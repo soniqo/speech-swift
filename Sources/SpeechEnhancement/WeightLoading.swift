@@ -13,10 +13,7 @@ enum DeepFilterNet3WeightLoader {
     ///   - directory: Directory containing DeepFilterNet3.mlpackage and auxiliary.npz
     /// - Returns: `(network, auxiliaryData)`
     static func load(from directory: URL) throws -> (DeepFilterNet3Network, AuxiliaryData) {
-        // Prefer INT8 quantized model if available
-        let int8URL = directory.appendingPathComponent("DeepFilterNet3_int8.mlpackage")
-        let fp32URL = directory.appendingPathComponent("DeepFilterNet3.mlpackage")
-        let modelURL = FileManager.default.fileExists(atPath: int8URL.path) ? int8URL : fp32URL
+        let modelURL = directory.appendingPathComponent("DeepFilterNet3.mlpackage")
         let auxURL = directory.appendingPathComponent("auxiliary.npz")
 
         guard FileManager.default.fileExists(atPath: modelURL.path) else {

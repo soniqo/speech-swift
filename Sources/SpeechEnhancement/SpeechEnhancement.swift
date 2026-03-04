@@ -2,11 +2,11 @@ import Foundation
 import CoreML
 import AudioCommon
 
-/// Speech enhancement using DeepFilterNet3 on Core ML.
+/// Speech enhancement using DeepFilterNet3 on Core ML (FP16, Neural Engine).
 ///
-/// Removes background noise from speech audio. The neural network runs via
-/// Core ML, while signal processing (STFT, ERB filterbank, deep filtering)
-/// runs on CPU via Accelerate/vDSP.
+/// Removes background noise from speech audio. The neural network runs on
+/// Apple's Neural Engine via Core ML, while signal processing (STFT, ERB
+/// filterbank, deep filtering) runs on CPU via Accelerate/vDSP.
 ///
 /// ```swift
 /// let enhancer = try await SpeechEnhancer.fromPretrained()

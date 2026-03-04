@@ -35,7 +35,7 @@ Papers: [Qwen3-ASR](https://arxiv.org/abs/2601.21337), [Qwen3-TTS](https://arxiv
 | PersonaPlex-7B (4-bit) | Speech → Speech | Yes (~2s chunks) | EN | ~5.3 GB |
 | Silero-VAD-v5 | Voice Activity Detection | Yes (32ms chunks) | Language-agnostic | ~1.2 MB (MLX or CoreML) |
 | Pyannote-Segmentation-3.0 | VAD + Speaker Segmentation | No (10s windows) | Language-agnostic | ~5.7 MB |
-| DeepFilterNet3 | Speech Enhancement | Yes (10ms frames) | Language-agnostic | ~2.2 MB (CoreML INT8) |
+| DeepFilterNet3 | Speech Enhancement | Yes (10ms frames) | Language-agnostic | ~4.2 MB (CoreML FP16) |
 | WeSpeaker-ResNet34-LM | Speaker Embedding (256-dim) | No | Language-agnostic | ~25 MB (MLX or CoreML) |
 
 ### When to Use Which TTS
@@ -589,7 +589,7 @@ import SpeechEnhancement
 import AudioCommon  // for WAVWriter
 
 let enhancer = try await SpeechEnhancer.fromPretrained()
-// Downloads ~2.3 MB on first run (Core ML INT8 model + auxiliary data)
+// Downloads ~4.3 MB on first run (Core ML FP16 model + auxiliary data)
 
 let cleanAudio = try enhancer.enhance(audio: noisyAudio, sampleRate: 48000)
 try WAVWriter.write(samples: cleanAudio, sampleRate: 48000, to: outputURL)
@@ -659,11 +659,13 @@ See [Speech Enhancement](docs/speech-enhancement.md) for architecture details.
 
 ### Speech Enhancement
 
-| Model | Backend | Latency | RTF | Notes |
-|-------|---------|---------|-----|-------|
-| DeepFilterNet3 | CoreML | ~4.8s / 20s audio | 0.24 | Neural Engine, 4x real-time |
+| Model | Backend | Duration | Latency | RTF |
+|-------|---------|----------|---------|-----|
+| DeepFilterNet3 (FP16) | CoreML | 5s | 0.65s | 0.13 |
+| DeepFilterNet3 (FP16) | CoreML | 10s | 1.2s | 0.12 |
+| DeepFilterNet3 (FP16) | CoreML | 20s | 4.8s | 0.24 |
 
-RTF = Real-Time Factor (lower is better, < 1.0 = faster than real-time).
+RTF = Real-Time Factor (lower is better, < 1.0 = faster than real-time). GRU cost scales ~O(n²).
 
 ### MLX vs CoreML
 
