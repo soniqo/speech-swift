@@ -11,7 +11,7 @@ AI speech models for Apple Silicon, powered by [MLX Swift](https://github.com/ml
 - **DeepFilterNet3** — Speech enhancement / noise suppression (2.1M params, real-time 48kHz)
 - **Silero VAD** — Streaming voice activity detection (32ms chunks, ~309K params)
 - **Pyannote VAD** — Offline voice activity detection (10s windows, multi-speaker overlap)
-- **Speaker Diarization** — Who spoke when (pyannote segmentation + WeSpeaker embedding + clustering)
+- **Speaker Diarization** — Who spoke when (pyannote segmentation + WeSpeaker embedding + spectral clustering with automatic speaker count)
 
 Papers: [Qwen3-ASR](https://arxiv.org/abs/2601.21337), [Qwen3-TTS](https://arxiv.org/abs/2601.15621), [CosyVoice 3](https://arxiv.org/abs/2505.17589), [PersonaPlex](https://arxiv.org/abs/2602.06053), [Mimi](https://arxiv.org/abs/2410.00037) (audio codec)
 
@@ -567,8 +567,8 @@ swift build -c release
 # CoreML embeddings (Neural Engine)
 .build/release/audio diarize meeting.wav --embedding-engine coreml
 
-# With options
-.build/release/audio diarize meeting.wav --threshold 0.6 --max-speakers 3 --json
+# With options (speaker count is automatic via GMM-BIC, or constrain with min/max)
+.build/release/audio diarize meeting.wav --min-speakers 2 --max-speakers 4 --json
 
 # Extract a specific speaker
 .build/release/audio diarize meeting.wav --target-speaker enrollment.wav
