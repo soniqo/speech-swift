@@ -30,19 +30,25 @@ REF_DIR = BENCHMARK_DIR / "ref"
 HYP_DIR = BENCHMARK_DIR / "hyp"
 RESULTS_FILE = BENCHMARK_DIR / "results.json"
 
-# VoxConverse test set files (subset for quick benchmarking)
-VOXCONVERSE_TEST_FILES = [
-    "abjxc", "afjiv", "aggyz", "ahkbf", "aigor",
-    "ajfnv", "ajuog", "akxfp", "alyuf", "amwyy",
-    "aobwi", "aofam", "aplmj", "aqgrp", "arnej",
-    "asgft", "asgor", "ateyp", "aujgc", "auzru",
-    "avfbp", "avpcl", "awgfk", "axgbr", "axxjq",
-    "ayowh", "azmff", "babzf", "bakth", "baskq",
-    "bbfbx", "bcfkm", "bcgir", "bdczo", "bdzgr",
-    "bfbwk", "bfrxl", "bgnet", "bgoij", "bhcdr",
-    "bhyij", "bjwrj", "bkfxq", "bkucv", "blakb",
-    "bmion", "bnrth", "boxqv", "bpjqs", "bqfpj",
-]
+def get_test_files(num_files: int = 0) -> list:
+    """Get list of test file names from the zip or existing audio directory."""
+    zip_path = BENCHMARK_DIR / "voxconverse_test_wav.zip"
+    if zip_path.exists():
+        import zipfile
+        with zipfile.ZipFile(zip_path) as zf:
+            names = sorted(set(
+                n.split("/")[-1].replace(".wav", "")
+                for n in zf.namelist()
+                if n.endswith(".wav") and not n.split("/")[-1].startswith("._")
+            ))
+    elif AUDIO_DIR.exists():
+        names = sorted(p.stem for p in AUDIO_DIR.glob("*.wav"))
+    else:
+        names = []
+
+    if num_files > 0:
+        names = names[:num_files]
+    return names
 
 
 def download_voxconverse(num_files: int = 0):
@@ -51,7 +57,15 @@ def download_voxconverse(num_files: int = 0):
     REF_DIR.mkdir(parents=True, exist_ok=True)
     HYP_DIR.mkdir(parents=True, exist_ok=True)
 
-    files = VOXCONVERSE_TEST_FILES[:num_files] if num_files > 0 else VOXCONVERSE_TEST_FILES
+    # Download zip first so we can discover file names
+    zip_path = BENCHMARK_DIR / "voxconverse_test_wav.zip"
+    if not zip_path.exists():
+        _download_zip(zip_path)
+
+    files = get_test_files(num_files)
+    if not files:
+        print("No test files found.")
+        return
 
     # Download reference RTTM files from GitHub
     print(f"Downloading {len(files)} reference RTTM files...")
@@ -66,44 +80,43 @@ def download_voxconverse(num_files: int = 0):
         except Exception as e:
             print(f"  Failed to download {name}.rttm: {e}")
 
-    # Check if audio needs downloading
+    # Extract audio from zip
     missing_audio = [f for f in files if not (AUDIO_DIR / f"{f}.wav").exists()]
     if not missing_audio:
         print("All audio files already present.")
         return
 
-    # Download full test set zip (~4.2 GB)
-    zip_path = BENCHMARK_DIR / "voxconverse_test_wav.zip"
-    if not zip_path.exists():
-        print(f"Downloading VoxConverse test audio zip (~4.2 GB)...")
-        print(f"  From: {VOXCONVERSE_TEST_AUDIO}")
-        print(f"  To:   {zip_path}")
-        print(f"  (This may take a while. You can also download manually with:")
-        print(f"   curl -L -o {zip_path} '{VOXCONVERSE_TEST_AUDIO}')")
-        try:
-            subprocess.run(
-                ["curl", "-L", "-o", str(zip_path), "--progress-bar", VOXCONVERSE_TEST_AUDIO],
-                check=True
-            )
-            print(f"  Downloaded to {zip_path}")
-        except (subprocess.CalledProcessError, FileNotFoundError) as e:
-            print(f"  Failed to download zip: {e}")
-            print(f"  Download manually and place at: {zip_path}")
-            return
-
-    # Extract needed files
     import zipfile
     print(f"Extracting {len(missing_audio)} audio files from zip...")
     with zipfile.ZipFile(zip_path) as zf:
         for name in missing_audio:
-            # Files may be in a subdirectory within the zip
-            matches = [n for n in zf.namelist() if n.endswith(f"{name}.wav")]
+            # Files may be in a subdirectory within the zip, skip macOS metadata
+            matches = [n for n in zf.namelist()
+                       if n.endswith(f"{name}.wav") and not n.split("/")[-1].startswith("._")]
             if matches:
                 with zf.open(matches[0]) as src, open(AUDIO_DIR / f"{name}.wav", "wb") as dst:
                     dst.write(src.read())
                 print(f"  Extracted {name}.wav")
             else:
                 print(f"  {name}.wav not found in zip")
+
+
+def _download_zip(zip_path: Path):
+    """Download VoxConverse test audio zip (~4.2 GB)."""
+    print(f"Downloading VoxConverse test audio zip (~4.2 GB)...")
+    print(f"  From: {VOXCONVERSE_TEST_AUDIO}")
+    print(f"  To:   {zip_path}")
+    print(f"  (You can also download manually with:")
+    print(f"   curl -L -o {zip_path} '{VOXCONVERSE_TEST_AUDIO}')")
+    try:
+        subprocess.run(
+            ["curl", "-L", "-o", str(zip_path), "--progress-bar", VOXCONVERSE_TEST_AUDIO],
+            check=True
+        )
+        print(f"  Downloaded to {zip_path}")
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        print(f"  Failed to download zip: {e}")
+        print(f"  Download manually and place at: {zip_path}")
 
 
 def run_diarization(cli_path: str, num_files: int = 0, engine: str = "mlx"):
