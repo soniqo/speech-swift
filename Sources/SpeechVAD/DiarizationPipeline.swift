@@ -14,9 +14,6 @@ public struct DiarizationConfig: Sendable {
     public var minSpeechDuration: Float
     /// Minimum silence duration between segments in seconds
     public var minSilenceDuration: Float
-    /// Clustering distance threshold (cosine distance, 0-2 range).
-    /// Kept for backward compatibility but no longer used by spectral clustering.
-    public var clusteringThreshold: Float
     /// Minimum number of speakers (0 = automatic)
     public var minSpeakers: Int
     /// Maximum number of speakers (0 = automatic)
@@ -27,7 +24,6 @@ public struct DiarizationConfig: Sendable {
         offset: Float = 0.3,
         minSpeechDuration: Float = 0.3,
         minSilenceDuration: Float = 0.15,
-        clusteringThreshold: Float = 0.5,
         minSpeakers: Int = 0,
         maxSpeakers: Int = 0
     ) {
@@ -35,7 +31,6 @@ public struct DiarizationConfig: Sendable {
         self.offset = offset
         self.minSpeechDuration = minSpeechDuration
         self.minSilenceDuration = minSilenceDuration
-        self.clusteringThreshold = clusteringThreshold
         self.minSpeakers = minSpeakers
         self.maxSpeakers = maxSpeakers
     }

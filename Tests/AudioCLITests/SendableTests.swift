@@ -22,7 +22,7 @@ final class SendableTests: XCTestCase {
     func testDiarizationConfigSendable() async {
         let config = DiarizationConfig.default
         let result = await Task { config }.value
-        XCTAssertEqual(result.clusteringThreshold, 0.5)
+        XCTAssertEqual(result.minSpeakers, 0)
     }
 
     func testQwen3AudioEncoderConfigSendable() async {

@@ -73,17 +73,17 @@ final class SpectralClusteringTests: XCTestCase {
     // MARK: - K-Means
 
     func testKMeans2Clusters() {
-        // Two well-separated 2D clusters
+        // Two well-separated 2D clusters with deterministic data
         var points = [Float]()
         // Cluster A: around (0, 0)
-        for _ in 0..<20 {
-            points.append(Float.random(in: -0.1...0.1))
-            points.append(Float.random(in: -0.1...0.1))
+        for i in 0..<20 {
+            points.append(Float(i) * 0.01)
+            points.append(Float(i) * -0.005)
         }
         // Cluster B: around (10, 10)
-        for _ in 0..<20 {
-            points.append(10.0 + Float.random(in: -0.1...0.1))
-            points.append(10.0 + Float.random(in: -0.1...0.1))
+        for i in 0..<20 {
+            points.append(10.0 + Float(i) * 0.01)
+            points.append(10.0 + Float(i) * -0.005)
         }
 
         let assignments = kMeans(points: points, n: 40, k: 2, dim: 2)
@@ -103,20 +103,21 @@ final class SpectralClusteringTests: XCTestCase {
     // MARK: - GMM-BIC
 
     func testGMMBICSelectsCorrectK() {
-        // Generate two well-separated Gaussian clusters in 4D
+        // Two well-separated clusters in 4D with deterministic pseudo-random spread
         var data = [Float]()
         let n = 40
+        // Use hash-like function for deterministic but non-linear spread
+        func pseudoRandom(_ i: Int, _ d: Int) -> Float {
+            let x = Float((i * 7 + d * 13 + 37) % 100) / 100.0 - 0.5
+            return x * 0.8  // spread ±0.4
+        }
         // Cluster A: around origin
-        for _ in 0..<(n / 2) {
-            for _ in 0..<4 {
-                data.append(Float.random(in: -0.5...0.5))
-            }
+        for i in 0..<(n / 2) {
+            for d in 0..<4 { data.append(pseudoRandom(i, d)) }
         }
         // Cluster B: around (10,10,10,10)
-        for _ in 0..<(n / 2) {
-            for _ in 0..<4 {
-                data.append(10.0 + Float.random(in: -0.5...0.5))
-            }
+        for i in 0..<(n / 2) {
+            for d in 0..<4 { data.append(10.0 + pseudoRandom(i + 20, d)) }
         }
 
         let (bic1, _) = gmmBIC(data: data, n: n, d: 4, k: 1)
@@ -131,22 +132,21 @@ final class SpectralClusteringTests: XCTestCase {
     // MARK: - Spectral Clustering
 
     func testSpectralClustering2Groups() {
-        // Two groups of similar 256-dim embeddings
-        var group1Base = [Float](repeating: 0, count: 256)
-        group1Base[0] = 1.0  // unit vector along dim 0
-        var group2Base = [Float](repeating: 0, count: 256)
-        group2Base[1] = 1.0  // unit vector along dim 1
-
+        // Two groups of similar 256-dim embeddings with deterministic perturbations
         var embeddings = [[Float]]()
-        // Add small perturbations
-        for _ in 0..<10 {
-            var e = group1Base
-            for j in 0..<256 { e[j] += Float.random(in: -0.01...0.01) }
+        for i in 0..<10 {
+            var e = [Float](repeating: 0, count: 256)
+            e[0] = 1.0  // unit vector along dim 0
+            // Deterministic small perturbation
+            e[1] = Float(i) * 0.002
+            e[2] = Float(i) * -0.001
             embeddings.append(e)
         }
-        for _ in 0..<10 {
-            var e = group2Base
-            for j in 0..<256 { e[j] += Float.random(in: -0.01...0.01) }
+        for i in 0..<10 {
+            var e = [Float](repeating: 0, count: 256)
+            e[1] = 1.0  // unit vector along dim 1
+            e[0] = Float(i) * 0.002
+            e[2] = Float(i) * 0.001
             embeddings.append(e)
         }
 
@@ -169,11 +169,11 @@ final class SpectralClusteringTests: XCTestCase {
 
     func testSpectralClustering1Group() {
         // All similar embeddings → should detect 1 cluster
-        let base = [Float](repeating: 0.5, count: 32)
         var embeddings = [[Float]]()
-        for _ in 0..<8 {
-            var e = base
-            for j in 0..<32 { e[j] += Float.random(in: -0.01...0.01) }
+        for i in 0..<8 {
+            var e = [Float](repeating: 0.5, count: 32)
+            e[0] += Float(i) * 0.001
+            e[1] -= Float(i) * 0.0005
             embeddings.append(e)
         }
 
@@ -191,11 +191,10 @@ final class SpectralClusteringTests: XCTestCase {
 
     func testMinMaxConstraints() {
         // All similar embeddings but force minClusters=2
-        let base = [Float](repeating: 0.5, count: 32)
         var embeddings = [[Float]]()
-        for _ in 0..<8 {
-            var e = base
-            for j in 0..<32 { e[j] += Float.random(in: -0.01...0.01) }
+        for i in 0..<8 {
+            var e = [Float](repeating: 0.5, count: 32)
+            e[0] += Float(i) * 0.001
             embeddings.append(e)
         }
 
@@ -205,16 +204,16 @@ final class SpectralClusteringTests: XCTestCase {
 
         // Two distinct groups but maxClusters=1
         var twoGroupEmbs = [[Float]]()
-        for _ in 0..<5 {
+        for i in 0..<5 {
             var e = [Float](repeating: 0, count: 32)
             e[0] = 1.0
-            for j in 0..<32 { e[j] += Float.random(in: -0.01...0.01) }
+            e[1] = Float(i) * 0.002
             twoGroupEmbs.append(e)
         }
-        for _ in 0..<5 {
+        for i in 0..<5 {
             var e = [Float](repeating: 0, count: 32)
             e[1] = 1.0
-            for j in 0..<32 { e[j] += Float.random(in: -0.01...0.01) }
+            e[0] = Float(i) * 0.002
             twoGroupEmbs.append(e)
         }
 

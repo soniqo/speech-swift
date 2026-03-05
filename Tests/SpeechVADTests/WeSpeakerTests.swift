@@ -12,7 +12,6 @@ final class WeSpeakerTests: XCTestCase {
         XCTAssertEqual(config.onset, 0.5, accuracy: 0.001)
         XCTAssertEqual(config.offset, 0.3, accuracy: 0.001)
         XCTAssertEqual(config.minSpeechDuration, 0.3, accuracy: 0.001)
-        XCTAssertEqual(config.clusteringThreshold, 0.5, accuracy: 0.001)
         XCTAssertEqual(config.minSpeakers, 0)
         XCTAssertEqual(config.maxSpeakers, 0)
     }
@@ -558,9 +557,9 @@ final class WeSpeakerTests: XCTestCase {
         }
     }
 
-    // MARK: - E2E: Threshold Insensitivity (GMM-BIC overrides threshold)
+    // MARK: - E2E: Min/Max Speakers Constraints
 
-    func testE2EThresholdInsensitivity() async throws {
+    func testE2EMinSpeakersConstraint() async throws {
         let pipeline = try await DiarizationPipeline.fromPretrained()
 
         let audioURL = URL(fileURLWithPath: "Tests/Qwen3ASRTests/Resources/test_audio.wav")
@@ -570,21 +569,11 @@ final class WeSpeakerTests: XCTestCase {
 
         let (samples, sampleRate) = try AudioFileLoader.loadWAV(url: audioURL)
 
-        // Run with different thresholds — spectral clustering should produce same result
-        let thresholds: [Float] = [0.3, 0.5, 0.7]
-        var speakerCounts = [Int]()
-
-        for t in thresholds {
-            let config = DiarizationConfig(clusteringThreshold: t)
-            let result = pipeline.diarize(audio: samples, sampleRate: sampleRate, config: config)
-            speakerCounts.append(result.numSpeakers)
-        }
-
-        // All should produce the same number of speakers (GMM-BIC determines count, not threshold)
-        XCTAssertEqual(speakerCounts[0], speakerCounts[1],
-                       "Threshold 0.3 and 0.5 should produce same speaker count: \(speakerCounts)")
-        XCTAssertEqual(speakerCounts[1], speakerCounts[2],
-                       "Threshold 0.5 and 0.7 should produce same speaker count: \(speakerCounts)")
+        // Force at least 2 speakers — GMM-BIC should respect the constraint
+        let config = DiarizationConfig(minSpeakers: 2)
+        let result = pipeline.diarize(audio: samples, sampleRate: sampleRate, config: config)
+        XCTAssertGreaterThanOrEqual(result.numSpeakers, 2,
+                                     "minSpeakers=2 should force at least 2 speakers, got \(result.numSpeakers)")
     }
 
     // MARK: - E2E: Embedding Different Audio Produces Different Embeddings
