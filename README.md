@@ -92,15 +92,27 @@ import AudioCommon        // Shared utilities
 - Swift 5.9+
 - macOS 14+ or iOS 17+
 - Apple Silicon (M1/M2/M3/M4)
-- Xcode 15+
+- Xcode 15+ (with Metal Toolchain — run `xcodebuild -downloadComponent MetalToolchain` if missing)
+
+### Build from Source
+
+```bash
+git clone https://github.com/ivan-digital/qwen3-asr-swift
+cd qwen3-asr-swift
+make build
+```
+
+This compiles the Swift package **and** the MLX Metal shader library in one step. The Metal library (`mlx.metallib`) is required for GPU inference — without it you'll get `Failed to load the default metallib` at runtime.
+
+For debug builds: `make debug`. To run unit tests: `make test`.
 
 ## Try the Voice Assistant
 
 **[PersonaPlexDemo](Examples/PersonaPlexDemo/)** is a ready-to-run macOS voice assistant — tap to talk, get spoken responses in real-time. Uses microphone input with Silero VAD for automatic speech detection, Qwen3-ASR for transcription, and PersonaPlex 7B for speech-to-speech generation. Multi-turn conversation with 18 voice presets and inner monologue transcript display.
 
 ```bash
+make build  # from repo root — builds everything including MLX metallib
 cd Examples/PersonaPlexDemo
-swift build -c release
 # See Examples/PersonaPlexDemo/README.md for .app bundle instructions
 ```
 
@@ -147,7 +159,7 @@ Runs on Neural Engine via CoreML — frees the GPU for concurrent workloads. 25 
 ### ASR CLI
 
 ```bash
-swift build -c release
+make build  # or: swift build -c release && ./scripts/build_mlx_metallib.sh release
 
 # Default (Qwen3-ASR 0.6B, MLX)
 .build/release/audio transcribe audio.wav
@@ -220,7 +232,7 @@ try WAVWriter.write(samples: audio, sampleRate: 24000, to: outputURL)
 ### TTS CLI
 
 ```bash
-swift build -c release
+make build
 .build/release/audio speak "Hello world" --output output.wav --language english
 ```
 
@@ -423,7 +435,7 @@ Available presets: `focused` (default), `assistant`, `customerService`, `teacher
 ### PersonaPlex CLI
 
 ```bash
-swift build -c release
+make build
 
 # Basic speech-to-speech
 .build/release/audio respond --input question.wav --output response.wav
@@ -477,7 +489,7 @@ for try await chunk in model.synthesizeStream(text: "Hello, how are you today?",
 ### CosyVoice TTS CLI
 
 ```bash
-swift build -c release
+make build
 
 # Basic synthesis
 .build/release/audio speak "Hello world" --engine cosyvoice --language english --output output.wav
@@ -533,7 +545,7 @@ let final = processor.flush()
 ### VAD CLI
 
 ```bash
-swift build -c release
+make build
 
 # Streaming Silero VAD (32ms chunks)
 .build/release/audio vad-stream audio.wav
@@ -636,7 +648,7 @@ try WAVWriter.write(samples: cleanAudio, sampleRate: 48000, to: outputURL)
 ### Denoise CLI
 
 ```bash
-swift build -c release
+make build
 
 # Basic noise removal
 .build/release/audio denoise noisy.wav
@@ -820,12 +832,10 @@ export QWEN3_CACHE_DIR=/path/to/cache
 
 ## MLX Metal Library
 
-If you see `Failed to load the default metallib`, build it manually:
+If you see `Failed to load the default metallib` at runtime, the Metal shader library is missing. Run `make build` (or `./scripts/build_mlx_metallib.sh release` after a manual `swift build`) to compile it. If the Metal Toolchain is missing, install it first:
 
 ```bash
 xcodebuild -downloadComponent MetalToolchain
-swift build -c release --disable-sandbox
-./scripts/build_mlx_metallib.sh release
 ```
 
 ## Testing

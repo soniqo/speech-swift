@@ -101,13 +101,17 @@ Contributions welcome.
 
 ```bash
 cd Examples/PersonaPlexDemo
-swift build -c release
+swift build -c release --disable-sandbox
+../../scripts/build_mlx_metallib.sh release
 ```
+
+Or from the repo root: `make build` (builds everything including the metallib).
 
 ### As a macOS app (recommended)
 
 ```bash
-swift build -c release
+swift build -c release --disable-sandbox
+../../scripts/build_mlx_metallib.sh release
 
 APP="/tmp/PersonaPlexDemo.app"
 mkdir -p "$APP/Contents/MacOS"
@@ -116,9 +120,8 @@ mkdir -p "$APP/Contents/MacOS"
 BINARY=$(find .build -name 'PersonaPlexDemo' -type f | head -1)
 cp "$BINARY" "$APP/Contents/MacOS/"
 
-# Copy MLX metallib (required for compiled inference)
-METALLIB=$(find .build -name 'mlx.metallib' 2>/dev/null | head -1)
-cp "$METALLIB" "$APP/Contents/MacOS/"
+# Copy MLX metallib (required for GPU inference)
+cp .build/release/mlx.metallib "$APP/Contents/MacOS/"
 
 cat > "$APP/Contents/Info.plist" << 'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
