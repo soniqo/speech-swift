@@ -24,7 +24,7 @@ Hysteresis binarization produces local speaker segments per window.
 
 **Stage 2 — Embedding**: For each local segment, crop the audio and extract a 256-dim speaker embedding using WeSpeaker ResNet34-LM.
 
-**Stage 3 — Clustering**: Agglomerative clustering with average linkage and cosine distance merges local speaker embeddings into global speaker IDs.
+**Stage 3 — Clustering**: Spectral clustering with GMM-BIC automatically estimates the number of speakers and assigns global speaker IDs. Cosine affinity → normalized Laplacian → LAPACK eigendecomposition → GMM-BIC model selection → k-means on spectral embedding. No manual threshold tuning required.
 
 ### WeSpeaker ResNet34-LM
 
@@ -124,7 +124,7 @@ audio diarize meeting.wav
 audio diarize meeting.wav --embedding-engine coreml
 
 # With options
-audio diarize meeting.wav --threshold 0.6 --max-speakers 3 --json
+audio diarize meeting.wav --min-speakers 2 --max-speakers 3 --json
 
 # Speaker extraction
 audio diarize meeting.wav --target-speaker enrollment.wav
@@ -169,6 +169,7 @@ Sources/SpeechVAD/
 ├── WeSpeaker.swift                    Public API: embed(), fromPretrained(), engine selection
 ├── CoreMLWeSpeakerInference.swift     CoreML inference (EnumeratedShapes, float16)
 ├── PowersetDecoder.swift              7-class powerset → per-speaker probs
+├── SpectralClustering.swift           GMM-BIC + spectral clustering (Accelerate/LAPACK)
 ├── DiarizationPipeline.swift          Full pipeline + speaker extraction
 └── SpeechVAD+Protocols.swift          Protocol conformances
 

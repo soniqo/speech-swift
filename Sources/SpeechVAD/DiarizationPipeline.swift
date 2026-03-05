@@ -14,8 +14,11 @@ public struct DiarizationConfig: Sendable {
     public var minSpeechDuration: Float
     /// Minimum silence duration between segments in seconds
     public var minSilenceDuration: Float
-    /// Clustering distance threshold (cosine distance, 0-2 range)
+    /// Clustering distance threshold (cosine distance, 0-2 range).
+    /// Kept for backward compatibility but no longer used by spectral clustering.
     public var clusteringThreshold: Float
+    /// Minimum number of speakers (0 = automatic)
+    public var minSpeakers: Int
     /// Maximum number of speakers (0 = automatic)
     public var maxSpeakers: Int
 
@@ -25,6 +28,7 @@ public struct DiarizationConfig: Sendable {
         minSpeechDuration: Float = 0.3,
         minSilenceDuration: Float = 0.15,
         clusteringThreshold: Float = 0.5,
+        minSpeakers: Int = 0,
         maxSpeakers: Int = 0
     ) {
         self.onset = onset
@@ -32,6 +36,7 @@ public struct DiarizationConfig: Sendable {
         self.minSpeechDuration = minSpeechDuration
         self.minSilenceDuration = minSilenceDuration
         self.clusteringThreshold = clusteringThreshold
+        self.minSpeakers = minSpeakers
         self.maxSpeakers = maxSpeakers
     }
 
@@ -65,7 +70,7 @@ public struct DiarizationResult: Sendable {
 /// Three-stage pipeline:
 /// 1. **Segmentation**: Pyannote segmentation on 10s sliding windows → per-speaker local segments
 /// 2. **Embedding**: For each local segment, crop audio → mel → WeSpeaker → 256-dim embedding
-/// 3. **Clustering**: Agglomerative clustering on embeddings → global speaker IDs
+/// 3. **Clustering**: Spectral clustering with GMM-BIC speaker count estimation → global speaker IDs
 ///
 /// ```swift
 /// let pipeline = try await DiarizationPipeline.fromPretrained()
@@ -189,11 +194,11 @@ public final class DiarizationPipeline {
             embeddings.append(emb)
         }
 
-        // Stage 3: Clustering — assign global speaker IDs
-        let (clusterIds, centroids) = agglomerativeClustering(
+        // Stage 3: Clustering — assign global speaker IDs via spectral clustering + GMM-BIC
+        let (clusterIds, centroids) = spectralClustering(
             embeddings: embeddings,
-            threshold: config.clusteringThreshold,
-            maxClusters: config.maxSpeakers > 0 ? config.maxSpeakers : Int.max
+            minClusters: config.minSpeakers,
+            maxClusters: config.maxSpeakers
         )
 
         // Build diarized segments
@@ -321,96 +326,6 @@ public final class DiarizationPipeline {
 
         // Sort by start time
         return allSegments.sorted { $0.startTime < $1.startTime }
-    }
-
-    // MARK: - Stage 3: Agglomerative Clustering
-
-    private func agglomerativeClustering(
-        embeddings: [[Float]],
-        threshold: Float,
-        maxClusters: Int
-    ) -> (clusterIds: [Int], centroids: [[Float]]) {
-        let n = embeddings.count
-        guard n > 0 else { return ([], []) }
-        if n == 1 { return ([0], embeddings) }
-
-        // Initialize: each embedding is its own cluster
-        var clusterAssignment = Array(0..<n)
-        var centroids = embeddings
-        var activeClusterIds = Set(0..<n)
-
-        while activeClusterIds.count > 1 {
-            // Find closest pair of clusters
-            var bestDist: Float = Float.infinity
-            var bestI = -1
-            var bestJ = -1
-
-            let activeList = Array(activeClusterIds).sorted()
-            for ai in 0..<activeList.count {
-                for aj in (ai + 1)..<activeList.count {
-                    let ci = activeList[ai]
-                    let cj = activeList[aj]
-                    let dist = cosineDistance(centroids[ci], centroids[cj])
-                    if dist < bestDist {
-                        bestDist = dist
-                        bestI = ci
-                        bestJ = cj
-                    }
-                }
-            }
-
-            // Stop if minimum distance exceeds threshold
-            if bestDist > threshold { break }
-
-            // Stop if we've reached max clusters
-            if activeClusterIds.count <= maxClusters { break }
-
-            // Merge bestJ into bestI
-            let membersI = clusterAssignment.enumerated().filter { $0.element == bestI }.map(\.offset)
-            let membersJ = clusterAssignment.enumerated().filter { $0.element == bestJ }.map(\.offset)
-
-            // Update centroid (average linkage)
-            let totalMembers = membersI.count + membersJ.count
-            var newCentroid = [Float](repeating: 0, count: embeddings[0].count)
-            for idx in membersI + membersJ {
-                for d in 0..<newCentroid.count {
-                    newCentroid[d] += embeddings[idx][d]
-                }
-            }
-            for d in 0..<newCentroid.count {
-                newCentroid[d] /= Float(totalMembers)
-            }
-
-            // L2 normalize centroid
-            var norm: Float = 0
-            for d in 0..<newCentroid.count { norm += newCentroid[d] * newCentroid[d] }
-            norm = sqrt(norm + 1e-10)
-            for d in 0..<newCentroid.count { newCentroid[d] /= norm }
-
-            centroids[bestI] = newCentroid
-
-            // Reassign members of bestJ to bestI
-            for idx in membersJ {
-                clusterAssignment[idx] = bestI
-            }
-            activeClusterIds.remove(bestJ)
-        }
-
-        // Remap cluster IDs to contiguous 0-based
-        let uniqueClusters = Array(Set(clusterAssignment)).sorted()
-        var remap = [Int: Int]()
-        for (newId, oldId) in uniqueClusters.enumerated() {
-            remap[oldId] = newId
-        }
-
-        let remappedIds = clusterAssignment.map { remap[$0]! }
-        let finalCentroids = uniqueClusters.map { centroids[$0] }
-
-        return (remappedIds, finalCentroids)
-    }
-
-    private func cosineDistance(_ a: [Float], _ b: [Float]) -> Float {
-        return 1.0 - WeSpeakerModel.cosineSimilarity(a, b)
     }
 
     // MARK: - Segment Merging

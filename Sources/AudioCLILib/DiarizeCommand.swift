@@ -15,6 +15,9 @@ public struct DiarizeCommand: ParsableCommand {
     @Option(name: .long, help: "Clustering distance threshold (0.0-2.0)")
     public var threshold: Float = DiarizationConfig.default.clusteringThreshold
 
+    @Option(name: .long, help: "Minimum number of speakers (0 = auto)")
+    public var minSpeakers: Int = 0
+
     @Option(name: .long, help: "Maximum number of speakers (0 = auto)")
     public var maxSpeakers: Int = 0
 
@@ -44,6 +47,7 @@ public struct DiarizeCommand: ParsableCommand {
 
             let config = DiarizationConfig(
                 clusteringThreshold: threshold,
+                minSpeakers: minSpeakers,
                 maxSpeakers: maxSpeakers
             )
 
