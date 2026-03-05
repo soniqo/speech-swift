@@ -378,7 +378,7 @@ final class RespondCommandTests: XCTestCase {
         XCTAssertEqual(respond.output, "response.wav")
         XCTAssertEqual(respond.voice, "NATM0")
         XCTAssertEqual(respond.systemPrompt, "assistant")
-        XCTAssertEqual(respond.maxSteps, 500)
+        XCTAssertEqual(respond.maxSteps, 200)
         XCTAssertEqual(respond.modelId, "aufklarer/PersonaPlex-7B-MLX-4bit")
         XCTAssertFalse(respond.stream)
         XCTAssertEqual(respond.chunkFrames, 25)

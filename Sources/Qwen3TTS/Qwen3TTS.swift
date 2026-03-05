@@ -270,6 +270,7 @@ public class Qwen3TTSModel {
         var trailingIdx = 0
         var step = prefillLen
         var emittedFrames = 0
+        var emittedFinal = false
 
         var nextEmitThreshold = streaming.firstChunkFrames
 
@@ -354,13 +355,15 @@ public class Qwen3TTSModel {
                     decoderLeftContext: streaming.decoderLeftContext,
                     samplesPerFrame: samplesPerFrame)
 
+                let isFinalChunk = isEos || iterIdx == safeMaxTokens - 1
                 let audioChunk = AudioChunk(
                     samples: chunk,
                     sampleRate: 24000,
                     frameIndex: chunkFrameStart,
-                    isFinal: isEos || iterIdx == safeMaxTokens - 1,
+                    isFinal: isFinalChunk,
                     elapsedTime: CFAbsoluteTimeGetCurrent() - t0)
                 continuation.yield(audioChunk)
+                if isFinalChunk { emittedFinal = true }
 
                 emittedFrames = chunkFrameEnd
                 // After first emit, use regular chunk size
@@ -381,7 +384,7 @@ public class Qwen3TTSModel {
             print("Warning: Hit safety limit of \(safeMaxTokens) tokens (~\(String(format: "%.1f", estSec))s audio).")
         }
 
-        // If we never emitted the final chunk (e.g. exactly at threshold), emit now
+        // Emit remaining frames if any
         if emittedFrames < numFrames {
             let chunk = decodeAndEmitChunk(
                 allCodebooks: generatedAllCodebooks,
@@ -391,6 +394,18 @@ public class Qwen3TTSModel {
                 samplesPerFrame: samplesPerFrame)
             let audioChunk = AudioChunk(
                 samples: chunk,
+                sampleRate: 24000,
+                frameIndex: emittedFrames,
+                isFinal: true,
+                elapsedTime: CFAbsoluteTimeGetCurrent() - t0)
+            continuation.yield(audioChunk)
+            emittedFinal = true
+        }
+
+        // If EOS arrived with no new frames, emit a final sentinel
+        if !emittedFinal {
+            let audioChunk = AudioChunk(
+                samples: [],
                 sampleRate: 24000,
                 frameIndex: emittedFrames,
                 isFinal: true,
