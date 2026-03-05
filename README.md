@@ -59,8 +59,10 @@ Then use:
 audio transcribe recording.wav
 audio speak "Hello world"
 audio speak "Hallo Welt" --engine cosyvoice --language german
-audio respond --input question.wav
+audio respond --input question.wav --transcript
 ```
+
+> For interactive voice conversation with microphone input, see **[PersonaPlexDemo](Examples/PersonaPlexDemo/)**.
 
 ### Swift Package Manager
 
@@ -92,11 +94,21 @@ import AudioCommon        // Shared utilities
 - Apple Silicon (M1/M2/M3/M4)
 - Xcode 15+
 
+## Try the Voice Assistant
+
+**[PersonaPlexDemo](Examples/PersonaPlexDemo/)** is a ready-to-run macOS voice assistant — tap to talk, get spoken responses in real-time. Uses microphone input with Silero VAD for automatic speech detection, Qwen3-ASR for transcription, and PersonaPlex 7B for speech-to-speech generation. Multi-turn conversation with 18 voice presets and inner monologue transcript display.
+
+```bash
+cd Examples/PersonaPlexDemo
+swift build -c release
+# See Examples/PersonaPlexDemo/README.md for .app bundle instructions
+```
+
+> RTF ~0.94 on M2 Max (faster than real-time). Models download automatically on first run (~5.5 GB PersonaPlex + ~400 MB ASR).
+
 ## Demo Apps
 
-Ready-to-run SwiftUI macOS apps in the `Examples/` directory:
-
-- **[PersonaPlexDemo](Examples/PersonaPlexDemo/)** — Conversational voice assistant powered by PersonaPlex 7B. Toggle-based conversation loop with Silero VAD speech detection, Qwen3-ASR transcription, and inner monologue transcript. RTF ~0.94 on M2 Max.
+- **[PersonaPlexDemo](Examples/PersonaPlexDemo/)** — Conversational voice assistant (mic input, VAD, multi-turn). See above.
 - **[SpeechDemo](Examples/SpeechDemo/)** — Dictation (Parakeet TDT / Qwen3-ASR with language auto-detect) and text-to-speech synthesis (Qwen3-TTS) in a tabbed interface.
 
 Build and run as a macOS `.app` bundle — see each demo's README for instructions.
@@ -345,6 +357,8 @@ CLI:
 
 ## PersonaPlex Usage
 
+> For an interactive voice assistant with microphone input, see **[PersonaPlexDemo](Examples/PersonaPlexDemo/)** — tap to talk, multi-turn conversation with automatic speech detection.
+
 ### Speech-to-Speech
 
 ```swift
@@ -355,9 +369,20 @@ let model = try await PersonaPlexModel.fromPretrained()
 // Downloads ~5.5 GB on first run (temporal 4-bit + depformer + Mimi codec + voice presets)
 
 let audio = try AudioFileLoader.load(url: inputURL, targetSampleRate: 24000)
-let response = model.respond(userAudio: audio, voice: .NATM0)
-// Output is 24kHz mono float samples
-try WAVWriter.write(samples: response, sampleRate: 24000, to: outputURL)
+let (response, textTokens) = model.respond(userAudio: audio, voice: .NATM0)
+// response: 24kHz mono float samples
+// textTokens: model's inner monologue (SentencePiece token IDs)
+try WAVWriter.write(samples: response.audio, sampleRate: 24000, to: outputURL)
+```
+
+### Inner Monologue (Text Output)
+
+PersonaPlex generates text tokens alongside audio — the model's internal reasoning. Decode them with the built-in SentencePiece decoder:
+
+```swift
+let decoder = try SentencePieceDecoder(modelPath: "tokenizer_spm_32k_3.model")
+let transcript = decoder.decode(textTokens)
+print(transcript)  // e.g. "Sure, I can help you with that..."
 ```
 
 ### Streaming Speech-to-Speech
@@ -402,8 +427,17 @@ swift build -c release
 # Basic speech-to-speech
 .build/release/audio respond --input question.wav --output response.wav
 
+# With transcript (decodes inner monologue text)
+.build/release/audio respond --input question.wav --transcript
+
+# JSON output (audio path, transcript, latency metrics)
+.build/release/audio respond --input question.wav --json
+
 # Choose a voice and system prompt preset
-.build/release/audio respond --input question.wav --voice NATF1 --system-prompt focused --output response.wav
+.build/release/audio respond --input question.wav --voice NATF1 --system-prompt focused
+
+# Tune sampling parameters
+.build/release/audio respond --input question.wav --audio-temp 0.6 --repetition-penalty 1.5
 
 # List available voices and prompts
 .build/release/audio respond --list-voices
@@ -608,6 +642,65 @@ swift build -c release
 ```
 
 See [Speech Enhancement](docs/speech-enhancement.md) for architecture details.
+
+## Pipelines
+
+All models conform to shared protocols (`SpeechRecognitionModel`, `SpeechGenerationModel`, `SpeechEnhancementModel`, etc.) and can be composed into pipelines:
+
+### Noisy Speech Recognition (DeepFilterNet + ASR)
+
+```swift
+import SpeechEnhancement
+import Qwen3ASR
+
+let enhancer = try await SpeechEnhancer.fromPretrained()
+let asr = try await Qwen3ASRModel.fromPretrained()
+
+// Enhance at 48kHz, then transcribe at 16kHz
+let clean = try enhancer.enhance(audio: noisyAudio, sampleRate: 48000)
+let clean16k = AudioResampler.resample(clean, from: 48000, to: 16000)
+let text = asr.transcribe(audio: clean16k, sampleRate: 16000)
+```
+
+### Voice-to-Voice Relay (VAD + ASR + TTS)
+
+```swift
+import SpeechVAD
+import Qwen3ASR
+import Qwen3TTS
+
+let vad = try await SileroVADModel.fromPretrained()
+let asr = try await Qwen3ASRModel.fromPretrained()
+let tts = try await Qwen3TTSModel.fromPretrained()
+
+// Detect speech segments, transcribe, re-synthesize
+let segments = vad.detectSpeech(audio: audio, sampleRate: 16000)
+for seg in segments {
+    let chunk = Array(audio[Int(seg.startTime * 16000)..<Int(seg.endTime * 16000)])
+    let text = asr.transcribe(audio: chunk, sampleRate: 16000)
+    let speech = tts.synthesize(text: text, language: "english")
+    // speech: 24kHz mono float samples
+}
+```
+
+### Meeting Transcription (Diarization + ASR)
+
+```swift
+import SpeechVAD
+import Qwen3ASR
+
+let pipeline = try await DiarizationPipeline.fromPretrained()
+let asr = try await Qwen3ASRModel.fromPretrained()
+
+let result = pipeline.diarize(audio: meetingAudio, sampleRate: 16000)
+for seg in result.segments {
+    let chunk = Array(meetingAudio[Int(seg.startTime * 16000)..<Int(seg.endTime * 16000)])
+    let text = asr.transcribe(audio: chunk, sampleRate: 16000)
+    print("Speaker \(seg.speakerId) [\(seg.startTime)s-\(seg.endTime)s]: \(text)")
+}
+```
+
+See [Shared Protocols](docs/shared-protocols.md) for the full protocol reference.
 
 ## Latency (M2 Max, 64 GB)
 

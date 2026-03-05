@@ -269,7 +269,10 @@ public struct PersonaPlexSamplingConfig: Sendable {
     public var textTemp: Float
     public var textTopK: Int
     public var audioRepetitionPenalty: Float
+    public var textRepetitionPenalty: Float
     public var repetitionWindow: Int
+    /// Number of consecutive silence frames before early stopping (0 = disabled)
+    public var silenceEarlyStopFrames: Int
 
     public init(
         audioTemp: Float = 0.8,
@@ -277,14 +280,18 @@ public struct PersonaPlexSamplingConfig: Sendable {
         textTemp: Float = 0.7,
         textTopK: Int = 25,
         audioRepetitionPenalty: Float = 1.2,
-        repetitionWindow: Int = 30
+        textRepetitionPenalty: Float = 1.2,
+        repetitionWindow: Int = 30,
+        silenceEarlyStopFrames: Int = 15
     ) {
         self.audioTemp = audioTemp
         self.audioTopK = audioTopK
         self.textTemp = textTemp
         self.textTopK = textTopK
         self.audioRepetitionPenalty = audioRepetitionPenalty
+        self.textRepetitionPenalty = textRepetitionPenalty
         self.repetitionWindow = repetitionWindow
+        self.silenceEarlyStopFrames = silenceEarlyStopFrames
     }
 
     public static var `default`: PersonaPlexSamplingConfig { PersonaPlexSamplingConfig() }

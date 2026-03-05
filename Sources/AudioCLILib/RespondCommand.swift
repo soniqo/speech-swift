@@ -46,6 +46,34 @@ public struct RespondCommand: ParsableCommand {
     @Flag(name: .long, help: "Show detailed timing info")
     public var verbose: Bool = false
 
+    @Flag(name: .long, help: "Decode and print the model's inner monologue text")
+    public var transcript: Bool = false
+
+    @Flag(name: .long, help: "Output results as JSON (includes transcript, latency, audio path)")
+    public var json: Bool = false
+
+    // Sampling config overrides
+    @Option(name: .long, help: "Audio sampling temperature (default: 0.8)")
+    public var audioTemp: Float?
+
+    @Option(name: .long, help: "Text sampling temperature (default: 0.7)")
+    public var textTemp: Float?
+
+    @Option(name: .long, help: "Audio top-k candidates (default: 250)")
+    public var audioTopK: Int?
+
+    @Option(name: .long, help: "Audio repetition penalty (default: 1.2, 1.0 = disabled)")
+    public var repetitionPenalty: Float?
+
+    @Option(name: .long, help: "Text repetition penalty (default: 1.2, 1.0 = disabled)")
+    public var textRepetitionPenalty: Float?
+
+    @Option(name: .long, help: "Repetition penalty window in frames (default: 30)")
+    public var repetitionWindow: Int?
+
+    @Option(name: .long, help: "Silence frames before early stop (default: 15, 0 = disabled)")
+    public var silenceEarlyStop: Int?
+
     public init() {}
 
     public func run() throws {
@@ -90,6 +118,15 @@ public struct RespondCommand: ParsableCommand {
             let model = try await PersonaPlexModel.fromPretrained(
                 modelId: modelId, progressHandler: reportProgress)
 
+            // Apply sampling config overrides
+            if let v = audioTemp { model.cfg.sampling.audioTemp = v }
+            if let v = textTemp { model.cfg.sampling.textTemp = v }
+            if let v = audioTopK { model.cfg.sampling.audioTopK = v }
+            if let v = repetitionPenalty { model.cfg.sampling.audioRepetitionPenalty = v }
+            if let v = textRepetitionPenalty { model.cfg.sampling.textRepetitionPenalty = v }
+            if let v = repetitionWindow { model.cfg.sampling.repetitionWindow = v }
+            if let v = silenceEarlyStop { model.cfg.sampling.silenceEarlyStopFrames = v }
+
             if compile {
                 print("Warming up compiled temporal transformer...")
                 let warmStart = CFAbsoluteTimeGetCurrent()
@@ -98,15 +135,33 @@ public struct RespondCommand: ParsableCommand {
                 print("  Warmup: \(String(format: "%.2f", warmTime))s")
             }
 
-            print("Loading input audio: \(input)")
+            // Load SentencePiece decoder for transcript
+            var spmDecoder: SentencePieceDecoder?
+            if transcript || json {
+                do {
+                    let cacheDir = try HuggingFaceDownloader.getCacheDirectory(for: modelId)
+                    let spmPath = cacheDir.appendingPathComponent("tokenizer_spm_32k_3.model").path
+                    if FileManager.default.fileExists(atPath: spmPath) {
+                        spmDecoder = try SentencePieceDecoder(modelPath: spmPath)
+                    }
+                } catch {
+                    if !json { print("Warning: Could not load SentencePiece decoder: \(error)") }
+                }
+            }
+
+            if !json { print("Loading input audio: \(input)") }
             let inputURL = URL(fileURLWithPath: input)
             let audio = try AudioFileLoader.load(
                 url: inputURL, targetSampleRate: 24000)
             let duration = Double(audio.count) / 24000.0
-            print("  Duration: \(String(format: "%.2f", duration))s (\(audio.count) samples)")
-
-            print("Generating response with voice \(selectedVoice.rawValue), prompt: \(selectedPrompt.rawValue)")
+            if !json {
+                print("  Duration: \(String(format: "%.2f", duration))s (\(audio.count) samples)")
+                print("Generating response with voice \(selectedVoice.rawValue), prompt: \(selectedPrompt.rawValue)")
+            }
             let startTime = CFAbsoluteTimeGetCurrent()
+
+            var responseSamples: [Float] = []
+            var textTokens: [Int32] = []
 
             if stream {
                 let streamingConfig = PersonaPlexModel.PersonaPlexStreamingConfig(
@@ -119,48 +174,64 @@ public struct RespondCommand: ParsableCommand {
                     streaming: streamingConfig,
                     verbose: verbose)
 
-                var allSamples: [Float] = []
                 var chunkCount = 0
                 for try await chunk in audioStream {
-                    allSamples.append(contentsOf: chunk.samples)
+                    responseSamples.append(contentsOf: chunk.samples)
                     chunkCount += 1
+                    if chunk.isFinal { textTokens = chunk.textTokens }
                     if verbose {
                         let chunkDuration = Double(chunk.samples.count) / 24000.0
                         print("  Chunk \(chunkCount): \(chunk.samples.count) samples (\(String(format: "%.2f", chunkDuration))s) at \(String(format: "%.2f", chunk.elapsedTime ?? 0))s")
                     }
                 }
-
-                let elapsed = CFAbsoluteTimeGetCurrent() - startTime
-                let responseDuration = Double(allSamples.count) / 24000.0
-
-                print("Response: \(String(format: "%.2f", responseDuration))s (\(chunkCount) chunks)")
-                print("Time: \(String(format: "%.2f", elapsed))s")
-                if responseDuration > 0 {
-                    print("RTF: \(String(format: "%.2f", elapsed / responseDuration))")
-                }
-
-                let outputURL = URL(fileURLWithPath: output)
-                try WAVWriter.write(samples: allSamples, sampleRate: 24000, to: outputURL)
-                print("Saved to \(output)")
             } else {
-                let (response, textTokens) = model.respond(
+                let result = model.respond(
                     userAudio: audio,
                     voice: selectedVoice,
                     systemPromptTokens: selectedPrompt.tokens,
                     maxSteps: maxSteps,
                     verbose: verbose)
+                responseSamples = result.audio
+                textTokens = result.textTokens
+            }
 
-                let elapsed = CFAbsoluteTimeGetCurrent() - startTime
-                let responseDuration = Double(response.count) / 24000.0
+            let elapsed = CFAbsoluteTimeGetCurrent() - startTime
+            let responseDuration = Double(responseSamples.count) / 24000.0
+            let rtf = responseDuration > 0 ? elapsed / responseDuration : 0
 
+            let outputURL = URL(fileURLWithPath: output)
+            try WAVWriter.write(samples: responseSamples, sampleRate: 24000, to: outputURL)
+
+            // Decode transcript
+            var decodedTranscript: String?
+            if let dec = spmDecoder, !textTokens.isEmpty {
+                decodedTranscript = dec.decode(textTokens)
+            }
+
+            if json {
+                var result: [String: Any] = [
+                    "audio": output,
+                    "voice": selectedVoice.rawValue,
+                    "system_prompt": selectedPrompt.rawValue,
+                    "input_duration": round(duration * 100) / 100,
+                    "output_duration": round(responseDuration * 100) / 100,
+                    "elapsed": round(elapsed * 100) / 100,
+                    "rtf": round(rtf * 100) / 100,
+                    "text_tokens": textTokens.count
+                ]
+                if let t = decodedTranscript { result["transcript"] = t }
+                let jsonData = try JSONSerialization.data(
+                    withJSONObject: result, options: [.prettyPrinted, .sortedKeys])
+                print(String(data: jsonData, encoding: .utf8) ?? "{}")
+            } else {
                 print("Response: \(String(format: "%.2f", responseDuration))s (\(textTokens.count) text tokens)")
                 print("Time: \(String(format: "%.2f", elapsed))s")
                 if responseDuration > 0 {
-                    print("RTF: \(String(format: "%.2f", elapsed / responseDuration))")
+                    print("RTF: \(String(format: "%.2f", rtf))")
                 }
-
-                let outputURL = URL(fileURLWithPath: output)
-                try WAVWriter.write(samples: response, sampleRate: 24000, to: outputURL)
+                if let t = decodedTranscript, transcript {
+                    print("Transcript: \(t)")
+                }
                 print("Saved to \(output)")
             }
         }

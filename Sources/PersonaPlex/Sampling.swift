@@ -84,3 +84,36 @@ public func sampleTopKWithPenalty(
 
     return sampleTopK(logits: penalized, temperature: temperature, topK: topK)
 }
+
+// MARK: - Text Repetition Penalty Sampling
+
+/// Sample text logits with repetition penalty applied to recent text tokens.
+/// Prevents text token collapse that can drive audio death spirals.
+public func sampleTextWithPenalty(
+    logits: MLXArray,
+    temperature: Float,
+    topK: Int,
+    pastTokens: [Int32],
+    penalty: Float
+) -> MLXArray {
+    guard penalty > 1.0, !pastTokens.isEmpty else {
+        return sampleTopK(logits: logits, temperature: temperature, topK: topK)
+    }
+
+    let uniquePast = Set(pastTokens)
+    let vocabSize = logits.shape[logits.ndim - 1]
+
+    var penaltyMask = [Float](repeating: 1.0, count: vocabSize)
+    for tok in uniquePast {
+        let idx = Int(tok)
+        if idx >= 0, idx < vocabSize {
+            penaltyMask[idx] = penalty
+        }
+    }
+    let penaltyArr = MLXArray(penaltyMask).reshaped([1, vocabSize])
+
+    let positive = logits .> MLXArray(Float(0))
+    let penalized = MLX.where(positive, logits / penaltyArr, logits * penaltyArr)
+
+    return sampleTopK(logits: penalized, temperature: temperature, topK: topK)
+}

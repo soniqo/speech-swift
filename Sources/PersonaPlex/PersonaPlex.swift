@@ -9,7 +9,7 @@ import AudioCommon
 ///
 /// - Warning: This class is not thread-safe. Create separate instances for concurrent use.
 public final class PersonaPlexModel: Module {
-    public let cfg: PersonaPlexConfig
+    public var cfg: PersonaPlexConfig
 
     @ModuleInfo public var temporal: TemporalTransformer
     @ModuleInfo public var depformer: Depformer
@@ -285,6 +285,8 @@ public final class PersonaPlexModel: Module {
         let useCompiledStep = temporal.compiledStep != nil
         let b = 1  // batch size
         var allTextTokens: [Int32] = []
+        var consecutiveSilenceFrames = 0
+        let silenceEarlyStop = cfg.sampling.silenceEarlyStopFrames
 
         for step in promptLen..<(prefillLen + maxSteps) {
             // Build input tokens for this step.
@@ -325,12 +327,15 @@ public final class PersonaPlexModel: Module {
                 )
             }
 
-            // Sample text token — eval here forces textLogits (and hidden) computation.
+            // Sample text token with repetition penalty.
             // Depformer needs textToken value for embedding lookup.
-            let textToken = sampleTopK(
+            let textHistory = Array(allTextTokens.suffix(cfg.sampling.repetitionWindow))
+            let textToken = sampleTextWithPenalty(
                 logits: textLogits.squeezed(axis: 1),
                 temperature: cfg.sampling.textTemp,
-                topK: cfg.sampling.textTopK
+                topK: cfg.sampling.textTopK,
+                pastTokens: textHistory,
+                penalty: cfg.sampling.textRepetitionPenalty
             )
             eval(textToken)
 
@@ -408,6 +413,21 @@ public final class PersonaPlexModel: Module {
                     tokenCache[1 + cb][step] = tok
                 }
                 agentTokens[cb].append(tok)
+            }
+
+            // Silence early stopping: if agent audio produces silence tokens
+            // for consecutive frames, stop generation to avoid filling dead air.
+            if step >= prefillLen, silenceEarlyStop > 0 {
+                let isSilence = (0..<nQ).allSatisfy { cb in
+                    agentTokens[cb].last == TemporalTransformerConfig.silenceTokens[cb]
+                }
+                consecutiveSilenceFrames = isSilence ? consecutiveSilenceFrames + 1 : 0
+                if consecutiveSilenceFrames >= silenceEarlyStop {
+                    if verbose {
+                        print("  Early stop: \(silenceEarlyStop) consecutive silence frames at step \(step - prefillLen)/\(maxSteps)")
+                    }
+                    break
+                }
             }
         }
 
@@ -671,6 +691,8 @@ public final class PersonaPlexModel: Module {
                     let useCompiledStep = temporal.compiledStep != nil
                     let b = 1
                     let genStart = CFAbsoluteTimeGetCurrent()
+                    var consecutiveSilenceFrames = 0
+                    let silenceEarlyStop = cfg.sampling.silenceEarlyStopFrames
 
                     for step in promptLen..<(prefillLen + maxSteps) {
                         let readIdx = step - 1
@@ -702,10 +724,13 @@ public final class PersonaPlexModel: Module {
                                 textTokens: textTokenArr, audioTokens: audioTokens, offset: step)
                         }
 
-                        let textToken = sampleTopK(
+                        let textHistory = Array(allTextTokens.suffix(cfg.sampling.repetitionWindow))
+                        let textToken = sampleTextWithPenalty(
                             logits: textLogits.squeezed(axis: 1),
                             temperature: cfg.sampling.textTemp,
-                            topK: cfg.sampling.textTopK)
+                            topK: cfg.sampling.textTopK,
+                            pastTokens: textHistory,
+                            penalty: cfg.sampling.textRepetitionPenalty)
                         eval(textToken)
 
                         var providedTokens: [Int32]? = nil
@@ -750,6 +775,20 @@ public final class PersonaPlexModel: Module {
                                 tokenCache[1 + cb][step] = tok
                             }
                             agentTokens[cb].append(tok)
+                        }
+
+                        // Silence early stopping
+                        if step >= prefillLen, silenceEarlyStop > 0 {
+                            let isSilence = (0..<nQ).allSatisfy { cb in
+                                agentTokens[cb].last == TemporalTransformerConfig.silenceTokens[cb]
+                            }
+                            consecutiveSilenceFrames = isSilence ? consecutiveSilenceFrames + 1 : 0
+                            if consecutiveSilenceFrames >= silenceEarlyStop {
+                                if verbose {
+                                    print("  Early stop: \(silenceEarlyStop) consecutive silence frames")
+                                }
+                                break
+                            }
                         }
 
                         // Emit chunk when enough frames accumulated
