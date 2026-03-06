@@ -52,6 +52,8 @@ See [Roadmap discussion](https://github.com/ivan-digital/qwen3-asr-swift/discuss
 
 ### Homebrew
 
+Requires native ARM Homebrew (`/opt/homebrew`). Rosetta/x86_64 Homebrew is not supported.
+
 ```bash
 brew tap ivan-digital/speech https://github.com/ivan-digital/qwen3-asr-swift
 brew install speech
