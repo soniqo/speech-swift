@@ -5,25 +5,28 @@ import MLX
 /// 80-dim log-mel feature extractor for WeSpeaker (speaker embeddings).
 ///
 /// Uses vDSP for FFT and mel filterbank computation.
-/// Parameters: nFFT=400, hop=160, 80 mel bins, Hamming window, 16kHz.
-/// Simple log-mel: `log(max(mel, 1e-10))` — no Whisper-specific normalization.
+/// Parameters: nFFT=400, hop=160, 80 mel bins, 16kHz.
+/// Matches Kaldi FBank defaults used by WeSpeaker: pre-emphasis=0.97,
+/// HTK mel scale, Povey window, fMin=20Hz.
 class MelFeatureExtractor {
     let sampleRate: Int = 16000
     let nFFT: Int = 400
     let hopLength: Int = 160
     let nMels: Int = 80
+    let preEmphasis: Float = 0.97
 
     private let paddedFFT: Int = 512
     private let log2PaddedFFT: vDSP_Length = 9
     private var fftSetup: FFTSetup
-    private var hammingWindow: [Float]
+    private var window: [Float]
     private var melFilterbank: [Float]  // [nMels, nBins]
 
     init() {
-        // Hamming window: 0.54 - 0.46 * cos(2π*i/N)
-        hammingWindow = [Float](repeating: 0, count: 400)
+        // Povey window (Kaldi default): pow(0.5 - 0.5*cos(2π*i/(N-1)), 0.85)
+        window = [Float](repeating: 0, count: 400)
         for i in 0..<400 {
-            hammingWindow[i] = 0.54 - 0.46 * cos(2.0 * Float.pi * Float(i) / Float(400))
+            let hann = 0.5 - 0.5 * cos(2.0 * Float.pi * Float(i) / Float(399))
+            window[i] = pow(hann, 0.85)
         }
 
         guard let setup = vDSP_create_fftsetup(9, FFTRadix(kFFTRadix2)) else {
@@ -31,7 +34,6 @@ class MelFeatureExtractor {
         }
         fftSetup = setup
 
-        // Initialize filterbank (will be replaced in setupMelFilterbank)
         melFilterbank = []
         setupMelFilterbank()
     }
@@ -41,29 +43,16 @@ class MelFeatureExtractor {
     }
 
     private func setupMelFilterbank() {
-        let fMin: Float = 0.0
+        let fMin: Float = 20.0
         let fMax: Float = Float(sampleRate) / 2.0
 
-        // Slaney mel scale
-        let minLogHertz: Float = 1000.0
-        let minLogMel: Float = 15.0
-        let logstepHzToMel: Float = 27.0 / log(6.4)
-        let logstepMelToHz: Float = log(6.4) / 27.0
-
+        // HTK mel scale (Kaldi default): mel = 2595 * log10(1 + hz/700)
         func hzToMel(_ hz: Float) -> Float {
-            if hz < minLogHertz {
-                return 3.0 * hz / 200.0
-            } else {
-                return minLogMel + log(hz / minLogHertz) * logstepHzToMel
-            }
+            return 2595.0 * log10(1.0 + hz / 700.0)
         }
 
         func melToHz(_ mel: Float) -> Float {
-            if mel < minLogMel {
-                return 200.0 * mel / 3.0
-            } else {
-                return minLogHertz * exp((mel - minLogMel) * logstepMelToHz)
-            }
+            return 700.0 * (pow(10.0, mel / 2595.0) - 1.0)
         }
 
         let nBins = paddedFFT / 2 + 1  // 257
@@ -132,20 +121,29 @@ class MelFeatureExtractor {
         let nBins = paddedFFT / 2 + 1
         let halfPadded = paddedFFT / 2
 
+        // Pre-emphasis: y[n] = x[n] - coeff * x[n-1]
+        var emphasized = [Float](repeating: 0, count: audio.count)
+        if !audio.isEmpty {
+            emphasized[0] = audio[0]
+            for i in 1..<audio.count {
+                emphasized[i] = audio[i] - preEmphasis * audio[i - 1]
+            }
+        }
+
         // Reflect padding
         let padLength = nFFT / 2
-        var paddedAudio = [Float](repeating: 0, count: padLength + audio.count + padLength)
+        var paddedAudio = [Float](repeating: 0, count: padLength + emphasized.count + padLength)
 
         for i in 0..<padLength {
-            let srcIdx = min(padLength - i, audio.count - 1)
-            paddedAudio[i] = audio[max(0, srcIdx)]
+            let srcIdx = min(padLength - i, emphasized.count - 1)
+            paddedAudio[i] = emphasized[max(0, srcIdx)]
         }
-        for i in 0..<audio.count {
-            paddedAudio[padLength + i] = audio[i]
+        for i in 0..<emphasized.count {
+            paddedAudio[padLength + i] = emphasized[i]
         }
         for i in 0..<padLength {
-            let srcIdx = audio.count - 2 - i
-            paddedAudio[padLength + audio.count + i] = audio[max(0, srcIdx)]
+            let srcIdx = emphasized.count - 2 - i
+            paddedAudio[padLength + emphasized.count + i] = emphasized[max(0, srcIdx)]
         }
 
         let nFrames = (paddedAudio.count - nFFT) / hopLength + 1
@@ -159,7 +157,7 @@ class MelFeatureExtractor {
             let start = frame * hopLength
 
             paddedAudio.withUnsafeBufferPointer { buf in
-                vDSP_vmul(buf.baseAddress! + start, 1, hammingWindow, 1, &paddedFrame, 1, vDSP_Length(nFFT))
+                vDSP_vmul(buf.baseAddress! + start, 1, window, 1, &paddedFrame, 1, vDSP_Length(nFFT))
             }
             for i in nFFT..<paddedFFT {
                 paddedFrame[i] = 0

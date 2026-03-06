@@ -62,13 +62,14 @@ public struct DiarizationResult: Sendable {
 ///
 /// - Warning: This class is not thread-safe. Create separate instances for concurrent use.
 ///
-/// Three-stage pipeline:
+/// Pipeline (with optional VAD pre-filter):
+/// 0. **VAD Pre-filter** (optional): Silero VAD masks non-speech regions → reduces false alarms
 /// 1. **Segmentation**: Pyannote segmentation on 10s sliding windows → per-speaker local segments
 /// 2. **Embedding**: For each local segment, crop audio → mel → WeSpeaker → 256-dim embedding
 /// 3. **Clustering**: Spectral clustering with GMM-BIC speaker count estimation → global speaker IDs
 ///
 /// ```swift
-/// let pipeline = try await DiarizationPipeline.fromPretrained()
+/// let pipeline = try await DiarizationPipeline.fromPretrained(useVADFilter: true)
 /// let result = pipeline.diarize(audio: samples, sampleRate: 16000)
 /// for seg in result.segments {
 ///     print("Speaker \(seg.speakerId): [\(seg.startTime)s - \(seg.endTime)s]")
@@ -85,14 +86,19 @@ public final class DiarizationPipeline {
     /// WeSpeaker embedding model
     public let embeddingModel: WeSpeakerModel
 
+    /// Optional Silero VAD for pre-filtering non-speech
+    let vadModel: SileroVADModel?
+
     init(
         segmentationModel: SegmentationModel,
         segConfig: SegmentationConfig,
-        embeddingModel: WeSpeakerModel
+        embeddingModel: WeSpeakerModel,
+        vadModel: SileroVADModel? = nil
     ) {
         self.segmentationModel = segmentationModel
         self.segConfig = segConfig
         self.embeddingModel = embeddingModel
+        self.vadModel = vadModel
     }
 
     /// Load pre-trained models for diarization.
@@ -109,6 +115,7 @@ public final class DiarizationPipeline {
         segModelId: String = PyannoteVADModel.defaultModelId,
         embModelId: String? = nil,
         embeddingEngine: WeSpeakerEngine = .mlx,
+        useVADFilter: Bool = false,
         progressHandler: ((Double, String) -> Void)? = nil
     ) async throws -> DiarizationPipeline {
         progressHandler?(0.0, "Downloading segmentation model...")
@@ -119,7 +126,7 @@ public final class DiarizationPipeline {
             modelId: segModelId,
             to: segCacheDir,
             progressHandler: { progress in
-                progressHandler?(progress * 0.4, "Downloading segmentation weights...")
+                progressHandler?(progress * 0.3, "Downloading segmentation weights...")
             }
         )
 
@@ -127,23 +134,36 @@ public final class DiarizationPipeline {
         let segModel = SegmentationModel(config: segConfig)
         try SegmentationWeightLoader.loadWeights(model: segModel, from: segCacheDir)
 
-        progressHandler?(0.4, "Downloading speaker embedding model...")
+        progressHandler?(0.3, "Downloading speaker embedding model...")
 
         // Load embedding model
         let embModel = try await WeSpeakerModel.fromPretrained(
             modelId: embModelId,
             engine: embeddingEngine,
             progressHandler: { progress, status in
-                progressHandler?(0.4 + progress * 0.5, status)
+                progressHandler?(0.3 + progress * 0.4, status)
             }
         )
+
+        // Optionally load Silero VAD for pre-filtering
+        var vadModel: SileroVADModel? = nil
+        if useVADFilter {
+            progressHandler?(0.7, "Downloading VAD filter model...")
+            vadModel = try await SileroVADModel.fromPretrained(
+                engine: .mlx,
+                progressHandler: { progress, status in
+                    progressHandler?(0.7 + progress * 0.25, status)
+                }
+            )
+        }
 
         progressHandler?(1.0, "Ready")
 
         return DiarizationPipeline(
             segmentationModel: segModel,
             segConfig: segConfig,
-            embeddingModel: embModel
+            embeddingModel: embModel,
+            vadModel: vadModel
         )
     }
 
@@ -166,58 +186,51 @@ public final class DiarizationPipeline {
             samples = audio
         }
 
-        // Stage 1: Segmentation — get per-speaker local segments from sliding windows
-        let localSegments = runSegmentation(samples: samples, config: config)
+        // Stage 0 (optional): VAD pre-filter — mask non-speech to reduce false alarms
+        let speechMask: [SpeechSegment]?
+        if let vadModel {
+            speechMask = vadModel.detectSpeech(
+                audio: samples, sampleRate: segConfig.sampleRate)
+        } else {
+            speechMask = nil
+        }
 
-        guard !localSegments.isEmpty else {
+        if let speechMask, speechMask.isEmpty {
             return DiarizationResult(segments: [], numSpeakers: 0, speakerEmbeddings: [])
         }
 
-        // Stage 2: Embedding — extract speaker embedding for each local segment
-        var embeddings = [[Float]]()
-        for seg in localSegments {
-            let startSample = max(0, Int(seg.startTime * Float(segConfig.sampleRate)))
-            let endSample = min(samples.count, Int(seg.endTime * Float(segConfig.sampleRate)))
+        // Stage 1: Per-window segmentation with probability-based speaker chaining
+        let (segments, numSpeakers) = runActivityChainedDiarization(
+            samples: samples, config: config, speechMask: speechMask)
 
-            guard endSample > startSample else {
-                embeddings.append([Float](repeating: 0, count: embeddingModel.embeddingDimension))
-                continue
-            }
-
-            let cropAudio = Array(samples[startSample..<endSample])
-            let emb = embeddingModel.embed(audio: cropAudio, sampleRate: segConfig.sampleRate)
-            embeddings.append(emb)
+        guard !segments.isEmpty else {
+            return DiarizationResult(segments: [], numSpeakers: 0, speakerEmbeddings: [])
         }
 
-        // Stage 3: Clustering — assign global speaker IDs via spectral clustering + GMM-BIC
-        let (clusterIds, centroids) = spectralClustering(
-            embeddings: embeddings,
-            minClusters: config.minSpeakers,
-            maxClusters: config.maxSpeakers
-        )
-
-        // Build diarized segments
-        var diarizedSegments = [DiarizedSegment]()
-        for (i, seg) in localSegments.enumerated() {
-            diarizedSegments.append(DiarizedSegment(
-                startTime: seg.startTime,
-                endTime: seg.endTime,
-                speakerId: clusterIds[i]
-            ))
-        }
-
-        // Merge adjacent segments with same speaker and short gaps
         let merged = mergeAdjacentSegments(
-            diarizedSegments,
-            minSilence: config.minSilenceDuration
-        )
+            segments, minSilence: config.minSilenceDuration)
 
-        let numSpeakers = Set(clusterIds).count
+        // Stage 2: Compute per-speaker embeddings from final segments
+        var speakerEmbeddings = [[Float]]()
+        for spk in 0..<numSpeakers {
+            var spkAudio = [Float]()
+            for seg in merged where seg.speakerId == spk {
+                let s = max(0, Int(seg.startTime * Float(segConfig.sampleRate)))
+                let e = min(samples.count, Int(seg.endTime * Float(segConfig.sampleRate)))
+                if e > s { spkAudio.append(contentsOf: samples[s..<e]) }
+            }
+            if spkAudio.count >= segConfig.sampleRate / 4 {
+                speakerEmbeddings.append(embeddingModel.embed(
+                    audio: spkAudio, sampleRate: segConfig.sampleRate))
+            } else {
+                speakerEmbeddings.append([Float](repeating: 0, count: 256))
+            }
+        }
 
         return DiarizationResult(
             segments: merged,
             numSpeakers: numSpeakers,
-            speakerEmbeddings: centroids
+            speakerEmbeddings: speakerEmbeddings
         )
     }
 
@@ -259,68 +272,288 @@ public final class DiarizationPipeline {
             .map { SpeechSegment(startTime: $0.startTime, endTime: $0.endTime) }
     }
 
-    // MARK: - Stage 1: Segmentation
+    // MARK: - Activity-Based Speaker Chaining
 
-    private func runSegmentation(
+    /// Per-window raw probability tracks (3 speakers × nFrames).
+    private struct WindowProbs {
+        let startSample: Int
+        let endSample: Int
+        /// Speaker probability tracks [3][nFrames]
+        let tracks: [[Float]]
+    }
+
+    /// Run diarization by chaining speakers across windows using activity correlation
+    /// in the overlap region (no embedding-based matching).
+    ///
+    /// With 50% overlapping windows, adjacent windows share a half-window overlap region.
+    /// The activity patterns of the 3 local speakers in this overlap are compared via
+    /// Pearson correlation to find the best permutation mapping between windows.
+    private func runActivityChainedDiarization(
         samples: [Float],
-        config: DiarizationConfig
-    ) -> [(startTime: Float, endTime: Float, localSpeaker: Int)] {
-        let vadConfig = VADConfig.default
-        let pipeline = VADPipeline(
-            config: vadConfig,
-            sampleRate: segConfig.sampleRate,
-            framesPerChunk: 589
-        )
+        config: DiarizationConfig,
+        speechMask: [SpeechSegment]?
+    ) -> (segments: [DiarizedSegment], numSpeakers: Int) {
+        let windowDuration: Float = 10.0
+        let sampleRate = segConfig.sampleRate
+        let windowSamples = Int(windowDuration * Float(sampleRate))
+        let framesPerChunk = 589
+        let frameDuration = windowDuration / Float(framesPerChunk)
+        let stepSamples = windowSamples / 2  // 50% overlap
+        let halfFrames = framesPerChunk / 2  // ~294 frames in overlap
 
-        let positions = pipeline.windowPositions(numSamples: samples.count)
-        guard !positions.isEmpty else { return [] }
+        let numSamples = samples.count
+        guard numSamples > 0 else { return ([], 0) }
 
-        let windowSamples = Int(vadConfig.windowDuration * Float(segConfig.sampleRate))
-        let frameDuration = vadConfig.windowDuration / Float(589)
+        // Generate window positions with 50% overlap
+        var positions = [(start: Int, end: Int)]()
+        if numSamples <= windowSamples {
+            positions.append((0, numSamples))
+        } else {
+            var start = 0
+            while start + windowSamples <= numSamples {
+                positions.append((start, start + windowSamples))
+                start += stepSamples
+            }
+            if positions.isEmpty || positions.last!.end < numSamples {
+                positions.append((numSamples - windowSamples, numSamples))
+            }
+        }
 
-        var allSegments = [(startTime: Float, endTime: Float, localSpeaker: Int)]()
+        // Step 1: Run segmentation on all windows, collect probability tracks
+        var windowProbs = [WindowProbs]()
 
-        for (start, end) in positions {
+        for (_, (start, end)) in positions.enumerated() {
             var window = Array(samples[start..<end])
             if window.count < windowSamples {
                 window.append(contentsOf: [Float](repeating: 0, count: windowSamples - window.count))
             }
 
-            // Run segmentation: [1, 1, samples] → [1, frames, 7]
             let input = MLXArray(window).reshaped(1, 1, windowSamples)
             let posteriors = segmentationModel(input)
-
-            // Decode powerset to per-speaker: [1, frames, 3]
             let speakerProbs = PowersetDecoder.speakerProbabilities(from: posteriors)
             eval(speakerProbs)
 
-            let windowStartTime = Float(start) / Float(segConfig.sampleRate)
-
-            // Extract segments for each local speaker
+            var tracks = [[Float]]()
             for spk in 0..<3 {
-                let probs = speakerProbs[0, 0..., spk].asArray(Float.self)
+                tracks.append(speakerProbs[0, 0..., spk].asArray(Float.self))
+            }
+            windowProbs.append(WindowProbs(startSample: start, endSample: end, tracks: tracks))
+        }
 
+        guard !windowProbs.isEmpty else { return ([], 0) }
+
+        // Step 2: Chain speakers across adjacent windows using overlap correlation
+        // globalPermutation[w][localSpk] = global speaker ID for window w, local speaker localSpk
+        var globalPermutation = [[Int]](repeating: [0, 1, 2], count: windowProbs.count)
+        var maxGlobalSpk = 2  // max global speaker ID used so far
+
+        for w in 1..<windowProbs.count {
+            let prev = windowProbs[w - 1]
+            let curr = windowProbs[w]
+
+            // The overlap region: second half of prev == first half of curr
+            // prev frames [halfFrames...589) overlap with curr frames [0...halfFrames)
+            let overlapFrames = min(halfFrames, prev.tracks[0].count - halfFrames,
+                                     curr.tracks[0].count)
+            guard overlapFrames > 10 else {
+                // No meaningful overlap — assign new IDs
+                globalPermutation[w] = [maxGlobalSpk + 1, maxGlobalSpk + 2, maxGlobalSpk + 3]
+                maxGlobalSpk += 3
+                continue
+            }
+
+            // Determine which tracks are "active" (have meaningful speech) in the overlap
+            let activityThreshold: Float = 0.05  // mean prob > 5% → active
+            var prevActive = [Int]()
+            var currActive = [Int]()
+            var prevSlices = [[Float]](repeating: [], count: 3)
+            var currSlices = [[Float]](repeating: [], count: 3)
+
+            for p in 0..<3 {
+                let slice = Array(prev.tracks[p][halfFrames..<(halfFrames + overlapFrames)])
+                prevSlices[p] = slice
+                let mean = slice.reduce(0, +) / Float(overlapFrames)
+                if mean > activityThreshold { prevActive.append(p) }
+            }
+            for c in 0..<3 {
+                let slice = Array(curr.tracks[c][0..<overlapFrames])
+                currSlices[c] = slice
+                let mean = slice.reduce(0, +) / Float(overlapFrames)
+                if mean > activityThreshold { currActive.append(c) }
+            }
+
+            let prevMapping = globalPermutation[w - 1]
+            var currMapping = [Int](repeating: -1, count: 3)
+
+            if prevActive.isEmpty || currActive.isEmpty {
+                // No active speakers in overlap — preserve order from previous window
+                currMapping = prevMapping
+            } else {
+                // Compute correlation matrix only for active tracks
+                // Then use greedy exclusive matching
+                var pairs = [(corr: Float, prevLocal: Int, currLocal: Int)]()
+                for p in prevActive {
+                    for c in currActive {
+                        let corr = activityCorrelation(prevSlices[p], currSlices[c])
+                        pairs.append((corr, p, c))
+                    }
+                }
+                pairs.sort { $0.corr > $1.corr }
+
+                var usedPrev = Set<Int>()
+                var usedCurr = Set<Int>()
+                for (_, p, c) in pairs {
+                    if usedPrev.contains(p) || usedCurr.contains(c) { continue }
+                    currMapping[c] = prevMapping[p]
+                    usedPrev.insert(p)
+                    usedCurr.insert(c)
+                }
+
+                // Inactive curr tracks: assign to unmatched prev globals (by order)
+                var unmatchedPrevGlobals = [Int]()
+                for p in 0..<3 {
+                    if !usedPrev.contains(p) {
+                        unmatchedPrevGlobals.append(prevMapping[p])
+                    }
+                }
+                var unmatchedIdx = 0
+                for c in 0..<3 {
+                    if currMapping[c] < 0 {
+                        if unmatchedIdx < unmatchedPrevGlobals.count {
+                            currMapping[c] = unmatchedPrevGlobals[unmatchedIdx]
+                            unmatchedIdx += 1
+                        } else {
+                            maxGlobalSpk += 1
+                            currMapping[c] = maxGlobalSpk
+                        }
+                    }
+                }
+            }
+
+            globalPermutation[w] = currMapping
+        }
+
+        // Step 3: Binarize and build segments with global speaker IDs
+        var diarizedSegments = [DiarizedSegment]()
+        let numGlobalSpeakers = maxGlobalSpk + 1
+
+        for (w, wp) in windowProbs.enumerated() {
+            let windowStartTime = Float(wp.startSample) / Float(sampleRate)
+            let windowEndTime = Float(wp.endSample) / Float(sampleRate)
+
+            // Center zone ownership
+            let prevEnd = w > 0 ?
+                Float(positions[w - 1].end) / Float(sampleRate) : 0
+            let nextStart = w + 1 < positions.count ?
+                Float(positions[w + 1].start) / Float(sampleRate) : Float(numSamples) / Float(sampleRate)
+            let ownStart = w > 0 ? (windowStartTime + prevEnd) / 2 : 0
+            let ownEnd = w + 1 < positions.count ?
+                (windowEndTime + nextStart) / 2 : Float(numSamples) / Float(sampleRate)
+
+            for localSpk in 0..<3 {
+                let globalSpk = globalPermutation[w][localSpk]
+                let probs = wp.tracks[localSpk]
                 let segments = PowersetDecoder.binarize(
-                    probs: probs,
-                    onset: config.onset,
-                    offset: config.offset,
-                    frameDuration: frameDuration
-                )
+                    probs: probs, onset: config.onset,
+                    offset: config.offset, frameDuration: frameDuration)
 
                 for seg in segments {
                     let absStart = windowStartTime + seg.startTime
-                    let absEnd = windowStartTime + seg.endTime
-                    let duration = absEnd - absStart
+                    let absEnd = min(windowStartTime + seg.endTime, windowEndTime)
 
-                    if duration >= config.minSpeechDuration {
-                        allSegments.append((absStart, absEnd, spk))
+                    // Clip to center zone
+                    let clippedStart = max(absStart, ownStart)
+                    let clippedEnd = min(absEnd, ownEnd)
+                    guard clippedEnd - clippedStart >= config.minSpeechDuration else { continue }
+
+                    // Apply VAD mask if present
+                    if let speechMask {
+                        if let trimmed = trimToSpeechMask(
+                            start: clippedStart, end: clippedEnd,
+                            speechRegions: speechMask,
+                            minDuration: config.minSpeechDuration
+                        ) {
+                            diarizedSegments.append(DiarizedSegment(
+                                startTime: trimmed.startTime,
+                                endTime: trimmed.endTime,
+                                speakerId: globalSpk
+                            ))
+                        }
+                    } else {
+                        diarizedSegments.append(DiarizedSegment(
+                            startTime: clippedStart,
+                            endTime: clippedEnd,
+                            speakerId: globalSpk
+                        ))
                     }
                 }
             }
         }
 
-        // Sort by start time
-        return allSegments.sorted { $0.startTime < $1.startTime }
+        diarizedSegments.sort { $0.startTime < $1.startTime }
+
+        // Compact speaker IDs (remove gaps)
+        let usedIds = Set(diarizedSegments.map(\.speakerId)).sorted()
+        let idMap = Dictionary(uniqueKeysWithValues: usedIds.enumerated().map { ($1, $0) })
+        diarizedSegments = diarizedSegments.map {
+            DiarizedSegment(startTime: $0.startTime, endTime: $0.endTime,
+                           speakerId: idMap[$0.speakerId] ?? $0.speakerId)
+        }
+
+        return (diarizedSegments, usedIds.count)
+    }
+
+    /// Correlation between two activity probability vectors.
+    /// Returns value in [-1, 1]; high correlation means similar activity patterns.
+    private func activityCorrelation(_ a: [Float], _ b: [Float]) -> Float {
+        let n = min(a.count, b.count)
+        guard n > 1 else { return 0 }
+
+        var sumA: Float = 0, sumB: Float = 0
+        for i in 0..<n { sumA += a[i]; sumB += b[i] }
+        let meanA = sumA / Float(n)
+        let meanB = sumB / Float(n)
+
+        var cov: Float = 0, varA: Float = 0, varB: Float = 0
+        for i in 0..<n {
+            let da = a[i] - meanA
+            let db = b[i] - meanB
+            cov += da * db
+            varA += da * da
+            varB += db * db
+        }
+
+        let denom = sqrt(varA * varB)
+        return denom > 1e-10 ? cov / denom : 0
+    }
+
+
+    /// Trim a segment to intersect with speech regions.
+    private func trimToSpeechMask(
+        start: Float, end: Float,
+        speechRegions: [SpeechSegment],
+        minDuration: Float
+    ) -> (startTime: Float, endTime: Float)? {
+        let segDuration = end - start
+        guard segDuration > 0 else { return nil }
+
+        var totalOverlap: Float = 0
+        var trimStart: Float = end
+        var trimEnd: Float = start
+
+        for vad in speechRegions {
+            let oStart = max(start, vad.startTime)
+            let oEnd = min(end, vad.endTime)
+            if oStart < oEnd {
+                totalOverlap += oEnd - oStart
+                trimStart = min(trimStart, oStart)
+                trimEnd = max(trimEnd, oEnd)
+            }
+        }
+
+        guard totalOverlap / segDuration >= 0.5,
+              trimEnd - trimStart >= minDuration else { return nil }
+        return (trimStart, trimEnd)
     }
 
     // MARK: - Segment Merging

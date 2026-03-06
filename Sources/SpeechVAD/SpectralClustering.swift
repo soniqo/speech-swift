@@ -404,7 +404,7 @@ func spectralClustering(
     // Build affinity matrix and Laplacian
     let affinity = cosineAffinityMatrix(embeddings: embeddings)
 
-    // Quick check: if minimum off-diagonal affinity is very high, all embeddings are similar → 1 cluster
+    // Quick check: if all embedding pairs are extremely similar → 1 cluster
     if effectiveMin <= 1 {
         var minAff: Float = 1.0
         for i in 0..<n {
@@ -412,7 +412,7 @@ func spectralClustering(
                 minAff = min(minAff, affinity[i * n + j])
             }
         }
-        if minAff > 0.95 {
+        if minAff > 0.99 {
             return singleClusterResult(embeddings: embeddings)
         }
     }
@@ -438,7 +438,7 @@ func spectralClustering(
         )
     }
 
-    // Extract top-searchMax eigenvectors as fixed-dimensional features for GMM-BIC
+    // Use top-searchMax eigenvectors as features for GMM-BIC model selection
     let featureDim = searchMax
     var spectralPoints = [Float](repeating: 0, count: n * featureDim)
     for i in 0..<n {
@@ -447,7 +447,7 @@ func spectralClustering(
         }
     }
 
-    // Row-normalize spectral points
+    // Row-normalize
     for i in 0..<n {
         var norm: Float = 0
         for j in 0..<featureDim {
@@ -459,7 +459,6 @@ func spectralClustering(
         }
     }
 
-    // Vary k (number of clusters) while keeping feature dimension fixed
     var bestK = searchMin
     var bestBIC: Float = Float.infinity
 

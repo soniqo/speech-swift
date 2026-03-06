@@ -119,7 +119,8 @@ def _download_zip(zip_path: Path):
         print(f"  Download manually and place at: {zip_path}")
 
 
-def run_diarization(cli_path: str, num_files: int = 0, engine: str = "mlx"):
+def run_diarization(cli_path: str, num_files: int = 0, engine: str = "mlx",
+                    vad_filter: bool = False):
     """Run diarization on VoxConverse test files."""
     files = sorted(AUDIO_DIR.glob("*.wav"))
     if num_files > 0:
@@ -129,7 +130,8 @@ def run_diarization(cli_path: str, num_files: int = 0, engine: str = "mlx"):
         print("No audio files found. Run with --download-only first.")
         sys.exit(1)
 
-    print(f"\nRunning diarization on {len(files)} files (engine: {engine})...")
+    filter_label = " + VAD filter" if vad_filter else ""
+    print(f"\nRunning diarization on {len(files)} files (engine: {engine}{filter_label})...")
     results = []
 
     for wav_path in files:
@@ -145,10 +147,12 @@ def run_diarization(cli_path: str, num_files: int = 0, engine: str = "mlx"):
         start = time.time()
 
         try:
+            cmd = [cli_path, "diarize", str(wav_path), "--rttm",
+                   "--embedding-engine", engine]
+            if vad_filter:
+                cmd.append("--vad-filter")
             result = subprocess.run(
-                [cli_path, "diarize", str(wav_path), "--rttm",
-                 "--embedding-engine", engine],
-                capture_output=True, text=True, timeout=300
+                cmd, capture_output=True, text=True, timeout=300
             )
             elapsed = time.time() - start
 
@@ -327,6 +331,8 @@ def main():
                        help="Number of test files (0 = all)")
     parser.add_argument("--engine", default="mlx", choices=["mlx", "coreml"],
                        help="Speaker embedding engine")
+    parser.add_argument("--vad-filter", action="store_true",
+                       help="Pre-filter with Silero VAD to reduce false alarms")
     parser.add_argument("--download-only", action="store_true",
                        help="Only download test data")
     parser.add_argument("--score-only", action="store_true",
@@ -350,7 +356,8 @@ def main():
             print("Build with: swift build -c release")
             sys.exit(1)
 
-        run_results = run_diarization(args.cli_path, args.num_files, args.engine)
+        run_results = run_diarization(args.cli_path, args.num_files, args.engine,
+                                      args.vad_filter)
 
     # Score
     if args.use_dscore:

@@ -30,6 +30,9 @@ public struct DiarizeCommand: ParsableCommand {
     @Flag(name: .long, help: "Output as RTTM (standard diarization evaluation format)")
     public var rttm: Bool = false
 
+    @Flag(name: .long, help: "Pre-filter with Silero VAD to reduce false alarms")
+    public var vadFilter: Bool = false
+
     @Option(name: .long, help: "Reference RTTM file to score against (computes DER)")
     public var scoreAgainst: String?
 
@@ -53,9 +56,10 @@ public struct DiarizeCommand: ParsableCommand {
                 maxSpeakers: maxSpeakers
             )
 
-            print("Loading diarization models (embedding engine: \(embEngine.rawValue))...")
+            print("Loading diarization models (embedding engine: \(embEngine.rawValue)\(vadFilter ? ", VAD filter" : ""))...")
             let pipeline = try await DiarizationPipeline.fromPretrained(
                 embeddingEngine: embEngine,
+                useVADFilter: vadFilter,
                 progressHandler: reportProgress
             )
 
