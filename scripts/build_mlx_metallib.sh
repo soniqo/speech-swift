@@ -13,7 +13,14 @@ If you see: "missing Metal Toolchain", run:
 EOF
 }
 
+FORCE=0
 CONFIG="${1:-release}"
+if [[ "$CONFIG" == "--force" ]]; then
+  FORCE=1
+  CONFIG="${2:-release}"
+elif [[ "${2:-}" == "--force" ]]; then
+  FORCE=1
+fi
 if [[ "$CONFIG" != "release" && "$CONFIG" != "debug" ]]; then
   usage
   exit 2
@@ -55,43 +62,60 @@ if [[ "${#METAL_SRCS[@]}" -eq 0 ]]; then
   exit 1
 fi
 
-TMPDIR_ROOT="${TMPDIR:-/tmp}"
-TMP="$(mktemp -d "$TMPDIR_ROOT/mlx-metallib.XXXXXX")"
-cleanup() { rm -rf "$TMP"; }
-trap cleanup EXIT
-
-AIR_FILES=()
-METAL_FLAGS=(
-  -x metal
-  -Wall
-  -Wextra
-  -fno-fast-math
-  -Wno-c++17-extensions
-  -Wno-c++20-extensions
-)
-
-echo "Compiling ${#METAL_SRCS[@]} Metal sources..."
-for SRC in "${METAL_SRCS[@]}"; do
-  REL="${SRC#"$KERNELS_DIR/"}"
-  KEY="$(printf '%s' "$REL" | shasum -a 256 | awk '{print $1}' | cut -c1-16)"
-  OUT_AIR="$TMP/$KEY.air"
-
-  if ! xcrun -sdk macosx metal "${METAL_FLAGS[@]}" -c "$SRC" -I"$KERNELS_DIR" -I"$MLX_SWIFT_DIR/Source/Cmlx/mlx" -o "$OUT_AIR" 2>"$TMP/metal.err"; then
-    if grep -q "missing Metal Toolchain" "$TMP/metal.err" 2>/dev/null; then
-      echo "error: Xcode Metal Toolchain is missing." >&2
-      echo "run: xcodebuild -downloadComponent MetalToolchain" >&2
-    fi
-    cat "$TMP/metal.err" >&2
-    exit 1
-  fi
-  AIR_FILES+=("$OUT_AIR")
-done
-
 OUT_METALLIB="$OUT_DIR/mlx.metallib"
-echo "Linking mlx.metallib -> $OUT_METALLIB"
-xcrun -sdk macosx metallib "${AIR_FILES[@]}" -o "$OUT_METALLIB"
+HASH_FILE="$OUT_DIR/.mlx.metallib.sha"
 
-echo "OK: wrote $OUT_METALLIB"
+# Content hash of all metal sources + headers to detect changes
+CURRENT_HASH="$(find "$KERNELS_DIR" -type f \( -name '*.metal' -o -name '*.h' \) ! -name '*_nax.metal' | LC_ALL=C sort | xargs cat | shasum -a 256 | awk '{print $1}')"
+
+if [[ "$FORCE" != "1" && -f "$OUT_METALLIB" && -f "$HASH_FILE" ]]; then
+  PREV_HASH="$(cat "$HASH_FILE" 2>/dev/null || true)"
+  if [[ "$CURRENT_HASH" == "$PREV_HASH" ]]; then
+    echo "mlx.metallib is up to date (hash match), skipping build"
+    # Still copy to test bundles if needed
+    SKIP_BUILD=1
+  fi
+fi
+
+if [[ "${SKIP_BUILD:-0}" != "1" ]]; then
+  TMPDIR_ROOT="${TMPDIR:-/tmp}"
+  TMP="$(mktemp -d "$TMPDIR_ROOT/mlx-metallib.XXXXXX")"
+  cleanup() { rm -rf "$TMP"; }
+  trap cleanup EXIT
+
+  AIR_FILES=()
+  METAL_FLAGS=(
+    -x metal
+    -Wall
+    -Wextra
+    -fno-fast-math
+    -Wno-c++17-extensions
+    -Wno-c++20-extensions
+  )
+
+  echo "Compiling ${#METAL_SRCS[@]} Metal sources..."
+  for SRC in "${METAL_SRCS[@]}"; do
+    REL="${SRC#"$KERNELS_DIR/"}"
+    KEY="$(printf '%s' "$REL" | shasum -a 256 | awk '{print $1}' | cut -c1-16)"
+    OUT_AIR="$TMP/$KEY.air"
+
+    if ! xcrun -sdk macosx metal "${METAL_FLAGS[@]}" -c "$SRC" -I"$KERNELS_DIR" -I"$MLX_SWIFT_DIR/Source/Cmlx/mlx" -o "$OUT_AIR" 2>"$TMP/metal.err"; then
+      if grep -q "missing Metal Toolchain" "$TMP/metal.err" 2>/dev/null; then
+        echo "error: Xcode Metal Toolchain is missing." >&2
+        echo "run: xcodebuild -downloadComponent MetalToolchain" >&2
+      fi
+      cat "$TMP/metal.err" >&2
+      exit 1
+    fi
+    AIR_FILES+=("$OUT_AIR")
+  done
+
+  echo "Linking mlx.metallib -> $OUT_METALLIB"
+  xcrun -sdk macosx metallib "${AIR_FILES[@]}" -o "$OUT_METALLIB"
+
+  printf '%s' "$CURRENT_HASH" > "$HASH_FILE"
+  echo "OK: wrote $OUT_METALLIB"
+fi
 
 # Also copy to test binary location so swift test can find it
 ARCH="$(uname -m)-apple-macosx"
