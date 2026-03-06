@@ -30,7 +30,18 @@ jobs:
       - name: Build MLX metallib
         run: ./scripts/build_mlx_metallib.sh release
 
+      - name: Build debug test targets
+        run: swift build --build-tests --disable-sandbox
+
+      - name: Copy metallib to test bundle
+        run: |
+          ARCH="$(uname -m)-apple-macosx"
+          for BUNDLE in .build/$ARCH/debug/*.xctest/Contents/MacOS; do
+            [ -d "$BUNDLE" ] && cp .build/release/mlx.metallib "$BUNDLE/"
+            echo "Copied metallib to $BUNDLE"
+          done
+
       - name: Run tests
         run: >
-          swift test --filter
-          "WAVParsingSecurityTests|DownloadSecurityTests|MetallibScriptTests|DERScoringTests|SpectralClusteringTests|Qwen3TTSConfigTests|CosyVoiceTTSConfigTests|SamplingTests|PersonaPlexTests/testDefaultConfig|PersonaPlexTests/testDepformerConfig|PersonaPlexTests/testMimiConfig|PersonaPlexTests/testSamplingConfig|PersonaPlexTests/testEntropyConfig|PersonaPlexTests/testAudioChunk|PersonaPlexTests/testSilenceTokens|PersonaPlexTests/testDelayPattern|PersonaPlexTests/testVoicePresets|PersonaPlexTests/testHiddenScale|PersonaPlexTests/testDepformerDim|ForcedAlignerTests/testText|ForcedAlignerTests/testTimestamp|ForcedAlignerTests/testLIS|SileroVADTests/testSileroDefaultVADConfig"
+          swift test --skip-build --filter
+          "WAVParsingSecurityTests|DownloadSecurityTests|MetallibScriptTests|DERScoringTests|SpectralClusteringTests|Qwen3TTSConfigTests|CosyVoiceTTSConfigTests|SamplingTests|PersonaPlexTests/testDefaultConfig|PersonaPlexTests/testDepformerConfig|PersonaPlexTests/testMimiConfig|PersonaPlexTests/testSamplingConfig|PersonaPlexTests/testEntropyConfig|PersonaPlexTests/testAudioChunk|PersonaPlexTests/testSilenceTokens|PersonaPlexTests/testDelayPattern|PersonaPlexTests/testVoicePresets|PersonaPlexTests/testHiddenScale|PersonaPlexTests/testDepformerDim|ForcedAlignerTests/testText|ForcedAlignerTests/testTimestamp|ForcedAlignerTests/testLIS|SileroVADTests/testSilero|SileroVADTests/testReflection|SileroVADTests/testProcess|SileroVADTests/testReset|SileroVADTests/testDetect|SileroVADTests/testStreaming|SileroVADTests/testVADEvent"
