@@ -42,6 +42,32 @@ See [Roadmap discussion](https://github.com/ivan-digital/qwen3-asr-swift/discuss
 | DeepFilterNet3 | Speech Enhancement | Yes (10ms frames) | Language-agnostic | ~4.2 MB (CoreML FP16) |
 | WeSpeaker-ResNet34-LM | Speaker Embedding (256-dim) | No | Language-agnostic | ~25 MB (MLX or CoreML) |
 
+### Memory Requirements
+
+Weight memory is the GPU (MLX) or ANE (CoreML) memory consumed by model parameters. Peak inference includes KV caches, activations, and intermediate tensors.
+
+| Model | Weight Memory | Peak Inference | Fits 8GB? |
+|-------|--------------|----------------|-----------|
+| Qwen3-ASR-0.6B (4-bit) | 675 MB | ~2.2 GB | Yes |
+| Qwen3-ASR-1.7B (8-bit) | 2,349 MB | ~4 GB | No |
+| Parakeet-TDT-0.6B (CoreML) | 315 MB | ~400 MB | Yes |
+| Qwen3-ForcedAligner-0.6B (4-bit) | 933 MB | ~1.5 GB | Yes |
+| Qwen3-TTS-0.6B (4-bit) | 977 MB | ~2 GB | Yes |
+| CosyVoice3-0.5B (4-bit) | 732 MB | ~1.5 GB | Yes |
+| PersonaPlex-7B (4-bit) | 5,543 MB | ~6.5 GB | No |
+| Silero VAD (MLX) | 1.2 MB | ~5 MB | Yes |
+| Silero VAD (CoreML) | 0.7 MB | ~3 MB | Yes |
+| Pyannote Segmentation | 6 MB | ~20 MB | Yes |
+| DeepFilterNet3 (CoreML) | 4.2 MB | ~10 MB | Yes |
+| WeSpeaker (MLX) | 25 MB | ~50 MB | Yes |
+
+**8GB device recommendations:**
+- **Dictation**: Parakeet TDT (CoreML) + Silero VAD — ~400 MB total, leaves room for other apps
+- **Transcription**: Qwen3-ASR-0.6B + Silero VAD — ~2.2 GB peak
+- **TTS**: Qwen3-TTS or CosyVoice — ~2 GB peak, runs standalone
+- **ASR + TTS together**: Qwen3-ASR + Qwen3-TTS — ~4 GB peak, tight but works. Use Parakeet (CoreML) for ASR to avoid GPU contention
+- **PersonaPlex**: Requires 16GB+ device
+
 ### When to Use Which TTS
 
 - **Qwen3-TTS**: Best quality, streaming (~120ms), 9 built-in speakers, 10 languages, batch synthesis
