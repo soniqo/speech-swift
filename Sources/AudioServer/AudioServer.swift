@@ -1,5 +1,8 @@
 import Foundation
 import Hummingbird
+import HummingbirdCore
+import HummingbirdWebSocket
+import NIOCore
 import Qwen3ASR
 import Qwen3TTS
 import CosyVoiceTTS
@@ -22,8 +25,26 @@ public struct AudioServer {
 
     public func run() async throws {
         let router = buildRouter()
+        let state = self.state
+        let wsConfig = WebSocketServerConfiguration(maxFrameSize: 1 << 24)  // 16 MB max frame
+        let wsServer: HTTPServerBuilder = .http1WebSocketUpgrade(configuration: wsConfig) { head, _, _ in
+            let path = head.path ?? ""
+            switch path {
+            case "/ws/transcribe":
+                return .upgrade([:]) { inbound, outbound, _ in
+                    try await handleTranscribeWS(inbound: inbound, outbound: outbound, state: state)
+                }
+            case "/ws/speak":
+                return .upgrade([:]) { inbound, outbound, _ in
+                    try await handleSpeakWS(inbound: inbound, outbound: outbound, state: state)
+                }
+            default:
+                return .dontUpgrade
+            }
+        }
         let app = Application(
             router: router,
+            server: wsServer,
             configuration: .init(address: .hostname(host, port: port)))
         try await app.run()
     }
@@ -34,6 +55,8 @@ public struct AudioServer {
         _ = try await state.loadPersonaPlex()
         _ = try await state.loadEnhancer()
     }
+
+    // MARK: - HTTP Routes
 
     func buildRouter() -> Router<BasicRequestContext> {
         let router = Router()
@@ -225,6 +248,85 @@ private func logProgress(_ progress: Double, _ status: String) {
     print("  [\(Int(progress * 100))%] \(status)")
 }
 
+// MARK: - WebSocket Handlers
+
+/// Handle /ws/transcribe: binary audio in, JSON text out
+func handleTranscribeWS(
+    inbound: WebSocketInboundStream,
+    outbound: WebSocketOutboundWriter,
+    state: ModelState
+) async throws {
+    for try await message in inbound.messages(maxSize: 50 * 1024 * 1024) {
+        switch message {
+        case .binary(let buffer):
+            let data = Data(buffer: buffer)
+            let audio: [Float]
+            if data.count >= 44, data[0...3] == Data([0x52, 0x49, 0x46, 0x46]) {
+                audio = try decodeWAVData(data, targetSampleRate: 16000)
+            } else {
+                audio = pcm16LEToFloat(data)
+            }
+            let model = try await state.loadASR()
+            let text = model.transcribe(audio: audio, sampleRate: 16000)
+            try await outbound.write(.text(formatJSON(["text": text, "is_final": true])))
+
+        case .text(let string):
+            _ = string
+            try await outbound.write(.text(formatJSON(["status": "ok"])))
+        }
+    }
+}
+
+/// Handle /ws/speak: JSON text in, binary audio chunks out
+func handleSpeakWS(
+    inbound: WebSocketInboundStream,
+    outbound: WebSocketOutboundWriter,
+    state: ModelState
+) async throws {
+    for try await message in inbound.messages(maxSize: 1024 * 1024) {
+        guard case .text(let string) = message else { continue }
+        guard let jsonData = string.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
+              let text = json["text"] as? String else {
+            try await outbound.write(.text(formatJSON(["error": "Missing 'text' field"])))
+            continue
+        }
+
+        let engine = json["engine"] as? String ?? "cosyvoice"
+        let language = json["language"] as? String ?? "english"
+
+        if engine == "qwen3" {
+            let model = try await state.loadTTS()
+            let stream = model.synthesizeStream(text: text, language: language)
+            var totalSamples = 0
+            for try await chunk in stream {
+                if !chunk.samples.isEmpty {
+                    totalSamples += chunk.samples.count
+                    try await outbound.write(.binary(ByteBuffer(data: floatToPCM16LE(chunk.samples))))
+                }
+            }
+            let duration = Double(totalSamples) / 24000.0
+            try await outbound.write(.text(formatJSON([
+                "done": true, "duration": round(duration * 100) / 100, "sample_rate": 24000
+            ] as [String: Any])))
+        } else {
+            let model = try await state.loadCosyVoice()
+            let stream = model.synthesizeStream(text: text, language: language)
+            var totalSamples = 0
+            for try await chunk in stream {
+                if !chunk.samples.isEmpty {
+                    totalSamples += chunk.samples.count
+                    try await outbound.write(.binary(ByteBuffer(data: floatToPCM16LE(chunk.samples))))
+                }
+            }
+            let duration = Double(totalSamples) / 24000.0
+            try await outbound.write(.text(formatJSON([
+                "done": true, "duration": round(duration * 100) / 100, "sample_rate": 24000
+            ] as [String: Any])))
+        }
+    }
+}
+
 // MARK: - Request Parsing
 
 struct RequestParams {
@@ -299,4 +401,37 @@ func errorResponse(_ message: String, status: HTTPResponse.Status) -> Response {
         status: status,
         headers: [.contentType: "application/json"],
         body: .init(byteBuffer: .init(data: data)))
+}
+
+// MARK: - PCM Conversion
+
+func pcm16LEToFloat(_ data: Data) -> [Float] {
+    let sampleCount = data.count / 2
+    var result = [Float](repeating: 0, count: sampleCount)
+    data.withUnsafeBytes { raw in
+        let int16s = raw.bindMemory(to: Int16.self)
+        for i in 0..<sampleCount {
+            result[i] = Float(Int16(littleEndian: int16s[i])) / 32768.0
+        }
+    }
+    return result
+}
+
+func floatToPCM16LE(_ samples: [Float]) -> Data {
+    var data = Data(count: samples.count * 2)
+    data.withUnsafeMutableBytes { raw in
+        let int16s = raw.bindMemory(to: Int16.self)
+        for i in 0..<samples.count {
+            let clamped = max(-1.0, min(1.0, samples[i]))
+            int16s[i] = Int16(clamped * 32767.0).littleEndian
+        }
+    }
+    return data
+}
+
+func formatJSON(_ dict: [String: Any]) -> String {
+    guard let data = try? JSONSerialization.data(withJSONObject: dict, options: [.sortedKeys]) else {
+        return "{}"
+    }
+    return String(data: data, encoding: .utf8) ?? "{}"
 }

@@ -772,7 +772,7 @@ See [Shared Protocols](docs/shared-protocols.md) for the full protocol reference
 
 ## HTTP API Server
 
-A standalone HTTP server exposes all models via REST endpoints. Models are loaded lazily on first request.
+A standalone HTTP server exposes all models via REST and WebSocket endpoints. Models are loaded lazily on first request.
 
 ```bash
 swift build -c release
@@ -795,7 +795,34 @@ curl -X POST http://localhost:8080/enhance --data-binary @noisy.wav -o clean.wav
 .build/release/audio-server --preload --port 8080
 ```
 
-The server is a separate `AudioServer` module and `audio-server` executable — it does not add Hummingbird to the main `audio` CLI.
+### WebSocket Streaming
+
+WebSocket endpoints enable real-time streaming for browser-based voice UIs:
+
+| Endpoint | Direction | Protocol |
+|----------|-----------|----------|
+| `ws://host:port/ws/transcribe` | Binary audio in, JSON text out | PCM16LE mono 16kHz or WAV |
+| `ws://host:port/ws/speak` | JSON text in, binary audio out | PCM16LE mono 24kHz chunks |
+
+```javascript
+// Streaming ASR
+const ws = new WebSocket('ws://localhost:8080/ws/transcribe');
+ws.binaryType = 'arraybuffer';
+ws.send(pcm16leBuffer);  // or WAV file bytes
+ws.onmessage = (e) => console.log(JSON.parse(e.data));  // {"text": "...", "is_final": true}
+
+// Streaming TTS
+const ws = new WebSocket('ws://localhost:8080/ws/speak');
+ws.send(JSON.stringify({ text: "Hello", engine: "cosyvoice", language: "english" }));
+ws.onmessage = (e) => {
+  if (e.data instanceof ArrayBuffer) { /* PCM16LE audio chunk */ }
+  else { /* JSON: {"done": true, "duration": 1.5, "sample_rate": 24000} */ }
+};
+```
+
+An example HTML client is at `Examples/websocket-client.html` — open it in a browser while the server is running.
+
+The server is a separate `AudioServer` module and `audio-server` executable — it does not add Hummingbird/WebSocket to the main `audio` CLI.
 
 ## Latency (M2 Max, 64 GB)
 

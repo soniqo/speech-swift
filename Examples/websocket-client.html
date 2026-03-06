@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Speech WebSocket Client</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; color: #333; }
+  h1 { margin-bottom: 8px; }
+  .subtitle { color: #666; margin-bottom: 24px; }
+  .section { border: 1px solid #ddd; border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+  h2 { margin-bottom: 12px; }
+  label { display: block; font-weight: 600; margin-bottom: 4px; }
+  input, select, textarea { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; margin-bottom: 12px; font-size: 14px; }
+  textarea { resize: vertical; }
+  button { padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; margin-right: 8px; }
+  .btn-primary { background: #007aff; color: white; }
+  .btn-primary:disabled { background: #99c8ff; cursor: not-allowed; }
+  .btn-danger { background: #ff3b30; color: white; }
+  .btn-record { background: #34c759; color: white; }
+  .btn-record.recording { background: #ff3b30; }
+  .log { background: #f5f5f5; border-radius: 4px; padding: 12px; font-family: monospace; font-size: 13px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; margin-top: 12px; }
+  .status { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+  .status.connected { background: #34c759; }
+  .status.disconnected { background: #ff3b30; }
+  audio { width: 100%; margin-top: 12px; }
+</style>
+</head>
+<body>
+<h1>Speech WebSocket Client</h1>
+<p class="subtitle">Test streaming ASR and TTS via WebSocket</p>
+
+<div class="section">
+  <label>Server</label>
+  <input type="text" id="server" value="ws://127.0.0.1:8080" />
+</div>
+
+<!-- ASR Section -->
+<div class="section">
+  <h2>Streaming ASR <span id="asr-status" class="status disconnected"></span></h2>
+  <p style="margin-bottom:12px;color:#666;">Record from microphone or upload a WAV file. Audio is sent as PCM16LE mono 16kHz.</p>
+  <button class="btn-record" id="record-btn" onclick="toggleRecord()">Record</button>
+  <input type="file" id="wav-file" accept=".wav" style="display:inline-block;width:auto;" />
+  <button class="btn-primary" onclick="sendWAV()">Send WAV</button>
+  <div class="log" id="asr-log">Ready.</div>
+</div>
+
+<!-- TTS Section -->
+<div class="section">
+  <h2>Streaming TTS <span id="tts-status" class="status disconnected"></span></h2>
+  <label>Text</label>
+  <textarea id="tts-text" rows="2">Hello! This is a test of streaming text to speech synthesis.</textarea>
+  <label>Engine</label>
+  <select id="tts-engine">
+    <option value="cosyvoice">CosyVoice</option>
+    <option value="qwen3">Qwen3-TTS</option>
+  </select>
+  <label>Language</label>
+  <select id="tts-language">
+    <option value="english">English</option>
+    <option value="chinese">Chinese</option>
+    <option value="german">German</option>
+    <option value="japanese">Japanese</option>
+    <option value="spanish">Spanish</option>
+    <option value="french">French</option>
+    <option value="korean">Korean</option>
+    <option value="russian">Russian</option>
+    <option value="italian">Italian</option>
+  </select>
+  <button class="btn-primary" id="speak-btn" onclick="speak()">Speak</button>
+  <audio id="tts-audio" controls></audio>
+  <div class="log" id="tts-log">Ready.</div>
+</div>
+
+<script>
+// --- ASR ---
+let asrWs = null;
+let mediaRecorder = null;
+let audioContext = null;
+let isRecording = false;
+
+function asrLog(msg) {
+  const el = document.getElementById('asr-log');
+  el.textContent += '\n' + msg;
+  el.scrollTop = el.scrollHeight;
+}
+
+function setAsrStatus(connected) {
+  document.getElementById('asr-status').className = 'status ' + (connected ? 'connected' : 'disconnected');
+}
+
+function connectASR() {
+  return new Promise((resolve, reject) => {
+    if (asrWs && asrWs.readyState === WebSocket.OPEN) { resolve(asrWs); return; }
+    const url = document.getElementById('server').value + '/ws/transcribe';
+    asrLog('Connecting to ' + url + '...');
+    asrWs = new WebSocket(url);
+    asrWs.binaryType = 'arraybuffer';
+    asrWs.onopen = () => { setAsrStatus(true); asrLog('Connected.'); resolve(asrWs); };
+    asrWs.onmessage = (e) => { asrLog('Server: ' + e.data); };
+    asrWs.onclose = () => { setAsrStatus(false); asrLog('Disconnected.'); asrWs = null; };
+    asrWs.onerror = (e) => { asrLog('Error: ' + e); reject(e); };
+  });
+}
+
+async function toggleRecord() {
+  const btn = document.getElementById('record-btn');
+  if (isRecording) {
+    isRecording = false;
+    btn.textContent = 'Record';
+    btn.classList.remove('recording');
+    if (mediaRecorder) mediaRecorder.stop();
+    return;
+  }
+  try {
+    const ws = await connectASR();
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { sampleRate: 16000, channelCount: 1 } });
+    audioContext = new AudioContext({ sampleRate: 16000 });
+    const source = audioContext.createMediaStreamSource(stream);
+    const processor = audioContext.createScriptProcessor(4096, 1, 1);
+    processor.onaudioprocess = (e) => {
+      if (!isRecording || !ws || ws.readyState !== WebSocket.OPEN) return;
+      const float32 = e.inputBuffer.getChannelData(0);
+      const int16 = new Int16Array(float32.length);
+      for (let i = 0; i < float32.length; i++) {
+        int16[i] = Math.max(-32768, Math.min(32767, Math.round(float32[i] * 32767)));
+      }
+      ws.send(int16.buffer);
+    };
+    source.connect(processor);
+    processor.connect(audioContext.destination);
+    isRecording = true;
+    btn.textContent = 'Stop';
+    btn.classList.add('recording');
+    asrLog('Recording... (sending PCM16LE 16kHz chunks)');
+  } catch (err) {
+    asrLog('Microphone error: ' + err.message);
+  }
+}
+
+async function sendWAV() {
+  const file = document.getElementById('wav-file').files[0];
+  if (!file) { asrLog('No file selected.'); return; }
+  try {
+    const ws = await connectASR();
+    const buf = await file.arrayBuffer();
+    asrLog('Sending ' + file.name + ' (' + buf.byteLength + ' bytes)...');
+    ws.send(buf);
+  } catch (err) {
+    asrLog('Error: ' + err.message);
+  }
+}
+
+// --- TTS ---
+let ttsWs = null;
+
+function ttsLog(msg) {
+  const el = document.getElementById('tts-log');
+  el.textContent += '\n' + msg;
+  el.scrollTop = el.scrollHeight;
+}
+
+function setTtsStatus(connected) {
+  document.getElementById('tts-status').className = 'status ' + (connected ? 'connected' : 'disconnected');
+}
+
+async function speak() {
+  const text = document.getElementById('tts-text').value.trim();
+  if (!text) { ttsLog('No text entered.'); return; }
+  const engine = document.getElementById('tts-engine').value;
+  const language = document.getElementById('tts-language').value;
+  const btn = document.getElementById('speak-btn');
+
+  btn.disabled = true;
+  const url = document.getElementById('server').value + '/ws/speak';
+  ttsLog('Connecting to ' + url + '...');
+
+  ttsWs = new WebSocket(url);
+  ttsWs.binaryType = 'arraybuffer';
+  const audioChunks = [];
+
+  ttsWs.onopen = () => {
+    setTtsStatus(true);
+    ttsLog('Connected. Sending: ' + JSON.stringify({ text, engine, language }));
+    ttsWs.send(JSON.stringify({ text, engine, language }));
+  };
+
+  ttsWs.onmessage = (e) => {
+    if (e.data instanceof ArrayBuffer) {
+      const samples = e.data.byteLength / 2;
+      audioChunks.push(new Int16Array(e.data));
+      ttsLog('Received audio chunk: ' + samples + ' samples');
+    } else {
+      ttsLog('Server: ' + e.data);
+      try {
+        const msg = JSON.parse(e.data);
+        if (msg.done) {
+          // Assemble all chunks into a WAV blob and play
+          playAudio(audioChunks, msg.sample_rate || 24000);
+        }
+      } catch {}
+    }
+  };
+
+  ttsWs.onclose = () => {
+    setTtsStatus(false);
+    ttsLog('Disconnected.');
+    btn.disabled = false;
+    ttsWs = null;
+  };
+
+  ttsWs.onerror = (e) => {
+    ttsLog('Error: ' + e);
+    btn.disabled = false;
+  };
+}
+
+function playAudio(int16Chunks, sampleRate) {
+  let totalLength = 0;
+  for (const c of int16Chunks) totalLength += c.length;
+  if (totalLength === 0) { ttsLog('No audio to play.'); return; }
+
+  // Build WAV
+  const headerSize = 44;
+  const dataSize = totalLength * 2;
+  const buf = new ArrayBuffer(headerSize + dataSize);
+  const view = new DataView(buf);
+  // RIFF header
+  writeString(view, 0, 'RIFF');
+  view.setUint32(4, 36 + dataSize, true);
+  writeString(view, 8, 'WAVE');
+  writeString(view, 12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, 1, true); // mono
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeString(view, 36, 'data');
+  view.setUint32(40, dataSize, true);
+  let offset = 44;
+  for (const c of int16Chunks) {
+    for (let i = 0; i < c.length; i++) {
+      view.setInt16(offset, c[i], true);
+      offset += 2;
+    }
+  }
+  const blob = new Blob([buf], { type: 'audio/wav' });
+  const audioEl = document.getElementById('tts-audio');
+  audioEl.src = URL.createObjectURL(blob);
+  audioEl.play();
+  ttsLog('Playing ' + (totalLength / sampleRate).toFixed(2) + 's audio.');
+}
+
+function writeString(view, offset, str) {
+  for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+}
+</script>
+</body>
+</html>

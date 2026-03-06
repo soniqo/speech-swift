@@ -29,11 +29,13 @@ struct AudioServerCommand: AsyncParsableCommand {
 
         print("Starting server on http://\(host):\(port)")
         print("Endpoints:")
-        print("  POST /transcribe  - Speech-to-text (WAV body or JSON with audio_base64)")
-        print("  POST /speak       - Text-to-speech (JSON: {text, engine?, language?})")
-        print("  POST /respond     - Speech-to-speech (WAV body, voice/max_steps via query)")
-        print("  POST /enhance     - Speech enhancement (WAV body)")
-        print("  GET  /health      - Health check")
+        print("  POST /transcribe     - Speech-to-text (WAV body or JSON with audio_base64)")
+        print("  POST /speak          - Text-to-speech (JSON: {text, engine?, language?})")
+        print("  POST /respond        - Speech-to-speech (WAV body, voice/max_steps via query)")
+        print("  POST /enhance        - Speech enhancement (WAV body)")
+        print("  GET  /health         - Health check")
+        print("  WS   /ws/transcribe  - Streaming ASR (binary audio in, JSON text out)")
+        print("  WS   /ws/speak       - Streaming TTS (JSON text in, binary audio out)")
 
         try await server.run()
     }
