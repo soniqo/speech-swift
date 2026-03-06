@@ -11,9 +11,13 @@ AI speech models for Apple Silicon, powered by [MLX Swift](https://github.com/ml
 - **DeepFilterNet3** — Speech enhancement / noise suppression (2.1M params, real-time 48kHz)
 - **Silero VAD** — Streaming voice activity detection (32ms chunks, ~309K params)
 - **Pyannote VAD** — Offline voice activity detection (10s windows, multi-speaker overlap)
-- **Speaker Diarization** — Who spoke when (pyannote segmentation + WeSpeaker embedding + spectral clustering with automatic speaker count)
+- **Speaker Diarization** — Who spoke when (pyannote segmentation + activity-based speaker chaining, up to 3 concurrent speakers)
 
 Papers: [Qwen3-ASR](https://arxiv.org/abs/2601.21337), [Qwen3-TTS](https://arxiv.org/abs/2601.15621), [CosyVoice 3](https://arxiv.org/abs/2505.17589), [PersonaPlex](https://arxiv.org/abs/2602.06053), [Mimi](https://arxiv.org/abs/2410.00037) (audio codec)
+
+## Roadmap
+
+See [Roadmap discussion](https://github.com/ivan-digital/qwen3-asr-swift/discussions/81) for what's planned — comments and suggestions welcome!
 
 ## News
 
@@ -874,6 +878,16 @@ PERSONAPLEX_E2E=1 swift test --filter PersonaPlexE2ETests
 | Qwen3-TTS | EN, CN, DE, JA, ES, FR, KO, RU, IT, PT (+ Beijing/Sichuan dialects via CustomVoice) |
 | CosyVoice TTS | CN, EN, JA, KO, DE, ES, FR, IT, RU |
 | PersonaPlex | EN |
+
+## Contributing
+
+We welcome contributions! Whether it's a bug fix, new model integration, or documentation improvement — PRs are appreciated.
+
+**To get started:**
+1. Fork the repo and create a feature branch
+2. `make build` to compile (requires Xcode + Metal Toolchain)
+3. `make test` to run the test suite
+4. Open a PR against `main`
 
 ## Star History
 
