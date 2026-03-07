@@ -34,8 +34,7 @@ struct AudioServerCommand: AsyncParsableCommand {
         print("  POST /respond        - Speech-to-speech (WAV body, voice/max_steps via query)")
         print("  POST /enhance        - Speech enhancement (WAV body)")
         print("  GET  /health         - Health check")
-        print("  WS   /ws/transcribe  - Streaming ASR (binary audio in, JSON text out)")
-        print("  WS   /ws/speak       - Streaming TTS (JSON text in, binary audio out)")
+        print("  WS   /v1/realtime    - OpenAI Realtime API (JSON events, base64 PCM16 audio)")
 
         try await server.run()
     }

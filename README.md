@@ -797,27 +797,47 @@ curl -X POST http://localhost:8080/enhance --data-binary @noisy.wav -o clean.wav
 
 ### WebSocket Streaming
 
-WebSocket endpoints enable real-time streaming for browser-based voice UIs:
+#### OpenAI Realtime API (`/v1/realtime`)
 
-| Endpoint | Direction | Protocol |
-|----------|-----------|----------|
-| `ws://host:port/ws/transcribe` | Binary audio in, JSON text out | PCM16LE mono 16kHz or WAV |
-| `ws://host:port/ws/speak` | JSON text in, binary audio out | PCM16LE mono 24kHz chunks |
+The primary WebSocket endpoint implements the [OpenAI Realtime API](https://platform.openai.com/docs/api-reference/realtime) protocol — all messages are JSON with a `type` field, audio is base64-encoded PCM16 24kHz mono.
+
+**Client → Server events:**
+
+| Event | Description |
+|-------|-------------|
+| `session.update` | Configure engine, language, audio format |
+| `input_audio_buffer.append` | Send base64 PCM16 audio chunk |
+| `input_audio_buffer.commit` | Transcribe accumulated audio (ASR) |
+| `input_audio_buffer.clear` | Clear audio buffer |
+| `response.create` | Request TTS synthesis |
+
+**Server → Client events:**
+
+| Event | Description |
+|-------|-------------|
+| `session.created` | Session initialized |
+| `session.updated` | Configuration confirmed |
+| `input_audio_buffer.committed` | Audio committed for transcription |
+| `conversation.item.input_audio_transcription.completed` | ASR result |
+| `response.audio.delta` | Base64 PCM16 audio chunk (TTS) |
+| `response.audio.done` | Audio streaming complete |
+| `response.done` | Response complete with metadata |
+| `error` | Error with type and message |
 
 ```javascript
-// Streaming ASR
-const ws = new WebSocket('ws://localhost:8080/ws/transcribe');
-ws.binaryType = 'arraybuffer';
-ws.send(pcm16leBuffer);  // or WAV file bytes
-ws.onmessage = (e) => console.log(JSON.parse(e.data));  // {"text": "...", "is_final": true}
+const ws = new WebSocket('ws://localhost:8080/v1/realtime');
 
-// Streaming TTS
-const ws = new WebSocket('ws://localhost:8080/ws/speak');
-ws.send(JSON.stringify({ text: "Hello", engine: "cosyvoice", language: "english" }));
-ws.onmessage = (e) => {
-  if (e.data instanceof ArrayBuffer) { /* PCM16LE audio chunk */ }
-  else { /* JSON: {"done": true, "duration": 1.5, "sample_rate": 24000} */ }
-};
+// ASR: send audio, get transcription
+ws.send(JSON.stringify({ type: 'input_audio_buffer.append', audio: base64PCM16 }));
+ws.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
+// → receives: conversation.item.input_audio_transcription.completed
+
+// TTS: send text, get streamed audio
+ws.send(JSON.stringify({
+  type: 'response.create',
+  response: { modalities: ['audio', 'text'], instructions: 'Hello world' }
+}));
+// → receives: response.audio.delta (base64 chunks), response.audio.done, response.done
 ```
 
 An example HTML client is at `Examples/websocket-client.html` — open it in a browser while the server is running.

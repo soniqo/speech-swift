@@ -73,6 +73,44 @@ final class PCMConversionTests: XCTestCase {
     }
 }
 
+final class ResampleTests: XCTestCase {
+
+    func testSameRate() {
+        let input: [Float] = [1.0, 2.0, 3.0, 4.0]
+        let output = resample(input, from: 24000, to: 24000)
+        XCTAssertEqual(output, input)
+    }
+
+    func testEmpty() {
+        let output = resample([], from: 24000, to: 16000)
+        XCTAssertEqual(output.count, 0)
+    }
+
+    func testDownsample24kTo16k() {
+        // 24000 samples at 24kHz = 1 second → should produce ~16000 samples at 16kHz
+        let input = [Float](repeating: 0.5, count: 24000)
+        let output = resample(input, from: 24000, to: 16000)
+        XCTAssertEqual(output.count, 16000)
+        for s in output {
+            XCTAssertEqual(s, 0.5, accuracy: 1e-5)
+        }
+    }
+
+    func testDownsamplePreservesShape() {
+        // A simple ramp 0..1 over 240 samples at 24kHz → 160 samples at 16kHz
+        let input = (0..<240).map { Float($0) / 239.0 }
+        let output = resample(input, from: 24000, to: 16000)
+        XCTAssertEqual(output.count, 160)
+        // First sample should be ~0, last should be ~1
+        XCTAssertEqual(output[0], 0.0, accuracy: 0.01)
+        XCTAssertEqual(output[output.count - 1], 1.0, accuracy: 0.02)
+        // Should be monotonically increasing
+        for i in 1..<output.count {
+            XCTAssertGreaterThanOrEqual(output[i], output[i - 1])
+        }
+    }
+}
+
 final class FormatJSONTests: XCTestCase {
 
     func testBasicJSON() {
