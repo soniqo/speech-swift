@@ -21,8 +21,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .build
-          key: swiftpm-${{ runner.os }}-${{ hashFiles('Package.swift') }}
-          restore-keys: swiftpm-${{ runner.os }}-
+          key: swiftpm-${{ runner.os }}-${{ github.repository }}-${{ hashFiles('Package.swift') }}
 
       - name: Build release
         run: swift build -c release --disable-sandbox
@@ -44,4 +43,4 @@ jobs:
       - name: Run tests
         run: >
           swift test --skip-build --filter
-          "WAVParsingSecurityTests|DownloadSecurityTests|MetallibScriptTests|DERScoringTests|SpectralClusteringTests|Qwen3TTSConfigTests|CosyVoiceTTSConfigTests|SamplingTests|PersonaPlexTests/testDefaultConfig|PersonaPlexTests/testDepformerConfig|PersonaPlexTests/testMimiConfig|PersonaPlexTests/testSamplingConfig|PersonaPlexTests/testEntropyConfig|PersonaPlexTests/testAudioChunk|PersonaPlexTests/testSilenceTokens|PersonaPlexTests/testDelayPattern|PersonaPlexTests/testVoicePresets|PersonaPlexTests/testHiddenScale|PersonaPlexTests/testDepformerDim|ForcedAlignerTests/testText|ForcedAlignerTests/testTimestamp|ForcedAlignerTests/testLIS|SileroVADTests/testSilero|SileroVADTests/testReflection|SileroVADTests/testProcess|SileroVADTests/testReset|SileroVADTests/testDetect|SileroVADTests/testStreaming|SileroVADTests/testVADEvent"
+          "WAVParsingSecurityTests|DownloadSecurityTests|MetallibScriptTests|DERScoringTests|SpectralClusteringTests|Qwen3TTSConfigTests|CosyVoiceTTSConfigTests|SamplingTests|PersonaPlexTests/testDefaultConfig|PersonaPlexTests/testDepformerConfig|PersonaPlexTests/testMimiConfig|PersonaPlexTests/testSamplingConfig|PersonaPlexTests/testEntropyConfig|PersonaPlexTests/testAudioChunk|PersonaPlexTests/testSilenceTokens|PersonaPlexTests/testDelayPattern|PersonaPlexTests/testVoicePresets|PersonaPlexTests/testHiddenScale|PersonaPlexTests/testDepformerDim|ForcedAlignerTests/testText|ForcedAlignerTests/testTimestamp|ForcedAlignerTests/testLIS|SileroVADTests/testSilero|SileroVADTests/testReflection|SileroVADTests/testProcess|SileroVADTests/testReset|SileroVADTests/testDetect|SileroVADTests/testStreaming|SileroVADTests/testVADEvent|PCMConversionTests|ResampleTests|FormatJSONTests|RealtimeAPITests"

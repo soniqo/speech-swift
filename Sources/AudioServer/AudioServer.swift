@@ -1,5 +1,8 @@
 import Foundation
 import Hummingbird
+import HummingbirdCore
+import HummingbirdWebSocket
+import NIOCore
 import Qwen3ASR
 import Qwen3TTS
 import CosyVoiceTTS
@@ -22,8 +25,18 @@ public struct AudioServer {
 
     public func run() async throws {
         let router = buildRouter()
+        let state = self.state
+        let wsConfig = WebSocketServerConfiguration(maxFrameSize: 1 << 24)  // 16 MB max frame
+        let wsServer: HTTPServerBuilder = .http1WebSocketUpgrade(configuration: wsConfig) { head, _, _ in
+            let path = head.path ?? ""
+            guard path == "/v1/realtime" else { return .dontUpgrade }
+            return .upgrade([:]) { inbound, outbound, _ in
+                try await handleRealtimeWS(inbound: inbound, outbound: outbound, state: state)
+            }
+        }
         let app = Application(
             router: router,
+            server: wsServer,
             configuration: .init(address: .hostname(host, port: port)))
         try await app.run()
     }
@@ -34,6 +47,8 @@ public struct AudioServer {
         _ = try await state.loadPersonaPlex()
         _ = try await state.loadEnhancer()
     }
+
+    // MARK: - HTTP Routes
 
     func buildRouter() -> Router<BasicRequestContext> {
         let router = Router()
@@ -225,6 +240,285 @@ private func logProgress(_ progress: Double, _ status: String) {
     print("  [\(Int(progress * 100))%] \(status)")
 }
 
+// MARK: - OpenAI Realtime API Handler
+
+/// Per-connection session state for the OpenAI Realtime protocol.
+private final class RealtimeSession {
+    var engine: String = "cosyvoice"
+    var language: String = "english"
+    var inputAudioBuffer = Data()
+    var inputSampleRate: Int = 24000
+}
+
+/// Handle /v1/realtime: OpenAI Realtime API compatible protocol.
+/// All messages are JSON with a "type" field. Audio is base64-encoded PCM16 24kHz.
+func handleRealtimeWS(
+    inbound: WebSocketInboundStream,
+    outbound: WebSocketOutboundWriter,
+    state: ModelState
+) async throws {
+    let session = RealtimeSession()
+    let sessionId = UUID().uuidString
+
+    // Send session.created
+    try await outbound.write(.text(formatJSON([
+        "type": "session.created",
+        "session": [
+            "id": sessionId,
+            "model": "qwen3-speech",
+            "modalities": ["audio", "text"],
+            "input_audio_format": "pcm16",
+            "output_audio_format": "pcm16"
+        ]
+    ] as [String: Any])))
+
+    for try await message in inbound.messages(maxSize: 50 * 1024 * 1024) {
+        guard case .text(let string) = message else { continue }
+        guard let jsonData = string.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
+              let eventType = json["type"] as? String else {
+            try await sendRealtimeError(outbound: outbound, message: "Invalid message format")
+            continue
+        }
+
+        switch eventType {
+
+        case "session.update":
+            if let sessionConfig = json["session"] as? [String: Any] {
+                if let engine = sessionConfig["engine"] as? String {
+                    session.engine = engine
+                }
+                if let lang = sessionConfig["language"] as? String {
+                    session.language = lang
+                }
+                if let fmt = sessionConfig["input_audio_format"] as? String, fmt == "pcm16" {
+                    session.inputSampleRate = 24000
+                }
+            }
+            try await outbound.write(.text(formatJSON([
+                "type": "session.updated",
+                "session": [
+                    "id": sessionId,
+                    "engine": session.engine,
+                    "language": session.language,
+                    "input_audio_format": "pcm16",
+                    "output_audio_format": "pcm16"
+                ]
+            ] as [String: Any])))
+
+        case "input_audio_buffer.append":
+            guard let audioB64 = json["audio"] as? String,
+                  let audioData = Data(base64Encoded: audioB64) else {
+                try await sendRealtimeError(outbound: outbound, message: "Missing or invalid 'audio' field")
+                continue
+            }
+            session.inputAudioBuffer.append(audioData)
+
+        case "input_audio_buffer.clear":
+            session.inputAudioBuffer.removeAll()
+            try await outbound.write(.text(formatJSON([
+                "type": "input_audio_buffer.cleared"
+            ])))
+
+        case "input_audio_buffer.commit":
+            let audioData = session.inputAudioBuffer
+            session.inputAudioBuffer.removeAll()
+
+            guard !audioData.isEmpty else {
+                try await sendRealtimeError(outbound: outbound, message: "Audio buffer is empty")
+                continue
+            }
+
+            let itemId = UUID().uuidString
+            try await outbound.write(.text(formatJSON([
+                "type": "input_audio_buffer.committed",
+                "item_id": itemId
+            ])))
+
+            // Transcribe: PCM16 24kHz → resample to 16kHz for ASR
+            let floats = pcm16LEToFloat(audioData)
+            let audio16k = resample(floats, from: session.inputSampleRate, to: 16000)
+            let model = try await state.loadASR()
+            let text = model.transcribe(audio: audio16k, sampleRate: 16000)
+
+            let responseId = UUID().uuidString
+            try await outbound.write(.text(formatJSON([
+                "type": "conversation.item.input_audio_transcription.completed",
+                "item_id": itemId,
+                "transcript": text
+            ])))
+
+            // Also emit as a response for clients expecting response.* events
+            try await outbound.write(.text(formatJSON([
+                "type": "response.created",
+                "response": ["id": responseId, "status": "in_progress"]
+            ] as [String: Any])))
+            try await outbound.write(.text(formatJSON([
+                "type": "response.audio_transcript.delta",
+                "response_id": responseId,
+                "delta": text
+            ])))
+            try await outbound.write(.text(formatJSON([
+                "type": "response.audio_transcript.done",
+                "response_id": responseId,
+                "transcript": text
+            ])))
+            try await outbound.write(.text(formatJSON([
+                "type": "response.done",
+                "response": ["id": responseId, "status": "completed"]
+            ] as [String: Any])))
+
+        case "response.create":
+            let input = json["response"] as? [String: Any]
+            let instructions = input?["instructions"] as? String
+            let modalities = input?["modalities"] as? [String] ?? ["audio", "text"]
+            let responseId = UUID().uuidString
+
+            // If there's text to speak (from instructions or input items)
+            var textToSpeak: String?
+
+            if let instructions = instructions, !instructions.isEmpty {
+                textToSpeak = instructions
+            }
+
+            // Check for input items with text content
+            if textToSpeak == nil, let inputItems = input?["input"] as? [[String: Any]] {
+                for item in inputItems {
+                    if let content = item["content"] as? [[String: Any]] {
+                        for part in content {
+                            if part["type"] as? String == "input_text",
+                               let text = part["text"] as? String {
+                                textToSpeak = text
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Also check conversation.item.create pattern — text in input
+            if textToSpeak == nil, let text = input?["text"] as? String {
+                textToSpeak = text
+            }
+
+            guard let text = textToSpeak else {
+                try await sendRealtimeError(outbound: outbound, message: "No text to synthesize")
+                continue
+            }
+
+            try await outbound.write(.text(formatJSON([
+                "type": "response.created",
+                "response": ["id": responseId, "status": "in_progress"]
+            ] as [String: Any])))
+
+            // Stream TTS audio as base64 PCM16 24kHz chunks
+            let engine = (input?["engine"] as? String) ?? session.engine
+            let language = (input?["language"] as? String) ?? session.language
+            var totalSamples = 0
+
+            if engine == "qwen3" {
+                let model = try await state.loadTTS()
+                let stream = model.synthesizeStream(text: text, language: language)
+                for try await chunk in stream {
+                    if !chunk.samples.isEmpty {
+                        totalSamples += chunk.samples.count
+                        let pcm = floatToPCM16LE(chunk.samples)
+                        try await outbound.write(.text(formatJSON([
+                            "type": "response.audio.delta",
+                            "response_id": responseId,
+                            "delta": pcm.base64EncodedString()
+                        ])))
+                    }
+                }
+            } else {
+                let model = try await state.loadCosyVoice()
+                let stream = model.synthesizeStream(text: text, language: language)
+                for try await chunk in stream {
+                    if !chunk.samples.isEmpty {
+                        totalSamples += chunk.samples.count
+                        let pcm = floatToPCM16LE(chunk.samples)
+                        try await outbound.write(.text(formatJSON([
+                            "type": "response.audio.delta",
+                            "response_id": responseId,
+                            "delta": pcm.base64EncodedString()
+                        ])))
+                    }
+                }
+            }
+
+            if modalities.contains("text") {
+                try await outbound.write(.text(formatJSON([
+                    "type": "response.audio_transcript.done",
+                    "response_id": responseId,
+                    "transcript": text
+                ])))
+            }
+
+            try await outbound.write(.text(formatJSON([
+                "type": "response.audio.done",
+                "response_id": responseId
+            ])))
+
+            let duration = Double(totalSamples) / 24000.0
+            try await outbound.write(.text(formatJSON([
+                "type": "response.done",
+                "response": [
+                    "id": responseId,
+                    "status": "completed",
+                    "usage": [
+                        "total_tokens": 0,
+                        "output_tokens": 0
+                    ],
+                    "output": [
+                        ["type": "audio", "duration": round(duration * 100) / 100, "sample_rate": 24000]
+                    ]
+                ]
+            ] as [String: Any])))
+
+        case "conversation.item.create":
+            // Accept text items for TTS via response.create flow
+            if let item = json["item"] as? [String: Any],
+               let content = item["content"] as? [[String: Any]] {
+                for part in content {
+                    if part["type"] as? String == "input_text" || part["type"] as? String == "text",
+                       let _ = part["text"] as? String {
+                        try await outbound.write(.text(formatJSON([
+                            "type": "conversation.item.created",
+                            "item": item
+                        ] as [String: Any])))
+                    }
+                }
+            }
+
+        default:
+            try await sendRealtimeError(outbound: outbound,
+                message: "Unknown event type: \(eventType)")
+        }
+    }
+}
+
+private func sendRealtimeError(outbound: WebSocketOutboundWriter, message: String) async throws {
+    try await outbound.write(.text(formatJSON([
+        "type": "error",
+        "error": ["type": "invalid_request_error", "message": message]
+    ] as [String: Any])))
+}
+
+/// Simple linear resampling (e.g. 24kHz → 16kHz for ASR)
+func resample(_ samples: [Float], from sourceSR: Int, to targetSR: Int) -> [Float] {
+    guard sourceSR != targetSR, !samples.isEmpty else { return samples }
+    let ratio = Double(sourceSR) / Double(targetSR)
+    let outputCount = Int(Double(samples.count) / ratio)
+    var result = [Float](repeating: 0, count: outputCount)
+    for i in 0..<outputCount {
+        let srcIdx = Double(i) * ratio
+        let idx0 = Int(srcIdx)
+        let frac = Float(srcIdx - Double(idx0))
+        let idx1 = min(idx0 + 1, samples.count - 1)
+        result[i] = samples[idx0] * (1 - frac) + samples[idx1] * frac
+    }
+    return result
+}
+
 // MARK: - Request Parsing
 
 struct RequestParams {
@@ -299,4 +593,37 @@ func errorResponse(_ message: String, status: HTTPResponse.Status) -> Response {
         status: status,
         headers: [.contentType: "application/json"],
         body: .init(byteBuffer: .init(data: data)))
+}
+
+// MARK: - PCM Conversion
+
+func pcm16LEToFloat(_ data: Data) -> [Float] {
+    let sampleCount = data.count / 2
+    var result = [Float](repeating: 0, count: sampleCount)
+    data.withUnsafeBytes { raw in
+        let int16s = raw.bindMemory(to: Int16.self)
+        for i in 0..<sampleCount {
+            result[i] = Float(Int16(littleEndian: int16s[i])) / 32768.0
+        }
+    }
+    return result
+}
+
+func floatToPCM16LE(_ samples: [Float]) -> Data {
+    var data = Data(count: samples.count * 2)
+    data.withUnsafeMutableBytes { raw in
+        let int16s = raw.bindMemory(to: Int16.self)
+        for i in 0..<samples.count {
+            let clamped = max(-1.0, min(1.0, samples[i]))
+            int16s[i] = Int16(clamped * 32767.0).littleEndian
+        }
+    }
+    return data
+}
+
+func formatJSON(_ dict: [String: Any]) -> String {
+    guard let data = try? JSONSerialization.data(withJSONObject: dict, options: [.sortedKeys]) else {
+        return "{}"
+    }
+    return String(data: data, encoding: .utf8) ?? "{}"
 }

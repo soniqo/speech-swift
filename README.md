@@ -17,7 +17,7 @@ Papers: [Qwen3-ASR](https://arxiv.org/abs/2601.21337), [Qwen3-TTS](https://arxiv
 
 ## Roadmap
 
-See [Roadmap discussion](https://github.com/ivan-digital/qwen3-asr-swift/discussions/81) for what's planned — comments and suggestions welcome!
+See [Roadmap discussion](https://github.com/soniqo/speech-swift/discussions/81) for what's planned — comments and suggestions welcome!
 
 ## News
 
@@ -81,7 +81,7 @@ Weight memory is the GPU (MLX) or ANE (CoreML) memory consumed by model paramete
 Requires native ARM Homebrew (`/opt/homebrew`). Rosetta/x86_64 Homebrew is not supported.
 
 ```bash
-brew tap ivan-digital/speech https://github.com/ivan-digital/qwen3-asr-swift
+brew tap soniqo/speech https://github.com/soniqo/speech-swift
 brew install speech
 ```
 
@@ -102,7 +102,7 @@ Add to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/ivan-digital/qwen3-asr-swift", branch: "main")
+    .package(url: "https://github.com/soniqo/speech-swift", branch: "main")
 ]
 ```
 
@@ -129,8 +129,8 @@ import AudioCommon        // Shared utilities
 ### Build from Source
 
 ```bash
-git clone https://github.com/ivan-digital/qwen3-asr-swift
-cd qwen3-asr-swift
+git clone https://github.com/soniqo/speech-swift
+cd speech-swift
 make build
 ```
 
@@ -772,7 +772,7 @@ See [Shared Protocols](docs/shared-protocols.md) for the full protocol reference
 
 ## HTTP API Server
 
-A standalone HTTP server exposes all models via REST endpoints. Models are loaded lazily on first request.
+A standalone HTTP server exposes all models via REST and WebSocket endpoints. Models are loaded lazily on first request.
 
 ```bash
 swift build -c release
@@ -795,7 +795,54 @@ curl -X POST http://localhost:8080/enhance --data-binary @noisy.wav -o clean.wav
 .build/release/audio-server --preload --port 8080
 ```
 
-The server is a separate `AudioServer` module and `audio-server` executable — it does not add Hummingbird to the main `audio` CLI.
+### WebSocket Streaming
+
+#### OpenAI Realtime API (`/v1/realtime`)
+
+The primary WebSocket endpoint implements the [OpenAI Realtime API](https://platform.openai.com/docs/api-reference/realtime) protocol — all messages are JSON with a `type` field, audio is base64-encoded PCM16 24kHz mono.
+
+**Client → Server events:**
+
+| Event | Description |
+|-------|-------------|
+| `session.update` | Configure engine, language, audio format |
+| `input_audio_buffer.append` | Send base64 PCM16 audio chunk |
+| `input_audio_buffer.commit` | Transcribe accumulated audio (ASR) |
+| `input_audio_buffer.clear` | Clear audio buffer |
+| `response.create` | Request TTS synthesis |
+
+**Server → Client events:**
+
+| Event | Description |
+|-------|-------------|
+| `session.created` | Session initialized |
+| `session.updated` | Configuration confirmed |
+| `input_audio_buffer.committed` | Audio committed for transcription |
+| `conversation.item.input_audio_transcription.completed` | ASR result |
+| `response.audio.delta` | Base64 PCM16 audio chunk (TTS) |
+| `response.audio.done` | Audio streaming complete |
+| `response.done` | Response complete with metadata |
+| `error` | Error with type and message |
+
+```javascript
+const ws = new WebSocket('ws://localhost:8080/v1/realtime');
+
+// ASR: send audio, get transcription
+ws.send(JSON.stringify({ type: 'input_audio_buffer.append', audio: base64PCM16 }));
+ws.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
+// → receives: conversation.item.input_audio_transcription.completed
+
+// TTS: send text, get streamed audio
+ws.send(JSON.stringify({
+  type: 'response.create',
+  response: { modalities: ['audio', 'text'], instructions: 'Hello world' }
+}));
+// → receives: response.audio.delta (base64 chunks), response.audio.done, response.done
+```
+
+An example HTML client is at `Examples/websocket-client.html` — open it in a browser while the server is running.
+
+The server is a separate `AudioServer` module and `audio-server` executable — it does not add Hummingbird/WebSocket to the main `audio` CLI.
 
 ## Latency (M2 Max, 64 GB)
 
@@ -939,7 +986,7 @@ We welcome contributions! Whether it's a bug fix, new model integration, or docu
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=ivan-digital/qwen3-asr-swift&type=date&legend=top-left)](https://www.star-history.com/#ivan-digital/qwen3-asr-swift&type=date&legend=top-left)
+[![Star History Chart](https://api.star-history.com/svg?repos=soniqo/speech-swift&type=date&legend=top-left)](https://www.star-history.com/#soniqo/speech-swift&type=date&legend=top-left)
 
 ## License
 
