@@ -20,14 +20,13 @@ public class Qwen3ForcedAligner {
 
     private let config: Qwen3ASRConfig
 
-    public init((
+    public init(
         audioConfig: Qwen3AudioEncoderConfig = .forcedAligner,
         textConfig: TextDecoderConfig = .small,
         classifyNum: Int = 5000,
         useFloatTextDecoder: Bool = false
     ) {
         self.audioEncoder = Qwen3AudioEncoder(config: audioConfig)
-        self.textDecoder = QuantizedTextModel(config: textConfig)
         if useFloatTextDecoder {
             self.textDecoder = FloatTextModel(config: textConfig)
         } else {
@@ -253,5 +252,64 @@ public extension Qwen3ForcedAligner {
         progressHandler?(1.0, "Ready")
 
         return model
+    }
+
+    private struct ForcedAlignerPackaging {
+        let usesFloatTextDecoder: Bool
+        let textConfig: TextDecoderConfig
+    }
+
+    private struct QuantizationFile: Decodable {
+        struct Quantization: Decodable {
+            let bits: Int?
+            let groupSize: Int?
+            let quantizedComponents: [String]?
+
+            enum CodingKeys: String, CodingKey {
+                case bits
+                case groupSize = "group_size"
+                case quantizedComponents = "quantized_components"
+            }
+        }
+
+        let quantization: Quantization?
+        let quantizationConfig: Quantization?
+
+        enum CodingKeys: String, CodingKey {
+            case quantization
+            case quantizationConfig = "quantization_config"
+        }
+    }
+
+    private static func detectPackaging(in cacheDir: URL) -> ForcedAlignerPackaging {
+        let decoder = JSONDecoder()
+        var textConfig = TextDecoderConfig.small
+        var usesFloatTextDecoder = true
+
+        let configPath = cacheDir.appendingPathComponent("config.json")
+        if let data = try? Data(contentsOf: configPath),
+           let file = try? decoder.decode(QuantizationFile.self, from: data),
+           let quant = file.quantization ?? file.quantizationConfig,
+           let bits = quant.bits {
+            textConfig.bits = bits
+            if let groupSize = quant.groupSize { textConfig.groupSize = groupSize }
+            usesFloatTextDecoder = false
+        }
+
+        let quantizePath = cacheDir.appendingPathComponent("quantize_config.json")
+        if let data = try? Data(contentsOf: quantizePath),
+           let file = try? decoder.decode(QuantizationFile.self, from: data),
+           let quant = file.quantization,
+           let bits = quant.bits,
+           quant.quantizedComponents?.contains("text_decoder") == true {
+            textConfig.bits = bits
+            if let groupSize = quant.groupSize { textConfig.groupSize = groupSize }
+            usesFloatTextDecoder = false
+        }
+
+        return ForcedAlignerPackaging(
+            usesFloatTextDecoder: usesFloatTextDecoder,
+            textConfig: textConfig
+        )
     }
 }

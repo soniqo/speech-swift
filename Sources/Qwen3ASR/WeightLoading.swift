@@ -224,7 +224,6 @@ public enum WeightLoader {
         } else {
             throw WeightLoadingError.incompatibleWeights("Unsupported forced-aligner text decoder type")
         }
-        print("Applied text decoder weights (\(model.textDecoder.layers.count) layers)")
 
         // Load classify head (NOT quantized — regular Linear)
         applyClassifyHeadWeights(to: model.classifyHead, prefix: "lm_head", from: classifyWeights, textDecoder: model.textDecoder)
