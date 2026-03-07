@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-VoxConverse DER benchmark for qwen3-asr-swift diarization pipeline.
+VoxConverse DER benchmark for speech-swift diarization pipeline.
 
 Downloads VoxConverse test set, runs diarization via CLI, computes DER.
 Uses dscore for standard evaluation when available, falls back to built-in scoring.

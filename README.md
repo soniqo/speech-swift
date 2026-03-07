@@ -17,7 +17,7 @@ Papers: [Qwen3-ASR](https://arxiv.org/abs/2601.21337), [Qwen3-TTS](https://arxiv
 
 ## Roadmap
 
-See [Roadmap discussion](https://github.com/ivan-digital/qwen3-asr-swift/discussions/81) for what's planned — comments and suggestions welcome!
+See [Roadmap discussion](https://github.com/soniqo/speech-swift/discussions/81) for what's planned — comments and suggestions welcome!
 
 ## News
 
@@ -81,7 +81,7 @@ Weight memory is the GPU (MLX) or ANE (CoreML) memory consumed by model paramete
 Requires native ARM Homebrew (`/opt/homebrew`). Rosetta/x86_64 Homebrew is not supported.
 
 ```bash
-brew tap ivan-digital/speech https://github.com/ivan-digital/qwen3-asr-swift
+brew tap soniqo/speech https://github.com/soniqo/speech-swift
 brew install speech
 ```
 
@@ -102,7 +102,7 @@ Add to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/ivan-digital/qwen3-asr-swift", branch: "main")
+    .package(url: "https://github.com/soniqo/speech-swift", branch: "main")
 ]
 ```
 
@@ -129,8 +129,8 @@ import AudioCommon        // Shared utilities
 ### Build from Source
 
 ```bash
-git clone https://github.com/ivan-digital/qwen3-asr-swift
-cd qwen3-asr-swift
+git clone https://github.com/soniqo/speech-swift
+cd speech-swift
 make build
 ```
 
@@ -986,7 +986,7 @@ We welcome contributions! Whether it's a bug fix, new model integration, or docu
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=ivan-digital/qwen3-asr-swift&type=date&legend=top-left)](https://www.star-history.com/#ivan-digital/qwen3-asr-swift&type=date&legend=top-left)
+[![Star History Chart](https://api.star-history.com/svg?repos=soniqo/speech-swift&type=date&legend=top-left)](https://www.star-history.com/#soniqo/speech-swift&type=date&legend=top-left)
 
 ## License
 
