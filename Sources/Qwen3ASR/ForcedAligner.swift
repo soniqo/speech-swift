@@ -13,21 +13,28 @@ import AudioCommon
 /// Inference is non-autoregressive (single forward pass).
 public class Qwen3ForcedAligner {
     public let audioEncoder: Qwen3AudioEncoder
-    public let textDecoder: QuantizedTextModel
+    public let textDecoder: any ForcedAlignerTextDecoding
     public let classifyHead: Linear
     public let featureExtractor: WhisperFeatureExtractor
     public var tokenizer: Qwen3Tokenizer?
 
     private let config: Qwen3ASRConfig
 
-    public init(
+    public init((
         audioConfig: Qwen3AudioEncoderConfig = .forcedAligner,
         textConfig: TextDecoderConfig = .small,
-        classifyNum: Int = 5000
+        classifyNum: Int = 5000,
+        useFloatTextDecoder: Bool = false
     ) {
         self.audioEncoder = Qwen3AudioEncoder(config: audioConfig)
         self.textDecoder = QuantizedTextModel(config: textConfig)
-        self.classifyHead = Linear(textConfig.hiddenSize, classifyNum)
+        if useFloatTextDecoder {
+            self.textDecoder = FloatTextModel(config: textConfig)
+        } else {
+            self.textDecoder = QuantizedTextModel(config: textConfig)
+        }
+
+        self.classifyHead = Linear(textConfig.hiddenSize, classifyNum, bias: false)
         self.featureExtractor = WhisperFeatureExtractor()
 
         var cfg = Qwen3ASRConfig()
@@ -87,7 +94,7 @@ public class Qwen3ForcedAligner {
 
         // 4. Embed all tokens and replace audio_pad with audio embeddings
         let inputIdsTensor = MLXArray(inputIds.map { Int32($0) }).expandedDimensions(axis: 0)
-        var inputEmbeds = textDecoder.embedTokens(inputIdsTensor)
+        var inputEmbeds = textDecoder.embeddings(for: inputIdsTensor)
 
         // Find audio_pad range and replace with audio embeddings
         let audioStartIndex = findAudioPadStart(inputIds)
@@ -99,7 +106,7 @@ public class Qwen3ForcedAligner {
         inputEmbeds = concatenated([beforeAudio, audioEmbedsTyped, afterAudio], axis: 1)
 
         // 5. Single forward pass through decoder (no cache, no autoregressive loop)
-        let (hiddenStates, _) = textDecoder(inputsEmbeds: inputEmbeds, cache: nil)
+        let (hiddenStates, _) = textDecoder.decode(inputsEmbeds: inputEmbeds, attentionMask: nil, cache: nil)
 
         // 6. Apply classify head to ALL hidden states → logits [1, seqLen, classifyNum]
         let logits = classifyHead(hiddenStates)
@@ -214,7 +221,8 @@ public extension Qwen3ForcedAligner {
         try await HuggingFaceDownloader.downloadWeights(
             modelId: modelId,
             to: cacheDir,
-            additionalFiles: ["vocab.json", "merges.txt", "tokenizer_config.json"],
+            additionalFiles: ["vocab.json", "merges.txt", "tokenizer_config.json",
+                              "quantize_config.json"],
             progressHandler: { progress in
                 progressHandler?(progress * 0.8, "Downloading weights...")
             }
@@ -222,26 +230,11 @@ public extension Qwen3ForcedAligner {
 
         progressHandler?(0.80, "Loading tokenizer...")
 
-        // Detect quantization from model ID
-        let textConfig: TextDecoderConfig
-        if modelId.contains("4bit") {
-            var cfg = TextDecoderConfig.small
-            cfg.bits = 4
-            cfg.groupSize = 64
-            textConfig = cfg
-        } else if modelId.contains("8bit") {
-            var cfg = TextDecoderConfig.small
-            cfg.bits = 8
-            cfg.groupSize = 64
-            textConfig = cfg
-        } else {
-            // bf16 — still use quantized text model structure but with default config
-            textConfig = .small
-        }
+        let packaging = detectPackaging(in: cacheDir)
 
         let model = Qwen3ForcedAligner(
-            audioConfig: .forcedAligner,
-            textConfig: textConfig
+            textConfig: packaging.textConfig,
+            useFloatTextDecoder: packaging.usesFloatTextDecoder
         )
 
         // Load tokenizer
