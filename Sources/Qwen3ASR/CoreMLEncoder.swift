@@ -17,7 +17,7 @@ public class CoreMLASREncoder {
     private let model: MLModel
     private let enumeratedMelLengths: [Int]
 
-    public static let defaultModelId = "aufklarer/Qwen3-ASR-CoreML-INT4"
+    public static let defaultModelId = "aufklarer/Qwen3-ASR-CoreML"
 
     public init(model: MLModel, enumeratedMelLengths: [Int] = [100, 200, 400, 600, 800, 1000, 1500, 2000, 3000]) {
         self.model = model

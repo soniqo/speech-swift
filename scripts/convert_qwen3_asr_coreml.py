@@ -4,7 +4,7 @@ Convert Qwen3-ASR-0.6B audio encoder to CoreML for iOS/iPad deployment.
 
 Loads audio_tower weights from HuggingFace, builds a clean PyTorch encoder,
 traces it, converts to CoreML with EnumeratedShapes for variable-length audio,
-and applies INT4 palettization for Neural Engine efficiency.
+and applies INT8 palettization for Neural Engine efficiency.
 
 The audio encoder processes mel spectrograms → audio embeddings that feed
 into the text decoder. This converts the encoder only; the text decoder
@@ -20,7 +20,7 @@ Requires:
 Usage:
   python scripts/convert_qwen3_asr_coreml.py
   python scripts/convert_qwen3_asr_coreml.py --output-dir ./qwen3-asr-coreml --compile
-  python scripts/convert_qwen3_asr_coreml.py --no-quantize  # skip INT4
+  python scripts/convert_qwen3_asr_coreml.py --no-quantize  # skip INT8
 """
 
 import argparse
@@ -189,16 +189,25 @@ class Qwen3ASREncoder(nn.Module):
 
 # ── Weight loading ──
 
-def download_encoder_weights(model_id):
-    """Download safetensors from HuggingFace and extract audio_tower weights."""
-    from huggingface_hub import snapshot_download
+def download_encoder_weights(model_id, weights_dir=None):
+    """Load audio_tower weights from local cache or HuggingFace.
+
+    Args:
+        model_id: HuggingFace model ID (used if weights_dir is None)
+        weights_dir: Local directory with safetensors (skips HF download)
+    """
     from safetensors.torch import load_file
 
-    print(f"Downloading weights from {model_id}...")
-    cache_dir = Path(snapshot_download(
-        model_id,
-        allow_patterns=["*.safetensors", "model.safetensors.index.json"],
-    ))
+    if weights_dir:
+        cache_dir = Path(weights_dir)
+        print(f"Loading weights from {cache_dir}...")
+    else:
+        from huggingface_hub import snapshot_download
+        print(f"Downloading weights from {model_id}...")
+        cache_dir = Path(snapshot_download(
+            model_id,
+            allow_patterns=["*.safetensors", "model.safetensors.index.json"],
+        ))
 
     all_weights = {}
     for f in sorted(cache_dir.glob("*.safetensors")):
@@ -223,7 +232,18 @@ def download_encoder_weights(model_id):
 
 
 def load_weights(model, weights):
-    """Load HuggingFace weights into the PyTorch encoder."""
+    """Load weights into the PyTorch encoder.
+
+    Handles MLX Conv2d format [outC, kH, kW, inC] → PyTorch [outC, inC, kH, kW].
+    """
+    # Fix Conv2d weights from MLX format if needed
+    for key in ["conv2d1.weight", "conv2d2.weight", "conv2d3.weight"]:
+        if key in weights and weights[key].dim() == 4:
+            w = weights[key]
+            # MLX: [outC, kH, kW, inC], PyTorch: [outC, inC, kH, kW]
+            if w.shape[1] == w.shape[2] and w.shape[1] <= 3:  # kH=kW=3
+                weights[key] = w.permute(0, 3, 1, 2)
+
     sd = model.state_dict()
     loaded = 0
 
@@ -247,11 +267,17 @@ def load_weights(model, weights):
 
 # ── CoreML conversion ──
 
-def convert_to_coreml(traced, quantize):
-    """Convert traced encoder to CoreML with EnumeratedShapes and optional INT4."""
+def convert_to_coreml(traced, quantize_nbits=None):
+    """Convert traced encoder to CoreML with EnumeratedShapes and optional quantization.
+
+    Args:
+        traced: JIT-traced PyTorch model
+        quantize_nbits: None for FP16 only, 4 for INT4, 8 for INT8
+    """
     mel_shapes = [ct.Shape(shape=(1, 128, t)) for t in MEL_T_VALUES]
 
-    print(f"Converting to CoreML (shapes: {MEL_T_VALUES})...")
+    label = f"INT{quantize_nbits}" if quantize_nbits else "FP16"
+    print(f"Converting to CoreML {label} (shapes: {MEL_T_VALUES})...")
     mlmodel = ct.convert(
         traced,
         inputs=[ct.TensorType(
@@ -265,14 +291,14 @@ def convert_to_coreml(traced, quantize):
         minimum_deployment_target=ct.target.iOS17,
     )
 
-    if quantize:
-        print("  Applying INT4 palettization...")
+    if quantize_nbits:
+        print(f"  Applying INT{quantize_nbits} palettization...")
         from coremltools.optimize.coreml import (
             OpPalettizerConfig,
             OptimizationConfig,
             palettize_weights,
         )
-        op_config = OpPalettizerConfig(mode="kmeans", nbits=4)
+        op_config = OpPalettizerConfig(mode="kmeans", nbits=quantize_nbits)
         config = OptimizationConfig(global_config=op_config)
         mlmodel = palettize_weights(mlmodel, config)
 
@@ -339,17 +365,21 @@ def main():
     parser = argparse.ArgumentParser(description="Convert Qwen3-ASR encoder to CoreML")
     parser.add_argument("--model-id", default="Qwen/Qwen3-ASR-0.6B",
                         help="HuggingFace model ID (default: Qwen/Qwen3-ASR-0.6B)")
+    parser.add_argument("--weights-dir",
+                        help="Local directory with safetensors (skip HF download)")
+    parser.add_argument("--weights-pt",
+                        help="Pre-extracted audio_tower weights .pt file")
     parser.add_argument("--output-dir", default="./qwen3-asr-coreml",
                         help="Output directory (default: ./qwen3-asr-coreml)")
     parser.add_argument("--no-quantize", action="store_true",
-                        help="Skip INT4 palettization")
+                        help="Skip INT8 palettization (FP16 only)")
     parser.add_argument("--compile", action="store_true",
                         help="Compile .mlpackage to .mlmodelc")
     parser.add_argument("--skip-verify", action="store_true",
                         help="Skip verification step")
     parser.add_argument("--upload", action="store_true",
                         help="Upload to HuggingFace")
-    parser.add_argument("--repo-id", default="aufklarer/Qwen3-ASR-CoreML-INT4",
+    parser.add_argument("--repo-id", default="aufklarer/Qwen3-ASR-CoreML",
                         help="HuggingFace repo ID for upload")
     args = parser.parse_args()
 
@@ -360,7 +390,13 @@ def main():
     print("=" * 60)
     print("Phase 1: Download audio_tower weights")
     print("=" * 60)
-    audio_weights = download_encoder_weights(args.model_id)
+    if args.weights_pt:
+        import torch as _torch
+        print(f"Loading pre-extracted weights from {args.weights_pt}...")
+        audio_weights = _torch.load(args.weights_pt, weights_only=True)
+        print(f"  Loaded {len(audio_weights)} weights")
+    else:
+        audio_weights = download_encoder_weights(args.model_id, args.weights_dir)
 
     # ── Phase 2: Build PyTorch encoder and load weights ──
     print("\n" + "=" * 60)
@@ -394,22 +430,34 @@ def main():
     print(f"  Traced vs original max diff: {diff:.2e}")
     assert diff < 1e-5, f"Trace mismatch: {diff}"
 
-    # ── Phase 4: Convert to CoreML ──
+    # ── Phase 4: Convert to CoreML (FP16 + INT8) ──
     print("\n" + "=" * 60)
     print("Phase 4: Convert to CoreML")
     print("=" * 60)
 
-    mlmodel = convert_to_coreml(traced, quantize=not args.no_quantize)
+    # Produce INT8 (default — best accuracy/size tradeoff, cos_sim > 0.999)
+    mlmodel_int8 = convert_to_coreml(traced, quantize_nbits=8)
+    int8_path = output_dir / "encoder_int8.mlpackage"
+    if int8_path.exists():
+        shutil.rmtree(int8_path)
+    mlmodel_int8.save(str(int8_path))
+    int8_size = sum(f.stat().st_size for f in int8_path.rglob("*") if f.is_file()) / 1024 / 1024
+    print(f"  Saved encoder_int8.mlpackage ({int8_size:.1f} MB)")
+    del mlmodel_int8
+    gc.collect()
 
-    pkg_path = output_dir / "encoder.mlpackage"
-    if pkg_path.exists():
-        shutil.rmtree(pkg_path)
-    mlmodel.save(str(pkg_path))
+    # Produce INT4 (smallest, lower accuracy — cos_sim ~0.64-0.76)
+    mlmodel_int4 = convert_to_coreml(traced, quantize_nbits=4)
+    int4_path = output_dir / "encoder_int4.mlpackage"
+    if int4_path.exists():
+        shutil.rmtree(int4_path)
+    mlmodel_int4.save(str(int4_path))
+    int4_size = sum(f.stat().st_size for f in int4_path.rglob("*") if f.is_file()) / 1024 / 1024
+    print(f"  Saved encoder_int4.mlpackage ({int4_size:.1f} MB)")
+    del mlmodel_int4
+    gc.collect()
 
-    size_mb = sum(f.stat().st_size for f in pkg_path.rglob("*") if f.is_file()) / 1024 / 1024
-    print(f"  Saved encoder.mlpackage ({size_mb:.1f} MB)")
-
-    del traced, mlmodel
+    del traced
     gc.collect()
 
     # ── Phase 5: Verify ──
@@ -417,14 +465,24 @@ def main():
         print("\n" + "=" * 60)
         print("Phase 5: Verify")
         print("=" * 60)
-        verify(model, pkg_path)
+        print("\n--- INT8 ---")
+        verify(model, int8_path)
+        print("\n--- INT4 ---")
+        verify(model, int4_path)
+
+    # ── Phase 6: Compile ──
+    # Compile the INT8 model as "encoder" (default for Swift)
+    if args.compile:
+        # Compile INT8 as the default encoder.mlmodelc
+        encoder_pkg = output_dir / "encoder.mlpackage"
+        if encoder_pkg.exists():
+            shutil.rmtree(encoder_pkg)
+        shutil.copytree(str(int8_path), str(encoder_pkg))
+        compile_mlpackage(output_dir, "encoder")
+        shutil.rmtree(encoder_pkg)
 
     del model
     gc.collect()
-
-    # ── Phase 6: Compile ──
-    if args.compile:
-        compile_mlpackage(output_dir, "encoder")
 
     # ── Save config ──
     config = {
@@ -440,8 +498,19 @@ def main():
         "output_dim": ENCODER_CONFIG["output_dim"],
         "conv_stride": 8,
         "enumerated_mel_lengths": MEL_T_VALUES,
-        "quantization": "int4_palettize" if not args.no_quantize else "none",
-        "compute_precision": "float16",
+        "variants": {
+            "int8": {
+                "file": "encoder_int8.mlpackage",
+                "quantization": "int8_palettize",
+                "precision": "float16",
+            },
+            "int4": {
+                "file": "encoder_int4.mlpackage",
+                "quantization": "int4_palettize",
+                "precision": "float16",
+            },
+        },
+        "default_variant": "int8",
     }
     config_path = output_dir / "config.json"
     with open(config_path, "w") as f:
