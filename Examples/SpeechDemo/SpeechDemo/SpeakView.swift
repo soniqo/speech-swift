@@ -5,7 +5,8 @@ struct SpeakView: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            // Load model button
+            #if os(macOS)
+            // Load model button (macOS uses Qwen3-TTS)
             if !vm.modelLoaded && !vm.isLoading {
                 Button("Load Qwen3-TTS") {
                     Task { await vm.loadModel() }
@@ -22,6 +23,11 @@ struct SpeakView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            #else
+            Text("System Speech Synthesis")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            #endif
 
             if vm.modelLoaded {
                 // Language picker
@@ -32,19 +38,28 @@ struct SpeakView: View {
                             Text(lang.capitalized).tag(lang)
                         }
                     }
+                    #if os(macOS)
                     .frame(width: 150)
+                    #endif
                 }
 
                 // Text input
                 TextEditor(text: $vm.text)
                     .font(.body)
                     .frame(minHeight: 100)
+                    #if os(macOS)
                     .border(Color.gray.opacity(0.3))
+                    #else
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.gray.opacity(0.3))
+                    )
+                    #endif
                     .disabled(vm.isSynthesizing)
 
                 // Controls
                 HStack(spacing: 12) {
-                    Button(vm.isSynthesizing ? "Synthesizing..." : "Synthesize") {
+                    Button(vm.isSynthesizing ? "Synthesizing..." : "Speak") {
                         Task { await vm.synthesize() }
                     }
                     .buttonStyle(.borderedProminent)

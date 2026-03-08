@@ -40,6 +40,10 @@ let package = Package(
             name: "ParakeetASR",
             targets: ["ParakeetASR"]
         ),
+        .library(
+            name: "SpeechCore",
+            targets: ["SpeechCore"]
+        ),
         .executable(
             name: "audio",
             targets: ["AudioCLI"]
@@ -120,6 +124,22 @@ let package = Package(
         .target(
             name: "ParakeetASR",
             dependencies: [
+                "AudioCommon",
+            ]
+        ),
+        .target(
+            name: "CSpeechCore",
+            path: "Sources/CSpeechCore",
+            publicHeadersPath: "include",
+            linkerSettings: [
+                .unsafeFlags(["-L../speech-core/build"]),
+                .linkedLibrary("c++"),
+            ]
+        ),
+        .target(
+            name: "SpeechCore",
+            dependencies: [
+                "CSpeechCore",
                 "AudioCommon",
             ]
         ),

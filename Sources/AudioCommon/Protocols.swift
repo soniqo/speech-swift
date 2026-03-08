@@ -151,6 +151,20 @@ public protocol VoiceActivityDetectionModel: AnyObject {
     func detectSpeech(audio: [Float], sampleRate: Int) -> [SpeechSegment]
 }
 
+/// A streaming VAD that processes fixed-size audio chunks and returns speech probability.
+///
+/// Maps directly to speech-core's `sc_vad_vtable_t` for pipeline integration.
+public protocol StreamingVADProvider: AnyObject {
+    /// Expected input sample rate in Hz
+    var inputSampleRate: Int { get }
+    /// Number of samples per chunk
+    var chunkSize: Int { get }
+    /// Process a single audio chunk, returns speech probability in [0, 1]
+    func processChunk(_ samples: [Float]) -> Float
+    /// Reset internal state (LSTM hidden state, context buffer, etc.)
+    func resetState()
+}
+
 // MARK: - Speaker Diarization
 
 /// A speech segment with an assigned speaker identity.

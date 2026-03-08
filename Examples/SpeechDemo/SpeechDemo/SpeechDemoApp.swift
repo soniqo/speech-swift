@@ -17,6 +17,8 @@ struct ContentView: View {
             SpeakView()
                 .tabItem { Label("Speak", systemImage: "speaker.wave.2.fill") }
         }
+        #if os(macOS)
         .frame(minWidth: 500, minHeight: 400)
+        #endif
     }
 }

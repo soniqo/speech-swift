@@ -176,4 +176,19 @@ public class CoreMLASRModel {
         }
     }
 }
+
+// MARK: - SpeechRecognitionModel
+
+@available(macOS 15, iOS 18, *)
+extension CoreMLASRModel: SpeechRecognitionModel {
+    public var inputSampleRate: Int { 16000 }
+
+    public func transcribe(audio: [Float], sampleRate: Int, language: String?) -> String {
+        do {
+            return try transcribe(audio: audio, sampleRate: sampleRate, language: language, maxTokens: 448)
+        } catch {
+            return "[CoreML error: \(error.localizedDescription)]"
+        }
+    }
+}
 #endif

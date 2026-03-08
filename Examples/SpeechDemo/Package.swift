@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "SpeechDemo",
-    platforms: [.macOS(.v14)],
+    platforms: [.macOS(.v14), .iOS(.v17)],
     dependencies: [
         .package(path: "../.."),
     ],
@@ -14,6 +14,7 @@ let package = Package(
                 .product(name: "ParakeetASR", package: "speech-swift"),
                 .product(name: "Qwen3ASR", package: "speech-swift"),
                 .product(name: "Qwen3TTS", package: "speech-swift"),
+                .product(name: "SpeechVAD", package: "speech-swift"),
                 .product(name: "AudioCommon", package: "speech-swift"),
             ],
             path: "SpeechDemo",

@@ -329,3 +329,9 @@ extension SileroVADModel: VoiceActivityDetectionModel {
         detectSpeech(audio: audio, sampleRate: sampleRate, config: .sileroDefault)
     }
 }
+
+// MARK: - StreamingVADProvider
+
+extension SileroVADModel: StreamingVADProvider {
+    public var chunkSize: Int { Self.chunkSize }
+}
