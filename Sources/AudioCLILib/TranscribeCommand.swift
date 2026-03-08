@@ -14,7 +14,7 @@ public struct TranscribeCommand: ParsableCommand {
     @Argument(help: "Audio file to transcribe (WAV, any sample rate)")
     public var audioFile: String
 
-    @Option(name: .long, help: "ASR engine: qwen3 (default), parakeet, or qwen3-coreml")
+    @Option(name: .long, help: "ASR engine: qwen3 (default), parakeet, qwen3-coreml, or qwen3-coreml-full")
     public var engine: String = "qwen3"
 
     @Option(name: .shortAndLong, help: "[qwen3] Model: 0.6B (default), 1.7B, or full HuggingFace model ID")
@@ -36,8 +36,8 @@ public struct TranscribeCommand: ParsableCommand {
 
     public func validate() throws {
         let eng = engine.lowercased()
-        guard eng == "qwen3" || eng == "parakeet" || eng == "qwen3-coreml" else {
-            throw ValidationError("--engine must be 'qwen3', 'parakeet', or 'qwen3-coreml'")
+        guard eng == "qwen3" || eng == "parakeet" || eng == "qwen3-coreml" || eng == "qwen3-coreml-full" else {
+            throw ValidationError("--engine must be 'qwen3', 'parakeet', 'qwen3-coreml', or 'qwen3-coreml-full'")
         }
     }
 
@@ -47,6 +47,8 @@ public struct TranscribeCommand: ParsableCommand {
             try runParakeetTranscription()
         case "qwen3-coreml":
             try runCoreMLTranscription()
+        case "qwen3-coreml-full":
+            try runFullCoreMLTranscription()
         default:
             if stream {
                 try runStreamingTranscription()
@@ -150,6 +152,44 @@ public struct TranscribeCommand: ParsableCommand {
 
             print("Result: \(result)")
             print(String(format: "  Time: %.2fs, RTF: %.3f", elapsed, rtf))
+        }
+        #else
+        print("CoreML is not available on this platform.")
+        #endif
+    }
+
+    private func runFullCoreMLTranscription() throws {
+        #if canImport(CoreML)
+        try runAsync {
+            print("Loading audio: \(audioFile)")
+            let audio = try AudioFileLoader.load(
+                url: URL(fileURLWithPath: audioFile), targetSampleRate: 16000)
+            let duration = Float(audio.count) / 16000.0
+            print("  Loaded \(audio.count) samples (\(String(format: "%.2f", duration))s)")
+
+            if #available(macOS 15, iOS 18, *) {
+                print("Loading full CoreML ASR pipeline...")
+                let asrModel = try await CoreMLASRModel.fromPretrained(
+                    progressHandler: reportProgress)
+
+                print("Warming up CoreML...")
+                let warmupStart = CFAbsoluteTimeGetCurrent()
+                try asrModel.warmUp()
+                let warmupTime = CFAbsoluteTimeGetCurrent() - warmupStart
+
+                print("Transcribing (full CoreML: encoder + decoder)...")
+                let startTime = CFAbsoluteTimeGetCurrent()
+                let result = try asrModel.transcribe(
+                    audio: audio, sampleRate: 16000, language: language)
+                let elapsed = CFAbsoluteTimeGetCurrent() - startTime
+                let rtf = elapsed / Double(duration)
+
+                print("Result: \(result)")
+                print(String(format: "  Time: %.2fs, RTF: %.3f (warmup: %.2fs)", elapsed, rtf, warmupTime))
+            } else {
+                print("Full CoreML ASR requires macOS 15+ / iOS 18+ for MLState KV cache.")
+                print("Use --engine qwen3-coreml for hybrid CoreML encoder + MLX decoder.")
+            }
         }
         #else
         print("CoreML is not available on this platform.")
