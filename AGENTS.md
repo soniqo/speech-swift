@@ -33,6 +33,7 @@ The metallib step compiles MLX Metal shaders — without it, inference runs ~5x 
 - `Sources/ParakeetASR/` — Speech-to-text (Parakeet TDT, CoreML)
 - `Sources/Qwen3TTS/` — Text-to-speech (Qwen3-TTS)
 - `Sources/CosyVoiceTTS/` — Text-to-speech (CosyVoice3, streaming)
+- `Sources/KokoroTTS/` — Text-to-speech (Kokoro-82M, CoreML, iOS-ready)
 - `Sources/PersonaPlex/` — Speech-to-speech (PersonaPlex 7B, full-duplex)
 - `Sources/SpeechVAD/` — VAD (Silero + Pyannote), speaker diarization, speaker embedding (WeSpeaker)
 - `Sources/SpeechEnhancement/` — Noise suppression (DeepFilterNet3, CoreML)
@@ -47,7 +48,7 @@ The metallib step compiles MLX Metal shaders — without it, inference runs ~5x 
 ## Key Conventions
 
 - Swift 6, macOS 14+, Apple Silicon (M-series)
-- MLX for GPU inference (Metal), CoreML for Neural Engine (DeepFilterNet3, Silero VAD optional)
+- MLX for GPU inference (Metal), CoreML for Neural Engine (DeepFilterNet3, Kokoro, Silero VAD optional)
 - Models are downloaded from HuggingFace on first use, cached in `~/Library/Caches/qwen3-speech/`
 - All audio processing uses Float32 PCM, resampled to model-specific rates internally
 - `DiarizedSegment`, `SpeechSegment`, protocol types defined in `Sources/AudioCommon/Protocols.swift`
@@ -78,6 +79,7 @@ The `audio` binary is the main entry point:
 .build/release/audio vad audio.wav                     # Voice activity detection
 .build/release/audio embed-speaker voice.wav           # Speaker embedding
 .build/release/audio denoise noisy.wav                 # Speech enhancement
+.build/release/audio kokoro "Hello" --voice af_heart   # Kokoro TTS (iOS)
 ```
 
 ## Documentation Site
@@ -114,6 +116,7 @@ soniqo-web/public/
     embed-speaker/          Speaker embeddings guide
     denoise/                Speech enhancement guide
     align/                  Forced alignment guide
+    kokoro/                 Kokoro-82M guide (iOS TTS)
   cli/                      CLI command reference (all flags/options)
   api/                      Protocols and shared types
   architecture/             Module structure, backends, weight formats
