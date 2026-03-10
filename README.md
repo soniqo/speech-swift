@@ -9,13 +9,14 @@ AI speech models for Apple Silicon, powered by [MLX Swift](https://github.com/ml
 - **Qwen3-ForcedAligner** — Word-level timestamp alignment (audio + text → timestamps)
 - **Qwen3-TTS** — Text-to-speech synthesis (highest quality, custom speakers)
 - **CosyVoice TTS** — Text-to-speech with streaming (9 languages, DiT flow matching)
+- **Kokoro TTS** — On-device text-to-speech (82M params, CoreML/Neural Engine, 50 voices, iOS-ready)
 - **PersonaPlex** — Full-duplex speech-to-speech (7B, audio in → audio out)
 - **DeepFilterNet3** — Speech enhancement / noise suppression (2.1M params, real-time 48kHz)
 - **Silero VAD** — Streaming voice activity detection (32ms chunks, ~309K params)
 - **Pyannote VAD** — Offline voice activity detection (10s windows, multi-speaker overlap)
 - **Speaker Diarization** — Who spoke when (pyannote segmentation + activity-based speaker chaining, up to 3 concurrent speakers)
 
-Papers: [Qwen3-ASR](https://arxiv.org/abs/2601.21337), [Qwen3-TTS](https://arxiv.org/abs/2601.15621), [CosyVoice 3](https://arxiv.org/abs/2505.17589), [PersonaPlex](https://arxiv.org/abs/2602.06053), [Mimi](https://arxiv.org/abs/2410.00037) (audio codec)
+Papers: [Qwen3-ASR](https://arxiv.org/abs/2601.21337), [Qwen3-TTS](https://arxiv.org/abs/2601.15621), [CosyVoice 3](https://arxiv.org/abs/2505.17589), [Kokoro](https://huggingface.co/hexgrad/Kokoro-82M) (StyleTTS 2), [PersonaPlex](https://arxiv.org/abs/2602.06053), [Mimi](https://arxiv.org/abs/2410.00037) (audio codec)
 
 ## Roadmap
 
@@ -29,57 +30,49 @@ See [Roadmap discussion](https://github.com/soniqo/speech-swift/discussions/81) 
 
 ## Models
 
-| Model | Task | Streaming | Languages | Download Size |
-|-------|------|-----------|-----------|--------------|
-| Qwen3-ASR-0.6B (4-bit) | Speech → Text | No | 52 languages | ~400 MB |
-| Qwen3-ASR-0.6B (INT8, CoreML) | Speech → Text | No | 52 languages | ~180 MB |
-| Qwen3-ASR-1.7B (8-bit) | Speech → Text | No | 52 languages | ~2.5 GB |
-| Parakeet-TDT-0.6B (INT4, CoreML) | Speech → Text | No | 25 European languages | ~315 MB |
-| Qwen3-ForcedAligner-0.6B (4-bit) | Audio + Text → Timestamps | No | Multi | ~979 MB |
-| Qwen3-ForcedAligner-0.6B (8-bit) | Audio + Text → Timestamps | No | Multi | ~1.3 GB |
-| Qwen3-ForcedAligner-0.6B (bf16) | Audio + Text → Timestamps | No | Multi | ~1.8 GB |
-| Qwen3-TTS-0.6B Base (4-bit) | Text → Speech | Yes (~120ms) | 10 languages | ~1.7 GB |
-| Qwen3-TTS-0.6B CustomVoice (4-bit) | Text → Speech | Yes (~120ms) | 10 languages | ~1.7 GB |
-| CosyVoice3-0.5B (4-bit) | Text → Speech | Yes (~150ms) | 9 languages | ~1.9 GB |
-| PersonaPlex-7B (4-bit) | Speech → Speech | Yes (~2s chunks) | EN | ~5.3 GB |
-| Silero-VAD-v5 | Voice Activity Detection | Yes (32ms chunks) | Language-agnostic | ~1.2 MB (MLX or CoreML) |
-| Pyannote-Segmentation-3.0 | VAD + Speaker Segmentation | No (10s windows) | Language-agnostic | ~5.7 MB |
-| DeepFilterNet3 | Speech Enhancement | Yes (10ms frames) | Language-agnostic | ~4.2 MB (CoreML FP16) |
-| WeSpeaker-ResNet34-LM | Speaker Embedding (256-dim) | No | Language-agnostic | ~25 MB (MLX or CoreML) |
+| Model | Task | Streaming | Languages | Sizes |
+|-------|------|-----------|-----------|-------|
+| Qwen3-ASR-0.6B | Speech → Text | No | 52 languages | [4-bit](https://huggingface.co/aufklarer/Qwen3-ASR-0.6B-MLX-4bit) 680 MB · [8-bit](https://huggingface.co/aufklarer/Qwen3-ASR-0.6B-MLX-8bit) 1.0 GB · [CoreML](https://huggingface.co/aufklarer/Qwen3-ASR-CoreML) 180 MB |
+| Qwen3-ASR-1.7B | Speech → Text | No | 52 languages | [4-bit](https://huggingface.co/aufklarer/Qwen3-ASR-1.7B-MLX-4bit) 2.1 GB · [8-bit](https://huggingface.co/aufklarer/Qwen3-ASR-1.7B-MLX-8bit) 3.2 GB |
+| Parakeet-TDT-0.6B | Speech → Text | No | 25 European languages | [CoreML INT4](https://huggingface.co/aufklarer/Parakeet-TDT-v3-CoreML-INT4) 315 MB · [CoreML INT8](https://huggingface.co/aufklarer/Parakeet-TDT-v3-CoreML-INT8) 500 MB |
+| Qwen3-ForcedAligner-0.6B | Audio + Text → Timestamps | No | Multi | [4-bit](https://huggingface.co/aufklarer/Qwen3-ForcedAligner-0.6B-4bit) 979 MB · [8-bit](https://huggingface.co/aufklarer/Qwen3-ForcedAligner-0.6B-8bit) 1.4 GB · [CoreML INT4](https://huggingface.co/aufklarer/Qwen3-ForcedAligner-0.6B-CoreML-INT4) 630 MB · [CoreML INT8](https://huggingface.co/aufklarer/Qwen3-ForcedAligner-0.6B-CoreML-INT8) 1.0 GB |
+| Qwen3-TTS-0.6B Base | Text → Speech | Yes (~120ms) | 10 languages | [4-bit](https://huggingface.co/aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-4bit) 1.7 GB · [8-bit](https://huggingface.co/aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-8bit) 2.4 GB |
+| Qwen3-TTS-0.6B CustomVoice | Text → Speech | Yes (~120ms) | 10 languages | [4-bit](https://huggingface.co/aufklarer/Qwen3-TTS-12Hz-0.6B-CustomVoice-MLX-4bit) 1.7 GB |
+| Qwen3-TTS-1.7B Base | Text → Speech | Yes (~120ms) | 10 languages | [4-bit](https://huggingface.co/aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-4bit) 3.2 GB · [8-bit](https://huggingface.co/aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-8bit) 4.8 GB |
+| CosyVoice3-0.5B | Text → Speech | Yes (~150ms) | 9 languages | [4-bit](https://huggingface.co/aufklarer/CosyVoice3-0.5B-MLX-4bit) 1.2 GB |
+| Kokoro-82M | Text → Speech | No | 10 languages | [CoreML](https://huggingface.co/aufklarer/Kokoro-82M-CoreML) ~325 MB |
+| PersonaPlex-7B | Speech → Speech | Yes (~2s chunks) | EN | [4-bit](https://huggingface.co/aufklarer/PersonaPlex-7B-MLX-4bit) 4.9 GB · [8-bit](https://huggingface.co/aufklarer/PersonaPlex-7B-MLX-8bit) 9.1 GB |
+| Silero-VAD-v5 | Voice Activity Detection | Yes (32ms chunks) | Language-agnostic | [MLX](https://huggingface.co/aufklarer/Silero-VAD-v5-MLX) · [CoreML](https://huggingface.co/aufklarer/Silero-VAD-v5-CoreML) ~1.2 MB |
+| Pyannote-Segmentation-3.0 | VAD + Speaker Segmentation | No (10s windows) | Language-agnostic | [MLX](https://huggingface.co/aufklarer/Pyannote-Segmentation-MLX) ~5.7 MB |
+| DeepFilterNet3 | Speech Enhancement | Yes (10ms frames) | Language-agnostic | [CoreML FP16](https://huggingface.co/aufklarer/DeepFilterNet3-CoreML) ~4.2 MB |
+| WeSpeaker-ResNet34-LM | Speaker Embedding (256-dim) | No | Language-agnostic | [MLX](https://huggingface.co/aufklarer/WeSpeaker-ResNet34-LM-MLX) · [CoreML](https://huggingface.co/aufklarer/WeSpeaker-ResNet34-LM-CoreML) ~25 MB |
 
 ### Memory Requirements
 
 Weight memory is the GPU (MLX) or ANE (CoreML) memory consumed by model parameters. Peak inference includes KV caches, activations, and intermediate tensors.
 
-| Model | Weight Memory | Peak Inference | Fits 8GB? |
-|-------|--------------|----------------|-----------|
-| Qwen3-ASR-0.6B (4-bit) | 675 MB | ~2.2 GB | Yes |
-| Qwen3-ASR-0.6B (INT8, CoreML) | 180 MB | ~400 MB | Yes |
-| Qwen3-ASR-1.7B (8-bit) | 2,349 MB | ~4 GB | No |
-| Parakeet-TDT-0.6B (CoreML) | 315 MB | ~400 MB | Yes |
-| Qwen3-ForcedAligner-0.6B (4-bit) | 933 MB | ~1.5 GB | Yes |
-| Qwen3-ForcedAligner-0.6B (8-bit) | 1,217 MB | ~2.0 GB | Yes |
-| Qwen3-ForcedAligner-0.6B (bf16) | 1,750 MB | ~2.5 GB | Yes |
-| Qwen3-TTS-0.6B (4-bit) | 977 MB | ~2 GB | Yes |
-| CosyVoice3-0.5B (4-bit) | 732 MB | ~1.5 GB | Yes |
-| PersonaPlex-7B (4-bit) | 5,543 MB | ~6.5 GB | No |
-| Silero VAD (MLX) | 1.2 MB | ~5 MB | Yes |
-| Silero VAD (CoreML) | 0.7 MB | ~3 MB | Yes |
-| Pyannote Segmentation | 6 MB | ~20 MB | Yes |
-| DeepFilterNet3 (CoreML) | 4.2 MB | ~10 MB | Yes |
-| WeSpeaker (MLX) | 25 MB | ~50 MB | Yes |
-
-**8GB device recommendations:**
-- **Dictation**: Parakeet TDT (CoreML) + Silero VAD — ~400 MB total, leaves room for other apps
-- **Transcription**: Qwen3-ASR-0.6B + Silero VAD — ~2.2 GB peak
-- **TTS**: Qwen3-TTS or CosyVoice — ~2 GB peak, runs standalone
-- **ASR + TTS together**: Qwen3-ASR + Qwen3-TTS — ~4 GB peak, tight but works. Use Parakeet (CoreML) for ASR to avoid GPU contention
-- **PersonaPlex**: Requires 16GB+ device
+| Model | Weight Memory | Peak Inference |
+|-------|--------------|----------------|
+| Qwen3-ASR-0.6B (4-bit, MLX) | 675 MB | ~2.2 GB |
+| Qwen3-ASR-0.6B (INT8, CoreML) | 180 MB | ~400 MB |
+| Qwen3-ASR-1.7B (8-bit, MLX) | 2,349 MB | ~4 GB |
+| Parakeet-TDT-0.6B (CoreML) | 315 MB | ~400 MB |
+| Qwen3-ForcedAligner-0.6B (4-bit, MLX) | 933 MB | ~1.5 GB |
+| Qwen3-TTS-0.6B (4-bit, MLX) | 977 MB | ~2 GB |
+| CosyVoice3-0.5B (4-bit, MLX) | 732 MB | ~1.5 GB |
+| Kokoro-82M (CoreML) | 325 MB | ~500 MB |
+| PersonaPlex-7B (4-bit, MLX) | 4,900 MB | ~6.5 GB |
+| Silero-VAD-v5 (MLX) | 1.2 MB | ~5 MB |
+| Silero-VAD-v5 (CoreML) | 0.7 MB | ~3 MB |
+| Pyannote-Segmentation-3.0 (MLX) | 6 MB | ~20 MB |
+| DeepFilterNet3 (CoreML FP16) | 4.2 MB | ~10 MB |
+| WeSpeaker-ResNet34-LM (MLX) | 25 MB | ~50 MB |
 
 ### When to Use Which TTS
 
 - **Qwen3-TTS**: Best quality, streaming (~120ms), 9 built-in speakers, 10 languages, batch synthesis
 - **CosyVoice TTS**: Streaming (~150ms), 9 languages, DiT flow matching + HiFi-GAN vocoder
+- **Kokoro TTS**: Lightweight iOS-ready TTS (82M params), CoreML/Neural Engine, 50 voices, 10 languages, non-autoregressive (single forward pass)
 - **PersonaPlex**: Full-duplex speech-to-speech (audio in → audio out), streaming (~2s chunks), 18 voice presets, based on Moshi architecture
 
 ## Installation
@@ -121,6 +114,7 @@ import Qwen3ASR      // Speech recognition (MLX)
 import ParakeetASR   // Speech recognition (CoreML)
 import Qwen3TTS      // Text-to-speech (Qwen3)
 import CosyVoiceTTS  // Text-to-speech (streaming)
+import KokoroTTS     // Text-to-speech (CoreML, iOS-ready)
 import PersonaPlex   // Speech-to-speech (full-duplex)
 import SpeechVAD          // Voice activity detection (pyannote + Silero)
 import SpeechEnhancement  // Noise suppression (DeepFilterNet3)
@@ -575,6 +569,39 @@ make build
 .build/release/audio speak "Hello world" --engine cosyvoice --language english --stream --output output.wav
 ```
 
+## Kokoro TTS Usage
+
+### Basic Synthesis
+
+```swift
+import KokoroTTS
+import AudioCommon  // for WAVWriter
+
+let tts = try await KokoroTTSModel.fromPretrained()
+// Downloads ~325 MB on first run (CoreML models + voice embeddings + dictionaries)
+
+let audio = try tts.synthesize(text: "Hello world", voice: "af_heart")
+// Output is 24kHz mono float samples
+try WAVWriter.write(samples: audio, sampleRate: 24000, to: outputURL)
+```
+
+50 preset voices across 10 languages. Non-autoregressive — single CoreML forward pass, no sampling loop. Runs on Neural Engine, frees the GPU entirely.
+
+### Kokoro TTS CLI
+
+```bash
+make build
+
+# Basic synthesis
+.build/release/audio kokoro "Hello world" --voice af_heart --output hello.wav
+
+# Choose language
+.build/release/audio kokoro "Bonjour le monde" --voice ff_siwis --language fr --output bonjour.wav
+
+# List available voices
+.build/release/audio kokoro --list-voices
+```
+
 ## Voice Activity Detection
 
 ### Streaming VAD (Silero)
@@ -895,9 +922,10 @@ The server is a separate `AudioServer` module and `audio-server` executable — 
 | Model | Framework | Short (1s) | Medium (3s) | Long (6s) | Streaming First-Packet |
 |-------|-----------|-----------|-------------|------------|----------------------|
 | Qwen3-TTS-0.6B (4-bit) | MLX Swift (release) | 1.6s (RTF 1.2) | 2.3s (RTF 0.7) | 3.9s (RTF 0.7) | ~120ms (1-frame) |
+| Kokoro-82M | CoreML (Neural Engine) | ~45ms | ~45ms | ~45ms | N/A (non-autoregressive) |
 | Apple `AVSpeechSynthesizer` | AVFoundation | 0.08s | 0.08s | 0.17s (RTF 0.02) | N/A |
 
-> Qwen3-TTS generates natural, expressive speech with prosody and emotion, running **faster than real-time** (RTF < 1.0). Streaming synthesis delivers the first audio chunk in ~120ms. Apple's built-in TTS is ~35x faster but produces robotic, monotone speech.
+> Qwen3-TTS generates natural, expressive speech with prosody and emotion, running **faster than real-time** (RTF < 1.0). Streaming synthesis delivers the first audio chunk in ~120ms. Kokoro-82M runs entirely on Neural Engine with a single forward pass — ~45ms regardless of output length, ideal for iOS. Apple's built-in TTS is faster but produces robotic, monotone speech.
 
 ### PersonaPlex (Speech-to-Speech)
 
@@ -945,7 +973,7 @@ CoreML models are available for Qwen3-ASR encoder, Silero VAD, and WeSpeaker. Fo
 
 ## Architecture
 
-See [ASR Inference](docs/asr-inference.md), [ASR Model](docs/asr-model.md), [Parakeet TDT ASR](docs/parakeet-asr.md), [Forced Aligner](docs/forced-aligner.md), [Qwen3-TTS Inference](docs/qwen3-tts-inference.md), [TTS Model](docs/tts-model.md), [CosyVoice TTS](docs/cosyvoice-tts.md), [PersonaPlex](docs/personaplex.md), [Silero VAD](docs/silero-vad.md), [Speaker Diarization](docs/speaker-diarization.md), [Speech Enhancement](docs/speech-enhancement.md), [Shared Protocols](docs/shared-protocols.md) for detailed architecture docs.
+See [ASR Inference](docs/asr-inference.md), [ASR Model](docs/asr-model.md), [Parakeet TDT ASR](docs/parakeet-asr.md), [Forced Aligner](docs/forced-aligner.md), [Qwen3-TTS Inference](docs/qwen3-tts-inference.md), [TTS Model](docs/tts-model.md), [CosyVoice TTS](docs/cosyvoice-tts.md), [Kokoro TTS](docs/kokoro-tts.md), [PersonaPlex](docs/personaplex.md), [Silero VAD](docs/silero-vad.md), [Speaker Diarization](docs/speaker-diarization.md), [Speech Enhancement](docs/speech-enhancement.md), [Shared Protocols](docs/shared-protocols.md) for detailed architecture docs.
 
 ## Cache Configuration
 
@@ -968,7 +996,7 @@ xcodebuild -downloadComponent MetalToolchain
 Unit tests (config, sampling, text preprocessing, timestamp correction) run without model downloads:
 
 ```bash
-swift test --filter "Qwen3TTSConfigTests|SamplingTests|CosyVoiceTTSConfigTests|PersonaPlexTests|ForcedAlignerTests/testText|ForcedAlignerTests/testTimestamp|ForcedAlignerTests/testLIS|SileroVADTests/testSilero|SileroVADTests/testReflection|SileroVADTests/testProcess|SileroVADTests/testReset|SileroVADTests/testDetect|SileroVADTests/testStreaming|SileroVADTests/testVADEvent"
+swift test --filter "Qwen3TTSConfigTests|SamplingTests|CosyVoiceTTSConfigTests|PersonaPlexTests|ForcedAlignerTests/testText|ForcedAlignerTests/testTimestamp|ForcedAlignerTests/testLIS|SileroVADTests/testSilero|SileroVADTests/testReflection|SileroVADTests/testProcess|SileroVADTests/testReset|SileroVADTests/testDetect|SileroVADTests/testStreaming|SileroVADTests/testVADEvent|KokoroTTSTests"
 ```
 
 Integration tests require model weights (downloaded automatically on first run):
@@ -998,6 +1026,7 @@ PERSONAPLEX_E2E=1 swift test --filter PersonaPlexE2ETests
 | Parakeet TDT | 25 European languages (BG, CS, DA, DE, EL, EN, ES, ET, FI, FR, HR, HU, IT, LT, LV, MT, NL, PL, PT, RO, RU, SK, SL, SV, UK) |
 | Qwen3-TTS | EN, CN, DE, JA, ES, FR, KO, RU, IT, PT (+ Beijing/Sichuan dialects via CustomVoice) |
 | CosyVoice TTS | CN, EN, JA, KO, DE, ES, FR, IT, RU |
+| Kokoro TTS | EN (US/UK), ES, FR, HI, IT, JA, PT, CN, KO, DE |
 | PersonaPlex | EN |
 
 ## Contributing
@@ -1016,5 +1045,5 @@ We welcome contributions! Whether it's a bug fix, new model integration, or docu
 
 ## License
 
-Apache 2.0 (same as original Qwen3 models)
+Apache 2.0
 

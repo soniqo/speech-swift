@@ -44,6 +44,10 @@ let package = Package(
             name: "SpeechCore",
             targets: ["SpeechCore"]
         ),
+        .library(
+            name: "KokoroTTS",
+            targets: ["KokoroTTS"]
+        ),
         .executable(
             name: "audio",
             targets: ["AudioCLI"]
@@ -140,6 +144,12 @@ let package = Package(
             ]
         ),
         .target(
+            name: "KokoroTTS",
+            dependencies: [
+                "AudioCommon",
+            ]
+        ),
+        .target(
             name: "AudioCLILib",
             dependencies: [
                 "Qwen3ASR",
@@ -149,6 +159,7 @@ let package = Package(
                 "SpeechVAD",
                 "SpeechEnhancement",
                 "ParakeetASR",
+                "KokoroTTS",
                 "AudioCommon",
                 .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser")
@@ -210,6 +221,13 @@ let package = Package(
             dependencies: ["ParakeetASR", "AudioCommon"],
             resources: [
                 .copy("Resources/test_audio.wav")
+            ]
+        ),
+        .testTarget(
+            name: "KokoroTTSTests",
+            dependencies: [
+                "KokoroTTS",
+                "AudioCommon",
             ]
         ),
         .testTarget(

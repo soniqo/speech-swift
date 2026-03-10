@@ -146,14 +146,17 @@ final class Qwen3TTSConfigTests: XCTestCase {
 
     func testCodePredictorLarge4bit() {
         let config = CodePredictorConfig.large4bit
-        XCTAssertEqual(config.hiddenSize, 2048)
-        XCTAssertEqual(config.intermediateSize, 6144)
+        XCTAssertEqual(config.hiddenSize, 1024)
+        XCTAssertEqual(config.embeddingDim, 2048)
+        XCTAssertTrue(config.needsProjection)
         XCTAssertEqual(config.bits, 4)
     }
 
     func testCodePredictorLarge8bit() {
         let config = CodePredictorConfig.large8bit
-        XCTAssertEqual(config.hiddenSize, 2048)
+        XCTAssertEqual(config.hiddenSize, 1024)
+        XCTAssertEqual(config.embeddingDim, 2048)
+        XCTAssertTrue(config.needsProjection)
         XCTAssertEqual(config.bits, 8)
     }
 
