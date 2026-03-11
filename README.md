@@ -1039,10 +1039,6 @@ We welcome contributions! Whether it's a bug fix, new model integration, or docu
 3. `make test` to run the test suite
 4. Open a PR against `main`
 
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=soniqo/speech-swift&type=date&legend=top-left)](https://www.star-history.com/#soniqo/speech-swift&type=date&legend=top-left)
-
 ## License
 
 Apache 2.0
