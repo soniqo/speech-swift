@@ -1,4 +1,5 @@
 import Foundation
+import AVFoundation
 import ArgumentParser
 import Qwen3TTS
 import CosyVoiceTTS
@@ -24,6 +25,9 @@ public struct SpeakCommand: ParsableCommand {
 
     @Flag(name: .long, help: "Enable streaming synthesis")
     public var stream: Bool = false
+
+    @Flag(name: .long, help: "Play audio through default output device instead of (or in addition to) saving a file")
+    public var play: Bool = false
 
     // MARK: - Qwen3-specific options
 
@@ -226,9 +230,13 @@ public struct SpeakCommand: ParsableCommand {
         print("  First-packet latency: \(String(format: "%.0f", (firstPacketLatency ?? 0) * 1000))ms")
         print("  Total: \(chunkCount) chunks, \(allSamples.count) samples (\(formatDuration(allSamples.count))s)")
 
-        let outputURL = URL(fileURLWithPath: output)
-        try WAVWriter.write(samples: allSamples, sampleRate: 24000, to: outputURL)
-        print("Saved to \(output)")
+        if !play {
+            let outputURL = URL(fileURLWithPath: output)
+            try WAVWriter.write(samples: allSamples, sampleRate: 24000, to: outputURL)
+            print("Saved to \(output)")
+        } else {
+            playAudio(samples: allSamples, sampleRate: 24000)
+        }
     }
 
     private func runQwen3Batch(
@@ -306,9 +314,13 @@ public struct SpeakCommand: ParsableCommand {
             throw ExitCode(1)
         }
 
-        let outputURL = URL(fileURLWithPath: output)
-        try WAVWriter.write(samples: audio, sampleRate: 24000, to: outputURL)
-        print("Saved \(audio.count) samples (\(formatDuration(audio.count))s) to \(output)")
+        if !play {
+            let outputURL = URL(fileURLWithPath: output)
+            try WAVWriter.write(samples: audio, sampleRate: 24000, to: outputURL)
+            print("Saved \(audio.count) samples (\(formatDuration(audio.count))s) to \(output)")
+        } else {
+            playAudio(samples: audio, sampleRate: 24000)
+        }
     }
 
     // MARK: - CosyVoice engine
@@ -344,22 +356,66 @@ public struct SpeakCommand: ParsableCommand {
                 print(String(format: "  Duration: %.2fs, Time: %.2fs, RTF: %.2f",
                              duration, elapsed, elapsed / max(duration, 0.001)))
 
-                let outputURL = URL(fileURLWithPath: output)
-                try WAVWriter.write(samples: allSamples, sampleRate: 24000, to: outputURL)
-                print("Saved to \(output)")
+                if !self.play {
+                    let outputURL = URL(fileURLWithPath: self.output)
+                    try WAVWriter.write(samples: allSamples, sampleRate: 24000, to: outputURL)
+                    print("Saved to \(self.output)")
+                } else {
+                    self.playAudio(samples: allSamples, sampleRate: 24000)
+                }
             } else {
                 let samples = cosyModel.synthesize(
-                    text: inputText, language: effectiveLanguage, verbose: verbose)
+                    text: inputText, language: self.effectiveLanguage, verbose: self.verbose)
 
                 let elapsed = CFAbsoluteTimeGetCurrent() - startTime
                 let duration = Double(samples.count) / 24000.0
                 print(String(format: "  Duration: %.2fs, Time: %.2fs, RTF: %.2f",
                              duration, elapsed, elapsed / max(duration, 0.001)))
 
-                let outputURL = URL(fileURLWithPath: output)
-                try WAVWriter.write(samples: samples, sampleRate: 24000, to: outputURL)
-                print("Saved to \(output)")
+                if !self.play {
+                    let outputURL = URL(fileURLWithPath: self.output)
+                    try WAVWriter.write(samples: samples, sampleRate: 24000, to: outputURL)
+                    print("Saved to \(self.output)")
+                } else {
+                    self.playAudio(samples: samples, sampleRate: 24000)
+                }
             }
         }
+    }
+
+    // MARK: - Audio Playback
+
+    private func playAudio(samples: [Float], sampleRate: Int) {
+        let engine = AVAudioEngine()
+        let playerNode = AVAudioPlayerNode()
+        let format = AVAudioFormat(standardFormatWithSampleRate: Double(sampleRate), channels: 1)!
+
+        engine.attach(playerNode)
+        engine.connect(playerNode, to: engine.mainMixerNode, format: format)
+
+        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(samples.count))!
+        buffer.frameLength = AVAudioFrameCount(samples.count)
+        samples.withUnsafeBufferPointer { src in
+            buffer.floatChannelData![0].update(from: src.baseAddress!, count: samples.count)
+        }
+
+        do {
+            try engine.start()
+        } catch {
+            print("Error: Failed to start audio engine: \(error)")
+            return
+        }
+
+        let semaphore = DispatchSemaphore(value: 0)
+        playerNode.play()
+        playerNode.scheduleBuffer(buffer) {
+            semaphore.signal()
+        }
+
+        print("Playing \(formatDuration(samples.count))s audio...")
+        semaphore.wait()
+        // Small delay for audio to finish draining
+        usleep(100_000)
+        engine.stop()
     }
 }
