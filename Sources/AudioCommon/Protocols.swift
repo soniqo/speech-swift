@@ -234,3 +234,11 @@ public protocol SpeakerDiarizationModel: AnyObject {
     /// Diarize audio into speaker-labeled segments
     func diarize(audio: [Float], sampleRate: Int) -> [DiarizedSegment]
 }
+
+/// A diarization model that also supports extracting a specific speaker's segments
+/// using a reference embedding. Not all engines support this (e.g. Sortformer is
+/// end-to-end and does not produce speaker embeddings).
+public protocol SpeakerExtractionCapable: SpeakerDiarizationModel {
+    /// Extract segments belonging to a target speaker identified by a reference embedding.
+    func extractSpeaker(audio: [Float], sampleRate: Int, targetEmbedding: [Float]) -> [SpeechSegment]
+}

@@ -334,7 +334,7 @@ All model classes are **not thread-safe** by design. ML inference is inherently 
 - `CosyVoiceTTSModel`
 - `PersonaPlexModel`
 - `SileroVADModel`, `StreamingVADProcessor`, `PyannoteVADModel`
-- `DiarizationPipeline`
+- `PyannoteDiarizationPipeline` (aliased as `DiarizationPipeline`)
 
 **Thread-safe** (all `let` properties, pure computation):
 - `WeSpeakerModel`

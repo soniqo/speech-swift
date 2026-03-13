@@ -737,8 +737,8 @@ make build
 # CoreML embeddings (Neural Engine, pyannote only)
 .build/release/audio diarize meeting.wav --embedding-engine coreml
 
-# With options (speaker count is automatic via GMM-BIC, or constrain with min/max)
-.build/release/audio diarize meeting.wav --min-speakers 2 --max-speakers 4 --json
+# JSON output
+.build/release/audio diarize meeting.wav --json
 
 # Extract a specific speaker (pyannote only)
 .build/release/audio diarize meeting.wav --target-speaker enrollment.wav

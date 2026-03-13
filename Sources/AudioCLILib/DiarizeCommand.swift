@@ -12,12 +12,6 @@ public struct DiarizeCommand: ParsableCommand {
     @Argument(help: "Audio file to analyze (WAV, any sample rate)")
     public var audioFile: String
 
-    @Option(name: .long, help: "Minimum number of speakers (0 = auto)")
-    public var minSpeakers: Int = 0
-
-    @Option(name: .long, help: "Maximum number of speakers (0 = auto)")
-    public var maxSpeakers: Int = 0
-
     @Option(name: .long, help: "Enrollment audio for target speaker extraction")
     public var targetSpeaker: String?
 
@@ -49,10 +43,7 @@ public struct DiarizeCommand: ParsableCommand {
             let duration = formatDuration(audio.count, sampleRate: 16000)
             print("  Loaded \(audio.count) samples (\(duration)s)")
 
-            let config = DiarizationConfig(
-                minSpeakers: minSpeakers,
-                maxSpeakers: maxSpeakers
-            )
+            let config = DiarizationConfig()
 
             if engine == "sortformer" {
                 #if canImport(CoreML)

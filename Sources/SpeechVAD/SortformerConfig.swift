@@ -40,15 +40,6 @@ public struct SortformerConfig: Sendable {
 
     // MARK: - Model I/O Shapes
 
-    /// Number of input mel frames per chunk (after subsampling alignment)
-    public var chunkFrames: Int {
-        // 6s * 16000Hz / 160hop = 600 mel frames, but model expects padded to 112
-        // after conv subsampling (factor 8): 600/8 = 75 → but model pads to 112
-        let rawFrames = Int(chunkLenSeconds * Float(sampleRate)) / hopLength
-        // Pad to next multiple of subsamplingFactor, then model-specific alignment
-        return ((rawFrames + subsamplingFactor - 1) / subsamplingFactor) * subsamplingFactor / (subsamplingFactor / 2)
-    }
-
     /// Maximum number of speakers the model can predict
     public let maxSpeakers: Int
 

@@ -4,7 +4,7 @@
 
 Speaker diarization identifies **who spoke when** in an audio recording. Two engines are available:
 
-1. **Pyannote** (default) — three-stage pipeline: Pyannote segmentation → WeSpeaker embedding → agglomerative clustering
+1. **Pyannote** (default) — two-stage pipeline: segmentation + activity-based speaker chaining → post-hoc WeSpeaker embedding
 2. **Sortformer** (CoreML) — NVIDIA's end-to-end neural diarization model, runs on Neural Engine
 
 ## Architecture
@@ -162,8 +162,8 @@ audio diarize meeting.wav --engine sortformer
 # CoreML embeddings (Neural Engine, pyannote only)
 audio diarize meeting.wav --embedding-engine coreml
 
-# With options
-audio diarize meeting.wav --min-speakers 2 --max-speakers 3 --json
+# JSON output
+audio diarize meeting.wav --json
 
 # Speaker extraction (pyannote only)
 audio diarize meeting.wav --target-speaker enrollment.wav
