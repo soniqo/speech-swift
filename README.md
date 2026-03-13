@@ -8,7 +8,7 @@ AI speech models for Apple Silicon, powered by [MLX Swift](https://github.com/ml
 - **Parakeet TDT** — Speech-to-text via CoreML (Neural Engine, FastConformer + TDT decoder)
 - **Qwen3-ForcedAligner** — Word-level timestamp alignment (audio + text → timestamps)
 - **Qwen3-TTS** — Text-to-speech synthesis (highest quality, custom speakers)
-- **CosyVoice TTS** — Text-to-speech with streaming (9 languages, DiT flow matching)
+- **CosyVoice TTS** — Text-to-speech with streaming, voice cloning, multi-speaker dialogue, and emotion tags (9 languages, DiT flow matching, CAM++ speaker encoder)
 - **Kokoro TTS** — On-device text-to-speech (82M params, CoreML/Neural Engine, 50 voices, iOS-ready)
 - **PersonaPlex** — Full-duplex speech-to-speech (7B, audio in → audio out)
 - **DeepFilterNet3** — Speech enhancement / noise suppression (2.1M params, real-time 48kHz)
@@ -46,6 +46,7 @@ See [Roadmap discussion](https://github.com/soniqo/speech-swift/discussions/81) 
 | Pyannote-Segmentation-3.0 | VAD + Speaker Segmentation | No (10s windows) | Language-agnostic | [MLX](https://huggingface.co/aufklarer/Pyannote-Segmentation-MLX) ~5.7 MB |
 | DeepFilterNet3 | Speech Enhancement | Yes (10ms frames) | Language-agnostic | [CoreML FP16](https://huggingface.co/aufklarer/DeepFilterNet3-CoreML) ~4.2 MB |
 | WeSpeaker-ResNet34-LM | Speaker Embedding (256-dim) | No | Language-agnostic | [MLX](https://huggingface.co/aufklarer/WeSpeaker-ResNet34-LM-MLX) · [CoreML](https://huggingface.co/aufklarer/WeSpeaker-ResNet34-LM-CoreML) ~25 MB |
+| CAM++ | Speaker Embedding (192-dim) | No | Language-agnostic | [CoreML](https://huggingface.co/aufklarer/CamPlusPlus-Speaker-CoreML) ~14 MB |
 | Sortformer | Speaker Diarization (end-to-end) | Yes (chunked) | Language-agnostic | [CoreML](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) ~240 MB |
 
 ### Memory Requirements
@@ -72,7 +73,7 @@ Weight memory is the GPU (MLX) or ANE (CoreML) memory consumed by model paramete
 ### When to Use Which TTS
 
 - **Qwen3-TTS**: Best quality, streaming (~120ms), 9 built-in speakers, 10 languages, batch synthesis
-- **CosyVoice TTS**: Streaming (~150ms), 9 languages, DiT flow matching + HiFi-GAN vocoder
+- **CosyVoice TTS**: Streaming (~150ms), 9 languages, voice cloning (CAM++ speaker encoder), multi-speaker dialogue (`[S1] ... [S2] ...`), inline emotion/style tags (`(happy)`, `(whispers)`), DiT flow matching + HiFi-GAN vocoder
 - **Kokoro TTS**: Lightweight iOS-ready TTS (82M params), CoreML/Neural Engine, 50 voices, 10 languages, non-autoregressive (single forward pass)
 - **PersonaPlex**: Full-duplex speech-to-speech (audio in → audio out), streaming (~2s chunks), 18 voice presets, based on Moshi architecture
 
@@ -558,6 +559,29 @@ for try await chunk in model.synthesizeStream(text: "Hello, how are you today?",
 }
 ```
 
+### Voice Cloning (CosyVoice)
+
+Clone a speaker's voice using the CAM++ speaker encoder (192-dim, CoreML Neural Engine):
+
+```swift
+import CosyVoiceTTS
+import AudioCommon
+
+let model = try await CosyVoiceTTSModel.fromPretrained()
+let speaker = try await CamPlusPlusSpeaker.fromPretrained()
+// Downloads ~14 MB CAM++ CoreML model on first use
+
+let refAudio = try AudioFileLoader.load(url: referenceURL, targetSampleRate: 16000)
+let embedding = try speaker.embed(audio: refAudio, sampleRate: 16000)
+// embedding: [Float] of length 192
+
+let audio = model.synthesize(
+    text: "Hello in a cloned voice!",
+    language: "english",
+    speakerEmbedding: embedding
+)
+```
+
 ### CosyVoice TTS CLI
 
 ```bash
@@ -565,6 +589,24 @@ make build
 
 # Basic synthesis
 .build/release/audio speak "Hello world" --engine cosyvoice --language english --output output.wav
+
+# Voice cloning (downloads CAM++ speaker encoder on first use)
+.build/release/audio speak "Hello world" --engine cosyvoice --voice-sample reference.wav --output cloned.wav
+
+# Multi-speaker dialogue with voice cloning
+.build/release/audio speak "[S1] Hello there! [S2] Hey, how are you?" \
+    --engine cosyvoice --speakers s1=alice.wav,s2=bob.wav -o dialogue.wav
+
+# Inline emotion/style tags
+.build/release/audio speak "(excited) Wow, amazing! (sad) But I have to go..." \
+    --engine cosyvoice -o emotion.wav
+
+# Combined: dialogue + emotions + voice cloning
+.build/release/audio speak "[S1] (happy) Great news! [S2] (surprised) Really?" \
+    --engine cosyvoice --speakers s1=alice.wav,s2=bob.wav -o combined.wav
+
+# Custom style instruction
+.build/release/audio speak "Hello world" --engine cosyvoice --cosy-instruct "Speak cheerfully" -o cheerful.wav
 
 # Streaming synthesis
 .build/release/audio speak "Hello world" --engine cosyvoice --language english --stream --output output.wav
@@ -1012,7 +1054,7 @@ xcodebuild -downloadComponent MetalToolchain
 Unit tests (config, sampling, text preprocessing, timestamp correction) run without model downloads:
 
 ```bash
-swift test --filter "Qwen3TTSConfigTests|SamplingTests|CosyVoiceTTSConfigTests|PersonaPlexTests|ForcedAlignerTests/testText|ForcedAlignerTests/testTimestamp|ForcedAlignerTests/testLIS|SileroVADTests/testSilero|SileroVADTests/testReflection|SileroVADTests/testProcess|SileroVADTests/testReset|SileroVADTests/testDetect|SileroVADTests/testStreaming|SileroVADTests/testVADEvent|KokoroTTSTests"
+swift test --filter "Qwen3TTSConfigTests|SamplingTests|CosyVoiceTTSConfigTests|CamPlusPlusMelExtractorTests|PersonaPlexTests|ForcedAlignerTests/testText|ForcedAlignerTests/testTimestamp|ForcedAlignerTests/testLIS|SileroVADTests/testSilero|SileroVADTests/testReflection|SileroVADTests/testProcess|SileroVADTests/testReset|SileroVADTests/testDetect|SileroVADTests/testStreaming|SileroVADTests/testVADEvent|KokoroTTSTests"
 ```
 
 Integration tests require model weights (downloaded automatically on first run):
