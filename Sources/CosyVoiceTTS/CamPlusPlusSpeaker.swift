@@ -99,19 +99,27 @@ public final class CamPlusPlusSpeaker {
                 "Too few mel frames for speaker embedding (\(nFrames), need >= 10)")
         }
 
-        // Clamp to CoreML model's max input length
-        let effectiveFrames = min(nFrames, 3000)
+        // Fixed input size: 500 frames (~5s at 16kHz).
+        // The CoreML model uses fixed shape to avoid dynamic reshape issues.
+        // Pad short audio with zeros, truncate long audio.
+        let targetFrames = 500
 
-        // Create input: [1, T, 80] float16
+        // Create input: [1, 500, 80] float16
         let melArray = try MLMultiArray(
-            shape: [1, effectiveFrames as NSNumber, 80],
+            shape: [1, targetFrames as NSNumber, 80],
             dataType: .float16
         )
         let melPtr = melArray.dataPointer.assumingMemoryBound(to: Float16.self)
 
-        let copyCount = effectiveFrames * 80
+        let copyFrames = min(nFrames, targetFrames)
+        let copyCount = copyFrames * 80
         for i in 0..<copyCount {
             melPtr[i] = Float16(melSpec[i])
+        }
+        // Zero-pad remaining frames
+        let totalElements = targetFrames * 80
+        for i in copyCount..<totalElements {
+            melPtr[i] = 0
         }
 
         let input = try MLDictionaryFeatureProvider(dictionary: [
