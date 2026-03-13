@@ -14,7 +14,7 @@ AI speech models for Apple Silicon, powered by [MLX Swift](https://github.com/ml
 - **DeepFilterNet3** — Speech enhancement / noise suppression (2.1M params, real-time 48kHz)
 - **Silero VAD** — Streaming voice activity detection (32ms chunks, ~309K params)
 - **Pyannote VAD** — Offline voice activity detection (10s windows, multi-speaker overlap)
-- **Speaker Diarization** — Who spoke when (pyannote segmentation + activity-based speaker chaining, up to 3 concurrent speakers)
+- **Speaker Diarization** — Who spoke when (Pyannote pipeline or end-to-end Sortformer on Neural Engine)
 
 Papers: [Qwen3-ASR](https://arxiv.org/abs/2601.21337), [Qwen3-TTS](https://arxiv.org/abs/2601.15621), [CosyVoice 3](https://arxiv.org/abs/2505.17589), [Kokoro](https://huggingface.co/hexgrad/Kokoro-82M) (StyleTTS 2), [PersonaPlex](https://arxiv.org/abs/2602.06053), [Mimi](https://arxiv.org/abs/2410.00037) (audio codec)
 
@@ -46,6 +46,7 @@ See [Roadmap discussion](https://github.com/soniqo/speech-swift/discussions/81) 
 | Pyannote-Segmentation-3.0 | VAD + Speaker Segmentation | No (10s windows) | Language-agnostic | [MLX](https://huggingface.co/aufklarer/Pyannote-Segmentation-MLX) ~5.7 MB |
 | DeepFilterNet3 | Speech Enhancement | Yes (10ms frames) | Language-agnostic | [CoreML FP16](https://huggingface.co/aufklarer/DeepFilterNet3-CoreML) ~4.2 MB |
 | WeSpeaker-ResNet34-LM | Speaker Embedding (256-dim) | No | Language-agnostic | [MLX](https://huggingface.co/aufklarer/WeSpeaker-ResNet34-LM-MLX) · [CoreML](https://huggingface.co/aufklarer/WeSpeaker-ResNet34-LM-CoreML) ~25 MB |
+| Sortformer | Speaker Diarization (end-to-end) | Yes (chunked) | Language-agnostic | [CoreML](https://huggingface.co/FluidInference/diar-streaming-sortformer-coreml) ~50 MB |
 
 ### Memory Requirements
 
@@ -710,21 +711,36 @@ let segments = pipeline.extractSpeaker(
 )
 ```
 
+### Sortformer Diarization (End-to-End, CoreML)
+
+NVIDIA Sortformer predicts per-frame speaker activity for up to 4 speakers directly — no embedding or clustering needed. Runs on Neural Engine.
+
+```swift
+let diarizer = try await SortformerDiarizer.fromPretrained()
+let result = diarizer.diarize(audio: samples, sampleRate: 16000, config: .default)
+for seg in result.segments {
+    print("Speaker \(seg.speakerId): [\(seg.startTime)s - \(seg.endTime)s]")
+}
+```
+
 ### Diarization CLI
 
 ```bash
-swift build -c release
+make build
 
-# Speaker diarization
+# Pyannote diarization (default)
 .build/release/audio diarize meeting.wav
 
-# CoreML embeddings (Neural Engine)
+# Sortformer diarization (CoreML, Neural Engine)
+.build/release/audio diarize meeting.wav --engine sortformer
+
+# CoreML embeddings (Neural Engine, pyannote only)
 .build/release/audio diarize meeting.wav --embedding-engine coreml
 
 # With options (speaker count is automatic via GMM-BIC, or constrain with min/max)
 .build/release/audio diarize meeting.wav --min-speakers 2 --max-speakers 4 --json
 
-# Extract a specific speaker
+# Extract a specific speaker (pyannote only)
 .build/release/audio diarize meeting.wav --target-speaker enrollment.wav
 
 # Speaker embedding
