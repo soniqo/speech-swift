@@ -178,7 +178,7 @@ audio embed-speaker enrollment.wav --engine coreml --json
 - **Segmentation**: `aufklarer/Pyannote-Segmentation-MLX` (~5.7 MB)
 - **Speaker Embedding (MLX)**: `aufklarer/WeSpeaker-ResNet34-LM-MLX` (~25 MB)
 - **Speaker Embedding (CoreML)**: `aufklarer/WeSpeaker-ResNet34-LM-CoreML` (~13 MB)
-- **Sortformer (CoreML)**: `FluidInference/diar-streaming-sortformer-coreml` (~50 MB)
+- **Sortformer (CoreML)**: `aufklarer/Sortformer-Diarization-CoreML` (~240 MB)
 - Cache: `~/Library/Caches/qwen3-speech/`
 
 ### Weight Conversion

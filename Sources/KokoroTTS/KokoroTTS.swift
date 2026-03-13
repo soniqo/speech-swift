@@ -7,7 +7,7 @@ import AudioCommon
 /// Lightweight (82M params) non-autoregressive TTS model.
 /// Supports 8 languages with 50 preset voices. Designed for iOS/iPad deployment.
 ///
-/// Uses pre-converted CoreML models from FluidInference/kokoro-82m-coreml.
+/// Uses pre-converted CoreML models from aufklarer/Kokoro-82M-CoreML.
 ///
 /// ```swift
 /// let tts = try await KokoroTTSModel.fromPretrained()

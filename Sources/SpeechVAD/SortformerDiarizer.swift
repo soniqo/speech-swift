@@ -19,7 +19,7 @@ import AudioCommon
 public final class SortformerDiarizer {
 
     /// Default HuggingFace model ID for the CoreML Sortformer model
-    public static let defaultModelId = "FluidInference/diar-streaming-sortformer-coreml"
+    public static let defaultModelId = "aufklarer/Sortformer-Diarization-CoreML"
 
     private let model: SortformerCoreMLModel
     private let melExtractor: SortformerMelExtractor

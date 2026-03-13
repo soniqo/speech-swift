@@ -8,7 +8,7 @@ final class KokoroE2ETests: XCTestCase {
 
     static let testModelDir = "/tmp/kokoro-coreml-test"
 
-    /// Test loading vocab_index.json from FluidInference.
+    /// Test loading vocab_index.json from aufklarer/Kokoro-82M-CoreML.
     func testLoadVocabIndex() throws {
         let url = URL(fileURLWithPath: Self.testModelDir + "/vocab_index.json")
         guard FileManager.default.fileExists(atPath: url.path) else {
