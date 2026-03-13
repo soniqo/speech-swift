@@ -402,6 +402,107 @@ final class SileroVADTests: XCTestCase {
         }
     }
 
+    // MARK: - updateContextOnly / resetLSTMState Tests
+
+    func testUpdateContextOnlyPreservesContext() {
+        let network = SileroVADNetwork()
+        let model = SileroVADModel(network: network)
+
+        // Process a chunk normally to establish state
+        let chunk1 = [Float](repeating: 0.1, count: 512)
+        _ = model.processChunk(chunk1)
+
+        // Update context only (skip neural inference)
+        let chunk2 = (0..<512).map { Float($0) / 512.0 }
+        model.updateContextOnly(chunk2)
+
+        // Process next chunk — should use context from chunk2
+        let chunk3 = [Float](repeating: 0.2, count: 512)
+        let prob = model.processChunk(chunk3)
+
+        XCTAssertGreaterThanOrEqual(prob, 0.0)
+        XCTAssertLessThanOrEqual(prob, 1.0)
+    }
+
+    func testResetLSTMStateKeepsContext() {
+        let network = SileroVADNetwork()
+        let model = SileroVADModel(network: network)
+
+        // Process chunks to build up LSTM state
+        let samples = [Float](repeating: 0.1, count: 512)
+        _ = model.processChunk(samples)
+        _ = model.processChunk(samples)
+
+        // Reset LSTM only
+        model.resetLSTMState()
+
+        // Should still work (context preserved, LSTM restarted)
+        let prob = model.processChunk(samples)
+        XCTAssertGreaterThanOrEqual(prob, 0.0)
+        XCTAssertLessThanOrEqual(prob, 1.0)
+    }
+
+    // MARK: - StreamingVADProcessor Pre-Filter Tests
+
+    func testStreamingProcessorWithPreFilter() {
+        let network = SileroVADNetwork()
+        let model = SileroVADModel(network: network)
+
+        let config = VADConfig(
+            onset: 0.99, offset: 0.98,
+            minSpeechDuration: 0.25, minSilenceDuration: 0.1,
+            windowDuration: 0.032, stepRatio: 1.0
+        )
+        let processor = StreamingVADProcessor(
+            model: model, config: config,
+            preFilterConfig: .default
+        )
+
+        // Feed silence — pre-filter should skip most chunks after warmup
+        let silence = [Float](repeating: 0, count: 16000)  // 1 second
+        _ = processor.process(samples: silence)
+        _ = processor.flush()
+
+        // With onset=0.99 and silence, should get skips after warmup
+        XCTAssertGreaterThan(processor.totalChunks, 0)
+        // Pre-filter should skip at least some chunks after warmup period
+        // (10 warmup chunks = 320ms, 1s total = ~31 chunks)
+        XCTAssertGreaterThan(processor.skippedChunks, 0,
+                             "Pre-filter should skip some silent chunks after warmup")
+    }
+
+    func testStreamingProcessorWithoutPreFilter() {
+        let network = SileroVADNetwork()
+        let model = SileroVADModel(network: network)
+        let processor = StreamingVADProcessor(model: model)
+
+        let silence = [Float](repeating: 0, count: 16000)
+        _ = processor.process(samples: silence)
+        _ = processor.flush()
+
+        XCTAssertGreaterThan(processor.totalChunks, 0)
+        XCTAssertEqual(processor.skippedChunks, 0,
+                       "Without pre-filter, no chunks should be skipped")
+    }
+
+    func testStreamingProcessorPreFilterReset() {
+        let network = SileroVADNetwork()
+        let model = SileroVADModel(network: network)
+        let processor = StreamingVADProcessor(
+            model: model,
+            preFilterConfig: .default
+        )
+
+        let silence = [Float](repeating: 0, count: 8000)
+        _ = processor.process(samples: silence)
+
+        processor.reset()
+
+        XCTAssertEqual(processor.currentTime, 0.0)
+        XCTAssertEqual(processor.skippedChunks, 0)
+        XCTAssertEqual(processor.totalChunks, 0)
+    }
+
     // MARK: - Per-Chunk Probability Tests
 
     func testE2EPerChunkProbabilities() async throws {

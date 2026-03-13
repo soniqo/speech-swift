@@ -154,6 +154,31 @@ public final class SileroVADModel {
         context = [Float](repeating: 0, count: Self.contextSize)
     }
 
+    /// Update context buffer without running neural inference.
+    ///
+    /// Used by the energy pre-filter when skipping a chunk — preserves the
+    /// 64-sample context so the next invoked chunk gets correct context.
+    ///
+    /// - Parameter samples: exactly 512 PCM Float32 samples at 16kHz
+    public func updateContextOnly(_ samples: [Float]) {
+        precondition(samples.count == Self.chunkSize,
+                     "Chunk must be \(Self.chunkSize) samples, got \(samples.count)")
+        context = Array(samples.suffix(Self.contextSize))
+    }
+
+    /// Reset only LSTM state, keeping the context buffer intact.
+    ///
+    /// Used after long silence gaps (50+ consecutive skips) to prevent
+    /// stale LSTM state from corrupting onset detection.
+    public func resetLSTMState() {
+        h = nil
+        c = nil
+        #if canImport(CoreML)
+        coremlH = nil
+        coremlC = nil
+        #endif
+    }
+
     /// Detect speech segments in complete audio (batch mode).
     ///
     /// Processes the entire audio in 512-sample chunks, collects per-chunk
@@ -163,11 +188,13 @@ public final class SileroVADModel {
     ///   - audio: PCM Float32 audio samples
     ///   - sampleRate: sample rate of input audio (resampled to 16kHz if needed)
     ///   - config: VAD configuration (defaults to Silero-tuned thresholds)
+    ///   - preFilterConfig: optional energy pre-filter config; `nil` disables pre-filtering
     /// - Returns: array of speech segments with start/end times in seconds
     public func detectSpeech(
         audio: [Float],
         sampleRate: Int,
-        config: VADConfig = .sileroDefault
+        config: VADConfig = .sileroDefault,
+        preFilterConfig: EnergyPreFilterConfig? = nil
     ) -> [SpeechSegment] {
         let samples: [Float]
         if sampleRate != Self.sampleRate {
@@ -178,13 +205,23 @@ public final class SileroVADModel {
 
         resetState()
 
+        var preFilter: EnergyPreFilter? = preFilterConfig.map { EnergyPreFilter(config: $0) }
+
         // Collect per-chunk probabilities
         var probs = [Float]()
         var offset = 0
 
         while offset + Self.chunkSize <= samples.count {
             let chunk = Array(samples[offset ..< (offset + Self.chunkSize)])
-            probs.append(processChunk(chunk))
+
+            if preFilter != nil && !preFilter!.shouldInvokeSilero(chunk) {
+                // Skip neural inference — feed zero probability
+                updateContextOnly(chunk)
+                probs.append(0.0)
+            } else {
+                probs.append(processChunk(chunk))
+            }
+
             offset += Self.chunkSize
         }
 

@@ -90,3 +90,38 @@ public struct VADConfig: Sendable {
         stepRatio: 1.0
     )
 }
+
+/// Configuration for the DSP energy pre-filter (Stage 1 before Silero).
+public struct EnergyPreFilterConfig: Sendable {
+    /// EMA decay factor for adaptive noise floor estimation.
+    public var noiseAlpha: Float
+
+    /// Number of initial chunks that always invoke Silero (~320ms at 10 chunks).
+    public var warmupChunks: Int
+
+    /// Energy must exceed noise floor by this many dB to invoke Silero.
+    public var marginDB: Float
+
+    /// After this many consecutive skips (~1.6s at 50), reset LSTM state.
+    public var maxConsecutiveSkips: Int
+
+    /// Number of look-back chunks to replay on skip→invoke transition.
+    public var lookBackChunks: Int
+
+    public init(
+        noiseAlpha: Float = 0.01,
+        warmupChunks: Int = 10,
+        marginDB: Float = 10.0,
+        maxConsecutiveSkips: Int = 50,
+        lookBackChunks: Int = 2
+    ) {
+        self.noiseAlpha = noiseAlpha
+        self.warmupChunks = warmupChunks
+        self.marginDB = marginDB
+        self.maxConsecutiveSkips = maxConsecutiveSkips
+        self.lookBackChunks = lookBackChunks
+    }
+
+    /// Default configuration.
+    public static let `default` = EnergyPreFilterConfig()
+}

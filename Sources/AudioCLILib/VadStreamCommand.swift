@@ -30,6 +30,9 @@ public struct VadStreamCommand: ParsableCommand {
     @Option(name: .long, help: "Minimum silence duration in seconds")
     public var minSilence: Float = VADConfig.sileroDefault.minSilenceDuration
 
+    @Flag(name: .long, help: "Disable DSP energy pre-filter (pre-filter is on by default)")
+    public var noPreFilter: Bool = false
+
     @Flag(name: .long, help: "Output as JSON")
     public var json: Bool = false
 
@@ -65,9 +68,11 @@ public struct VadStreamCommand: ParsableCommand {
                 stepRatio: VADConfig.sileroDefault.stepRatio
             )
 
-            let processor = StreamingVADProcessor(model: vadModel, config: vadConfig)
+            let preFilterConfig: EnergyPreFilterConfig? = noPreFilter ? nil : .default
+            let processor = StreamingVADProcessor(
+                model: vadModel, config: vadConfig, preFilterConfig: preFilterConfig)
 
-            print("Processing in 32ms chunks...")
+            print("Processing in 32ms chunks\(preFilterConfig != nil ? " (pre-filter enabled)" : "")...")
             let start = Date()
             var allEvents = [VADEvent]()
 
@@ -115,6 +120,12 @@ public struct VadStreamCommand: ParsableCommand {
                 let totalSpeech = segments.reduce(Float(0)) { $0 + $1.duration }
                 print("\n\(segments.count) segment(s), \(String(format: "%.2f", totalSpeech))s total speech")
                 print("Processing took \(String(format: "%.3f", elapsed))s (\(String(format: "%.0f", Double(audio.count) / 16000.0 / elapsed))x real-time)")
+
+                // Pre-filter statistics
+                if preFilterConfig != nil && processor.totalChunks > 0 {
+                    let pct = Int(round(Double(processor.skippedChunks) / Double(processor.totalChunks) * 100))
+                    print("Pre-filter: skipped \(processor.skippedChunks)/\(processor.totalChunks) chunks (\(pct)%)")
+                }
             }
         }
     }
