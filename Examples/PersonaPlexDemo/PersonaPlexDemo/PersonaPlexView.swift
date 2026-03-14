@@ -99,6 +99,15 @@ struct PersonaPlexView: View {
                 .pickerStyle(.segmented)
                 .frame(width: 180)
             }
+
+            if vm.isFullDuplexMode {
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text("Echo Suppression").font(.caption).foregroundStyle(.secondary)
+                    Toggle("", isOn: $vm.echoSuppression)
+                        .labelsHidden()
+                        .help("Enable when using speakers to prevent the mic from picking up agent audio. Disable when using headphones.")
+                }
+            }
         }
         .disabled(vm.isActive || vm.isBusy)
 

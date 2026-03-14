@@ -38,6 +38,8 @@ final class PersonaPlexViewModel {
     var selectedVoice: PersonaPlexVoice = .NATM0
     var maxSteps: Int = 75
     var isFullDuplexMode: Bool = false
+    /// Suppress mic input while agent is speaking (for speaker output; disable when using headphones).
+    var echoSuppression: Bool = false
 
     // Combined assistant + focused prompt tokens (SentencePiece):
     // "<system> You are a helpful assistant. Answer questions clearly and concisely.
@@ -192,8 +194,9 @@ final class PersonaPlexViewModel {
         let tracker = agentSpeakingTracker
 
         do {
+            let suppressEnabled = echoSuppression
             try recorder?.startContinuous(buffer: ringBuffer) {
-                tracker.isSpeaking
+                suppressEnabled && tracker.isSpeaking
             }
         } catch {
             errorMessage = "Mic error: \(error.localizedDescription)"
