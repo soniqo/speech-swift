@@ -32,16 +32,16 @@ final class ConcurrencyTests: XCTestCase {
     // MARK: - Stream cancellation via onTermination
 
     func testStreamWithoutOnTerminationLeaks() async throws {
-        var taskCompleted = false
+        let taskCompleted = OSAllocatedUnfairLock(initialState: false)
 
         let stream = AsyncThrowingStream<Int, Error> { continuation in
             // NO onTermination — task is untracked (the bug we fixed)
             Task {
                 for i in 0..<5 {
                     continuation.yield(i)
-                    try? await Task.sleep(nanoseconds: 10_000_000)
+                    try? await Task.sleep(nanoseconds: 1_000_000) // 1ms
                 }
-                taskCompleted = true
+                taskCompleted.withLock { $0 = true }
                 continuation.finish()
             }
         }
@@ -49,10 +49,11 @@ final class ConcurrencyTests: XCTestCase {
         // Consume 1 element and break
         for try await _ in stream { break }
 
-        // Task continues running even after consumer exits
-        try await Task.sleep(nanoseconds: 100_000_000)
-        // This demonstrates the leak — without onTermination, task runs to completion
-        XCTAssertTrue(taskCompleted, "Untracked task runs to completion (leaked)")
+        // Task continues running even after consumer exits — wait generously
+        try await Task.sleep(nanoseconds: 500_000_000) // 500ms
+        let completed = taskCompleted.withLock { $0 }
+        // Demonstrates the leak: without onTermination, task runs to completion
+        XCTAssertTrue(completed, "Untracked task runs to completion (leaked)")
     }
 
     // MARK: - Continuation error path
