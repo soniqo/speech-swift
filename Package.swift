@@ -72,16 +72,22 @@ let package = Package(
         .target(
             name: "AudioCommon",
             dependencies: [
+                .product(name: "Hub", package: "swift-transformers")
+            ]
+        ),
+        .target(
+            name: "MLXCommon",
+            dependencies: [
+                "AudioCommon",
                 .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "MLXNN", package: "mlx-swift"),
-                .product(name: "MLXFast", package: "mlx-swift"),
-                .product(name: "Hub", package: "swift-transformers")
             ]
         ),
         .target(
             name: "Qwen3ASR",
             dependencies: [
                 "AudioCommon",
+                "MLXCommon",
                 "SpeechVAD",
                 .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "MLXNN", package: "mlx-swift"),
@@ -92,6 +98,7 @@ let package = Package(
             name: "Qwen3TTS",
             dependencies: [
                 "AudioCommon",
+                "MLXCommon",
                 .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "MLXNN", package: "mlx-swift"),
                 .product(name: "MLXFast", package: "mlx-swift")
@@ -101,6 +108,7 @@ let package = Package(
             name: "CosyVoiceTTS",
             dependencies: [
                 "AudioCommon",
+                "MLXCommon",
                 .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "MLXNN", package: "mlx-swift"),
                 .product(name: "MLXFast", package: "mlx-swift")
@@ -110,6 +118,7 @@ let package = Package(
             name: "PersonaPlex",
             dependencies: [
                 "AudioCommon",
+                "MLXCommon",
                 .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "MLXNN", package: "mlx-swift"),
                 .product(name: "MLXFast", package: "mlx-swift")
@@ -119,6 +128,7 @@ let package = Package(
             name: "SpeechVAD",
             dependencies: [
                 "AudioCommon",
+                "MLXCommon",
                 .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "MLXNN", package: "mlx-swift"),
             ]
@@ -127,6 +137,7 @@ let package = Package(
             name: "SpeechEnhancement",
             dependencies: [
                 "AudioCommon",
+                "MLXCommon",
             ]
         ),
         .target(
