@@ -2,6 +2,11 @@
 
 AI speech models for Apple Silicon (MLX Swift). ASR, TTS, speech-to-speech, VAD, diarization, speech enhancement.
 
+## Git Conventions
+
+- Never mention Claude, AI, or any AI tool in commit messages, PR descriptions, or co-author tags
+- No `Co-Authored-By` lines in commits
+
 ## Build
 
 ```bash
@@ -37,6 +42,7 @@ The metallib step compiles MLX Metal shaders — without it, inference runs ~5x 
 - `Sources/PersonaPlex/` — Speech-to-speech (PersonaPlex 7B, full-duplex)
 - `Sources/SpeechVAD/` — VAD (Silero + Pyannote), speaker diarization, speaker embedding (WeSpeaker)
 - `Sources/SpeechEnhancement/` — Noise suppression (DeepFilterNet3, CoreML)
+- `Sources/Qwen3Chat/` — On-device LLM chat (Qwen3-0.6B, CoreML, INT4)
 - `Sources/Qwen3Common/` — Shared model components (KV cache, RoPE, quantization)
 - `Sources/AudioCommon/` — Audio I/O, protocols, HuggingFace downloader
 - `Sources/AudioCLILib/` — CLI commands
