@@ -24,13 +24,15 @@ public final class Qwen3ChatModel: @unchecked Sendable {
 
     private let config: Qwen3ChatConfig
     private let tokenizer: ChatTokenizer
-    private let generator: CoreMLGenerator
-    private var conversationHistory: [ChatMessage] = []
-    private var systemPromptCached = false
+    var generator: CoreMLGenerator?
+    var conversationHistory: [ChatMessage] = []
+    var systemPromptCached = false
+    var _isLoaded = true
 
     /// Metrics from the last generation (tokens/sec, prefill time, etc.).
     public var lastMetrics: (tokensPerSec: Double, prefillMs: Double, decodeMs: Double, msPerToken: Double) {
-        let m = generator.metrics
+        guard let g = generator else { return (0, 0, 0, 0) }
+        let m = g.metrics
         return (m.tokensPerSecond, m.prefillTimeMs, m.decodeTimeMs, m.msPerToken)
     }
 
@@ -38,7 +40,7 @@ public final class Qwen3ChatModel: @unchecked Sendable {
         self.config = config
         self.tokenizer = tokenizer
         self.generator = generator
-        self.generator.resetCache()
+        generator.resetCache()
     }
 
     // MARK: - Factory
@@ -231,8 +233,8 @@ public final class Qwen3ChatModel: @unchecked Sendable {
         messages: [ChatMessage],
         sampling: ChatSamplingConfig = .default
     ) throws -> String {
-        generator.resetCache()
-        generator.resetMetrics()
+        generator?.resetCache()
+        generator?.resetMetrics()
 
         let promptTokens = ChatTemplate.encode(
             messages: messages,
@@ -240,12 +242,12 @@ public final class Qwen3ChatModel: @unchecked Sendable {
         )
 
         // Prefill: process all prompt tokens at once
-        var logits = try generator.prefill(tokenIds: promptTokens)
+        var logits = try generator!.prefill(tokenIds: promptTokens)
 
         // Autoregressive decode
         var generatedTokens: [Int] = []
         for _ in 0..<sampling.maxTokens {
-            let nextToken = generator.sample(
+            let nextToken = generator!.sample(
                 logits: logits,
                 config: sampling,
                 previousTokens: promptTokens + generatedTokens
@@ -255,7 +257,7 @@ public final class Qwen3ChatModel: @unchecked Sendable {
             if nextToken == ChatTemplate.imEndId { break }
 
             generatedTokens.append(nextToken)
-            logits = try generator.decode(tokenId: nextToken)
+            logits = try generator!.decode(tokenId: nextToken)
         }
 
         let responseTokens = ChatTemplate.stripThinking(from: generatedTokens)
@@ -272,8 +274,8 @@ public final class Qwen3ChatModel: @unchecked Sendable {
         AsyncThrowingStream { continuation in
             Task {
                 do {
-                    self.generator.resetCache()
-                    self.generator.resetMetrics()
+                    self.generator?.resetCache()
+                    self.generator?.resetMetrics()
 
                     let promptTokens = ChatTemplate.encode(
                         messages: messages,
@@ -281,13 +283,13 @@ public final class Qwen3ChatModel: @unchecked Sendable {
                     )
 
                     // Prefill
-                    var logits = try self.generator.prefill(tokenIds: promptTokens)
+                    var logits = try self.generator!.prefill(tokenIds: promptTokens)
                     var generatedTokens: [Int] = []
 
                     // Decode loop — skip thinking block tokens
                     var inThinking = false
                     for _ in 0..<sampling.maxTokens {
-                        let nextToken = self.generator.sample(
+                        let nextToken = self.generator!.sample(
                             logits: logits,
                             config: sampling,
                             previousTokens: promptTokens + generatedTokens
@@ -308,7 +310,7 @@ public final class Qwen3ChatModel: @unchecked Sendable {
                             continuation.yield(text)
                         }
 
-                        logits = try self.generator.decode(tokenId: nextToken)
+                        logits = try self.generator!.decode(tokenId: nextToken)
                     }
 
                     continuation.finish()
@@ -332,24 +334,24 @@ public final class Qwen3ChatModel: @unchecked Sendable {
     ) throws -> String {
         // Cache system prompt on first turn
         if let system = systemPrompt, !systemPromptCached {
-            generator.resetCache()
-            generator.resetMetrics()
+            generator?.resetCache()
+            generator?.resetMetrics()
 
             let systemTokens = ChatTemplate.encode(
                 messages: [ChatMessage(role: .system, content: system)],
                 tokenizer: tokenizer,
                 addGenerationPrompt: false
             )
-            _ = try generator.prefill(tokenIds: systemTokens)
-            generator.snapshotPromptCache()
+            _ = try generator!.prefill(tokenIds: systemTokens)
+            generator?.snapshotPromptCache()
             systemPromptCached = true
         } else if systemPromptCached {
             // Restore cached system prompt KV state
-            generator.restorePromptCache()
-            generator.resetMetrics()
+            generator?.restorePromptCache()
+            generator?.resetMetrics()
         } else {
-            generator.resetCache()
-            generator.resetMetrics()
+            generator?.resetCache()
+            generator?.resetMetrics()
         }
 
         // Build turn tokens: history + new user message + generation prompt
@@ -362,12 +364,12 @@ public final class Qwen3ChatModel: @unchecked Sendable {
         )
 
         // Prefill turn tokens
-        var logits = try generator.prefill(tokenIds: turnTokens)
+        var logits = try generator!.prefill(tokenIds: turnTokens)
 
         // Decode response
         var generatedTokens: [Int] = []
         for _ in 0..<sampling.maxTokens {
-            let nextToken = generator.sample(
+            let nextToken = generator!.sample(
                 logits: logits,
                 config: sampling,
                 previousTokens: generatedTokens
@@ -377,7 +379,7 @@ public final class Qwen3ChatModel: @unchecked Sendable {
             if nextToken == ChatTemplate.imEndId { break }
 
             generatedTokens.append(nextToken)
-            logits = try generator.decode(tokenId: nextToken)
+            logits = try generator!.decode(tokenId: nextToken)
         }
 
         let responseTokens = ChatTemplate.stripThinking(from: generatedTokens)
@@ -402,22 +404,22 @@ public final class Qwen3ChatModel: @unchecked Sendable {
                 do {
                     // Cache system prompt on first turn
                     if let system = systemPrompt, !self.systemPromptCached {
-                        self.generator.resetCache()
-                        self.generator.resetMetrics()
+                        self.generator?.resetCache()
+                        self.generator?.resetMetrics()
                         let systemTokens = ChatTemplate.encode(
                             messages: [ChatMessage(role: .system, content: system)],
                             tokenizer: self.tokenizer,
                             addGenerationPrompt: false
                         )
-                        _ = try self.generator.prefill(tokenIds: systemTokens)
-                        self.generator.snapshotPromptCache()
+                        _ = try self.generator!.prefill(tokenIds: systemTokens)
+                        self.generator?.snapshotPromptCache()
                         self.systemPromptCached = true
                     } else if self.systemPromptCached {
-                        self.generator.restorePromptCache()
-                        self.generator.resetMetrics()
+                        self.generator?.restorePromptCache()
+                        self.generator?.resetMetrics()
                     } else {
-                        self.generator.resetCache()
-                        self.generator.resetMetrics()
+                        self.generator?.resetCache()
+                        self.generator?.resetMetrics()
                     }
 
                     var turnMessages = self.conversationHistory
@@ -428,12 +430,12 @@ public final class Qwen3ChatModel: @unchecked Sendable {
                         tokenizer: self.tokenizer
                     )
 
-                    var logits = try self.generator.prefill(tokenIds: turnTokens)
+                    var logits = try self.generator!.prefill(tokenIds: turnTokens)
                     var generatedTokens: [Int] = []
 
                     var inThinking = false
                     for _ in 0..<sampling.maxTokens {
-                        let nextToken = self.generator.sample(
+                        let nextToken = self.generator!.sample(
                             logits: logits,
                             config: sampling,
                             previousTokens: generatedTokens
@@ -455,7 +457,7 @@ public final class Qwen3ChatModel: @unchecked Sendable {
                             continuation.yield(text)
                         }
 
-                        logits = try self.generator.decode(tokenId: nextToken)
+                        logits = try self.generator!.decode(tokenId: nextToken)
                     }
 
                     self.conversationHistory.append(
@@ -476,6 +478,6 @@ public final class Qwen3ChatModel: @unchecked Sendable {
     public func resetConversation() {
         conversationHistory = []
         systemPromptCached = false
-        generator.clearPromptCache()
+        generator?.clearPromptCache()
     }
 }
