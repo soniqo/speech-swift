@@ -43,7 +43,7 @@ The metallib step compiles MLX Metal shaders — without it, inference runs ~5x 
 - `Sources/SpeechVAD/` — VAD (Silero + Pyannote), speaker diarization, speaker embedding (WeSpeaker)
 - `Sources/SpeechEnhancement/` — Noise suppression (DeepFilterNet3, CoreML)
 - `Sources/Qwen3Chat/` — On-device LLM chat (Qwen3-0.6B, CoreML, INT4)
-- `Sources/Qwen3Common/` — Shared model components (KV cache, RoPE, quantization)
+- `Sources/MLXCommon/` — Shared MLX utilities (weight loading, quantized layers, memory estimation)
 - `Sources/AudioCommon/` — Audio I/O, protocols, HuggingFace downloader
 - `Sources/AudioCLILib/` — CLI commands
 - `Sources/AudioCLI/` — CLI entry point (`audio` binary)
