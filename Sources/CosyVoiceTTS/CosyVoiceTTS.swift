@@ -226,6 +226,11 @@ public final class CosyVoiceTTSModel {
     }
 
     /// Synthesize with streaming output.
+    /// Synthesize speech asynchronously, yielding audio in chunks.
+    ///
+    /// Currently yields a single chunk with the full result (not yet
+    /// incrementally streaming). The async stream interface is preserved
+    /// for forward compatibility with chunked codec decoding.
     public func synthesizeStream(
         text: String,
         language: String = "english",
@@ -238,7 +243,6 @@ public final class CosyVoiceTTSModel {
                 continuation.finish()
                 return
             }
-            // Non-streaming for now — stream the full result as a single chunk
             let samples = self.synthesize(text: text, language: language)
             let chunk = AudioChunk(
                 samples: samples,

@@ -68,7 +68,7 @@ public class Qwen3TTSModel {
     /// growing KV cache handled by shapeless mode, batch dim uses -1 reshapes.
     private var compiledCPTransformer: (([MLXArray]) -> [MLXArray])?
 
-    public init(config: Qwen3TTSConfig = .base06B) {
+    init(config: Qwen3TTSConfig = .base06B) {
         self.config = config
         self.talker = TalkerModel(config: config.talker)
         self.codePredictor = CodePredictorModel(config: config.codePredictor)
@@ -76,7 +76,7 @@ public class Qwen3TTSModel {
         self.speakerEncoder = SpeakerEncoder()
     }
 
-    public func setTokenizer(_ tokenizer: Qwen3Tokenizer) {
+    func setTokenizer(_ tokenizer: Qwen3Tokenizer) {
         self.tokenizer = tokenizer
     }
 

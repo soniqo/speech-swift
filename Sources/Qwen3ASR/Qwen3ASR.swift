@@ -33,7 +33,7 @@ public class Qwen3ASRModel {
     /// Whether the model weights are loaded and ready for inference.
     var _isLoaded = true
 
-    public init(
+    init(
         audioConfig: Qwen3AudioEncoderConfig = .default,
         textConfig: TextDecoderConfig = .small
     ) {
@@ -45,12 +45,12 @@ public class Qwen3ASRModel {
     }
 
     /// Set tokenizer for text decoding
-    public func setTokenizer(_ tokenizer: Qwen3Tokenizer) {
+    func setTokenizer(_ tokenizer: Qwen3Tokenizer) {
         self.tokenizer = tokenizer
     }
 
     /// Initialize text decoder (called after loading)
-    public func initializeTextDecoder() {
+    func initializeTextDecoder() {
         self.textDecoder = QuantizedTextModel(config: textConfig)
     }
 
