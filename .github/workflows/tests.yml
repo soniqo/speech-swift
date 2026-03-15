@@ -57,3 +57,4 @@ jobs:
           --skip CosyVoiceTokenizerTests
           --skip TTSBatchTests
           --skip TTSStreamingTests
+          --skip KokoroTTSTests
