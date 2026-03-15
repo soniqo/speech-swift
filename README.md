@@ -42,7 +42,7 @@ See [Roadmap discussion](https://github.com/soniqo/speech-swift/discussions/81) 
 | Qwen3-TTS-1.7B Base | Text → Speech | Yes (~120ms) | 10 languages | [4-bit](https://huggingface.co/aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-4bit) 3.2 GB · [8-bit](https://huggingface.co/aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-8bit) 4.8 GB |
 | CosyVoice3-0.5B | Text → Speech | Yes (~150ms) | 9 languages | [4-bit](https://huggingface.co/aufklarer/CosyVoice3-0.5B-MLX-4bit) 1.2 GB |
 | Kokoro-82M | Text → Speech | No | 10 languages | [CoreML](https://huggingface.co/aufklarer/Kokoro-82M-CoreML) ~325 MB |
-| Qwen3-0.6B Chat | Text → Text (LLM) | Yes (streaming) | Multi | [CoreML INT4](https://huggingface.co/aufklarer/Qwen3-0.6B-Chat-CoreML) 318 MB |
+| Qwen3-0.6B Chat | Text → Text (LLM) | Yes (streaming) | Multi | [CoreML INT4](https://huggingface.co/aufklarer/Qwen3-0.6B-Chat-CoreML) 318 MB · [CoreML INT8](https://huggingface.co/aufklarer/Qwen3-0.6B-Chat-CoreML) 571 MB |
 | PersonaPlex-7B | Speech → Speech | Yes (~2s chunks) | EN | [4-bit](https://huggingface.co/aufklarer/PersonaPlex-7B-MLX-4bit) 4.9 GB · [8-bit](https://huggingface.co/aufklarer/PersonaPlex-7B-MLX-8bit) 9.1 GB |
 | Silero-VAD-v5 | Voice Activity Detection | Yes (32ms chunks) | Language-agnostic | [MLX](https://huggingface.co/aufklarer/Silero-VAD-v5-MLX) · [CoreML](https://huggingface.co/aufklarer/Silero-VAD-v5-CoreML) ~1.2 MB |
 | Pyannote-Segmentation-3.0 | VAD + Speaker Segmentation | No (10s windows) | Language-agnostic | [MLX](https://huggingface.co/aufklarer/Pyannote-Segmentation-MLX) ~5.7 MB |

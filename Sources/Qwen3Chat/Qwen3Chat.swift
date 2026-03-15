@@ -54,8 +54,15 @@ public final class Qwen3ChatModel: @unchecked Sendable {
     ///   - modelId: HuggingFace model ID
     ///   - computeUnits: CoreML compute units (default: .all for Neural Engine + CPU + GPU)
     ///   - progressHandler: Optional callback for download progress
+    /// Quantization variant to load.
+    public enum Quantization: String, Sendable {
+        case int4 = "Qwen3Chat-INT4"
+        case int8 = "Qwen3Chat-INT8"
+    }
+
     public static func fromPretrained(
         modelId: String = defaultModelId,
+        quantization: Quantization = .int4,
         computeUnits: MLComputeUnits = .all,
         progressHandler: ((Double, String) -> Void)? = nil
     ) async throws -> Qwen3ChatModel {
@@ -113,7 +120,8 @@ public final class Qwen3ChatModel: @unchecked Sendable {
                 decodeModel: decodeModel,
                 config: config
             )
-        } else if let singleURL = findModel(named: "Qwen3Chat", in: cacheDir)
+        } else if let singleURL = findModel(named: quantization.rawValue, in: cacheDir)
+                    ?? findModel(named: "Qwen3Chat", in: cacheDir) // backward compat
                     ?? findAnyModel(in: cacheDir) {
             // Single model fallback
             let model = try MLModel(contentsOf: singleURL, configuration: mlConfig)

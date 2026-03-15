@@ -163,11 +163,54 @@ final class Qwen3ChatE2ETests: XCTestCase {
         XCTAssertFalse(trimmed.isEmpty, "Should generate non-empty response")
     }
 
+    // MARK: - INT8 Variant
+
+    func testINT8ModelLoading() async throws {
+        let model = try await loadModelOrSkip(quantization: .int8)
+        let metrics = model.lastMetrics
+        XCTAssertEqual(metrics.tokensPerSec, 0)
+    }
+
+    func testINT8Generation() async throws {
+        let model = try await loadModelOrSkip(quantization: .int8)
+        let response = try model.generate(
+            messages: [ChatMessage(role: .user, content: "Say hello in one word.")],
+            sampling: ChatSamplingConfig(temperature: 0.3, topK: 20, maxTokens: 20)
+        )
+        XCTAssertFalse(response.isEmpty, "INT8 model should generate non-empty response")
+        print("INT8 generation: '\(response.trimmingCharacters(in: .whitespacesAndNewlines))'")
+
+        let m = model.lastMetrics
+        print("INT8 performance: \(String(format: "%.1f", m.tokensPerSec)) tok/s, "
+            + "\(String(format: "%.0f", m.prefillMs))ms prefill")
+    }
+
+    func testINT8StreamingChat() async throws {
+        let model = try await loadModelOrSkip(quantization: .int8)
+        var chunks: [String] = []
+
+        let stream = model.chatStream(
+            "What is 1+1?",
+            systemPrompt: "Answer in one word.",
+            sampling: ChatSamplingConfig(temperature: 0.3, maxTokens: 10)
+        )
+
+        for try await chunk in stream {
+            chunks.append(chunk)
+        }
+
+        XCTAssertTrue(chunks.count > 0, "INT8 streaming should yield tokens")
+        let text = chunks.joined()
+        XCTAssertFalse(text.isEmpty)
+        print("INT8 streaming: '\(text.trimmingCharacters(in: .whitespacesAndNewlines))'")
+    }
+
     // MARK: - Helpers
 
-    private func loadModelOrSkip() async throws -> Qwen3ChatModel {
+    private func loadModelOrSkip(quantization: Qwen3ChatModel.Quantization = .int4) async throws -> Qwen3ChatModel {
         return try await Qwen3ChatModel.fromPretrained(
             modelId: Self.modelId,
+            quantization: quantization,
             computeUnits: .all
         ) { progress, status in
             print("[\(Int(progress * 100))%] \(status)")
