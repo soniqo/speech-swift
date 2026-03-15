@@ -13,7 +13,7 @@ concurrency:
 jobs:
   build-and-test:
     runs-on: macos-15
-    timeout-minutes: 30
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -33,10 +33,5 @@ jobs:
             [ -d "$BUNDLE" ] && cp .build/debug/mlx.metallib "$BUNDLE/" 2>/dev/null || true
           done
           swift test --skip-build \
-            --skip Qwen3ChatE2ETests \
-            --skip Qwen3ASRIntegrationTests \
-            --skip ParakeetASRE2ETests \
-            --skip KokoroE2ETests \
-            --skip Qwen3TTSE2ETests \
-            --skip PersonaPlexE2ETests \
-            --skip CosyVoiceE2ETests
+            --skip E2ETests \
+            --skip IntegrationTests
