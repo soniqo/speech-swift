@@ -40,6 +40,18 @@ let package = Package(
             name: "ParakeetASR",
             targets: ["ParakeetASR"]
         ),
+        .library(
+            name: "SpeechCore",
+            targets: ["SpeechCore"]
+        ),
+        .library(
+            name: "KokoroTTS",
+            targets: ["KokoroTTS"]
+        ),
+        .library(
+            name: "Qwen3Chat",
+            targets: ["Qwen3Chat"]
+        ),
         .executable(
             name: "audio",
             targets: ["AudioCLI"]
@@ -53,7 +65,8 @@ let package = Package(
         .package(url: "https://github.com/ml-explore/mlx-swift", from: "0.30.0"),
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.5.0"),
         .package(url: "https://github.com/huggingface/swift-transformers", from: "1.1.6"),
-        .package(url: "https://github.com/hummingbird-project/hummingbird.git", from: "2.5.0")
+        .package(url: "https://github.com/hummingbird-project/hummingbird.git", "2.5.0"..<"2.17.0"),
+        .package(url: "https://github.com/hummingbird-project/hummingbird-websocket.git", from: "2.6.0")
     ],
     targets: [
         .target(
@@ -122,6 +135,30 @@ let package = Package(
                 "AudioCommon",
             ]
         ),
+        .binaryTarget(
+            name: "CSpeechCore",
+            url: "https://github.com/soniqo/speech-core/releases/download/v0.0.2/SpeechCore.xcframework.zip",
+            checksum: "67a714baf4ada80dd550a40da0c31f1dcd2be1fd41f2cbf3b45bf0891d8afbc7"
+        ),
+        .target(
+            name: "SpeechCore",
+            dependencies: [
+                "CSpeechCore",
+                "AudioCommon",
+            ]
+        ),
+        .target(
+            name: "KokoroTTS",
+            dependencies: [
+                "AudioCommon",
+            ]
+        ),
+        .target(
+            name: "Qwen3Chat",
+            dependencies: [
+                "AudioCommon",
+            ]
+        ),
         .target(
             name: "AudioCLILib",
             dependencies: [
@@ -132,6 +169,7 @@ let package = Package(
                 "SpeechVAD",
                 "SpeechEnhancement",
                 "ParakeetASR",
+                "KokoroTTS",
                 "AudioCommon",
                 .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser")
@@ -150,7 +188,8 @@ let package = Package(
                 "PersonaPlex",
                 "SpeechEnhancement",
                 "AudioCommon",
-                .product(name: "Hummingbird", package: "hummingbird")
+                .product(name: "Hummingbird", package: "hummingbird"),
+                .product(name: "HummingbirdWebSocket", package: "hummingbird-websocket")
             ]
         ),
         .executableTarget(
@@ -195,6 +234,19 @@ let package = Package(
             ]
         ),
         .testTarget(
+            name: "AudioCommonTests",
+            dependencies: [
+                "AudioCommon",
+            ]
+        ),
+        .testTarget(
+            name: "KokoroTTSTests",
+            dependencies: [
+                "KokoroTTS",
+                "AudioCommon",
+            ]
+        ),
+        .testTarget(
             name: "SpeechEnhancementTests",
             dependencies: [
                 "SpeechEnhancement",
@@ -203,10 +255,23 @@ let package = Package(
             ]
         ),
         .testTarget(
+            name: "Qwen3ChatTests",
+            dependencies: [
+                "Qwen3Chat",
+                "AudioCommon",
+            ]
+        ),
+        .testTarget(
             name: "AudioCLITests",
             dependencies: [
                 "AudioCLILib",
                 .product(name: "ArgumentParser", package: "swift-argument-parser")
+            ]
+        ),
+        .testTarget(
+            name: "AudioServerTests",
+            dependencies: [
+                "AudioServer"
             ]
         )
     ]

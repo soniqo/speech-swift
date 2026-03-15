@@ -11,14 +11,20 @@ The `AudioCommon` module defines shared protocols that provide model-agnostic in
 │  AudioChunk          SpeechGenerationModel (TTS)        │
 │  AlignedWord         SpeechRecognitionModel (STT)       │
 │  SpeechSegment       ForcedAlignmentModel                │
-│                      SpeechToSpeechModel                 │
+│  TranscriptionResult SpeechToSpeechModel                 │
 │                      VoiceActivityDetectionModel (VAD)   │
+│                      StreamingVADProvider (pipeline)      │
+│                      SpeakerEmbeddingModel               │
+│                      SpeakerDiarizationModel             │
+│                      SpeakerExtractionCapable            │
+│                      SpeechEnhancementModel              │
 └─────────────────────────────────────────────────────────┘
         ▲                    ▲                    ▲
         │                    │                    │
    ┌────┴────┐        ┌─────┴─────┐       ┌─────┴─────┐       ┌─────┴─────┐
    │Qwen3TTS │        │  Qwen3ASR │       │PersonaPlex │       │ SpeechVAD │
-   │CosyVoice│        │ForcedAlign│       └───────────┘       └───────────┘
+   │CosyVoice│        │ParakeetASR│       └───────────┘       └───────────┘
+   │Kokoro   │        │ForcedAlign│
    └─────────┘        └───────────┘
 ```
 
@@ -36,7 +42,7 @@ public protocol SpeechGenerationModel: AnyObject {
 }
 ```
 
-**Conforming types:** `Qwen3TTSModel`, `CosyVoiceTTSModel`
+**Conforming types:** `Qwen3TTSModel`, `CosyVoiceTTSModel`, `KokoroTTSModel`
 
 ### SpeechRecognitionModel (STT)
 
@@ -46,10 +52,13 @@ Speech-to-text models that transcribe audio.
 public protocol SpeechRecognitionModel: AnyObject {
     var inputSampleRate: Int { get }
     func transcribe(audio: [Float], sampleRate: Int, language: String?) -> String
+    func transcribeWithLanguage(audio: [Float], sampleRate: Int, language: String?) -> TranscriptionResult
 }
 ```
 
-**Conforming types:** `Qwen3ASRModel`
+The `transcribeWithLanguage` method has a default implementation that delegates to `transcribe()` with no language detection. Models that detect language (e.g. ParakeetASR via `NLLanguageRecognizer`) override it to return `TranscriptionResult` with a detected language — used by the voice pipeline to forward language to TTS.
+
+**Conforming types:** `Qwen3ASRModel`, `ParakeetASRModel`
 
 ### ForcedAlignmentModel
 
@@ -90,6 +99,127 @@ public protocol VoiceActivityDetectionModel: AnyObject {
 
 **Conforming types:** `PyannoteVADModel`, `SileroVADModel`
 
+### StreamingVADProvider (Pipeline)
+
+Streaming VAD that processes fixed-size audio chunks and returns speech probability. Used by the `SpeechCore` voice pipeline via the C vtable FFI.
+
+```swift
+public protocol StreamingVADProvider: AnyObject {
+    var inputSampleRate: Int { get }
+    var chunkSize: Int { get }
+    func processChunk(_ samples: [Float]) -> Float
+    func resetState()
+}
+```
+
+**Conforming types:** `SileroVADModel`
+
+### SpeakerEmbeddingModel
+
+Models that extract speaker embeddings from audio.
+
+```swift
+public protocol SpeakerEmbeddingModel: AnyObject {
+    var inputSampleRate: Int { get }
+    var embeddingDimension: Int { get }
+    func embed(audio: [Float], sampleRate: Int) -> [Float]
+}
+```
+
+**Conforming types:** `WeSpeakerModel`
+
+### SpeakerDiarizationModel
+
+Models that assign speaker identities to speech segments.
+
+```swift
+public protocol SpeakerDiarizationModel: AnyObject {
+    var inputSampleRate: Int { get }
+    func diarize(audio: [Float], sampleRate: Int) -> [DiarizedSegment]
+}
+```
+
+**Conforming types:** `PyannoteDiarizationPipeline` (aliased as `DiarizationPipeline`), `SortformerDiarizer`
+
+### SpeakerExtractionCapable
+
+Extended diarization protocol for engines that support extracting a target speaker's segments using a reference embedding. Not all engines support this — Sortformer is end-to-end and does not produce speaker embeddings.
+
+```swift
+public protocol SpeakerExtractionCapable: SpeakerDiarizationModel {
+    func extractSpeaker(audio: [Float], sampleRate: Int, targetEmbedding: [Float]) -> [SpeechSegment]
+}
+```
+
+**Conforming types:** `PyannoteDiarizationPipeline`
+
+### SpeechEnhancementModel
+
+Models that enhance speech by removing noise.
+
+```swift
+public protocol SpeechEnhancementModel: AnyObject {
+    var inputSampleRate: Int { get }
+    func enhance(audio: [Float], sampleRate: Int) throws -> [Float]
+}
+```
+
+**Conforming types:** `DeepFilterNet3Model`
+
+## Voice Pipeline (SpeechCore)
+
+The `SpeechCore` module provides `VoicePipeline` — a real-time voice agent pipeline powered by [speech-core](https://github.com/soniqo/speech-core) (C++ engine, distributed as xcframework). It connects `SpeechRecognitionModel`, `SpeechGenerationModel`, and `StreamingVADProvider` through a state machine with VAD-driven turn detection, interruption handling, and eager STT.
+
+```swift
+import SpeechCore
+
+let pipeline = VoicePipeline(
+    stt: parakeetASR,
+    tts: qwen3TTS,
+    vad: sileroVAD,
+    config: .init(mode: .echo),
+    onEvent: { event in print(event) }
+)
+pipeline.start()
+pipeline.pushAudio(micSamples)  // feed mic audio continuously
+```
+
+### Pipeline Modes
+
+| Mode | Flow | Use case |
+|------|------|----------|
+| **voicePipeline** | audio → VAD → STT → LLM → TTS → audio | Full voice agent |
+| **echo** | audio → VAD → STT → TTS → audio | Testing (speaks back transcription) |
+| **transcribeOnly** | audio → VAD → STT → text | Transcription only |
+
+### Configuration
+
+```swift
+var config = PipelineConfig()
+config.mode = .echo
+config.minSilenceDuration = 0.6     // seconds to confirm end of speech
+config.eagerSTT = true              // start STT before silence confirms
+config.eagerSTTDelay = 0.3          // seconds in silence before eager fires
+config.allowInterruptions = true    // user can barge-in during playback
+config.minInterruptionDuration = 1.0 // seconds of speech to confirm barge-in
+config.maxResponseDuration = 5.0    // cap TTS output (prevents hallucination)
+config.postPlaybackGuard = 0.3      // suppress VAD after playback (AEC settle)
+config.warmupSTT = true             // warm up Neural Engine at pipeline start
+```
+
+### Events
+
+| Event | When |
+|-------|------|
+| `speechStarted` | VAD confirms user speech |
+| `speechEnded` | User utterance finalized |
+| `transcriptionCompleted` | STT returns text + language + confidence |
+| `responseCreated` | TTS synthesis starting |
+| `responseAudioDelta` | TTS audio chunk ready (PCM Float32) |
+| `responseInterrupted` | User barged in during playback |
+| `responseDone` | TTS synthesis complete |
+| `error` | STT/LLM/TTS failure |
+
 ## Shared Types
 
 ### AudioChunk
@@ -108,6 +238,17 @@ public struct AudioChunk: Sendable {
 ```
 
 **Note on `textTokens`**: In `PersonaPlexModel.respondStream()`, each non-final chunk contains the text tokens generated during that chunk. The final chunk contains all text tokens from the entire generation. For non-PersonaPlex streams, this field defaults to empty.
+
+### TranscriptionResult
+
+Result of speech recognition including detected language:
+
+```swift
+public struct TranscriptionResult: Sendable {
+    public let text: String
+    public let language: String?  // e.g. "english", "russian"
+}
+```
 
 ### SpeechSegment
 
@@ -130,6 +271,19 @@ public struct AlignedWord: Sendable {
     public let text: String
     public let startTime: Float    // seconds
     public let endTime: Float      // seconds
+}
+```
+
+### DiarizedSegment
+
+Speech segment with speaker identity, returned by `SpeakerDiarizationModel`:
+
+```swift
+public struct DiarizedSegment: Sendable {
+    public let startTime: Float    // seconds
+    public let endTime: Float      // seconds
+    public let speakerId: Int      // 0-based speaker identifier
+    public var duration: Float     // computed: endTime - startTime
 }
 ```
 
@@ -183,7 +337,7 @@ for model in ttsModels {
 ```
 Sources/
 ├── AudioCommon/               Shared types, protocols, utilities
-│   ├── Protocols.swift        AudioChunk, AlignedWord, SpeechSegment, 5 protocols
+│   ├── Protocols.swift        AudioChunk, AlignedWord, SpeechSegment, DiarizedSegment, 9 protocols
 │   ├── AudioModelError.swift  Unified error type for all model operations
 │   ├── Logging.swift          Centralized os.Logger instances (AudioLog)
 │   ├── AudioFileLoader.swift  WAV/audio file loading
@@ -211,12 +365,20 @@ Sources/
 │   ├── PersonaPlex.swift      PersonaPlexModel: SpeechToSpeechModel
 │   └── PersonaPlex+Protocols.swift
 │
-├── SpeechVAD/                 Voice Activity Detection (pyannote + Silero)
+├── SpeechVAD/                 VAD, diarization, speaker embedding
 │   ├── SpeechVAD.swift        PyannoteVADModel: VoiceActivityDetectionModel
-│   ├── SpeechVAD+Protocols.swift
-│   ├── SileroVAD.swift        SileroVADModel: VoiceActivityDetectionModel
+│   ├── SpeechVAD+Protocols.swift  Protocol conformances
+│   ├── SileroVAD.swift        SileroVADModel: VoiceActivityDetectionModel, StreamingVADProvider
 │   ├── SileroModel.swift      Silero VAD v5 network (STFT + encoder + LSTM)
-│   └── StreamingVADProcessor.swift  Event-driven streaming wrapper
+│   ├── StreamingVADProcessor.swift  Event-driven streaming wrapper
+│   ├── DiarizationPipeline.swift  PyannoteDiarizationPipeline: SpeakerDiarizationModel, SpeakerExtractionCapable
+│   ├── DiarizationHelpers.swift   Shared helpers (merge, compact IDs, resample)
+│   ├── SortformerDiarizer.swift   SortformerDiarizer: SpeakerDiarizationModel (CoreML)
+│   ├── WeSpeaker.swift        WeSpeakerModel: SpeakerEmbeddingModel
+│   └── PowersetDecoder.swift  7-class powerset → per-speaker probabilities
+│
+├── SpeechCore/                Voice pipeline (wraps speech-core C++ engine)
+│   └── VoicePipeline.swift    VoicePipeline: bridges STT/TTS/VAD to C pipeline
 │
 ├── AudioCLILib/               CLI commands and utilities (library)
 └── AudioCLI/                  Thin launcher (main.swift → AudioCLILib)
@@ -228,11 +390,13 @@ Sources/
 AudioCommon  ← Qwen3ASR      ─┐
              ← Qwen3TTS      │
              ← CosyVoiceTTS  ├── AudioCLILib ── AudioCLI (executable)
+             ← KokoroTTS     │
              ← PersonaPlex   │
              ← SpeechVAD    ─┘
+             ← SpeechCore (CSpeechCore xcframework + AudioCommon)
 ```
 
-Each model target depends only on `AudioCommon` and MLX. No cross-dependencies between model targets.
+Each model target depends only on `AudioCommon` and MLX. No cross-dependencies between model targets. `SpeechCore` depends on `AudioCommon` for protocols and the `CSpeechCore` binary target for the C++ pipeline engine.
 
 ## Thread Safety
 
@@ -244,7 +408,7 @@ All model classes are **not thread-safe** by design. ML inference is inherently 
 - `CosyVoiceTTSModel`
 - `PersonaPlexModel`
 - `SileroVADModel`, `StreamingVADProcessor`, `PyannoteVADModel`
-- `DiarizationPipeline`
+- `PyannoteDiarizationPipeline` (aliased as `DiarizationPipeline`), `SortformerDiarizer`
 
 **Thread-safe** (all `let` properties, pure computation):
 - `WeSpeakerModel`

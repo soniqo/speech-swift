@@ -144,6 +144,15 @@ public enum TTSWeightLoader {
                 from: cpWeights)
         }
 
+        // Optional small_to_mtp_projection (1.7B: 2048 → 1024)
+        if let proj = codePredictor.smallToMtpProjection {
+            CommonWeightLoader.applyQuantizedLinearWeights(
+                to: proj, prefix: "small_to_mtp_projection", from: cpWeights)
+            if let bias = cpWeights["small_to_mtp_projection.bias"] {
+                proj.update(parameters: ModuleParameters(values: ["bias": .value(bias)]))
+            }
+        }
+
         print("Applied weights to Code Predictor (\(codePredictor.layers.count) layers)")
     }
 
@@ -367,6 +376,78 @@ public enum TTSWeightLoader {
         if let beta = weights["\(prefix).beta"] {
             let params: [String: NestedItem<String, MLXArray>] = ["beta": .value(beta.reshaped([1, 1, -1]))]
             snake.update(parameters: ModuleParameters(values: params))
+        }
+    }
+
+    // MARK: - Speaker Encoder
+
+    public static func loadSpeakerEncoderWeights(
+        into encoder: SpeakerEncoder,
+        from directory: URL
+    ) throws {
+        let allWeights = try CommonWeightLoader.loadAllSafetensors(from: directory)
+
+        // Filter speaker encoder weights and strip prefix
+        var seWeights: [String: MLXArray] = [:]
+        for (key, value) in allWeights {
+            if key.hasPrefix("speaker_encoder.") {
+                seWeights[String(key.dropFirst("speaker_encoder.".count))] = value
+            }
+        }
+        print("Found \(seWeights.count) speaker encoder weights")
+
+        // Initial conv (blocks.0 = TimeDelayNetBlock wrapping Conv1d)
+        // Weight key: blocks.0.conv.weight/bias → our initialConv (Conv1d)
+        applySpeakerConv1dWeights(to: encoder.initialConv, prefix: "blocks.0.conv", from: seWeights)
+
+        // 3 ECAPA blocks (blocks.1, blocks.2, blocks.3)
+        let ecapaBlocks = [encoder.block1, encoder.block2, encoder.block3]
+        for (i, block) in ecapaBlocks.enumerated() {
+            let blockPrefix = "blocks.\(i + 1)"
+            // tdnn1, tdnn2 (TimeDelayNetBlock → .conv)
+            applySpeakerConv1dWeights(to: block.tdnn1, prefix: "\(blockPrefix).tdnn1.conv", from: seWeights)
+            applySpeakerConv1dWeights(to: block.tdnn2, prefix: "\(blockPrefix).tdnn2.conv", from: seWeights)
+            // res2net_block.blocks.{0-6} (each is TimeDelayNetBlock → .conv)
+            for j in 0..<block.res2netBlock.blocks.count {
+                applySpeakerConv1dWeights(
+                    to: block.res2netBlock.blocks[j],
+                    prefix: "\(blockPrefix).res2net_block.blocks.\(j).conv",
+                    from: seWeights)
+            }
+            // se_block.conv1, se_block.conv2
+            applySpeakerConv1dWeights(to: block.seBlock.conv1, prefix: "\(blockPrefix).se_block.conv1", from: seWeights)
+            applySpeakerConv1dWeights(to: block.seBlock.conv2, prefix: "\(blockPrefix).se_block.conv2", from: seWeights)
+        }
+
+        // MFA (TimeDelayNetBlock → .conv)
+        applySpeakerConv1dWeights(to: encoder.mfa.conv, prefix: "mfa.conv", from: seWeights)
+
+        // ASP: tdnn (TimeDelayNetBlock → .conv) and conv (direct Conv1d)
+        applySpeakerConv1dWeights(to: encoder.asp.tdnn, prefix: "asp.tdnn.conv", from: seWeights)
+        applySpeakerConv1dWeights(to: encoder.asp.conv, prefix: "asp.conv", from: seWeights)
+
+        // FC (direct Conv1d)
+        applySpeakerConv1dWeights(to: encoder.fc, prefix: "fc", from: seWeights)
+
+        print("Applied weights to Speaker Encoder")
+    }
+
+    /// Apply Conv1d weights from safetensors. Speaker encoder weights are already in
+    /// MLX format [out_channels, kernel_size, in_channels] — no transpose needed.
+    private static func applySpeakerConv1dWeights(
+        to conv: Conv1d,
+        prefix: String,
+        from weights: [String: MLXArray]
+    ) {
+        var params: [String: NestedItem<String, MLXArray>] = [:]
+        if let w = weights["\(prefix).weight"] {
+            params["weight"] = .value(w)
+        }
+        if let b = weights["\(prefix).bias"] {
+            params["bias"] = .value(b)
+        }
+        if !params.isEmpty {
+            conv.update(parameters: ModuleParameters(values: params))
         }
     }
 

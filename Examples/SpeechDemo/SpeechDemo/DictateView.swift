@@ -5,7 +5,8 @@ struct DictateView: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            // Engine picker
+            #if os(macOS)
+            // Engine picker (macOS has multiple engines)
             Picker("Engine", selection: $vm.selectedEngine) {
                 ForEach(ASREngine.allCases) { engine in
                     Text(engine.rawValue).tag(engine)
@@ -31,6 +32,11 @@ struct DictateView: View {
                 .frame(maxWidth: 200)
                 .disabled(vm.isRecording || vm.isTranscribing)
             }
+            #else
+            Text("Parakeet TDT (CoreML)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            #endif
 
             // Load model button
             if !vm.modelLoaded && !vm.isLoading {

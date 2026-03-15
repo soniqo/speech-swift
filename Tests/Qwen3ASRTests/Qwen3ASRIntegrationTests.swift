@@ -79,7 +79,7 @@ final class Qwen3ASRIntegrationTests: XCTestCase {
         let targetSampleRate = 24000
         let resampledSamples: [Float]
         if sampleRate != targetSampleRate {
-            resampledSamples = AudioFileLoader.resampleForTest(samples, from: sampleRate, to: targetSampleRate)
+            resampledSamples = AudioFileLoader.resample(samples, from: sampleRate, to: targetSampleRate)
             print("Resampled to \(targetSampleRate)Hz: \(resampledSamples.count) samples")
         } else {
             resampledSamples = samples
@@ -118,7 +118,7 @@ final class Qwen3ASRIntegrationTests: XCTestCase {
         let targetSampleRate = 24000
         let audio: [Float]
         if sampleRate != targetSampleRate {
-            audio = AudioFileLoader.resampleForTest(samples, from: sampleRate, to: targetSampleRate)
+            audio = AudioFileLoader.resample(samples, from: sampleRate, to: targetSampleRate)
         } else {
             audio = samples
         }
@@ -198,6 +198,67 @@ final class Qwen3ASRIntegrationTests: XCTestCase {
         print("1.7B model loaded successfully!")
     }
 
+    // MARK: - 0.6B 8-bit Model Tests
+
+    func testSmall8bitModelLoading() async throws {
+        let modelId = "aufklarer/Qwen3-ASR-0.6B-MLX-8bit"
+        print("Testing 0.6B 8-bit model loading: \(modelId)")
+
+        let model = try await Qwen3ASRModel.fromPretrained(
+            modelId: modelId
+        ) { progress, status in
+            print("[\(Int(progress * 100))%] \(status)")
+        }
+
+        XCTAssertNotNil(model.audioEncoder)
+        XCTAssertEqual(model.audioEncoder.layers.count, 18, "0.6B should have 18 transformer layers")
+        XCTAssertEqual(model.audioEncoder.config.dModel, 896)
+        XCTAssertEqual(model.audioEncoder.config.outputDim, 1024)
+        XCTAssertEqual(model.textConfig.hiddenSize, 1024)
+        XCTAssertEqual(model.textConfig.bits, 8)
+
+        print("0.6B 8-bit model loaded successfully!")
+    }
+
+    func testSmall8bitFullPipeline() async throws {
+        guard let wavURL = Bundle.module.url(forResource: "test_audio", withExtension: "wav") else {
+            throw XCTSkip("Test WAV file not found in bundle resources")
+        }
+
+        let modelId = "aufklarer/Qwen3-ASR-0.6B-MLX-8bit"
+        print("Testing 0.6B 8-bit full pipeline with real audio...")
+
+        let model = try await Qwen3ASRModel.fromPretrained(
+            modelId: modelId
+        ) { progress, status in
+            print("[\(Int(progress * 100))%] \(status)")
+        }
+
+        let (samples, sampleRate) = try AudioFileLoader.loadWAV(url: wavURL)
+        let targetSampleRate = 24000
+        let audio: [Float]
+        if sampleRate != targetSampleRate {
+            audio = AudioFileLoader.resample(samples, from: sampleRate, to: targetSampleRate)
+        } else {
+            audio = samples
+        }
+
+        let start = Date()
+        let result = model.transcribe(audio: audio, sampleRate: targetSampleRate)
+        let elapsed = Date().timeIntervalSince(start)
+
+        print("0.6B 8-bit Transcription: \(result)")
+        print("Elapsed time: \(elapsed)s")
+
+        // Verify correct transcription
+        // Test audio contains: "Can you guarantee that the replacement part will be shipped tomorrow?"
+        XCTAssertFalse(result.isEmpty, "Transcription should not be empty")
+        XCTAssertTrue(result.contains("guarantee"), "Should transcribe 'guarantee'")
+        XCTAssertTrue(result.contains("replacement"), "Should transcribe 'replacement'")
+        XCTAssertTrue(result.contains("shipped"), "Should transcribe 'shipped'")
+        XCTAssertTrue(result.contains("tomorrow"), "Should transcribe 'tomorrow'")
+    }
+
     func testLargeModelFullPipeline() async throws {
         guard let wavURL = Bundle.module.url(forResource: "test_audio", withExtension: "wav") else {
             throw XCTSkip("Test WAV file not found in bundle resources")
@@ -216,7 +277,7 @@ final class Qwen3ASRIntegrationTests: XCTestCase {
         let targetSampleRate = 24000
         let audio: [Float]
         if sampleRate != targetSampleRate {
-            audio = AudioFileLoader.resampleForTest(samples, from: sampleRate, to: targetSampleRate)
+            audio = AudioFileLoader.resample(samples, from: sampleRate, to: targetSampleRate)
         } else {
             audio = samples
         }
@@ -238,27 +299,3 @@ final class Qwen3ASRIntegrationTests: XCTestCase {
     }
 }
 
-// MARK: - Test Helper Extension
-
-extension AudioFileLoader {
-    /// Simple linear resampling for tests
-    static func resampleForTest(_ samples: [Float], from inputRate: Int, to outputRate: Int) -> [Float] {
-        let ratio = Double(outputRate) / Double(inputRate)
-        let outputLength = Int(Double(samples.count) * ratio)
-
-        guard outputLength > 0 else { return [] }
-
-        var output = [Float](repeating: 0, count: outputLength)
-
-        for i in 0..<outputLength {
-            let srcIndex = Double(i) / ratio
-            let srcIndexFloor = Int(srcIndex)
-            let srcIndexCeil = min(srcIndexFloor + 1, samples.count - 1)
-            let fraction = Float(srcIndex - Double(srcIndexFloor))
-
-            output[i] = samples[srcIndexFloor] * (1 - fraction) + samples[srcIndexCeil] * fraction
-        }
-
-        return output
-    }
-}

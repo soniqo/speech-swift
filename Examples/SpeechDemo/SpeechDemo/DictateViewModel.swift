@@ -1,12 +1,20 @@
+#if os(macOS)
 import AppKit
+#elseif os(iOS)
+import UIKit
+#endif
 import Foundation
 import Observation
 import ParakeetASR
+#if os(macOS)
 import Qwen3ASR
+#endif
 
 enum ASREngine: String, CaseIterable, Identifiable {
     case parakeet = "Parakeet TDT"
+    #if os(macOS)
     case qwen3 = "Qwen3-ASR"
+    #endif
     var id: String { rawValue }
 }
 
@@ -23,13 +31,17 @@ final class DictateViewModel {
     var selectedLanguage: String = "auto"
 
     private var parakeetModel: ParakeetASRModel?
+    #if os(macOS)
     private var qwen3Model: Qwen3ASRModel?
+    #endif
     let recorder = AudioRecorder()
 
     var modelLoaded: Bool {
         switch selectedEngine {
         case .parakeet: return parakeetModel != nil
+        #if os(macOS)
         case .qwen3: return qwen3Model != nil
+        #endif
         }
     }
 
@@ -55,6 +67,7 @@ final class DictateViewModel {
                     try model.warmUp()
                     parakeetModel = model
                 }
+            #if os(macOS)
             case .qwen3:
                 if qwen3Model == nil {
                     let model = try await Task.detached {
@@ -68,6 +81,7 @@ final class DictateViewModel {
                     }.value
                     qwen3Model = model
                 }
+            #endif
             }
             loadingStatus = ""
         } catch {
@@ -107,6 +121,7 @@ final class DictateViewModel {
                     return
                 }
                 text = try model.transcribeAudio(audio, sampleRate: 16000)
+            #if os(macOS)
             case .qwen3:
                 guard let model = qwen3Model else {
                     errorMessage = "Model not loaded."
@@ -115,6 +130,7 @@ final class DictateViewModel {
                 }
                 let lang: String? = selectedLanguage == "auto" ? nil : selectedLanguage
                 text = model.transcribe(audio: audio, sampleRate: 16000, language: lang)
+            #endif
             }
             transcription = text
         } catch {
@@ -125,9 +141,11 @@ final class DictateViewModel {
     }
 
     func copyToClipboard() {
-        #if canImport(AppKit)
+        #if os(macOS)
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(transcription, forType: .string)
+        #elseif os(iOS)
+        UIPasteboard.general.string = transcription
         #endif
     }
 }

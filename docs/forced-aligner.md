@@ -42,7 +42,7 @@ Audio (16kHz) + Text
 | Component | Config |
 |-----------|--------|
 | Audio encoder | 24 layers, d_model=1024, 16 heads, FFN=4096, output→1024 |
-| Text decoder | 28 layers, hidden=1024, 16Q/8KV heads, headDim=128, 4-bit quantized |
+| Text decoder | 28 layers, hidden=1024, 16Q/8KV heads, headDim=128 (4-bit, 8-bit, or bf16) |
 | Classify head | Linear(1024, 5000), float16 (NOT tied to embeddings) |
 | Timestamp resolution | 80ms per class (5000 classes = 400s max) |
 
@@ -131,8 +131,13 @@ Weights use a `thinker.` prefix:
 
 | Model | ID | Size |
 |-------|----|------|
-| 4-bit quantized | `aufklarer/Qwen3-ForcedAligner-0.6B-4bit` | ~979 MB |
-| bf16 (original) | `aufklarer/Qwen3-ForcedAligner-0.6B-MLX-bf16` | ~1.84 GB |
+| MLX 4-bit | `aufklarer/Qwen3-ForcedAligner-0.6B-4bit` | ~979 MB |
+| MLX 8-bit | `aufklarer/Qwen3-ForcedAligner-0.6B-8bit` | ~1.3 GB |
+| MLX bf16 | `aufklarer/Qwen3-ForcedAligner-0.6B-bf16` | ~1.8 GB |
+| CoreML INT4 | `aufklarer/Qwen3-ForcedAligner-0.6B-CoreML-INT4` | ~662 MB |
+| CoreML INT8 | `aufklarer/Qwen3-ForcedAligner-0.6B-CoreML-INT8` | ~1.1 GB |
+
+Variant is auto-detected from `quantize_config.json` in the model directory. The bf16 variant uses a float text decoder (`FloatTextModel`) instead of a quantized one.
 
 ## CLI Usage
 
@@ -143,8 +148,9 @@ audio align audio.wav --text "Can you guarantee that the replacement part will b
 # Transcribe first, then align
 audio align audio.wav
 
-# Custom aligner model
-audio align audio.wav --aligner-model aufklarer/Qwen3-ForcedAligner-0.6B-MLX-bf16
+# Custom aligner model (8-bit or bf16)
+audio align audio.wav --aligner-model aufklarer/Qwen3-ForcedAligner-0.6B-8bit
+audio align audio.wav --aligner-model aufklarer/Qwen3-ForcedAligner-0.6B-bf16
 ```
 
 Output format:
@@ -174,10 +180,16 @@ for word in aligned {
 ## Conversion
 
 ```bash
-python scripts/convert_forced_aligner.py \
-    --source Qwen/Qwen3-ForcedAligner-0.6B \
-    --output-dir ./forced-aligner-4bit \
-    --upload --repo-id aufklarer/Qwen3-ForcedAligner-0.6B-4bit
+# MLX variants
+python scripts/convert_forced_aligner.py --bits 4 --upload --repo-id aufklarer/Qwen3-ForcedAligner-0.6B-4bit
+python scripts/convert_forced_aligner.py --bits 8 --upload --repo-id aufklarer/Qwen3-ForcedAligner-0.6B-8bit
+python scripts/convert_forced_aligner.py --bits 0 --upload --repo-id aufklarer/Qwen3-ForcedAligner-0.6B-bf16
+
+# CoreML variants
+python scripts/convert_forced_aligner.py --coreml --coreml-bits 4 --upload --repo-id aufklarer/Qwen3-ForcedAligner-0.6B-CoreML-INT4
+python scripts/convert_forced_aligner.py --coreml --coreml-bits 8 --upload --repo-id aufklarer/Qwen3-ForcedAligner-0.6B-CoreML-INT8
 ```
 
-Quantizes text decoder (attention + MLP + embeddings) to 4-bit. Audio encoder and classify head kept as float16.
+MLX: quantizes text decoder (attention + MLP + embeddings) to N-bit. Audio encoder and classify head kept as float16. `--bits 0` keeps everything as float16.
+
+CoreML: traces audio encoder, text decoder + classify head, and embedding as separate `.mlpackage` models with INT4/INT8 palettization.

@@ -20,8 +20,11 @@ public final class SpeechEnhancer {
     /// Native sample rate (48kHz)
     public static let sampleRate = 48000
 
+    /// Whether the model is loaded and ready for inference.
+    var _isLoaded = true
+
     let config: DeepFilterNet3Config
-    let network: DeepFilterNet3Network
+    var network: DeepFilterNet3Network?
     let stft: STFTProcessor
 
     // ERB filterbank matrices
@@ -75,7 +78,7 @@ public final class SpeechEnhancer {
     public func enhance(audio: [Float], sampleRate: Int) throws -> [Float] {
         var samples = audio
         if sampleRate != Self.sampleRate {
-            samples = resample(audio, from: sampleRate, to: Self.sampleRate)
+            samples = AudioFileLoader.resample(audio, from: sampleRate, to: Self.sampleRate)
         }
 
         resetState()
@@ -142,6 +145,7 @@ public final class SpeechEnhancer {
         }
 
         // Run neural network (single pass — GRU state is sequential, can't be chunked)
+        guard let network else { throw DeepFilterNet3Network.DeepFilterNet3Error.predictionFailed }
         let (erbMaskArray, coefsArray) = try network.predict(featErb: erbInput, featSpec: specInput)
 
         // Extract ERB mask [1, 1, T, 32] — handle float16 output from Core ML
@@ -265,25 +269,4 @@ public final class SpeechEnhancer {
         }
     }
 
-    /// Simple linear resampling.
-    private func resample(_ audio: [Float], from sourceSR: Int, to targetSR: Int) -> [Float] {
-        guard sourceSR != targetSR else { return audio }
-        let ratio = Double(targetSR) / Double(sourceSR)
-        let outputLen = Int(Double(audio.count) * ratio)
-        var output = [Float](repeating: 0, count: outputLen)
-
-        for i in 0..<outputLen {
-            let srcPos = Double(i) / ratio
-            let srcIdx = Int(srcPos)
-            let frac = Float(srcPos - Double(srcIdx))
-
-            if srcIdx + 1 < audio.count {
-                output[i] = audio[srcIdx] * (1 - frac) + audio[srcIdx + 1] * frac
-            } else if srcIdx < audio.count {
-                output[i] = audio[srcIdx]
-            }
-        }
-
-        return output
-    }
 }

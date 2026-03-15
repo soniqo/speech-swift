@@ -112,6 +112,11 @@ public class StreamingASR {
                         case .speechEnded(let segment):
                             if let startSample = speechStartSample {
                                 let endSample = min(Int(segment.endTime * 16000), samples.count)
+                                // After a force-split, startSample may equal endSample — skip empty spans
+                                guard startSample < endSample else {
+                                    speechStartSample = nil
+                                    continue
+                                }
                                 let segmentAudio = Array(samples[startSample..<endSample])
                                 let text = asrModel.transcribe(
                                     audio: segmentAudio, sampleRate: 16000,
@@ -139,6 +144,10 @@ public class StreamingASR {
 
                         if currentTime - lastPartialTime >= config.partialResultInterval {
                             let endSample = min(Int(currentTime * 16000), samples.count)
+                            guard startSample < endSample else {
+                                lastPartialTime = currentTime
+                                continue
+                            }
                             let segmentAudio = Array(samples[startSample..<endSample])
                             let text = asrModel.transcribe(
                                 audio: segmentAudio, sampleRate: 16000,
@@ -160,6 +169,11 @@ public class StreamingASR {
                         // Force-split if speech exceeds maxSegmentDuration
                         if speechDuration >= config.maxSegmentDuration {
                             let endSample = min(Int(currentTime * 16000), samples.count)
+                            guard startSample < endSample else {
+                                speechStartSample = Int(currentTime * 16000)
+                                lastPartialTime = currentTime
+                                continue
+                            }
                             let segmentAudio = Array(samples[startSample..<endSample])
                             let text = asrModel.transcribe(
                                 audio: segmentAudio, sampleRate: 16000,
@@ -185,6 +199,10 @@ public class StreamingASR {
 
                         if speechDuration >= config.maxSegmentDuration {
                             let endSample = min(Int(currentTime * 16000), samples.count)
+                            guard startSample < endSample else {
+                                speechStartSample = Int(currentTime * 16000)
+                                continue
+                            }
                             let segmentAudio = Array(samples[startSample..<endSample])
                             let text = asrModel.transcribe(
                                 audio: segmentAudio, sampleRate: 16000,
@@ -211,6 +229,7 @@ public class StreamingASR {
                 for event in flushEvents {
                     if case .speechEnded(let segment) = event, let startSample = speechStartSample {
                         let endSample = min(Int(segment.endTime * 16000), samples.count)
+                        guard startSample < endSample else { continue }
                         let segmentAudio = Array(samples[startSample..<endSample])
                         let text = asrModel.transcribe(
                             audio: segmentAudio, sampleRate: 16000,

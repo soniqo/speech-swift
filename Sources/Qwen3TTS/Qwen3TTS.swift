@@ -32,11 +32,21 @@ public class Qwen3TTSModel {
     public let codePredictor: CodePredictorModel
     public let codecDecoder: SpeechTokenizerDecoder
 
+    /// ECAPA-TDNN speaker encoder for voice cloning (Base model only)
+    public let speakerEncoder: SpeakerEncoder
+
     /// Speaker configuration parsed from config.json (nil for Base model, populated for CustomVoice)
     public private(set) var speakerConfig: SpeakerConfig?
 
     /// Available speaker names (empty for Base model)
     public var availableSpeakers: [String] { speakerConfig?.availableSpeakers ?? [] }
+
+    /// Default speaker for protocol-based generation (e.g. pipeline echo mode).
+    /// Set this before passing to VoicePipeline for consistent voice.
+    public var defaultSpeaker: String?
+
+    /// Whether the model weights are loaded and ready for inference.
+    var _isLoaded = true
 
     private var tokenizer: Qwen3Tokenizer?
 
@@ -58,14 +68,15 @@ public class Qwen3TTSModel {
     /// growing KV cache handled by shapeless mode, batch dim uses -1 reshapes.
     private var compiledCPTransformer: (([MLXArray]) -> [MLXArray])?
 
-    public init(config: Qwen3TTSConfig = .base06B) {
+    init(config: Qwen3TTSConfig = .base06B) {
         self.config = config
         self.talker = TalkerModel(config: config.talker)
         self.codePredictor = CodePredictorModel(config: config.codePredictor)
         self.codecDecoder = SpeechTokenizerDecoder(config: config.speechTokenizerDecoder)
+        self.speakerEncoder = SpeakerEncoder()
     }
 
-    public func setTokenizer(_ tokenizer: Qwen3Tokenizer) {
+    func setTokenizer(_ tokenizer: Qwen3Tokenizer) {
         self.tokenizer = tokenizer
     }
 
@@ -76,20 +87,22 @@ public class Qwen3TTSModel {
     ///   - speaker: Speaker voice name (requires CustomVoice model, e.g., "vivian", "ryan")
     ///   - instruct: Instruction text for style control (requires CustomVoice model, e.g., "Speak cheerfully")
     ///   - sampling: Sampling configuration
+    ///   - languageExplicit: Whether the caller explicitly set the language (prevents speaker dialect override)
     /// - Returns: Audio samples at 24kHz
     public func synthesize(
         text: String,
         language: String = "english",
         speaker: String? = nil,
         instruct: String? = nil,
-        sampling: SamplingConfig = .default
+        sampling: SamplingConfig = .default,
+        languageExplicit: Bool = false
     ) -> [Float] {
         guard let tokenizer = tokenizer else {
             fatalError("Tokenizer not loaded. Call setTokenizer() first.")
         }
 
         // Resolve speaker → token ID and optional language override
-        let (speakerTokenId, effectiveLanguage) = resolveSpeaker(speaker, language: language)
+        let (speakerTokenId, effectiveLanguage) = resolveSpeaker(speaker, language: language, languageExplicit: languageExplicit)
 
         // Auto-apply default instruct for CustomVoice when none provided
         let effectiveInstruct = instruct ?? (speakerConfig != nil ? Self.defaultInstruct : nil)
@@ -146,6 +159,91 @@ public class Qwen3TTSModel {
         return waveform
     }
 
+    // MARK: - Voice Cloning (x-vector mode)
+
+    /// Synthesize speech cloning a reference speaker's voice.
+    ///
+    /// Extracts a speaker embedding from reference audio using the ECAPA-TDNN speaker encoder,
+    /// then injects it into the codec prefix embedding between the think tokens and pad/bos.
+    ///
+    /// - Parameters:
+    ///   - text: Input text to synthesize
+    ///   - referenceAudio: Reference speaker audio samples (any sample rate, will be resampled to 24kHz)
+    ///   - referenceSampleRate: Sample rate of reference audio
+    ///   - language: Language tag (e.g., "english", "chinese")
+    ///   - sampling: Sampling configuration
+    /// - Returns: Audio samples at 24kHz
+    public func synthesizeWithVoiceClone(
+        text: String,
+        referenceAudio: [Float],
+        referenceSampleRate: Int = 24000,
+        language: String = "english",
+        sampling: SamplingConfig = .default
+    ) -> [Float] {
+        guard let tokenizer = tokenizer else {
+            fatalError("Tokenizer not loaded. Call setTokenizer() first.")
+        }
+
+        guard let langId = CodecTokens.languageId(for: language) else {
+            print("Warning: Unknown language '\(language)', defaulting to English")
+            return synthesizeWithVoiceClone(
+                text: text, referenceAudio: referenceAudio,
+                referenceSampleRate: referenceSampleRate, language: "english", sampling: sampling)
+        }
+
+        let t0 = CFAbsoluteTimeGetCurrent()
+
+        // Extract speaker embedding from reference audio
+        let mels = SpeakerMel.compute(audio: referenceAudio, sampleRate: referenceSampleRate)
+        let speakerEmbed = speakerEncoder(mels)  // [1, 1024]
+        eval(speakerEmbed)
+        print("  Speaker embedding extracted: \(speakerEmbed.shape)")
+
+        // Stage 1: Prepare text tokens and codec prefix (no speaker token ID — using embedding)
+        let textTokens = prepareTextTokens(text: text, tokenizer: tokenizer)
+        let codecPrefixTokens = buildCodecPrefix(languageId: langId)
+
+        // Stage 2: Build input embeddings with speaker embedding injection
+        let (prefillEmbeds, trailingTextHidden, ttsPadEmbed) = buildPrefillEmbeddings(
+            textTokens: textTokens, codecPrefixTokens: codecPrefixTokens,
+            speakerEmbedding: speakerEmbed)
+
+        eval(prefillEmbeds, trailingTextHidden, ttsPadEmbed)
+        let t1 = CFAbsoluteTimeGetCurrent()
+
+        // Stage 3: Autoregressive generation with per-step code predictor
+        let (allCodebooks, numFrames) = generateWithCodePredictor(
+            prefillEmbeds: prefillEmbeds,
+            trailingTextHidden: trailingTextHidden,
+            ttsPadEmbed: ttsPadEmbed,
+            sampling: sampling)
+
+        eval(allCodebooks)
+        let t2 = CFAbsoluteTimeGetCurrent()
+
+        guard numFrames > 0 else {
+            print("Warning: Talker generated no tokens")
+            return []
+        }
+
+        // Stage 4: Codec decode to waveform
+        let outputSamples = numFrames * 1920
+        print("  Decoding \(numFrames) frames -> \(outputSamples) samples (\(String(format: "%.1f", Double(outputSamples) / 24000.0))s)...")
+        let waveform = codecDecoder.decode(codes: allCodebooks)
+        let t3 = CFAbsoluteTimeGetCurrent()
+
+        let audioDur = Double(waveform.count) / 24000.0
+        print("  Voice clone timing: embed=\(String(format: "%.3f", t1-t0))s | " +
+              "generate=\(String(format: "%.3f", t2-t1))s (\(numFrames) steps, " +
+              "\(String(format: "%.0f", (t2-t1)/Double(numFrames)*1000))ms/step) | " +
+              "decode=\(String(format: "%.3f", t3-t2))s | " +
+              "total=\(String(format: "%.3f", t3-t0))s | " +
+              "audio=\(String(format: "%.2f", audioDur))s | " +
+              "RTF=\(String(format: "%.2f", (t3-t0)/audioDur))")
+
+        return waveform
+    }
+
     // MARK: - Streaming Synthesis
 
     /// Synthesize speech as a stream of audio chunks with low first-packet latency.
@@ -167,10 +265,11 @@ public class Qwen3TTSModel {
         speaker: String? = nil,
         instruct: String? = nil,
         sampling: SamplingConfig = .default,
-        streaming: StreamingConfig = .default
+        streaming: StreamingConfig = .default,
+        languageExplicit: Bool = false
     ) -> AsyncThrowingStream<AudioChunk, Error> {
         AsyncThrowingStream { continuation in
-            Task {
+            let task = Task {
                 do {
                     try self.runStreamingGeneration(
                         text: text,
@@ -179,12 +278,14 @@ public class Qwen3TTSModel {
                         instruct: instruct,
                         sampling: sampling,
                         streaming: streaming,
+                        languageExplicit: languageExplicit,
                         continuation: continuation)
                     continuation.finish()
                 } catch {
                     continuation.finish(throwing: error)
                 }
             }
+            continuation.onTermination = { @Sendable _ in task.cancel() }
         }
     }
 
@@ -197,13 +298,14 @@ public class Qwen3TTSModel {
         instruct: String?,
         sampling: SamplingConfig,
         streaming: StreamingConfig,
+        languageExplicit: Bool = false,
         continuation: AsyncThrowingStream<AudioChunk, Error>.Continuation
     ) throws {
         guard let tokenizer = tokenizer else {
             throw TTSError.tokenizerNotLoaded
         }
 
-        let (speakerTokenId, effectiveLanguage) = resolveSpeaker(speaker, language: language)
+        let (speakerTokenId, effectiveLanguage) = resolveSpeaker(speaker, language: language, languageExplicit: languageExplicit)
 
         // Auto-apply default instruct for CustomVoice when none provided
         let effectiveInstruct = instruct ?? (speakerConfig != nil ? Self.defaultInstruct : nil)
@@ -969,6 +1071,10 @@ public class Qwen3TTSModel {
             inputs: [cpRef], outputs: [cpRef], shapeless: false
         ) { inputs in
             var hidden = inputs[0]
+            // Project from embeddingDim → hiddenSize if needed (1.7B: 2048 → 1024)
+            if let proj = cpRef.smallToMtpProjection {
+                hidden = proj(hidden)
+            }
             var cpCache: [(MLXArray, MLXArray)] = []
             for i in 0..<numCPLayers {
                 cpCache.append((inputs[1 + i * 2], inputs[2 + i * 2]))
@@ -1021,6 +1127,10 @@ public class Qwen3TTSModel {
     ) -> (normed: MLXArray, newCache: [(MLXArray, MLXArray)]) {
         guard let compiled = compiledCPTransformer else {
             var h = hidden
+            // Project from embeddingDim → hiddenSize if needed (1.7B: 2048 → 1024)
+            if let proj = codePredictor.smallToMtpProjection {
+                h = proj(h)
+            }
             var newCache: [(MLXArray, MLXArray)] = []
             for (i, layer) in codePredictor.layers.enumerated() {
                 let (output, updated) = layer(h, attentionMask: nil, cache: cache[i])
@@ -1042,8 +1152,12 @@ public class Qwen3TTSModel {
     // MARK: - Speaker Resolution
 
     /// Resolve speaker name to token ID and effective language.
+    /// - Parameters:
+    ///   - speaker: Speaker name (nil = no speaker conditioning)
+    ///   - language: Language tag from caller
+    ///   - languageExplicit: Whether the caller explicitly set the language (prevents dialect override)
     /// - Returns: (speakerTokenId, effectiveLanguage) — speakerTokenId is nil if no speaker
-    private func resolveSpeaker(_ speaker: String?, language: String) -> (Int?, String) {
+    private func resolveSpeaker(_ speaker: String?, language: String, languageExplicit: Bool = false) -> (Int?, String) {
         guard let speakerName = speaker else {
             return (nil, language)
         }
@@ -1061,9 +1175,9 @@ public class Qwen3TTSModel {
             return (nil, language)
         }
 
-        // Check if this speaker has a dialect override
+        // Apply dialect override only when language was not explicitly specified
         var effectiveLanguage = language
-        if let dialect = config.speakerDialects[normalizedName] {
+        if !languageExplicit, let dialect = config.speakerDialects[normalizedName] {
             effectiveLanguage = dialect
         }
 
@@ -1115,19 +1229,19 @@ public class Qwen3TTSModel {
     // MARK: - Codec Prefix
 
     /// Build codec prefix: [think, think_bos, lang_id, think_eos, pad, bos] (6 tokens)
-    /// With speaker: [think, think_bos, lang_id, think_eos, pad, bos, spk_token] (7 tokens)
+    /// With speaker: [think, think_bos, lang_id, think_eos, spk_token, pad, bos] (7 tokens)
     func buildCodecPrefix(languageId: Int, speakerTokenId: Int? = nil) -> [Int32] {
         var prefix: [Int32] = [
             Int32(CodecTokens.codecThink),
             Int32(CodecTokens.codecThinkBos),
             Int32(languageId),
             Int32(CodecTokens.codecThinkEos),
-            Int32(CodecTokens.codecPad),
-            Int32(CodecTokens.codecBos),
         ]
         if let spkId = speakerTokenId {
             prefix.append(Int32(spkId))
         }
+        prefix.append(Int32(CodecTokens.codecPad))
+        prefix.append(Int32(CodecTokens.codecBos))
         return prefix
     }
 
@@ -1162,7 +1276,8 @@ public class Qwen3TTSModel {
     /// trailing_text = concat([text_embed[:, 4:-5, :], tts_eos_embed], axis=1)
     /// ```
     private func buildPrefillEmbeddings(
-        textTokens: [Int], codecPrefixTokens: [Int32], instructTokens: [Int]? = nil
+        textTokens: [Int], codecPrefixTokens: [Int32], instructTokens: [Int]? = nil,
+        speakerEmbedding: MLXArray? = nil
     ) -> (prefillEmbeds: MLXArray, trailingTextHidden: MLXArray, ttsPadEmbed: MLXArray) {
         let hiddenSize = config.talker.hiddenSize
 
@@ -1172,7 +1287,16 @@ public class Qwen3TTSModel {
 
         // Embed codec prefix tokens
         let codecArray = MLXArray(codecPrefixTokens).expandedDimensions(axis: 0)  // [1, codecLen]
-        let codecEmbeds = talker.embedCodec(codecArray)  // [1, codecLen, hiddenSize]
+        var codecEmbeds = talker.embedCodec(codecArray)  // [1, codecLen, hiddenSize]
+
+        // Voice cloning: inject speaker embedding between think tokens and pad/bos
+        // Python: cat([codec_embed[:,:4,:], speaker_embed.view(1,1,-1), codec_embed[:,4:,:]])
+        if let spkEmbed = speakerEmbedding {
+            let spkEmbedReshaped = spkEmbed.reshaped([1, 1, hiddenSize])  // [1, 1, 1024]
+            let part0 = codecEmbeds[0..., 0..<4, 0...]  // [think, think_bos, lang, think_eos]
+            let part1 = codecEmbeds[0..., 4..., 0...]    // [pad, bos]
+            codecEmbeds = concatenated([part0, spkEmbedReshaped, part1], axis: 1)  // [1, 7, 1024]
+        }
 
         // TTS special token embeddings (text-side)
         let ttsPadTokens = MLXArray([Int32(CodecTokens.ttsPad)]).expandedDimensions(axis: 0)
@@ -1183,7 +1307,7 @@ public class Qwen3TTSModel {
         let ttsBosEmbed = talker.embedText(ttsBosTokens)  // [1, 1, hiddenSize]
         let ttsEosEmbed = talker.embedText(ttsEosTokens)  // [1, 1, hiddenSize]
 
-        let codecLen = codecPrefixTokens.count  // 6
+        let codecLen = codecEmbeds.dim(1)  // 6 without speaker, 7 with speaker
 
         // Text overlay for codec prefix:
         // pad_count = codecLen - 2 (the last 2 positions are: tts_bos overlay + first_text+codec_bos)
@@ -1436,7 +1560,9 @@ public extension Qwen3TTSModel {
     ) async throws -> Qwen3TTSModel {
         progressHandler?(0.05, "Preparing download...")
 
-        let model = Qwen3TTSModel()
+        // Auto-detect model size and quantization from model ID
+        let detectedSize = TTSModelSize.detect(from: modelId)
+        var detectedBits = TTSModelSize.detectBits(from: modelId)
 
         // Download main model weights
         let mainCacheDir = try HuggingFaceDownloader.getCacheDirectory(for: modelId)
@@ -1463,8 +1589,22 @@ public extension Qwen3TTSModel {
                 })
         }
 
-        // Parse config.json for speaker config
+        // Parse config.json for speaker config and quantization fallback
         let configPath = mainCacheDir.appendingPathComponent("config.json")
+        if FileManager.default.fileExists(atPath: configPath.path) {
+            if let data = try? Data(contentsOf: configPath),
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let quantConfig = json["quantization_config"] as? [String: Any],
+               let configBits = quantConfig["bits"] as? Int {
+                detectedBits = configBits
+            }
+        }
+
+        // Create model with detected config
+        let ttsConfig = Qwen3TTSConfig.config(for: detectedSize, bits: detectedBits)
+        let model = Qwen3TTSModel(config: ttsConfig)
+
+        // Parse speaker config
         if FileManager.default.fileExists(atPath: configPath.path) {
             model.speakerConfig = try? parseSpeakerConfig(from: configPath)
         }
@@ -1478,10 +1618,12 @@ public extension Qwen3TTSModel {
             model.setTokenizer(tokenizer)
         }
 
-        // Load Talker + Code Predictor weights (single load of safetensors)
+        // Load Talker + Code Predictor + Speaker Encoder weights (single safetensors load)
         progressHandler?(0.7, "Loading TTS model weights...")
         try TTSWeightLoader.loadTalkerAndCodePredictorWeights(
             talker: model.talker, codePredictor: model.codePredictor, from: mainCacheDir)
+        try TTSWeightLoader.loadSpeakerEncoderWeights(
+            into: model.speakerEncoder, from: mainCacheDir)
 
         // Load Speech Tokenizer Decoder weights
         progressHandler?(0.85, "Loading speech tokenizer decoder...")

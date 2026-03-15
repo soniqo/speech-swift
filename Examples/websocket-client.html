@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Speech WebSocket Client</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; color: #333; }
+  h1 { margin-bottom: 8px; }
+  .subtitle { color: #666; margin-bottom: 24px; }
+  .section { border: 1px solid #ddd; border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+  h2 { margin-bottom: 12px; }
+  label { display: block; font-weight: 600; margin-bottom: 4px; }
+  input, select, textarea { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; margin-bottom: 12px; font-size: 14px; }
+  textarea { resize: vertical; }
+  button { padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; margin-right: 8px; }
+  .btn-primary { background: #007aff; color: white; }
+  .btn-primary:disabled { background: #99c8ff; cursor: not-allowed; }
+  .btn-danger { background: #ff3b30; color: white; }
+  .btn-record { background: #34c759; color: white; }
+  .btn-record.recording { background: #ff3b30; }
+  .log { background: #f5f5f5; border-radius: 4px; padding: 12px; font-family: monospace; font-size: 13px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; margin-top: 12px; }
+  .status { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+  .status.connected { background: #34c759; }
+  .status.disconnected { background: #ff3b30; }
+  audio { width: 100%; margin-top: 12px; }
+</style>
+</head>
+<body>
+<h1>OpenAI Realtime API Client</h1>
+<p class="subtitle">ASR and TTS via /v1/realtime WebSocket (OpenAI-compatible protocol)</p>
+
+<div class="section">
+  <h2>Session <span id="rt-status" class="status disconnected"></span></h2>
+  <label>Server</label>
+  <input type="text" id="server" value="ws://127.0.0.1:8080" />
+  <button class="btn-primary" onclick="rtConnect()">Connect</button>
+  <button class="btn-danger" onclick="rtDisconnect()">Disconnect</button>
+  <label style="margin-top:12px;">Engine</label>
+  <select id="rt-engine" onchange="rtUpdateSession()">
+    <option value="cosyvoice">CosyVoice</option>
+    <option value="qwen3">Qwen3-TTS</option>
+  </select>
+  <label>Language</label>
+  <select id="rt-language" onchange="rtUpdateSession()">
+    <option value="english">English</option>
+    <option value="chinese">Chinese</option>
+    <option value="german">German</option>
+    <option value="japanese">Japanese</option>
+    <option value="spanish">Spanish</option>
+    <option value="french">French</option>
+    <option value="korean">Korean</option>
+    <option value="russian">Russian</option>
+    <option value="italian">Italian</option>
+  </select>
+</div>
+
+<div class="section">
+  <h2>ASR (Audio Input)</h2>
+  <p style="margin-bottom:12px;color:#666;">Record or upload audio. Sends base64 PCM16 24kHz via input_audio_buffer.append + commit.</p>
+  <button class="btn-record" id="rt-record-btn" onclick="rtToggleRecord()">Record</button>
+  <input type="file" id="rt-wav-file" accept=".wav" style="display:inline-block;width:auto;" />
+  <button class="btn-primary" onclick="rtSendWAV()">Send WAV</button>
+  <div class="log" id="rt-asr-log">Ready.</div>
+</div>
+
+<div class="section">
+  <h2>TTS (Text to Speech)</h2>
+  <label>Text</label>
+  <textarea id="rt-tts-text" rows="2">Hello! This is a test of streaming text to speech synthesis.</textarea>
+  <button class="btn-primary" id="rt-speak-btn" onclick="rtSpeak()">Speak</button>
+  <audio id="rt-audio" controls></audio>
+  <div class="log" id="rt-tts-log">Ready.</div>
+</div>
+
+<script>
+let rtWs = null;
+let rtRecording = false;
+let rtAudioCtx = null;
+let rtAudioChunks = [];
+
+function rtAsrLog(msg) {
+  const el = document.getElementById('rt-asr-log');
+  el.textContent += '\n' + msg;
+  el.scrollTop = el.scrollHeight;
+}
+
+function rtTtsLog(msg) {
+  const el = document.getElementById('rt-tts-log');
+  el.textContent += '\n' + msg;
+  el.scrollTop = el.scrollHeight;
+}
+
+function rtSetStatus(connected) {
+  document.getElementById('rt-status').className = 'status ' + (connected ? 'connected' : 'disconnected');
+}
+
+function rtConnect() {
+  if (rtWs && rtWs.readyState === WebSocket.OPEN) return;
+  const url = document.getElementById('server').value + '/v1/realtime';
+  rtAsrLog('Connecting to ' + url + '...');
+  rtWs = new WebSocket(url);
+  rtWs.onopen = () => {
+    rtSetStatus(true);
+    rtAsrLog('Connected.');
+    rtUpdateSession();
+  };
+  rtWs.onmessage = (e) => {
+    try {
+      const msg = JSON.parse(e.data);
+      handleRealtimeEvent(msg);
+    } catch (err) {
+      rtAsrLog('Parse error: ' + err.message);
+    }
+  };
+  rtWs.onclose = () => {
+    rtSetStatus(false);
+    rtAsrLog('Disconnected.');
+    rtWs = null;
+  };
+  rtWs.onerror = (e) => { rtAsrLog('Error: ' + e); };
+}
+
+function rtDisconnect() {
+  if (rtWs) rtWs.close();
+}
+
+function rtSend(event) {
+  if (!rtWs || rtWs.readyState !== WebSocket.OPEN) {
+    rtAsrLog('Not connected.');
+    return false;
+  }
+  rtWs.send(JSON.stringify(event));
+  return true;
+}
+
+function rtUpdateSession() {
+  rtSend({
+    type: 'session.update',
+    session: {
+      engine: document.getElementById('rt-engine').value,
+      language: document.getElementById('rt-language').value,
+      input_audio_format: 'pcm16',
+      output_audio_format: 'pcm16'
+    }
+  });
+}
+
+function handleRealtimeEvent(msg) {
+  switch (msg.type) {
+    case 'session.created':
+      rtAsrLog('Session created: ' + msg.session.id);
+      break;
+    case 'session.updated':
+      rtAsrLog('Session updated: engine=' + msg.session.engine + ', lang=' + msg.session.language);
+      break;
+    case 'input_audio_buffer.committed':
+      rtAsrLog('Audio committed (item: ' + msg.item_id + ')');
+      break;
+    case 'input_audio_buffer.cleared':
+      rtAsrLog('Audio buffer cleared.');
+      break;
+    case 'conversation.item.input_audio_transcription.completed':
+      rtAsrLog('Transcript: ' + msg.transcript);
+      break;
+    case 'response.created':
+      rtTtsLog('Response started: ' + msg.response.id);
+      rtAudioChunks = [];
+      break;
+    case 'response.audio.delta':
+      const pcmB64 = msg.delta;
+      const pcmBytes = atob(pcmB64);
+      const pcmArray = new Int16Array(pcmBytes.length / 2);
+      for (let i = 0; i < pcmArray.length; i++) {
+        pcmArray[i] = pcmBytes.charCodeAt(i * 2) | (pcmBytes.charCodeAt(i * 2 + 1) << 8);
+      }
+      rtAudioChunks.push(pcmArray);
+      rtTtsLog('Audio chunk: ' + pcmArray.length + ' samples');
+      break;
+    case 'response.audio.done':
+      rtTtsLog('Audio stream complete.');
+      break;
+    case 'response.audio_transcript.delta':
+      rtTtsLog('Transcript delta: ' + msg.delta);
+      break;
+    case 'response.audio_transcript.done':
+      rtTtsLog('Transcript: ' + msg.transcript);
+      break;
+    case 'response.done':
+      rtTtsLog('Response done: ' + msg.response.status);
+      if (rtAudioChunks.length > 0) {
+        const sr = (msg.response.output && msg.response.output[0] && msg.response.output[0].sample_rate) || 24000;
+        playRealtimeAudio(rtAudioChunks, sr);
+      }
+      document.getElementById('rt-speak-btn').disabled = false;
+      break;
+    case 'error':
+      const errMsg = msg.error ? msg.error.message : JSON.stringify(msg);
+      rtAsrLog('Error: ' + errMsg);
+      rtTtsLog('Error: ' + errMsg);
+      document.getElementById('rt-speak-btn').disabled = false;
+      break;
+    default:
+      rtAsrLog('Event: ' + msg.type);
+  }
+}
+
+async function rtToggleRecord() {
+  const btn = document.getElementById('rt-record-btn');
+  if (rtRecording) {
+    rtRecording = false;
+    btn.textContent = 'Record';
+    btn.classList.remove('recording');
+    rtSend({ type: 'input_audio_buffer.commit' });
+    return;
+  }
+  if (!rtWs || rtWs.readyState !== WebSocket.OPEN) {
+    rtConnect();
+    await new Promise(r => setTimeout(r, 500));
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { sampleRate: 24000, channelCount: 1 } });
+    rtAudioCtx = new AudioContext({ sampleRate: 24000 });
+    const source = rtAudioCtx.createMediaStreamSource(stream);
+    const processor = rtAudioCtx.createScriptProcessor(4096, 1, 1);
+    processor.onaudioprocess = (e) => {
+      if (!rtRecording) return;
+      const float32 = e.inputBuffer.getChannelData(0);
+      const int16 = new Int16Array(float32.length);
+      for (let i = 0; i < float32.length; i++) {
+        int16[i] = Math.max(-32768, Math.min(32767, Math.round(float32[i] * 32767)));
+      }
+      const bytes = new Uint8Array(int16.buffer);
+      let binary = '';
+      for (let j = 0; j < bytes.length; j++) {
+        binary += String.fromCharCode(bytes[j]);
+      }
+      rtSend({ type: 'input_audio_buffer.append', audio: btoa(binary) });
+    };
+    source.connect(processor);
+    processor.connect(rtAudioCtx.destination);
+    rtRecording = true;
+    btn.textContent = 'Stop';
+    btn.classList.add('recording');
+    rtAsrLog('Recording... (PCM16 24kHz, base64 via input_audio_buffer.append)');
+  } catch (err) {
+    rtAsrLog('Microphone error: ' + err.message);
+  }
+}
+
+async function rtSendWAV() {
+  const file = document.getElementById('rt-wav-file').files[0];
+  if (!file) { rtAsrLog('No file selected.'); return; }
+  if (!rtWs || rtWs.readyState !== WebSocket.OPEN) {
+    rtConnect();
+    await new Promise(r => setTimeout(r, 500));
+  }
+  const arrayBuf = await file.arrayBuffer();
+  const audioCtx = new AudioContext({ sampleRate: 24000 });
+  const decoded = await audioCtx.decodeAudioData(arrayBuf);
+  const float32 = decoded.getChannelData(0);
+  rtAsrLog('Decoded ' + file.name + ': ' + float32.length + ' samples at 24kHz');
+  const int16 = new Int16Array(float32.length);
+  for (let i = 0; i < float32.length; i++) {
+    int16[i] = Math.max(-32768, Math.min(32767, Math.round(float32[i] * 32767)));
+  }
+  const bytes = new Uint8Array(int16.buffer);
+  const CHUNK_SIZE = 24000;
+  for (let i = 0; i < bytes.length; i += CHUNK_SIZE * 2) {
+    const chunk = bytes.slice(i, i + CHUNK_SIZE * 2);
+    let binary = '';
+    for (let j = 0; j < chunk.length; j++) {
+      binary += String.fromCharCode(chunk[j]);
+    }
+    rtSend({ type: 'input_audio_buffer.append', audio: btoa(binary) });
+  }
+  rtAsrLog('Sent ' + float32.length + ' samples. Committing...');
+  rtSend({ type: 'input_audio_buffer.commit' });
+  audioCtx.close();
+}
+
+function rtSpeak() {
+  const text = document.getElementById('rt-tts-text').value.trim();
+  if (!text) { rtTtsLog('No text entered.'); return; }
+  if (!rtWs || rtWs.readyState !== WebSocket.OPEN) {
+    rtConnect();
+    setTimeout(() => rtSpeak(), 600);
+    return;
+  }
+  document.getElementById('rt-speak-btn').disabled = true;
+  rtTtsLog('Requesting TTS: ' + text);
+  rtSend({
+    type: 'response.create',
+    response: {
+      modalities: ['audio', 'text'],
+      instructions: text
+    }
+  });
+}
+
+function playRealtimeAudio(int16Chunks, sampleRate) {
+  let totalLength = 0;
+  for (const c of int16Chunks) totalLength += c.length;
+  if (totalLength === 0) { rtTtsLog('No audio to play.'); return; }
+  const headerSize = 44;
+  const dataSize = totalLength * 2;
+  const buf = new ArrayBuffer(headerSize + dataSize);
+  const view = new DataView(buf);
+  writeString(view, 0, 'RIFF');
+  view.setUint32(4, 36 + dataSize, true);
+  writeString(view, 8, 'WAVE');
+  writeString(view, 12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeString(view, 36, 'data');
+  view.setUint32(40, dataSize, true);
+  let offset = 44;
+  for (const c of int16Chunks) {
+    for (let i = 0; i < c.length; i++) {
+      view.setInt16(offset, c[i], true);
+      offset += 2;
+    }
+  }
+  const blob = new Blob([buf], { type: 'audio/wav' });
+  const audioEl = document.getElementById('rt-audio');
+  audioEl.src = URL.createObjectURL(blob);
+  audioEl.play();
+  rtTtsLog('Playing ' + (totalLength / sampleRate).toFixed(2) + 's audio.');
+}
+
+function writeString(view, offset, str) {
+  for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+}
+</script>
+</body>
+</html>

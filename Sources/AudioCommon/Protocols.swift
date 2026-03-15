@@ -1,5 +1,39 @@
 import Foundation
 
+// MARK: - Model Memory Management
+
+/// Memory statistics for a loaded model.
+public struct ModelMemoryStats: Sendable {
+    /// Estimated weight memory in bytes
+    public let weightMemory: Int
+    /// Current active GPU memory in bytes (MLX only)
+    public let activeMemory: Int
+
+    public init(weightMemory: Int, activeMemory: Int = 0) {
+        self.weightMemory = weightMemory
+        self.activeMemory = activeMemory
+    }
+}
+
+/// A model that supports explicit memory management.
+///
+/// Call `unload()` to release model weights and free GPU memory.
+/// After unloading, the model cannot be used for inference until re-loaded.
+public protocol ModelMemoryManageable: AnyObject {
+    /// Whether the model is currently loaded and ready for inference.
+    var isLoaded: Bool { get }
+
+    /// Release model weights and free GPU memory.
+    ///
+    /// After calling this, `isLoaded` returns false and inference methods will fail.
+    /// To use the model again, create a new instance via `fromPretrained()`.
+    func unload()
+
+    /// Estimated memory footprint of the loaded model weights in bytes.
+    /// Returns 0 if the model is not loaded.
+    var memoryFootprint: Int { get }
+}
+
 // MARK: - Unified Audio Chunk
 
 /// A chunk of audio produced during streaming synthesis or generation.
@@ -55,13 +89,44 @@ public struct AlignedWord: Sendable {
 public protocol SpeechGenerationModel: AnyObject {
     /// Output sample rate in Hz
     var sampleRate: Int { get }
-    /// Synthesize audio from text (blocking, returns full waveform)
+    /// Synthesize audio from text (returns full waveform)
     func generate(text: String, language: String?) async throws -> [Float]
-    /// Synthesize audio from text with streaming output
+    /// Synthesize audio from text with streaming output.
+    /// Default implementation wraps `generate()` as a single chunk.
     func generateStream(text: String, language: String?) -> AsyncThrowingStream<AudioChunk, Error>
 }
 
+extension SpeechGenerationModel {
+    /// Default: wraps `generate()` as a single-chunk stream.
+    public func generateStream(text: String, language: String?) -> AsyncThrowingStream<AudioChunk, Error> {
+        let rate = sampleRate
+        return AsyncThrowingStream { continuation in
+            Task {
+                do {
+                    let samples = try await self.generate(text: text, language: language)
+                    continuation.yield(AudioChunk(samples: samples, sampleRate: rate, frameIndex: 0, isFinal: true))
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+        }
+    }
+}
+
 // MARK: - Speech Recognition (STT)
+
+/// Result of speech recognition including detected language.
+public struct TranscriptionResult: Sendable {
+    public let text: String
+    /// Detected language (e.g. "english", "russian"). Nil if model doesn't detect.
+    public let language: String?
+
+    public init(text: String, language: String? = nil) {
+        self.text = text
+        self.language = language
+    }
+}
 
 /// A speech-to-text model that transcribes audio.
 public protocol SpeechRecognitionModel: AnyObject {
@@ -69,6 +134,15 @@ public protocol SpeechRecognitionModel: AnyObject {
     var inputSampleRate: Int { get }
     /// Transcribe audio to text
     func transcribe(audio: [Float], sampleRate: Int, language: String?) -> String
+    /// Transcribe audio to text with language detection
+    func transcribeWithLanguage(audio: [Float], sampleRate: Int, language: String?) -> TranscriptionResult
+}
+
+/// Default implementation: delegates to transcribe() with no language detection.
+public extension SpeechRecognitionModel {
+    func transcribeWithLanguage(audio: [Float], sampleRate: Int, language: String?) -> TranscriptionResult {
+        TranscriptionResult(text: transcribe(audio: audio, sampleRate: sampleRate, language: language))
+    }
 }
 
 // MARK: - Forced Alignment
@@ -115,6 +189,20 @@ public protocol VoiceActivityDetectionModel: AnyObject {
     var inputSampleRate: Int { get }
     /// Detect speech segments in audio
     func detectSpeech(audio: [Float], sampleRate: Int) -> [SpeechSegment]
+}
+
+/// A streaming VAD that processes fixed-size audio chunks and returns speech probability.
+///
+/// Maps directly to speech-core's `sc_vad_vtable_t` for pipeline integration.
+public protocol StreamingVADProvider: AnyObject {
+    /// Expected input sample rate in Hz
+    var inputSampleRate: Int { get }
+    /// Number of samples per chunk
+    var chunkSize: Int { get }
+    /// Process a single audio chunk, returns speech probability in [0, 1]
+    func processChunk(_ samples: [Float]) -> Float
+    /// Reset internal state (LSTM hidden state, context buffer, etc.)
+    func resetState()
 }
 
 // MARK: - Speaker Diarization
@@ -164,4 +252,12 @@ public protocol SpeakerDiarizationModel: AnyObject {
     var inputSampleRate: Int { get }
     /// Diarize audio into speaker-labeled segments
     func diarize(audio: [Float], sampleRate: Int) -> [DiarizedSegment]
+}
+
+/// A diarization model that also supports extracting a specific speaker's segments
+/// using a reference embedding. Not all engines support this (e.g. Sortformer is
+/// end-to-end and does not produce speaker embeddings).
+public protocol SpeakerExtractionCapable: SpeakerDiarizationModel {
+    /// Extract segments belonging to a target speaker identified by a reference embedding.
+    func extractSpeaker(audio: [Float], sampleRate: Int, targetEmbedding: [Float]) -> [SpeechSegment]
 }

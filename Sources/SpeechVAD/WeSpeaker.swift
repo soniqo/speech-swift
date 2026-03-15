@@ -37,6 +37,9 @@ public final class WeSpeakerModel {
     /// The inference engine in use.
     public let engine: WeSpeakerEngine
 
+    /// Whether the model weights are loaded and ready for inference.
+    var _isLoaded = true
+
     /// The ResNet34 network (nil when using CoreML engine)
     let network: WeSpeakerNetwork?
 
@@ -45,7 +48,7 @@ public final class WeSpeakerModel {
 
     #if canImport(CoreML)
     /// CoreML compiled model (nil when using MLX engine)
-    let coremlModel: MLModel?
+    var coremlModel: MLModel?
     #endif
 
     /// Default HuggingFace model ID (MLX weights)
@@ -170,7 +173,7 @@ public final class WeSpeakerModel {
     public func embed(audio: [Float], sampleRate: Int) -> [Float] {
         let samples: [Float]
         if sampleRate != inputSampleRate {
-            samples = resample(audio, from: sampleRate, to: inputSampleRate)
+            samples = AudioFileLoader.resample(audio, from: sampleRate, to: inputSampleRate)
         } else {
             samples = audio
         }
@@ -220,24 +223,4 @@ public final class WeSpeakerModel {
         return denom > 0 ? dot / denom : 0
     }
 
-    private func resample(_ audio: [Float], from sourceSR: Int, to targetSR: Int) -> [Float] {
-        guard sourceSR != targetSR else { return audio }
-        let ratio = Double(targetSR) / Double(sourceSR)
-        let outputLen = Int(Double(audio.count) * ratio)
-        var output = [Float](repeating: 0, count: outputLen)
-
-        for i in 0..<outputLen {
-            let srcPos = Double(i) / ratio
-            let srcIdx = Int(srcPos)
-            let frac = Float(srcPos - Double(srcIdx))
-
-            if srcIdx + 1 < audio.count {
-                output[i] = audio[srcIdx] * (1 - frac) + audio[srcIdx + 1] * frac
-            } else if srcIdx < audio.count {
-                output[i] = audio[srcIdx]
-            }
-        }
-
-        return output
-    }
 }

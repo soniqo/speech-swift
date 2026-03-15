@@ -1,23 +1,30 @@
 # Speech Swift
 
-AI speech models for Apple Silicon, powered by [MLX Swift](https://github.com/ml-explore/mlx-swift).
+AI speech models for Apple Silicon, powered by [MLX Swift](https://github.com/ml-explore/mlx-swift) and CoreML.
 
-- **Qwen3-ASR** — Speech-to-text (automatic speech recognition)
-- **Parakeet TDT** — Speech-to-text via CoreML (Neural Engine, FastConformer + TDT decoder)
+Soniqo (speech-swift) is an open-source Swift library for running AI speech models natively on Apple Silicon (M1/M2/M3/M4). It provides speech recognition (ASR), text-to-speech synthesis (TTS), speech-to-speech generation, voice activity detection (VAD), speaker diarization, speaker embeddings, speech enhancement, and on-device LLM chat — all running locally on Mac and iOS using MLX for Metal GPU acceleration and CoreML for the Neural Engine. No cloud APIs, no API keys, no data leaves the device. Install via `brew install speech` or add as a Swift Package dependency.
+
+**[Documentation](https://soniqo.audio)** · **[Models](https://huggingface.co/aufklarer)** · **[Blog](https://blog.ivan.digital)**
+
+- **Qwen3-ASR** — Speech-to-text / speech recognition (automatic speech recognition, 52 languages)
+- **Parakeet TDT** — Speech-to-text via CoreML (Neural Engine, NVIDIA FastConformer + TDT decoder, 25 languages)
 - **Qwen3-ForcedAligner** — Word-level timestamp alignment (audio + text → timestamps)
-- **Qwen3-TTS** — Text-to-speech synthesis (highest quality, custom speakers)
-- **CosyVoice TTS** — Text-to-speech with streaming (9 languages, DiT flow matching)
-- **PersonaPlex** — Full-duplex speech-to-speech (7B, audio in → audio out)
+- **Qwen3-TTS** — Text-to-speech synthesis (highest quality, streaming, custom speakers, 10 languages)
+- **CosyVoice TTS** — Text-to-speech with streaming, voice cloning, multi-speaker dialogue, and emotion tags (9 languages, DiT flow matching, CAM++ speaker encoder)
+- **Kokoro TTS** — On-device text-to-speech (82M params, CoreML/Neural Engine, 50 voices, iOS-ready, 10 languages)
+- **Qwen3-Chat** — On-device LLM chat (0.6B, CoreML/Neural Engine, INT4/INT8, streaming tokens, thinking mode)
+- **PersonaPlex** — Full-duplex speech-to-speech conversation (7B, audio in → audio out, 18 voice presets)
 - **DeepFilterNet3** — Speech enhancement / noise suppression (2.1M params, real-time 48kHz)
-- **Silero VAD** — Streaming voice activity detection (32ms chunks, ~309K params)
+- **Silero VAD** — Streaming voice activity detection (32ms chunks, sub-millisecond latency)
 - **Pyannote VAD** — Offline voice activity detection (10s windows, multi-speaker overlap)
-- **Speaker Diarization** — Who spoke when (pyannote segmentation + activity-based speaker chaining, up to 3 concurrent speakers)
+- **Speaker Diarization** — Who spoke when (Pyannote segmentation + activity-based speaker chaining, or end-to-end Sortformer on Neural Engine)
+- **Speaker Embeddings** — Speaker verification and identification (WeSpeaker ResNet34, 256-dim vectors)
 
-Papers: [Qwen3-ASR](https://arxiv.org/abs/2601.21337), [Qwen3-TTS](https://arxiv.org/abs/2601.15621), [CosyVoice 3](https://arxiv.org/abs/2505.17589), [PersonaPlex](https://arxiv.org/abs/2602.06053), [Mimi](https://arxiv.org/abs/2410.00037) (audio codec)
+Papers: [Qwen3-ASR](https://arxiv.org/abs/2601.21337) (Alibaba), [Qwen3-TTS](https://arxiv.org/abs/2601.15621) (Alibaba), [Qwen3](https://arxiv.org/abs/2505.09388) (Alibaba), [Parakeet TDT](https://arxiv.org/abs/2304.06795) (NVIDIA), [CosyVoice 3](https://arxiv.org/abs/2505.17589) (Alibaba), [Kokoro](https://arxiv.org/abs/2301.01695) (StyleTTS 2), [PersonaPlex](https://arxiv.org/abs/2602.06053) (NVIDIA), [Mimi](https://arxiv.org/abs/2410.00037) (Kyutai), [Sortformer](https://arxiv.org/abs/2409.06656) (NVIDIA)
 
 ## Roadmap
 
-See [Roadmap discussion](https://github.com/ivan-digital/qwen3-asr-swift/discussions/81) for what's planned — comments and suggestions welcome!
+See [Roadmap discussion](https://github.com/soniqo/speech-swift/discussions/81) for what's planned — comments and suggestions welcome!
 
 ## News
 
@@ -27,25 +34,54 @@ See [Roadmap discussion](https://github.com/ivan-digital/qwen3-asr-swift/discuss
 
 ## Models
 
-| Model | Task | Streaming | Languages | Download Size |
-|-------|------|-----------|-----------|--------------|
-| Qwen3-ASR-0.6B (4-bit) | Speech → Text | No | 52 languages | ~400 MB |
-| Qwen3-ASR-1.7B (8-bit) | Speech → Text | No | 52 languages | ~2.5 GB |
-| Parakeet-TDT-0.6B (INT4, CoreML) | Speech → Text | No | 25 European languages | ~315 MB |
-| Qwen3-ForcedAligner-0.6B (4-bit) | Audio + Text → Timestamps | No | Multi | ~979 MB |
-| Qwen3-TTS-0.6B Base (4-bit) | Text → Speech | Yes (~120ms) | 10 languages | ~1.7 GB |
-| Qwen3-TTS-0.6B CustomVoice (4-bit) | Text → Speech | Yes (~120ms) | 10 languages | ~1.7 GB |
-| CosyVoice3-0.5B (4-bit) | Text → Speech | Yes (~150ms) | 9 languages | ~1.9 GB |
-| PersonaPlex-7B (4-bit) | Speech → Speech | Yes (~2s chunks) | EN | ~5.3 GB |
-| Silero-VAD-v5 | Voice Activity Detection | Yes (32ms chunks) | Language-agnostic | ~1.2 MB (MLX or CoreML) |
-| Pyannote-Segmentation-3.0 | VAD + Speaker Segmentation | No (10s windows) | Language-agnostic | ~5.7 MB |
-| DeepFilterNet3 | Speech Enhancement | Yes (10ms frames) | Language-agnostic | ~4.2 MB (CoreML FP16) |
-| WeSpeaker-ResNet34-LM | Speaker Embedding (256-dim) | No | Language-agnostic | ~25 MB (MLX or CoreML) |
+| Model | Task | Streaming | Languages | Sizes |
+|-------|------|-----------|-----------|-------|
+| Qwen3-ASR-0.6B | Speech → Text | No | 52 languages | [4-bit](https://huggingface.co/aufklarer/Qwen3-ASR-0.6B-MLX-4bit) 680 MB · [8-bit](https://huggingface.co/aufklarer/Qwen3-ASR-0.6B-MLX-8bit) 1.0 GB · [CoreML](https://huggingface.co/aufklarer/Qwen3-ASR-CoreML) 180 MB |
+| Qwen3-ASR-1.7B | Speech → Text | No | 52 languages | [4-bit](https://huggingface.co/aufklarer/Qwen3-ASR-1.7B-MLX-4bit) 2.1 GB · [8-bit](https://huggingface.co/aufklarer/Qwen3-ASR-1.7B-MLX-8bit) 3.2 GB |
+| Parakeet-TDT-0.6B | Speech → Text | No | 25 European languages | [CoreML INT4](https://huggingface.co/aufklarer/Parakeet-TDT-v3-CoreML-INT4) 315 MB · [CoreML INT8](https://huggingface.co/aufklarer/Parakeet-TDT-v3-CoreML-INT8) 500 MB |
+| Qwen3-ForcedAligner-0.6B | Audio + Text → Timestamps | No | Multi | [4-bit](https://huggingface.co/aufklarer/Qwen3-ForcedAligner-0.6B-4bit) 979 MB · [8-bit](https://huggingface.co/aufklarer/Qwen3-ForcedAligner-0.6B-8bit) 1.4 GB · [CoreML INT4](https://huggingface.co/aufklarer/Qwen3-ForcedAligner-0.6B-CoreML-INT4) 630 MB · [CoreML INT8](https://huggingface.co/aufklarer/Qwen3-ForcedAligner-0.6B-CoreML-INT8) 1.0 GB |
+| Qwen3-TTS-0.6B Base | Text → Speech | Yes (~120ms) | 10 languages | [4-bit](https://huggingface.co/aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-4bit) 1.7 GB · [8-bit](https://huggingface.co/aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-8bit) 2.4 GB |
+| Qwen3-TTS-0.6B CustomVoice | Text → Speech | Yes (~120ms) | 10 languages | [4-bit](https://huggingface.co/aufklarer/Qwen3-TTS-12Hz-0.6B-CustomVoice-MLX-4bit) 1.7 GB |
+| Qwen3-TTS-1.7B Base | Text → Speech | Yes (~120ms) | 10 languages | [4-bit](https://huggingface.co/aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-4bit) 3.2 GB · [8-bit](https://huggingface.co/aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-8bit) 4.8 GB |
+| CosyVoice3-0.5B | Text → Speech | Yes (~150ms) | 9 languages | [4-bit](https://huggingface.co/aufklarer/CosyVoice3-0.5B-MLX-4bit) 1.2 GB |
+| Kokoro-82M | Text → Speech | No | 10 languages | [CoreML](https://huggingface.co/aufklarer/Kokoro-82M-CoreML) ~325 MB |
+| Qwen3-0.6B Chat | Text → Text (LLM) | Yes (streaming) | Multi | [CoreML INT4](https://huggingface.co/aufklarer/Qwen3-0.6B-Chat-CoreML) 318 MB · [CoreML INT8](https://huggingface.co/aufklarer/Qwen3-0.6B-Chat-CoreML) 571 MB |
+| PersonaPlex-7B | Speech → Speech | Yes (~2s chunks) | EN | [4-bit](https://huggingface.co/aufklarer/PersonaPlex-7B-MLX-4bit) 4.9 GB · [8-bit](https://huggingface.co/aufklarer/PersonaPlex-7B-MLX-8bit) 9.1 GB |
+| Silero-VAD-v5 | Voice Activity Detection | Yes (32ms chunks) | Language-agnostic | [MLX](https://huggingface.co/aufklarer/Silero-VAD-v5-MLX) · [CoreML](https://huggingface.co/aufklarer/Silero-VAD-v5-CoreML) ~1.2 MB |
+| Pyannote-Segmentation-3.0 | VAD + Speaker Segmentation | No (10s windows) | Language-agnostic | [MLX](https://huggingface.co/aufklarer/Pyannote-Segmentation-MLX) ~5.7 MB |
+| DeepFilterNet3 | Speech Enhancement | Yes (10ms frames) | Language-agnostic | [CoreML FP16](https://huggingface.co/aufklarer/DeepFilterNet3-CoreML) ~4.2 MB |
+| WeSpeaker-ResNet34-LM | Speaker Embedding (256-dim) | No | Language-agnostic | [MLX](https://huggingface.co/aufklarer/WeSpeaker-ResNet34-LM-MLX) · [CoreML](https://huggingface.co/aufklarer/WeSpeaker-ResNet34-LM-CoreML) ~25 MB |
+| CAM++ | Speaker Embedding (192-dim) | No | Language-agnostic | [CoreML](https://huggingface.co/aufklarer/CamPlusPlus-Speaker-CoreML) ~14 MB |
+| Sortformer | Speaker Diarization (end-to-end) | Yes (chunked) | Language-agnostic | [CoreML](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) ~240 MB |
+
+### Memory Requirements
+
+Weight memory is the GPU (MLX) or ANE (CoreML) memory consumed by model parameters. Peak inference includes KV caches, activations, and intermediate tensors.
+
+| Model | Weight Memory | Peak Inference |
+|-------|--------------|----------------|
+| Qwen3-ASR-0.6B (4-bit, MLX) | 675 MB | ~2.2 GB |
+| Qwen3-ASR-0.6B (INT8, CoreML) | 180 MB | ~400 MB |
+| Qwen3-ASR-1.7B (8-bit, MLX) | 2,349 MB | ~4 GB |
+| Parakeet-TDT-0.6B (CoreML) | 315 MB | ~400 MB |
+| Qwen3-ForcedAligner-0.6B (4-bit, MLX) | 933 MB | ~1.5 GB |
+| Qwen3-TTS-0.6B (4-bit, MLX) | 977 MB | ~2 GB |
+| CosyVoice3-0.5B (4-bit, MLX) | 732 MB | ~1.5 GB |
+| Kokoro-82M (CoreML) | 325 MB | ~500 MB |
+| Qwen3-Chat-0.6B (INT4, CoreML) | 318 MB | ~600 MB |
+| Qwen3-Chat-0.6B (INT8, CoreML) | 571 MB | ~900 MB |
+| PersonaPlex-7B (4-bit, MLX) | 4,900 MB | ~6.5 GB |
+| Silero-VAD-v5 (MLX) | 1.2 MB | ~5 MB |
+| Silero-VAD-v5 (CoreML) | 0.7 MB | ~3 MB |
+| Pyannote-Segmentation-3.0 (MLX) | 6 MB | ~20 MB |
+| DeepFilterNet3 (CoreML FP16) | 4.2 MB | ~10 MB |
+| WeSpeaker-ResNet34-LM (MLX) | 25 MB | ~50 MB |
 
 ### When to Use Which TTS
 
 - **Qwen3-TTS**: Best quality, streaming (~120ms), 9 built-in speakers, 10 languages, batch synthesis
-- **CosyVoice TTS**: Streaming (~150ms), 9 languages, DiT flow matching + HiFi-GAN vocoder
+- **CosyVoice TTS**: Streaming (~150ms), 9 languages, voice cloning (CAM++ speaker encoder), multi-speaker dialogue (`[S1] ... [S2] ...`), inline emotion/style tags (`(happy)`, `(whispers)`), DiT flow matching + HiFi-GAN vocoder
+- **Kokoro TTS**: Lightweight iOS-ready TTS (82M params), CoreML/Neural Engine, 50 voices, 10 languages, non-autoregressive (single forward pass)
 - **PersonaPlex**: Full-duplex speech-to-speech (audio in → audio out), streaming (~2s chunks), 18 voice presets, based on Moshi architecture
 
 ## Installation
@@ -55,7 +91,7 @@ See [Roadmap discussion](https://github.com/ivan-digital/qwen3-asr-swift/discuss
 Requires native ARM Homebrew (`/opt/homebrew`). Rosetta/x86_64 Homebrew is not supported.
 
 ```bash
-brew tap ivan-digital/speech https://github.com/ivan-digital/qwen3-asr-swift
+brew tap soniqo/speech https://github.com/soniqo/speech-swift
 brew install speech
 ```
 
@@ -76,7 +112,7 @@ Add to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/ivan-digital/qwen3-asr-swift", branch: "main")
+    .package(url: "https://github.com/soniqo/speech-swift", branch: "main")
 ]
 ```
 
@@ -87,6 +123,8 @@ import Qwen3ASR      // Speech recognition (MLX)
 import ParakeetASR   // Speech recognition (CoreML)
 import Qwen3TTS      // Text-to-speech (Qwen3)
 import CosyVoiceTTS  // Text-to-speech (streaming)
+import KokoroTTS     // Text-to-speech (CoreML, iOS-ready)
+import Qwen3Chat     // On-device LLM chat (CoreML)
 import PersonaPlex   // Speech-to-speech (full-duplex)
 import SpeechVAD          // Voice activity detection (pyannote + Silero)
 import SpeechEnhancement  // Noise suppression (DeepFilterNet3)
@@ -103,8 +141,8 @@ import AudioCommon        // Shared utilities
 ### Build from Source
 
 ```bash
-git clone https://github.com/ivan-digital/qwen3-asr-swift
-cd qwen3-asr-swift
+git clone https://github.com/soniqo/speech-swift
+cd speech-swift
 make build
 ```
 
@@ -131,7 +169,7 @@ cd Examples/PersonaPlexDemo
 
 Build and run as a macOS `.app` bundle — see each demo's README for instructions.
 
-## ASR Usage
+## Speech-to-Text (ASR) — Transcribe Audio in Swift
 
 ### Basic Transcription
 
@@ -150,6 +188,20 @@ let model = try await Qwen3ASRModel.fromPretrained(
 let transcription = model.transcribe(audio: audioSamples, sampleRate: 16000)
 print(transcription)
 ```
+
+### CoreML Encoder (Neural Engine)
+
+Hybrid mode: CoreML encoder on Neural Engine + MLX text decoder on GPU. Lower power, frees GPU for the encoder pass.
+
+```swift
+import Qwen3ASR
+
+let encoder = try await CoreMLASREncoder.fromPretrained()
+let model = try await Qwen3ASRModel.fromPretrained()
+let text = try model.transcribe(audio: audioSamples, sampleRate: 16000, coremlEncoder: encoder)
+```
+
+INT8 (180 MB, default) and INT4 (90 MB) variants available. INT8 recommended (cosine similarity > 0.999 vs FP32).
 
 ### Parakeet TDT (CoreML)
 
@@ -172,6 +224,9 @@ make build  # or: swift build -c release && ./scripts/build_mlx_metallib.sh rele
 
 # Use 1.7B model
 .build/release/audio transcribe audio.wav --model 1.7B
+
+# CoreML encoder (Neural Engine + MLX decoder)
+.build/release/audio transcribe --engine qwen3-coreml audio.wav
 
 # Parakeet TDT (CoreML, Neural Engine)
 .build/release/audio transcribe --engine parakeet audio.wav
@@ -220,7 +275,7 @@ Output:
 
 Non-autoregressive — single forward pass, no sampling loop. See [Forced Aligner](docs/forced-aligner.md) for architecture details.
 
-## TTS Usage
+## Text-to-Speech (TTS) — Generate Speech in Swift
 
 ### Basic Synthesis
 
@@ -269,6 +324,26 @@ CLI:
 
 # List available speakers
 .build/release/audio speak --model customVoice --list-speakers
+```
+
+### Voice Cloning (Base model)
+
+Clone a speaker's voice from a reference audio file:
+
+```swift
+let refAudio = try AudioFileLoader.load(url: referenceURL, targetSampleRate: 24000)
+let audio = model.synthesizeWithVoiceClone(
+    text: "Hello world",
+    referenceAudio: refAudio,
+    referenceSampleRate: 24000,
+    language: "english"
+)
+```
+
+CLI:
+
+```bash
+.build/release/audio speak "Hello world" --voice-sample reference.wav --output cloned.wav
 ```
 
 ### Tone / Style Instructions (CustomVoice only)
@@ -373,7 +448,7 @@ CLI:
 .build/release/audio speak "Hello world" --stream --first-chunk-frames 1
 ```
 
-## PersonaPlex Usage
+## Speech-to-Speech — Full-Duplex Voice Conversation
 
 > For an interactive voice assistant with microphone input, see **[PersonaPlexDemo](Examples/PersonaPlexDemo/)** — tap to talk, multi-turn conversation with automatic speech detection.
 
@@ -466,7 +541,7 @@ make build
 .build/release/audio respond --list-prompts
 ```
 
-## CosyVoice TTS Usage
+## CosyVoice TTS — Streaming Text-to-Speech with Voice Cloning
 
 ### Basic Synthesis
 
@@ -492,6 +567,29 @@ for try await chunk in model.synthesizeStream(text: "Hello, how are you today?",
 }
 ```
 
+### Voice Cloning (CosyVoice)
+
+Clone a speaker's voice using the CAM++ speaker encoder (192-dim, CoreML Neural Engine):
+
+```swift
+import CosyVoiceTTS
+import AudioCommon
+
+let model = try await CosyVoiceTTSModel.fromPretrained()
+let speaker = try await CamPlusPlusSpeaker.fromPretrained()
+// Downloads ~14 MB CAM++ CoreML model on first use
+
+let refAudio = try AudioFileLoader.load(url: referenceURL, targetSampleRate: 16000)
+let embedding = try speaker.embed(audio: refAudio, sampleRate: 16000)
+// embedding: [Float] of length 192
+
+let audio = model.synthesize(
+    text: "Hello in a cloned voice!",
+    language: "english",
+    speakerEmbedding: embedding
+)
+```
+
 ### CosyVoice TTS CLI
 
 ```bash
@@ -500,11 +598,83 @@ make build
 # Basic synthesis
 .build/release/audio speak "Hello world" --engine cosyvoice --language english --output output.wav
 
+# Voice cloning (downloads CAM++ speaker encoder on first use)
+.build/release/audio speak "Hello world" --engine cosyvoice --voice-sample reference.wav --output cloned.wav
+
+# Multi-speaker dialogue with voice cloning
+.build/release/audio speak "[S1] Hello there! [S2] Hey, how are you?" \
+    --engine cosyvoice --speakers s1=alice.wav,s2=bob.wav -o dialogue.wav
+
+# Inline emotion/style tags
+.build/release/audio speak "(excited) Wow, amazing! (sad) But I have to go..." \
+    --engine cosyvoice -o emotion.wav
+
+# Combined: dialogue + emotions + voice cloning
+.build/release/audio speak "[S1] (happy) Great news! [S2] (surprised) Really?" \
+    --engine cosyvoice --speakers s1=alice.wav,s2=bob.wav -o combined.wav
+
+# Custom style instruction
+.build/release/audio speak "Hello world" --engine cosyvoice --cosy-instruct "Speak cheerfully" -o cheerful.wav
+
 # Streaming synthesis
 .build/release/audio speak "Hello world" --engine cosyvoice --language english --stream --output output.wav
 ```
 
-## Voice Activity Detection
+## Kokoro TTS — Lightweight On-Device Text-to-Speech (iOS + macOS)
+
+### Basic Synthesis
+
+```swift
+import KokoroTTS
+import AudioCommon  // for WAVWriter
+
+let tts = try await KokoroTTSModel.fromPretrained()
+// Downloads ~325 MB on first run (CoreML models + voice embeddings + dictionaries)
+
+let audio = try tts.synthesize(text: "Hello world", voice: "af_heart")
+// Output is 24kHz mono float samples
+try WAVWriter.write(samples: audio, sampleRate: 24000, to: outputURL)
+```
+
+50 preset voices across 10 languages. Non-autoregressive — single CoreML forward pass, no sampling loop. Runs on Neural Engine, frees the GPU entirely.
+
+### Kokoro TTS CLI
+
+```bash
+make build
+
+# Basic synthesis
+.build/release/audio kokoro "Hello world" --voice af_heart --output hello.wav
+
+# Choose language
+.build/release/audio kokoro "Bonjour le monde" --voice ff_siwis --language fr --output bonjour.wav
+
+# List available voices
+.build/release/audio kokoro --list-voices
+```
+
+## Qwen3 Chat (On-Device LLM)
+
+```swift
+import Qwen3Chat
+
+let chat = try await Qwen3ChatModel.fromPretrained()
+// Downloads ~318 MB on first run (INT4 CoreML model + tokenizer)
+
+// Single response
+let response = try chat.generate("What is Swift?", systemPrompt: "Answer briefly.")
+print(response)
+
+// Streaming tokens
+let stream = chat.chatStream("Tell me a joke", systemPrompt: "Be funny.")
+for try await token in stream {
+    print(token, terminator: "")
+}
+```
+
+Qwen3-0.6B INT4 quantized for CoreML. Runs on Neural Engine with ~2 tok/s on iPhone, ~15 tok/s on M-series. Supports multi-turn conversation with KV cache, thinking mode (`<think>` tokens), and configurable sampling (temperature, top-k, top-p, repetition penalty).
+
+## Voice Activity Detection (VAD) — Detect Speech in Audio
 
 ### Streaming VAD (Silero)
 
@@ -569,7 +739,7 @@ make build
 .build/release/audio vad audio.wav
 ```
 
-## Speaker Diarization
+## Speaker Diarization — Who Spoke When
 
 ### Diarization Pipeline
 
@@ -612,21 +782,36 @@ let segments = pipeline.extractSpeaker(
 )
 ```
 
+### Sortformer Diarization (End-to-End, CoreML)
+
+NVIDIA Sortformer predicts per-frame speaker activity for up to 4 speakers directly — no embedding or clustering needed. Runs on Neural Engine.
+
+```swift
+let diarizer = try await SortformerDiarizer.fromPretrained()
+let result = diarizer.diarize(audio: samples, sampleRate: 16000, config: .default)
+for seg in result.segments {
+    print("Speaker \(seg.speakerId): [\(seg.startTime)s - \(seg.endTime)s]")
+}
+```
+
 ### Diarization CLI
 
 ```bash
-swift build -c release
+make build
 
-# Speaker diarization
+# Pyannote diarization (default)
 .build/release/audio diarize meeting.wav
 
-# CoreML embeddings (Neural Engine)
+# Sortformer diarization (CoreML, Neural Engine)
+.build/release/audio diarize meeting.wav --engine sortformer
+
+# CoreML embeddings (Neural Engine, pyannote only)
 .build/release/audio diarize meeting.wav --embedding-engine coreml
 
-# With options (speaker count is automatic via GMM-BIC, or constrain with min/max)
-.build/release/audio diarize meeting.wav --min-speakers 2 --max-speakers 4 --json
+# JSON output
+.build/release/audio diarize meeting.wav --json
 
-# Extract a specific speaker
+# Extract a specific speaker (pyannote only)
 .build/release/audio diarize meeting.wav --target-speaker enrollment.wav
 
 # Speaker embedding
@@ -636,7 +821,7 @@ swift build -c release
 
 See [Speaker Diarization](docs/speaker-diarization.md) for architecture details.
 
-## Speech Enhancement
+## Speech Enhancement — Noise Suppression and Audio Cleanup
 
 ### Noise Suppression
 
@@ -665,7 +850,7 @@ make build
 
 See [Speech Enhancement](docs/speech-enhancement.md) for architecture details.
 
-## Pipelines
+## Pipelines — Compose Multiple Models
 
 All models conform to shared protocols (`SpeechRecognitionModel`, `SpeechGenerationModel`, `SpeechEnhancementModel`, etc.) and can be composed into pipelines:
 
@@ -726,7 +911,7 @@ See [Shared Protocols](docs/shared-protocols.md) for the full protocol reference
 
 ## HTTP API Server
 
-A standalone HTTP server exposes all models via REST endpoints. Models are loaded lazily on first request.
+A standalone HTTP server exposes all models via REST and WebSocket endpoints. Models are loaded lazily on first request.
 
 ```bash
 swift build -c release
@@ -749,7 +934,54 @@ curl -X POST http://localhost:8080/enhance --data-binary @noisy.wav -o clean.wav
 .build/release/audio-server --preload --port 8080
 ```
 
-The server is a separate `AudioServer` module and `audio-server` executable — it does not add Hummingbird to the main `audio` CLI.
+### WebSocket Streaming
+
+#### OpenAI Realtime API (`/v1/realtime`)
+
+The primary WebSocket endpoint implements the [OpenAI Realtime API](https://platform.openai.com/docs/api-reference/realtime) protocol — all messages are JSON with a `type` field, audio is base64-encoded PCM16 24kHz mono.
+
+**Client → Server events:**
+
+| Event | Description |
+|-------|-------------|
+| `session.update` | Configure engine, language, audio format |
+| `input_audio_buffer.append` | Send base64 PCM16 audio chunk |
+| `input_audio_buffer.commit` | Transcribe accumulated audio (ASR) |
+| `input_audio_buffer.clear` | Clear audio buffer |
+| `response.create` | Request TTS synthesis |
+
+**Server → Client events:**
+
+| Event | Description |
+|-------|-------------|
+| `session.created` | Session initialized |
+| `session.updated` | Configuration confirmed |
+| `input_audio_buffer.committed` | Audio committed for transcription |
+| `conversation.item.input_audio_transcription.completed` | ASR result |
+| `response.audio.delta` | Base64 PCM16 audio chunk (TTS) |
+| `response.audio.done` | Audio streaming complete |
+| `response.done` | Response complete with metadata |
+| `error` | Error with type and message |
+
+```javascript
+const ws = new WebSocket('ws://localhost:8080/v1/realtime');
+
+// ASR: send audio, get transcription
+ws.send(JSON.stringify({ type: 'input_audio_buffer.append', audio: base64PCM16 }));
+ws.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
+// → receives: conversation.item.input_audio_transcription.completed
+
+// TTS: send text, get streamed audio
+ws.send(JSON.stringify({
+  type: 'response.create',
+  response: { modalities: ['audio', 'text'], instructions: 'Hello world' }
+}));
+// → receives: response.audio.delta (base64 chunks), response.audio.done, response.done
+```
+
+An example HTML client is at `Examples/websocket-client.html` — open it in a browser while the server is running.
+
+The server is a separate `AudioServer` module and `audio-server` executable — it does not add Hummingbird/WebSocket to the main `audio` CLI.
 
 ## Latency (M2 Max, 64 GB)
 
@@ -758,6 +990,7 @@ The server is a separate `AudioServer` module and `audio-server` executable — 
 | Model | Backend | RTF | 10s audio processed in |
 |-------|---------|-----|------------------------|
 | Qwen3-ASR-0.6B (4-bit) | MLX | ~0.06 | ~0.6s |
+| Qwen3-ASR-0.6B (INT8) | CoreML + MLX | ~0.09 | ~0.9s |
 | Qwen3-ASR-1.7B (8-bit) | MLX | ~0.11 | ~1.1s |
 | Parakeet-TDT-0.6B (INT4) | CoreML (Neural Engine) | ~0.12 cold, ~0.03 warm | ~1.2s / ~0.3s |
 | Whisper-large-v3 | whisper.cpp (Q5_0) | ~0.10 | ~1.0s |
@@ -776,9 +1009,10 @@ The server is a separate `AudioServer` module and `audio-server` executable — 
 | Model | Framework | Short (1s) | Medium (3s) | Long (6s) | Streaming First-Packet |
 |-------|-----------|-----------|-------------|------------|----------------------|
 | Qwen3-TTS-0.6B (4-bit) | MLX Swift (release) | 1.6s (RTF 1.2) | 2.3s (RTF 0.7) | 3.9s (RTF 0.7) | ~120ms (1-frame) |
+| Kokoro-82M | CoreML (Neural Engine) | ~45ms | ~45ms | ~45ms | N/A (non-autoregressive) |
 | Apple `AVSpeechSynthesizer` | AVFoundation | 0.08s | 0.08s | 0.17s (RTF 0.02) | N/A |
 
-> Qwen3-TTS generates natural, expressive speech with prosody and emotion, running **faster than real-time** (RTF < 1.0). Streaming synthesis delivers the first audio chunk in ~120ms. Apple's built-in TTS is ~35x faster but produces robotic, monotone speech.
+> Qwen3-TTS generates natural, expressive speech with prosody and emotion, running **faster than real-time** (RTF < 1.0). Streaming synthesis delivers the first audio chunk in ~120ms. Kokoro-82M runs entirely on Neural Engine with a single forward pass — ~45ms regardless of output length, ideal for iOS. Apple's built-in TTS is faster but produces robotic, monotone speech.
 
 ### PersonaPlex (Speech-to-Speech)
 
@@ -822,11 +1056,11 @@ Both backends produce equivalent results. Choose based on your workload:
 
 **Desktop inference**: MLX is the default — fastest single-model performance on Apple Silicon. Switch to CoreML when running multiple models concurrently (e.g., VAD + ASR + TTS) to avoid GPU contention, or for battery-sensitive workloads on laptops.
 
-CoreML models are available for Silero VAD and WeSpeaker. Pass `engine: .coreml` at construction time — inference API is identical.
+CoreML models are available for Qwen3-ASR encoder, Silero VAD, and WeSpeaker. For Qwen3-ASR, use `--engine qwen3-coreml` (hybrid: CoreML encoder on ANE + MLX text decoder on GPU). For VAD/embeddings, pass `engine: .coreml` at construction time — inference API is identical.
 
 ## Architecture
 
-See [ASR Inference](docs/asr-inference.md), [ASR Model](docs/asr-model.md), [Parakeet TDT ASR](docs/parakeet-asr.md), [Forced Aligner](docs/forced-aligner.md), [Qwen3-TTS Inference](docs/qwen3-tts-inference.md), [TTS Model](docs/tts-model.md), [CosyVoice TTS](docs/cosyvoice-tts.md), [PersonaPlex](docs/personaplex.md), [Silero VAD](docs/silero-vad.md), [Speaker Diarization](docs/speaker-diarization.md), [Speech Enhancement](docs/speech-enhancement.md), [Shared Protocols](docs/shared-protocols.md) for detailed architecture docs.
+See [ASR Inference](docs/asr-inference.md), [ASR Model](docs/asr-model.md), [Parakeet TDT ASR](docs/parakeet-asr.md), [Forced Aligner](docs/forced-aligner.md), [Qwen3-TTS Inference](docs/qwen3-tts-inference.md), [TTS Model](docs/tts-model.md), [CosyVoice TTS](docs/cosyvoice-tts.md), [Kokoro TTS](docs/kokoro-tts.md), [PersonaPlex](docs/personaplex.md), [Silero VAD](docs/silero-vad.md), [Speaker Diarization](docs/speaker-diarization.md), [Speech Enhancement](docs/speech-enhancement.md), [Shared Protocols](docs/shared-protocols.md) for detailed architecture docs.
 
 ## Cache Configuration
 
@@ -849,7 +1083,7 @@ xcodebuild -downloadComponent MetalToolchain
 Unit tests (config, sampling, text preprocessing, timestamp correction) run without model downloads:
 
 ```bash
-swift test --filter "Qwen3TTSConfigTests|SamplingTests|CosyVoiceTTSConfigTests|PersonaPlexTests|ForcedAlignerTests/testText|ForcedAlignerTests/testTimestamp|ForcedAlignerTests/testLIS|SileroVADTests/testSilero|SileroVADTests/testReflection|SileroVADTests/testProcess|SileroVADTests/testReset|SileroVADTests/testDetect|SileroVADTests/testStreaming|SileroVADTests/testVADEvent"
+swift test --filter "Qwen3TTSConfigTests|SamplingTests|CosyVoiceTTSConfigTests|CamPlusPlusMelExtractorTests|PersonaPlexTests|ForcedAlignerTests/testText|ForcedAlignerTests/testTimestamp|ForcedAlignerTests/testLIS|SileroVADTests/testSilero|SileroVADTests/testReflection|SileroVADTests/testProcess|SileroVADTests/testReset|SileroVADTests/testDetect|SileroVADTests/testStreaming|SileroVADTests/testVADEvent|KokoroTTSTests"
 ```
 
 Integration tests require model weights (downloaded automatically on first run):
@@ -879,7 +1113,71 @@ PERSONAPLEX_E2E=1 swift test --filter PersonaPlexE2ETests
 | Parakeet TDT | 25 European languages (BG, CS, DA, DE, EL, EN, ES, ET, FI, FR, HR, HU, IT, LT, LV, MT, NL, PL, PT, RO, RU, SK, SL, SV, UK) |
 | Qwen3-TTS | EN, CN, DE, JA, ES, FR, KO, RU, IT, PT (+ Beijing/Sichuan dialects via CustomVoice) |
 | CosyVoice TTS | CN, EN, JA, KO, DE, ES, FR, IT, RU |
+| Kokoro TTS | EN (US/UK), ES, FR, HI, IT, JA, PT, CN, KO, DE |
 | PersonaPlex | EN |
+
+## How It Compares
+
+### Speech-to-Text (ASR): speech-swift vs Alternatives
+
+| | **speech-swift (Qwen3-ASR)** | **whisper.cpp** | **Apple SFSpeechRecognizer** | **Google Cloud Speech** |
+|---|---|---|---|---|
+| **Runtime** | On-device (MLX/CoreML) | On-device (CPU/GPU) | On-device or cloud | Cloud only |
+| **Languages** | 52 | 100+ | ~70 (on-device: limited) | 125+ |
+| **RTF (10s audio, M2 Max)** | 0.06 (17x real-time) | 0.10 (Whisper-large-v3) | N/A | N/A |
+| **Streaming** | No (batch) | No (batch) | Yes | Yes |
+| **Custom models** | Yes (swap HuggingFace weights) | Yes (GGML models) | No | No |
+| **Swift API** | Native async/await | C++ with Swift bridge | Native | REST/gRPC |
+| **Privacy** | Fully on-device | Fully on-device | Depends on config | Data sent to cloud |
+| **Word timestamps** | Yes (Forced Aligner) | Yes | Limited | Yes |
+| **Cost** | Free (Apache 2.0) | Free (MIT) | Free (on-device) | Pay per minute |
+
+### Text-to-Speech (TTS): speech-swift vs Alternatives
+
+| | **speech-swift (Qwen3-TTS)** | **speech-swift (Kokoro)** | **Apple AVSpeechSynthesizer** | **ElevenLabs / Cloud TTS** |
+|---|---|---|---|---|
+| **Quality** | Neural, expressive | Neural, natural | Robotic, monotone | Neural, highest quality |
+| **Runtime** | On-device (MLX) | On-device (CoreML) | On-device | Cloud only |
+| **Streaming** | Yes (~120ms first chunk) | No (single pass, ~45ms) | No | Yes |
+| **Voice cloning** | Yes | No | No | Yes |
+| **Voices** | 9 built-in + clone any | 50 preset voices | ~50 system voices | 1000+ |
+| **Languages** | 10 | 10 | 60+ | 30+ |
+| **iOS support** | macOS only | iOS + macOS | iOS + macOS | Any (API) |
+| **Cost** | Free (Apache 2.0) | Free (Apache 2.0) | Free | Pay per character |
+
+### When to Use speech-swift
+
+- **Privacy-critical apps** — medical, legal, enterprise where audio cannot leave the device
+- **Offline use** — no internet connection needed after initial model download
+- **Cost-sensitive** — no per-minute or per-character API charges
+- **Apple Silicon optimization** — built specifically for M-series GPU (Metal) and Neural Engine
+- **Full pipeline** — combine ASR + TTS + VAD + diarization + enhancement in a single Swift package
+
+## FAQ
+
+**Does speech-swift work on iOS?**
+Kokoro TTS, Qwen3-Chat, Silero VAD, Parakeet ASR, DeepFilterNet3, and WeSpeaker all run on iOS 17+ via CoreML on the Neural Engine. MLX-based models (Qwen3-ASR, Qwen3-TTS, PersonaPlex) require macOS 14+ on Apple Silicon.
+
+**Does it require an internet connection?**
+Only for the initial model download from HuggingFace (automatic, cached in `~/Library/Caches/qwen3-speech/`). After that, all inference runs fully offline with no network access.
+
+**How does speech-swift compare to Whisper?**
+Qwen3-ASR-0.6B achieves RTF 0.06 on M2 Max — 40% faster than Whisper-large-v3 via whisper.cpp (RTF 0.10) — with comparable accuracy across 52 languages. speech-swift provides a native Swift async/await API, while whisper.cpp requires a C++ bridge.
+
+**Can I use it in a commercial app?**
+Yes. speech-swift is licensed under Apache 2.0. The underlying model weights have their own licenses (check each model's HuggingFace page).
+
+**What Apple Silicon chips are supported?**
+All M-series chips: M1, M2, M3, M4 and their Pro/Max/Ultra variants. Requires macOS 14+ (Sonoma) or iOS 17+.
+
+**How much memory does it need?**
+From ~3 MB (Silero VAD) to ~6.5 GB (PersonaPlex 7B). Kokoro TTS uses ~500 MB, Qwen3-ASR ~2.2 GB. See the [Memory Requirements](#memory-requirements) table for full details.
+
+**Can I run multiple models simultaneously?**
+Yes. Use CoreML models on the Neural Engine alongside MLX models on the GPU to avoid contention — for example, Silero VAD (CoreML) + Qwen3-ASR (MLX) + Qwen3-TTS (MLX).
+
+**Is there a REST API?**
+Yes. The `audio-server` binary exposes all models via HTTP REST and WebSocket endpoints, including an OpenAI Realtime API-compatible WebSocket at `/v1/realtime`.
 
 ## Contributing
 
@@ -891,11 +1189,7 @@ We welcome contributions! Whether it's a bug fix, new model integration, or docu
 3. `make test` to run the test suite
 4. Open a PR against `main`
 
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=ivan-digital/qwen3-asr-swift&type=date&legend=top-left)](https://www.star-history.com/#ivan-digital/qwen3-asr-swift&type=date&legend=top-left)
-
 ## License
 
-Apache 2.0 (same as original Qwen3 models)
+Apache 2.0
 

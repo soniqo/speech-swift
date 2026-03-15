@@ -13,20 +13,26 @@ public class ParakeetASRModel {
     /// Model configuration.
     public let config: ParakeetConfig
 
-    /// Default HuggingFace model ID.
+    /// Default HuggingFace model ID (INT4 quantized encoder).
     public static let defaultModelId = "aufklarer/Parakeet-TDT-v3-CoreML-INT4"
 
+    /// INT8 quantized variant (higher accuracy, larger size).
+    public static let int8ModelId = "aufklarer/Parakeet-TDT-v3-CoreML-INT8"
+
+    /// Whether the model is loaded and ready for inference.
+    var _isLoaded = true
+
     private let melPreprocessor: MelPreprocessor
-    private let encoder: MLModel
-    private let decoder: MLModel
-    private let joint: MLModel
+    var encoder: MLModel?
+    var decoder: MLModel?
+    var joint: MLModel?
     private let vocabulary: ParakeetVocabulary
 
     private init(
         config: ParakeetConfig,
-        encoder: MLModel,
-        decoder: MLModel,
-        joint: MLModel,
+        encoder: MLModel?,
+        decoder: MLModel?,
+        joint: MLModel?,
         vocabulary: ParakeetVocabulary
     ) {
         self.config = config
@@ -86,7 +92,7 @@ public class ParakeetASRModel {
         let encodedLength = encodedLengthArray[0].intValue
 
         // Step 3: TDT greedy decode
-        let tdtDecoder = TDTGreedyDecoder(config: config, decoder: decoder, joint: joint)
+        let tdtDecoder = TDTGreedyDecoder(config: config, decoder: decoder!, joint: joint!)
         let tDec0 = CFAbsoluteTimeGetCurrent()
         let tokenIds = try tdtDecoder.decode(encoded: encoded, encodedLength: encodedLength)
         let tDec1 = CFAbsoluteTimeGetCurrent()
@@ -98,7 +104,7 @@ public class ParakeetASRModel {
         let encMs = (tEnc1 - tEnc0) * 1000
         let decMs = (tDec1 - tDec0) * 1000
         let totalMs = melMs + encMs + decMs
-        print("Parakeet timing: mel=\(String(format: "%.1f", melMs))ms, encoder=\(String(format: "%.1f", encMs))ms, decode=\(String(format: "%.1f", decMs))ms, total=\(String(format: "%.1f", totalMs))ms (\(tokenIds.count) tokens, \(encodedLength) frames)")
+        AudioLog.inference.info("Parakeet: mel=\(String(format: "%.1f", melMs))ms enc=\(String(format: "%.1f", encMs))ms dec=\(String(format: "%.1f", decMs))ms total=\(String(format: "%.1f", totalMs))ms (\(tokenIds.count) tokens, \(encodedLength) frames)")
 
         return text
     }
@@ -151,7 +157,7 @@ public class ParakeetASRModel {
             "mel": MLFeatureValue(multiArray: mel),
             "length": MLFeatureValue(multiArray: lengthArray),
         ])
-        return try encoder.prediction(from: input)
+        return try encoder!.prediction(from: input)
     }
 
     // MARK: - Model Loading

@@ -14,6 +14,18 @@ final class AudioRecorder {
         samples = []
         audioLevel = 0
 
+        #if os(iOS)
+        // Configure audio session for recording on iOS
+        let session = AVAudioSession.sharedInstance()
+        do {
+            try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker])
+            try session.setActive(true)
+        } catch {
+            print("Failed to configure audio session: \(error)")
+            return
+        }
+        #endif
+
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
         let hwFormat = inputNode.outputFormat(forBus: 0)

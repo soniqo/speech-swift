@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "SpeechDemo",
-    platforms: [.macOS(.v14)],
+    platforms: [.macOS(.v14), .iOS(.v17)],
     dependencies: [
         .package(path: "../.."),
     ],
@@ -11,13 +11,20 @@ let package = Package(
         .executableTarget(
             name: "SpeechDemo",
             dependencies: [
-                .product(name: "ParakeetASR", package: "qwen3-asr-swift"),
-                .product(name: "Qwen3ASR", package: "qwen3-asr-swift"),
-                .product(name: "Qwen3TTS", package: "qwen3-asr-swift"),
-                .product(name: "AudioCommon", package: "qwen3-asr-swift"),
+                .product(name: "ParakeetASR", package: "speech-swift"),
+                .product(name: "Qwen3ASR", package: "speech-swift"),
+                .product(name: "Qwen3TTS", package: "speech-swift"),
+                .product(name: "SpeechVAD", package: "speech-swift"),
+                .product(name: "SpeechCore", package: "speech-swift"),
+                .product(name: "AudioCommon", package: "speech-swift"),
             ],
             path: "SpeechDemo",
             exclude: ["SpeechDemo.entitlements", "Info.plist"]
+        ),
+        .testTarget(
+            name: "SpeechDemoTests",
+            dependencies: ["SpeechDemo"],
+            path: "Tests"
         ),
     ]
 )
