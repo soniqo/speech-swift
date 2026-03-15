@@ -48,6 +48,10 @@ let package = Package(
             name: "KokoroTTS",
             targets: ["KokoroTTS"]
         ),
+        .library(
+            name: "Qwen3Chat",
+            targets: ["Qwen3Chat"]
+        ),
         .executable(
             name: "audio",
             targets: ["AudioCLI"]
@@ -150,6 +154,12 @@ let package = Package(
             ]
         ),
         .target(
+            name: "Qwen3Chat",
+            dependencies: [
+                "AudioCommon",
+            ]
+        ),
+        .target(
             name: "AudioCLILib",
             dependencies: [
                 "Qwen3ASR",
@@ -242,6 +252,13 @@ let package = Package(
                 "SpeechEnhancement",
                 "AudioCommon",
                 .product(name: "MLX", package: "mlx-swift"),
+            ]
+        ),
+        .testTarget(
+            name: "Qwen3ChatTests",
+            dependencies: [
+                "Qwen3Chat",
+                "AudioCommon",
             ]
         ),
         .testTarget(
