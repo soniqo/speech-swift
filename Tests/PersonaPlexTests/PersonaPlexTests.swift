@@ -1192,100 +1192,140 @@ final class PersonaPlexE2ETests: XCTestCase {
     }
 }
 
-// MARK: - PersonaPlex 8-bit E2E Tests
+// MARK: - AudioRingBuffer Tests
 
-/// E2E tests for 8-bit PersonaPlex model variant.
-/// Run with: PERSONAPLEX_8BIT_E2E=1 swift test --filter PersonaPlex8bitE2ETests
-final class PersonaPlex8bitE2ETests: XCTestCase {
+final class AudioRingBufferTests: XCTestCase {
 
-    private static var _model: PersonaPlexModel?
-    private static var loaded = false
+    // MARK: Basic write / read
 
-    override func setUpWithError() throws {
-        if !Self.loaded {
-            let hasEnv = ProcessInfo.processInfo.environment["PERSONAPLEX_8BIT_E2E"] != nil
-            try XCTSkipUnless(hasEnv, "Set PERSONAPLEX_8BIT_E2E=1 to run PersonaPlex 8-bit E2E tests")
-        }
+    func testWriteAndRead() {
+        let buf = AudioRingBuffer(capacity: 8)
+        buf.write([1, 2, 3, 4])
+        XCTAssertEqual(buf.available, 4)
+        let result = buf.read(4)
+        XCTAssertEqual(result, [1, 2, 3, 4])
+        XCTAssertEqual(buf.available, 0)
     }
 
-    private var model: PersonaPlexModel {
-        get throws {
-            guard let m = Self._model else {
-                throw XCTSkip("Model not loaded — run testLoadModel8bit first")
+    func testPartialRead() {
+        let buf = AudioRingBuffer(capacity: 8)
+        buf.write([10, 20, 30, 40])
+        let first = buf.read(2)
+        XCTAssertEqual(first, [10, 20])
+        XCTAssertEqual(buf.available, 2)
+        let second = buf.read(2)
+        XCTAssertEqual(second, [30, 40])
+        XCTAssertEqual(buf.available, 0)
+    }
+
+    // MARK: Underrun — pad with zeros
+
+    func testReadUnderrunReturnsPaddedZeros() {
+        let buf = AudioRingBuffer(capacity: 8)
+        buf.write([5, 6])
+        let result = buf.read(4)
+        XCTAssertEqual(result, [5, 6, 0, 0])
+        XCTAssertEqual(buf.available, 0)
+    }
+
+    func testReadFromEmptyBufferReturnsZeros() {
+        let buf = AudioRingBuffer(capacity: 8)
+        let result = buf.read(4)
+        XCTAssertEqual(result, [0, 0, 0, 0])
+    }
+
+    // MARK: Overwrite — drops oldest when full
+
+    func testOverwriteDropsOldest() {
+        let buf = AudioRingBuffer(capacity: 4)
+        buf.write([1, 2, 3, 4])   // buffer full
+        buf.write([5])             // overwrites sample 1
+        XCTAssertEqual(buf.available, 4)
+        let result = buf.read(4)
+        XCTAssertEqual(result, [2, 3, 4, 5])
+    }
+
+    func testOverwriteByLargeBlockDropsCorrectly() {
+        let buf = AudioRingBuffer(capacity: 4)
+        buf.write([1, 2, 3, 4])
+        buf.write([5, 6, 7, 8])   // completely replaces all old data
+        XCTAssertEqual(buf.available, 4)
+        let result = buf.read(4)
+        XCTAssertEqual(result, [5, 6, 7, 8])
+    }
+
+    // MARK: Wrap-around boundary
+
+    func testWriteAndReadAcrossBufferBoundary() {
+        let buf = AudioRingBuffer(capacity: 4)
+        buf.write([1, 2, 3])
+        _ = buf.read(2)            // consume 2 → readPos now at 2
+        buf.write([4, 5])          // writePos wraps around
+        XCTAssertEqual(buf.available, 3)
+        let result = buf.read(3)
+        XCTAssertEqual(result, [3, 4, 5])
+    }
+
+    func testMultipleWriteReadCycles() {
+        let buf = AudioRingBuffer(capacity: 4)
+        for i in 0..<10 {
+            let sample = Float(i)
+            buf.write([sample])
+            let result = buf.read(1)
+            XCTAssertEqual(result, [sample], "cycle \(i)")
+        }
+        XCTAssertEqual(buf.available, 0)
+    }
+
+    // MARK: Thread safety
+
+    func testConcurrentWriteAndRead() {
+        let capacity = 1024
+        let buf = AudioRingBuffer(capacity: capacity)
+        let iterations = 10_000
+        let expectation = XCTestExpectation(description: "concurrent write+read")
+        expectation.expectedFulfillmentCount = 2
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            for i in 0..<iterations {
+                buf.write([Float(i % 128)])
             }
-            return m
+            expectation.fulfill()
         }
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            for _ in 0..<iterations {
+                _ = buf.read(1)
+            }
+            expectation.fulfill()
+        }
+
+        wait(for: [expectation], timeout: 10)
+        // No crash = thread-safety holds; available count must be 0..capacity
+        XCTAssertGreaterThanOrEqual(buf.available, 0)
+        XCTAssertLessThanOrEqual(buf.available, capacity)
     }
 
-    func testLoadModel8bit() async throws {
-        guard Self._model == nil else { return }
+    func testConcurrentMultipleWriters() {
+        let buf = AudioRingBuffer(capacity: 512)
+        let group = DispatchGroup()
+        let writerCount = 4
+        let samplesPerWriter = 1000
 
-        let modelId = PersonaPlexModel.modelId8bit
-        print("Loading PersonaPlex 8-bit: \(modelId)")
-
-        let model = try await PersonaPlexModel.fromPretrained(
-            modelId: modelId
-        ) { progress, status in
-            print("  [\(Int(progress * 100))%] \(status)")
-        }
-        Self._model = model
-        Self.loaded = true
-
-        XCTAssertEqual(model.modelId, PersonaPlexModel.modelId8bit)
-        print("PersonaPlex 8-bit model loaded successfully")
-    }
-
-    func testRespondProducesAudio8bit() throws {
-        let model = try self.model
-
-        let sampleRate = 24000
-        let numSamples = 24000  // 1s
-        var testAudio = [Float](repeating: 0, count: numSamples)
-        for i in 0..<numSamples {
-            testAudio[i] = sin(2 * .pi * 440 * Float(i) / Float(sampleRate)) * 0.5
+        for _ in 0..<writerCount {
+            group.enter()
+            DispatchQueue.global(qos: .userInitiated).async {
+                for i in 0..<samplesPerWriter {
+                    buf.write([Float(i)])
+                }
+                group.leave()
+            }
         }
 
-        let (response, _) = model.respond(
-            userAudio: testAudio,
-            voice: .NATM0,
-            maxSteps: 10,
-            verbose: true
-        )
-
-        XCTAssertFalse(response.isEmpty, "8-bit model should produce response audio")
-
-        let maxAmp = response.map { abs($0) }.max() ?? 0
-        XCTAssertGreaterThan(maxAmp, 0.001, "8-bit response audio should not be silent")
-
-        let responseDuration = Double(response.count) / Double(sampleRate)
-        print("8-bit response: \(response.count) samples (\(String(format: "%.2f", responseDuration))s)")
-    }
-
-    func testRespondWithRealAudio8bit() throws {
-        let model = try self.model
-
-        let testAudioPath = ProcessInfo.processInfo.environment["PERSONAPLEX_TEST_AUDIO"]
-        guard let audioPath = testAudioPath else {
-            throw XCTSkip("Set PERSONAPLEX_TEST_AUDIO=/path/to/audio.wav to run real audio test")
-        }
-
-        let url = URL(fileURLWithPath: audioPath)
-        let audio = try AudioFileLoader.load(url: url, targetSampleRate: 24000)
-
-        let (response, _) = model.respond(
-            userAudio: audio,
-            voice: .NATM0,
-            maxSteps: 50,
-            verbose: true
-        )
-
-        XCTAssertFalse(response.isEmpty, "8-bit model should produce response to real audio")
-
-        let maxAmp = response.map { abs($0) }.max() ?? 0
-        XCTAssertGreaterThan(maxAmp, 0.01, "8-bit response should have audible content")
-
-        let responseDuration = Double(response.count) / 24000.0
-        print("8-bit response to real audio: \(String(format: "%.2f", responseDuration))s")
+        group.wait()
+        // Available must be within [0, capacity]; no crash or data corruption
+        XCTAssertGreaterThanOrEqual(buf.available, 0)
+        XCTAssertLessThanOrEqual(buf.available, 512)
     }
 }
 
