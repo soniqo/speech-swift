@@ -27,8 +27,7 @@ final class Qwen3ChatE2ETests: XCTestCase {
         )
 
         let trimmed = response.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Note: INT4 quantized 0.6B model may produce empty or unexpected responses
-        // with greedy decoding. This test verifies the pipeline runs without crash.
+        XCTAssertFalse(trimmed.isEmpty, "Should generate non-empty response")
         print("Generation: '\(trimmed)'")
 
         let metrics = model.lastMetrics

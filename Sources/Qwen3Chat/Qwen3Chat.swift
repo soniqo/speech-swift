@@ -22,8 +22,8 @@ import AudioCommon
 public final class Qwen3ChatModel: @unchecked Sendable {
     public static let defaultModelId = "aufklarer/Qwen3-0.6B-Chat-CoreML"
 
-    private let config: Qwen3ChatConfig
-    private let tokenizer: ChatTokenizer
+    let config: Qwen3ChatConfig
+    let tokenizer: ChatTokenizer
     let generator: CoreMLGenerator
     var conversationHistory: [ChatMessage] = []
     var systemPromptCached = false
@@ -253,7 +253,11 @@ public final class Qwen3ChatModel: @unchecked Sendable {
 
         // Autoregressive decode
         var generatedTokens: [Int] = []
-        for _ in 0..<sampling.maxTokens {
+        var responseTokenCount = 0
+        var inThinking = false
+        let thinkBudget = 100  // extra tokens for <think>...</think>
+
+        for _ in 0..<(sampling.maxTokens + thinkBudget) {
             let nextToken = generator.sample(
                 logits: logits,
                 config: sampling,
@@ -264,6 +268,22 @@ public final class Qwen3ChatModel: @unchecked Sendable {
             if nextToken == ChatTemplate.imEndId { break }
 
             generatedTokens.append(nextToken)
+
+            // Track thinking vs response tokens
+            if nextToken == ChatTemplate.thinkStartId { inThinking = true }
+            else if nextToken == ChatTemplate.thinkEndId { inThinking = false }
+            else if !inThinking { responseTokenCount += 1 }
+
+            // Cap thinking: if thinking exceeds budget, force </think>
+            if inThinking && generatedTokens.count > thinkBudget {
+                generatedTokens.append(ChatTemplate.thinkEndId)
+                logits = try generator.decode(tokenId: ChatTemplate.thinkEndId)
+                inThinking = false
+                continue
+            }
+
+            if responseTokenCount >= sampling.maxTokens { break }
+
             logits = try generator.decode(tokenId: nextToken)
         }
 
