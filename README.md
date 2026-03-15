@@ -10,7 +10,7 @@ AI speech models for Apple Silicon, powered by [MLX Swift](https://github.com/ml
 - **Qwen3-TTS** — Text-to-speech synthesis (highest quality, custom speakers)
 - **CosyVoice TTS** — Text-to-speech with streaming, voice cloning, multi-speaker dialogue, and emotion tags (9 languages, DiT flow matching, CAM++ speaker encoder)
 - **Kokoro TTS** — On-device text-to-speech (82M params, CoreML/Neural Engine, 50 voices, iOS-ready)
-- **Qwen3-Chat** — On-device LLM chat (0.6B, CoreML/Neural Engine, INT4, streaming tokens, thinking mode)
+- **Qwen3-Chat** — On-device LLM chat (0.6B, CoreML/Neural Engine, INT4/INT8, streaming tokens, thinking mode)
 - **PersonaPlex** — Full-duplex speech-to-speech (7B, audio in → audio out)
 - **DeepFilterNet3** — Speech enhancement / noise suppression (2.1M params, real-time 48kHz)
 - **Silero VAD** — Streaming voice activity detection (32ms chunks, ~309K params)
@@ -66,6 +66,7 @@ Weight memory is the GPU (MLX) or ANE (CoreML) memory consumed by model paramete
 | CosyVoice3-0.5B (4-bit, MLX) | 732 MB | ~1.5 GB |
 | Kokoro-82M (CoreML) | 325 MB | ~500 MB |
 | Qwen3-Chat-0.6B (INT4, CoreML) | 318 MB | ~600 MB |
+| Qwen3-Chat-0.6B (INT8, CoreML) | 571 MB | ~900 MB |
 | PersonaPlex-7B (4-bit, MLX) | 4,900 MB | ~6.5 GB |
 | Silero-VAD-v5 (MLX) | 1.2 MB | ~5 MB |
 | Silero-VAD-v5 (CoreML) | 0.7 MB | ~3 MB |
