@@ -1,0 +1,385 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0752CB8B419B6E9C4517A28F /* DiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F89CE951B7D9AA634C4F3DF /* DiagnosticsView.swift */; };
+		29B028341A346342699AF383 /* ChatBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = B697D09D2DAB1546B407426D /* ChatBubble.swift */; };
+		2F673300B797D3852645CA98 /* Qwen3Chat in Frameworks */ = {isa = PBXBuildFile; productRef = EC2D604406E793E6F8E82983 /* Qwen3Chat */; };
+		5E7A0838A8913B4EA373C5E5 /* CompanionChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 769A8EFA038D9E247CF0D207 /* CompanionChatViewModel.swift */; };
+		7102F8748F80696DDED0982D /* VoiceLevelBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7ACF5E20B409D8AF8A442ED /* VoiceLevelBar.swift */; };
+		741A001171143A8F2EA71EB6 /* AudioCommon in Frameworks */ = {isa = PBXBuildFile; productRef = 67C186316D0A5F54A654D403 /* AudioCommon */; };
+		80DE89951129E0629CB51E61 /* SpeechVAD in Frameworks */ = {isa = PBXBuildFile; productRef = 177F68BE93906BBB9F3AA871 /* SpeechVAD */; };
+		987DFC98DF23278A7AE9DF57 /* KokoroTTS in Frameworks */ = {isa = PBXBuildFile; productRef = CE7B5AAD750DC1011C225B3D /* KokoroTTS */; };
+		AF4D284F67CBD20AE2D1C791 /* SpeechCore in Frameworks */ = {isa = PBXBuildFile; productRef = F42946FB4F015511147E5F48 /* SpeechCore */; };
+		BC9448E8C4266049803B79DF /* TamagotchiDemoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D05C44D63D0CEDA642EE8949 /* TamagotchiDemoApp.swift */; };
+		C6165AAB81ADF7719A4436D6 /* CompanionChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC8F634461EF57900A431467 /* CompanionChatView.swift */; };
+		C624A102C111BE92AFD93429 /* ParakeetASR in Frameworks */ = {isa = PBXBuildFile; productRef = 106E5E52CEE5DF5282EA0DDA /* ParakeetASR */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		1E409FB3AD00B9F0D82DCE3B /* TamagotchiDemo.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = TamagotchiDemo.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		1F89CE951B7D9AA634C4F3DF /* DiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsView.swift; sourceTree = "<group>"; };
+		769A8EFA038D9E247CF0D207 /* CompanionChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionChatViewModel.swift; sourceTree = "<group>"; };
+		ADB73789636C5777730EC2F3 /* speech-swift */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "speech-swift"; path = ../..; sourceTree = SOURCE_ROOT; };
+		B697D09D2DAB1546B407426D /* ChatBubble.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatBubble.swift; sourceTree = "<group>"; };
+		BC8F634461EF57900A431467 /* CompanionChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionChatView.swift; sourceTree = "<group>"; };
+		D05C44D63D0CEDA642EE8949 /* TamagotchiDemoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TamagotchiDemoApp.swift; sourceTree = "<group>"; };
+		E0ECD34752A9C76ADAE55D35 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		E7ACF5E20B409D8AF8A442ED /* VoiceLevelBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceLevelBar.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		805B7924C07756EEA1A49242 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2F673300B797D3852645CA98 /* Qwen3Chat in Frameworks */,
+				987DFC98DF23278A7AE9DF57 /* KokoroTTS in Frameworks */,
+				C624A102C111BE92AFD93429 /* ParakeetASR in Frameworks */,
+				80DE89951129E0629CB51E61 /* SpeechVAD in Frameworks */,
+				AF4D284F67CBD20AE2D1C791 /* SpeechCore in Frameworks */,
+				741A001171143A8F2EA71EB6 /* AudioCommon in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		5BE797B553A32EAE5D728C59 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				1E409FB3AD00B9F0D82DCE3B /* TamagotchiDemo.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		733E37648AB6DF6541D067F4 = {
+			isa = PBXGroup;
+			children = (
+				E956EC00705CF98C6ED7381F /* Packages */,
+				9554F169F8C40F279474A43A /* TamagotchiDemo */,
+				5BE797B553A32EAE5D728C59 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		9554F169F8C40F279474A43A /* TamagotchiDemo */ = {
+			isa = PBXGroup;
+			children = (
+				B697D09D2DAB1546B407426D /* ChatBubble.swift */,
+				BC8F634461EF57900A431467 /* CompanionChatView.swift */,
+				769A8EFA038D9E247CF0D207 /* CompanionChatViewModel.swift */,
+				1F89CE951B7D9AA634C4F3DF /* DiagnosticsView.swift */,
+				E0ECD34752A9C76ADAE55D35 /* Info.plist */,
+				D05C44D63D0CEDA642EE8949 /* TamagotchiDemoApp.swift */,
+				E7ACF5E20B409D8AF8A442ED /* VoiceLevelBar.swift */,
+			);
+			path = TamagotchiDemo;
+			sourceTree = "<group>";
+		};
+		E956EC00705CF98C6ED7381F /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				ADB73789636C5777730EC2F3 /* speech-swift */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		F8D325D92FE658E334CD66FC /* TamagotchiDemo */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 84A15E7DDF6B3803716664FE /* Build configuration list for PBXNativeTarget "TamagotchiDemo" */;
+			buildPhases = (
+				9B42F1B53A2D8D7712A5FD1A /* Sources */,
+				805B7924C07756EEA1A49242 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = TamagotchiDemo;
+			packageProductDependencies = (
+				EC2D604406E793E6F8E82983 /* Qwen3Chat */,
+				CE7B5AAD750DC1011C225B3D /* KokoroTTS */,
+				106E5E52CEE5DF5282EA0DDA /* ParakeetASR */,
+				177F68BE93906BBB9F3AA871 /* SpeechVAD */,
+				F42946FB4F015511147E5F48 /* SpeechCore */,
+				67C186316D0A5F54A654D403 /* AudioCommon */,
+			);
+			productName = TamagotchiDemo;
+			productReference = 1E409FB3AD00B9F0D82DCE3B /* TamagotchiDemo.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		E6AB844DF405534963392017 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					F8D325D92FE658E334CD66FC = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 355F9E68C45F138C8AF26EA3 /* Build configuration list for PBXProject "TamagotchiDemo" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 733E37648AB6DF6541D067F4;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				95EABA8718C3F0C97BE8309F /* XCLocalSwiftPackageReference "../.." */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 5BE797B553A32EAE5D728C59 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				F8D325D92FE658E334CD66FC /* TamagotchiDemo */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		9B42F1B53A2D8D7712A5FD1A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				29B028341A346342699AF383 /* ChatBubble.swift in Sources */,
+				C6165AAB81ADF7719A4436D6 /* CompanionChatView.swift in Sources */,
+				5E7A0838A8913B4EA373C5E5 /* CompanionChatViewModel.swift in Sources */,
+				0752CB8B419B6E9C4517A28F /* DiagnosticsView.swift in Sources */,
+				BC9448E8C4266049803B79DF /* TamagotchiDemoApp.swift in Sources */,
+				7102F8748F80696DDED0982D /* VoiceLevelBar.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		63D72757454FFFDB630D933C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		6C0C525181CD21C9AE89B47D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				INFOPLIST_FILE = TamagotchiDemo/Info.plist;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Voice input for the companion chat";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = audio.soniqo.TamagotchiDemo;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		6C21A8E382E16B8E229AA470 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		90CE8E65AF3DBDE4DF4FD62D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				INFOPLIST_FILE = TamagotchiDemo/Info.plist;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Voice input for the companion chat";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = audio.soniqo.TamagotchiDemo;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		355F9E68C45F138C8AF26EA3 /* Build configuration list for PBXProject "TamagotchiDemo" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				63D72757454FFFDB630D933C /* Debug */,
+				6C21A8E382E16B8E229AA470 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		84A15E7DDF6B3803716664FE /* Build configuration list for PBXNativeTarget "TamagotchiDemo" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				90CE8E65AF3DBDE4DF4FD62D /* Debug */,
+				6C0C525181CD21C9AE89B47D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		95EABA8718C3F0C97BE8309F /* XCLocalSwiftPackageReference "../.." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../..;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		106E5E52CEE5DF5282EA0DDA /* ParakeetASR */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ParakeetASR;
+		};
+		177F68BE93906BBB9F3AA871 /* SpeechVAD */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = SpeechVAD;
+		};
+		67C186316D0A5F54A654D403 /* AudioCommon */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = AudioCommon;
+		};
+		CE7B5AAD750DC1011C225B3D /* KokoroTTS */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = KokoroTTS;
+		};
+		EC2D604406E793E6F8E82983 /* Qwen3Chat */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Qwen3Chat;
+		};
+		F42946FB4F015511147E5F48 /* SpeechCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = SpeechCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = E6AB844DF405534963392017 /* Project object */;
+}
