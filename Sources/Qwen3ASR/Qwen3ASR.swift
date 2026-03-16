@@ -60,7 +60,8 @@ public class Qwen3ASRModel {
         audio: [Float],
         sampleRate: Int = 16000,
         language: String? = nil,
-        maxTokens: Int = 448
+        maxTokens: Int = 448,
+        context: String? = nil
     ) -> String {
         // Extract mel features
         let melFeatures = featureExtractor.process(audio, sampleRate: sampleRate)
@@ -85,7 +86,8 @@ public class Qwen3ASRModel {
             audioEmbeds: audioEmbeds,
             textDecoder: textDecoder,
             language: language,
-            maxTokens: maxTokens
+            maxTokens: maxTokens,
+            context: context
         )
     }
 
@@ -94,7 +96,8 @@ public class Qwen3ASRModel {
         audioEmbeds: MLXArray,
         textDecoder: QuantizedTextModel,
         language: String?,
-        maxTokens: Int
+        maxTokens: Int,
+        context: String? = nil
     ) -> String {
         // Special token IDs
         let imStartId = 151644
@@ -116,8 +119,13 @@ public class Qwen3ASRModel {
         // Build input_ids array with audio_pad placeholder tokens
         var inputIds: [Int32] = []
 
-        // <|im_start|>system\n<|im_end|>\n
-        inputIds.append(contentsOf: [imStartId, systemId, newlineId, imEndId, newlineId].map { Int32($0) })
+        // <|im_start|>system\n{context}<|im_end|>\n
+        inputIds.append(contentsOf: [imStartId, systemId, newlineId].map { Int32($0) })
+        if let context = context, !context.isEmpty, let tokenizer = tokenizer {
+            let contextTokens = tokenizer.encode(context)
+            inputIds.append(contentsOf: contextTokens.map { Int32($0) })
+        }
+        inputIds.append(contentsOf: [imEndId, newlineId].map { Int32($0) })
 
         // <|im_start|>user\n<|audio_start|>
         inputIds.append(contentsOf: [imStartId, userId, newlineId, audioStartId].map { Int32($0) })
