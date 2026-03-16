@@ -54,9 +54,14 @@ public struct VadCommand: ParsableCommand {
                     modelId: modelId,
                     progressHandler: reportProgress
                 )
-                vad.speechThreshold = onset
-                vad.minSpeechDuration = minSpeech
-                vad.minSilenceDuration = minSilence
+                // Only override defaults if user explicitly set them
+                // FireRedVAD default threshold is 0.4 (vs Pyannote 0.767)
+                if minSpeech != VADConfig.default.minSpeechDuration {
+                    vad.minSpeechDuration = minSpeech
+                }
+                if minSilence != VADConfig.default.minSilenceDuration {
+                    vad.minSilenceDuration = minSilence
+                }
 
                 print("Detecting speech segments...")
                 start = Date()

@@ -159,9 +159,13 @@ public final class FireRedVADModel {
             for: "probabilities"
         )?.multiArrayValue else { return [] }
 
-        // Extract probabilities
-        let outPtr = outputArray.dataPointer.assumingMemoryBound(to: Float.self)
-        return Array(UnsafeBufferPointer(start: outPtr, count: numFrames))
+        // Extract probabilities — output is [1, T, 1]
+        // Use MLMultiArray subscript to handle strides and float16 conversion
+        var probs = [Float](repeating: 0, count: numFrames)
+        for i in 0..<numFrames {
+            probs[i] = outputArray[[0, NSNumber(value: i), 0]].floatValue
+        }
+        return probs
     }
     #endif
 
@@ -263,6 +267,7 @@ final class KaldiFbankExtractor {
     let nMels: Int = 80
     let nFFT: Int = 512          // next power of 2 from 400
     let log2FFT: vDSP_Length = 9 // log2(512)
+    let preemphCoeff: Float = 0.97
 
     private let window: [Float]
     private let fftSetup: FFTSetup
@@ -270,7 +275,7 @@ final class KaldiFbankExtractor {
     private let nBins: Int
 
     init() {
-        // Povey window (like Hann but raised to 0.85 power)
+        // Povey window (Hann raised to 0.85 power)
         var w = [Float](repeating: 0, count: 400)
         for i in 0..<400 {
             let hann = 0.5 - 0.5 * cos(2.0 * Float.pi * Float(i) / Float(400))
@@ -307,9 +312,27 @@ final class KaldiFbankExtractor {
         for frame in 0..<numFrames {
             let start = frame * frameShift
 
-            // Window the frame (scale to int16 range for Kaldi compatibility)
+            // Extract raw frame, scale to int16 range
+            var rawFrame = [Float](repeating: 0, count: frameLength)
             for i in 0..<frameLength {
-                paddedFrame[i] = samples[start + i] * 32768.0 * window[i]
+                rawFrame[i] = samples[start + i] * 32768.0
+            }
+
+            // Remove DC offset (Kaldi default)
+            var dcMean: Float = 0
+            vDSP_meanv(rawFrame, 1, &dcMean, vDSP_Length(frameLength))
+            var negMean = -dcMean
+            vDSP_vsadd(rawFrame, 1, &negMean, &rawFrame, 1, vDSP_Length(frameLength))
+
+            // Pre-emphasis: y[n] = x[n] - 0.97 * x[n-1]
+            for i in stride(from: frameLength - 1, through: 1, by: -1) {
+                rawFrame[i] -= preemphCoeff * rawFrame[i - 1]
+            }
+            rawFrame[0] -= preemphCoeff * rawFrame[0]  // Kaldi: first sample uses itself
+
+            // Apply window
+            for i in 0..<frameLength {
+                paddedFrame[i] = rawFrame[i] * window[i]
             }
             for i in frameLength..<nFFT {
                 paddedFrame[i] = 0
@@ -334,19 +357,20 @@ final class KaldiFbankExtractor {
                 }
             }
 
-            // Power spectrum
+            // Power spectrum: |X(k)|² (Kaldi does NOT divide by N)
+            // vDSP_fft_zrip output is 2x the true FFT, so scale by 0.5
+            let fftScale: Float = 0.5
             var powerSpec = [Float](repeating: 0, count: nBins)
-            // DC component
-            powerSpec[0] = realPart[0] * realPart[0]
-            // Nyquist
-            powerSpec[nBins - 1] = imagPart[0] * imagPart[0]
-            // Rest
-            let scale = 1.0 / Float(nFFT)
+            // DC (stored in realPart[0])
+            powerSpec[0] = (realPart[0] * fftScale) * (realPart[0] * fftScale)
+            // Nyquist (stored in imagPart[0])
+            powerSpec[nBins - 1] = (imagPart[0] * fftScale) * (imagPart[0] * fftScale)
+            // Remaining bins
             for i in 1..<(nBins - 1) {
-                powerSpec[i] = (realPart[i] * realPart[i] + imagPart[i] * imagPart[i]) * scale * scale
+                let r = realPart[i] * fftScale
+                let im = imagPart[i] * fftScale
+                powerSpec[i] = r * r + im * im
             }
-            powerSpec[0] *= scale * scale
-            powerSpec[nBins - 1] *= scale * scale
 
             // Apply mel filterbank
             var melEnergies = [Float](repeating: 0, count: nMels)
@@ -356,7 +380,7 @@ final class KaldiFbankExtractor {
                 for b in 0..<nBins {
                     energy += melFilterbank[offset + b] * powerSpec[b]
                 }
-                melEnergies[m] = log(max(energy, 1e-10))
+                melEnergies[m] = log(max(energy, Float.ulpOfOne))
             }
 
             allFeatures.append(contentsOf: melEnergies)
