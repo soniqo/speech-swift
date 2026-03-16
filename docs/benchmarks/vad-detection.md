@@ -9,6 +9,7 @@
 | Engine | Params | Backend | F1% | FAR% | MR% | RTF | Cold Start |
 |--------|--------|---------|-----|------|-----|-----|------------|
 | Pyannote | 1.5M | MLX (GPU) | 98.22 | 50.09 | 0.19 | 0.358 | ~2s |
+| Silero v5 | 309K | CoreML (ANE) | 97.52 | 33.29 | 2.69 | 0.022 | ~1s |
 | Silero v5 | 309K | MLX (GPU) | 95.98 | 21.02 | 5.88 | 0.027 | ~1s |
 | FireRedVAD | 588K | CoreML (ANE) | 94.21 | 69.33 | 5.05 | 0.009 | ~0.5s |
 
@@ -17,8 +18,9 @@
 ## Key observations
 
 - **Pyannote** has highest F1 (98.22%) with near-zero miss rate (0.19%) but very high false alarm (50%)
-- **Silero** offers the best balance: good F1 (95.98%), moderate FAR (21%), streaming-capable (32ms chunks)
-- **FireRedVAD** is fastest (RTF 0.009, 111x real-time) but has high FAR (69%) on VoxConverse — likely due to chunking boundary effects for long audio
+- **Silero CoreML** offers the best balance: high F1 (97.52%), moderate FAR (33%), streaming-capable (32ms chunks), runs on Neural Engine
+- **Silero MLX** has lower FAR (21%) but slightly lower F1 (95.98%) — GPU-based
+- **FireRedVAD** is fastest (RTF 0.009, 111x real-time) but has high FAR (69%) on VoxConverse — our fbank extractor has minor differences from Kaldi's, and chunking at 60s boundaries introduces artifacts
 - All engines have elevated FAR on VoxConverse due to background noise in multi-speaker conversation audio
 
 ## Comparison with published numbers
