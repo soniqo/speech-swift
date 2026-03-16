@@ -34,7 +34,34 @@ public enum PipelineEvent {
     case responseInterrupted
     case responseAudioDelta(samples: [Float])
     case responseDone
+    case toolCallStarted(name: String)
+    case toolCallCompleted(name: String, result: String)
     case error(String)
+}
+
+/// A tool that can be invoked by the LLM during voice pipeline execution.
+public struct PipelineTool {
+    public let name: String
+    public let description: String
+    public let handler: (String) -> String
+    public let cooldown: Int
+
+    /// - Parameters:
+    ///   - name: Tool name (used by LLM to invoke)
+    ///   - description: What the tool does (included in LLM system prompt)
+    ///   - cooldown: Minimum seconds between invocations (0 = no limit)
+    ///   - handler: Synchronous handler `(arguments) -> result`. Called on pipeline worker thread.
+    public init(
+        name: String,
+        description: String,
+        cooldown: Int = 0,
+        handler: @escaping (String) -> String
+    ) {
+        self.name = name
+        self.description = description
+        self.cooldown = cooldown
+        self.handler = handler
+    }
 }
 
 /// Pipeline configuration.
@@ -78,6 +105,14 @@ private final class STTBridge {
     var lastText: [CChar] = []  // keeps C string alive between calls
     var lastLanguage: [CChar] = []  // keeps language C string alive
     init(_ model: SpeechRecognitionModel) { self.model = model }
+}
+
+/// Bridges a PipelineTool to the C callback.
+private final class ToolBridge {
+    let tool: PipelineTool
+    var lastResult: [CChar] = []
+
+    init(_ tool: PipelineTool) { self.tool = tool }
 }
 
 /// Bridges a SpeechGenerationModel to the C vtable.
@@ -225,6 +260,9 @@ public final class VoicePipeline {
             Unmanaged.passUnretained(llmBridge).release()
         }
         Unmanaged.passUnretained(eventBridge).release()
+        for bridge in toolBridges {
+            Unmanaged.passUnretained(bridge).release()
+        }
     }
 
     // MARK: - Public API
@@ -263,6 +301,45 @@ public final class VoicePipeline {
         sc_pipeline_is_running(handle)
     }
 
+    // MARK: - Tool Calling
+
+    private var toolBridges: [ToolBridge] = []
+
+    /// Register tools that the LLM can invoke during conversation.
+    /// Must be called before `start()`.
+    public func setTools(_ tools: [PipelineTool]) {
+        sc_pipeline_clear_tools(handle)
+        toolBridges.removeAll()
+
+        for tool in tools {
+            let bridge = ToolBridge(tool)
+            toolBridges.append(bridge)
+
+            let ctx = Unmanaged.passRetained(bridge).toOpaque()
+            tool.name.withCString { namePtr in
+                tool.description.withCString { descPtr in
+                    var def = sc_tool_definition_t()
+                    def.name = namePtr
+                    def.description = descPtr
+                    def.triggers = nil
+                    def.handler = { namePtr, argsPtr, ctx in
+                        guard let ctx else { return nil }
+                        let bridge = Unmanaged<ToolBridge>.fromOpaque(ctx).takeUnretainedValue()
+                        let args = argsPtr.map { String(cString: $0) } ?? ""
+                        let result = bridge.tool.handler(args)
+                        bridge.lastResult = Array(result.utf8CString)
+                        return bridge.lastResult.withUnsafeBufferPointer { $0.baseAddress }
+                    }
+                    def.handler_context = ctx
+                    def.command = nil
+                    def.timeout = 0
+                    def.cooldown = Int32(tool.cooldown)
+                    sc_pipeline_add_tool(handle, def)
+                }
+            }
+        }
+    }
+
     // MARK: - Event Callback
 
     private static let eventCallback: sc_event_fn = { eventPtr, ctx in
@@ -295,6 +372,16 @@ public final class VoicePipeline {
             event = .responseAudioDelta(samples: pcm16ToFloat32(e.audio_data, count: e.audio_data_length))
         case SC_EVENT_RESPONSE_DONE:
             event = .responseDone
+        case SC_EVENT_TOOL_CALL_STARTED:
+            let name = e.text.map { String(cString: $0) } ?? ""
+            event = .toolCallStarted(name: name)
+        case SC_EVENT_TOOL_CALL_COMPLETED:
+            // text contains "tool_name: result" for completed events
+            let text = e.text.map { String(cString: $0) } ?? ""
+            let parts = text.split(separator: ":", maxSplits: 1)
+            let name = parts.first.map(String.init) ?? ""
+            let result = parts.count > 1 ? String(parts[1]).trimmingCharacters(in: .whitespaces) : ""
+            event = .toolCallCompleted(name: name, result: result)
         case SC_EVENT_ERROR:
             let text = e.text.map { String(cString: $0) } ?? "Unknown error"
             event = .error(text)
