@@ -9,7 +9,7 @@ Synthesize text → transcribe audio back → compute WER vs original text. Meas
 | Corpus | Sentences | WER% | TTS RTF | ms/step | Embed | Generate | Decode |
 |--------|-----------|------|---------|---------|-------|----------|--------|
 | Built-in (conversational) | 30 | 2.27 | 0.56 | 38 | 2ms | 2526ms | 211ms |
-| LibriSpeech transcripts | 47/50 | 18.55 | 0.57 | 40 | 2ms | 6353ms | 469ms |
+| LibriSpeech transcripts | 106/111 | 19.15 | 0.57 | 40 | 2ms | 6353ms | 469ms |
 
 **Machine**: Apple M2 Max, 64 GB, macOS 14, release build.
 
