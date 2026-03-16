@@ -79,19 +79,19 @@ final class KokoroE2ETests: XCTestCase {
     /// Test loading the CoreML Kokoro model.
     func testLoadKokoroModel() throws {
         let dir = URL(fileURLWithPath: Self.testModelDir)
-        let modelURL = dir.appendingPathComponent("kokoro_24_10s.mlmodelc")
+        let modelURL = dir.appendingPathComponent("kokoro_21_5s.mlmodelc")
         guard FileManager.default.fileExists(atPath: modelURL.path) else {
             throw XCTSkip("Models not downloaded")
         }
 
         let network = try KokoroNetwork(directory: dir)
-        XCTAssertTrue(network.availableBuckets.contains(.v24_10s))
+        XCTAssertTrue(network.availableBuckets.contains(.v21_5s))
     }
 
     /// Full E2E: text → phonemes → CoreML inference → audio.
     func testEndToEndSynthesis() throws {
         let dir = URL(fileURLWithPath: Self.testModelDir)
-        guard FileManager.default.fileExists(atPath: dir.appendingPathComponent("kokoro_24_10s.mlmodelc").path) else {
+        guard FileManager.default.fileExists(atPath: dir.appendingPathComponent("kokoro_21_5s.mlmodelc").path) else {
             throw XCTSkip("Models not downloaded")
         }
 
