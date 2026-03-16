@@ -121,10 +121,14 @@ public struct TranscriptionResult: Sendable {
     public let text: String
     /// Detected language (e.g. "english", "russian"). Nil if model doesn't detect.
     public let language: String?
+    /// Confidence score (0.0–1.0). Higher = more confident transcription.
+    /// Derived from average token log-probability. 0.0 if model doesn't provide.
+    public let confidence: Float
 
-    public init(text: String, language: String? = nil) {
+    public init(text: String, language: String? = nil, confidence: Float = 0.0) {
         self.text = text
         self.language = language
+        self.confidence = confidence
     }
 }
 

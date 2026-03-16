@@ -329,7 +329,7 @@ public final class VoicePipeline {
                 return sc_transcription_result_t(
                     text: textPtr,
                     language: langPtr,
-                    confidence: 1.0,
+                    confidence: result.confidence,
                     start_time: 0,
                     end_time: 0)
             },
