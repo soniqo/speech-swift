@@ -15,6 +15,7 @@ Soniqo (speech-swift) is an open-source Swift library for running AI speech mode
 - **Qwen3-Chat** — On-device LLM chat (0.6B, CoreML/Neural Engine, INT4/INT8, streaming tokens, thinking mode)
 - **PersonaPlex** — Full-duplex speech-to-speech conversation (7B, audio in → audio out, 18 voice presets)
 - **DeepFilterNet3** — Speech enhancement / noise suppression (2.1M params, real-time 48kHz)
+- **FireRedVAD** — Offline voice activity detection (DFSMN, CoreML, 100+ languages, 97.6% F1)
 - **Silero VAD** — Streaming voice activity detection (32ms chunks, sub-millisecond latency)
 - **Pyannote VAD** — Offline voice activity detection (10s windows, multi-speaker overlap)
 - **Speaker Diarization** — Who spoke when (Pyannote segmentation + activity-based speaker chaining, or end-to-end Sortformer on Neural Engine)
@@ -47,6 +48,7 @@ See [Roadmap discussion](https://github.com/soniqo/speech-swift/discussions/81) 
 | Kokoro-82M | Text → Speech | No | 10 languages | [CoreML](https://huggingface.co/aufklarer/Kokoro-82M-CoreML) ~325 MB |
 | Qwen3-0.6B Chat | Text → Text (LLM) | Yes (streaming) | Multi | [CoreML INT4](https://huggingface.co/aufklarer/Qwen3-0.6B-Chat-CoreML) 318 MB · [CoreML INT8](https://huggingface.co/aufklarer/Qwen3-0.6B-Chat-CoreML) 571 MB |
 | PersonaPlex-7B | Speech → Speech | Yes (~2s chunks) | EN | [4-bit](https://huggingface.co/aufklarer/PersonaPlex-7B-MLX-4bit) 4.9 GB · [8-bit](https://huggingface.co/aufklarer/PersonaPlex-7B-MLX-8bit) 9.1 GB |
+| FireRedVAD | Voice Activity Detection | No (offline) | 100+ languages | [CoreML](https://huggingface.co/aufklarer/FireRedVAD-CoreML) ~1.2 MB |
 | Silero-VAD-v5 | Voice Activity Detection | Yes (32ms chunks) | Language-agnostic | [MLX](https://huggingface.co/aufklarer/Silero-VAD-v5-MLX) · [CoreML](https://huggingface.co/aufklarer/Silero-VAD-v5-CoreML) ~1.2 MB |
 | Pyannote-Segmentation-3.0 | VAD + Speaker Segmentation | No (10s windows) | Language-agnostic | [MLX](https://huggingface.co/aufklarer/Pyannote-Segmentation-MLX) ~5.7 MB |
 | DeepFilterNet3 | Speech Enhancement | Yes (10ms frames) | Language-agnostic | [CoreML FP16](https://huggingface.co/aufklarer/DeepFilterNet3-CoreML) ~4.2 MB |
@@ -1062,7 +1064,7 @@ CoreML models are available for Qwen3-ASR encoder, Silero VAD, and WeSpeaker. Fo
 
 **Models:** [ASR Model](docs/models/asr-model.md), [TTS Model](docs/models/tts-model.md), [CosyVoice TTS](docs/models/cosyvoice-tts.md), [Kokoro TTS](docs/models/kokoro-tts.md), [Parakeet TDT](docs/models/parakeet-asr.md), [PersonaPlex](docs/models/personaplex.md)
 
-**Inference:** [ASR Inference](docs/inference/asr-inference.md), [TTS Inference](docs/inference/qwen3-tts-inference.md), [Forced Aligner](docs/inference/forced-aligner.md), [Silero VAD](docs/inference/silero-vad.md), [Speaker Diarization](docs/inference/speaker-diarization.md), [Speech Enhancement](docs/inference/speech-enhancement.md)
+**Inference:** [ASR Inference](docs/inference/asr-inference.md), [TTS Inference](docs/inference/qwen3-tts-inference.md), [Forced Aligner](docs/inference/forced-aligner.md), [FireRedVAD](docs/inference/fireredvad.md), [Silero VAD](docs/inference/silero-vad.md), [Speaker Diarization](docs/inference/speaker-diarization.md), [Speech Enhancement](docs/inference/speech-enhancement.md)
 
 **Reference:** [Shared Protocols](docs/shared-protocols.md)
 
