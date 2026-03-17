@@ -1060,11 +1060,42 @@ Both backends produce equivalent results. Choose based on your workload:
 
 CoreML models are available for Qwen3-ASR encoder, Silero VAD, and WeSpeaker. For Qwen3-ASR, use `--engine qwen3-coreml` (hybrid: CoreML encoder on ANE + MLX text decoder on GPU). For VAD/embeddings, pass `engine: .coreml` at construction time — inference API is identical.
 
+## Accuracy Benchmarks
+
+### ASR — Word Error Rate ([details](docs/benchmarks/asr-wer.md))
+
+| Model | WER% (LibriSpeech test-clean) | RTF |
+|-------|-------------------------------|-----|
+| Qwen3-ASR 1.7B 8-bit | **2.35** | 0.090 |
+| Qwen3-ASR 1.7B 4-bit | 2.57 | 0.045 |
+| Parakeet TDT INT8 | 2.74 | 0.089 |
+| Qwen3-ASR 0.6B 8-bit | 2.80 | 0.025 |
+
+Qwen3-ASR 1.7B 8-bit beats Whisper Large v3 Turbo (2.5%) at comparable size. Multilingual: 10 languages benchmarked on FLEURS.
+
+### TTS — Round-Trip Intelligibility ([details](docs/benchmarks/tts-roundtrip.md))
+
+| Engine | WER% | RTF |
+|--------|------|-----|
+| CosyVoice3 | **3.25** | 0.59 |
+| Qwen3-TTS 1.7B | 3.47 | 0.79 |
+| Kokoro-82M | 3.90 | 0.17 |
+
+### VAD — Speech Detection ([details](docs/benchmarks/vad-detection.md))
+
+| Engine | F1% (FLEURS) | RTF |
+|--------|-------------|-----|
+| FireRedVAD | **99.12** | 0.007 |
+| Silero CoreML | 95.13 | 0.022 |
+| Pyannote MLX | 94.86 | 0.358 |
+
 ## Architecture
 
-**Models:** [ASR Model](docs/models/asr-model.md), [TTS Model](docs/models/tts-model.md), [CosyVoice TTS](docs/models/cosyvoice-tts.md), [Kokoro TTS](docs/models/kokoro-tts.md), [Parakeet TDT](docs/models/parakeet-asr.md), [PersonaPlex](docs/models/personaplex.md)
+**Models:** [ASR Model](docs/models/asr-model.md), [TTS Model](docs/models/tts-model.md), [CosyVoice TTS](docs/models/cosyvoice-tts.md), [Kokoro TTS](docs/models/kokoro-tts.md), [Parakeet TDT](docs/models/parakeet-asr.md), [PersonaPlex](docs/models/personaplex.md), [FireRedVAD](docs/models/fireredvad.md)
 
 **Inference:** [ASR Inference](docs/inference/asr-inference.md), [TTS Inference](docs/inference/qwen3-tts-inference.md), [Forced Aligner](docs/inference/forced-aligner.md), [FireRedVAD](docs/inference/fireredvad.md), [Silero VAD](docs/inference/silero-vad.md), [Speaker Diarization](docs/inference/speaker-diarization.md), [Speech Enhancement](docs/inference/speech-enhancement.md)
+
+**Benchmarks:** [ASR WER](docs/benchmarks/asr-wer.md), [TTS Round-Trip](docs/benchmarks/tts-roundtrip.md), [VAD Detection](docs/benchmarks/vad-detection.md)
 
 **Reference:** [Shared Protocols](docs/shared-protocols.md)
 
