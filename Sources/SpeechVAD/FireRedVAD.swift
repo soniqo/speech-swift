@@ -358,6 +358,9 @@ final class KaldiFbankExtractor {
 
     /// Extract 80-dim log Mel features from audio samples.
     /// Returns flat array [T * 80] where T is the number of frames.
+    ///
+    /// Uses pre-computed DFT basis matrices with Accelerate `vDSP_mmul` for
+    /// exact numerical match with `numpy.fft.rfft` while maintaining high speed.
     func extract(_ samples: [Float]) -> [Float] {
         let numFrames = max(0, (samples.count - frameLength) / frameShift + 1)
         guard numFrames > 0 else { return [] }
@@ -365,10 +368,16 @@ final class KaldiFbankExtractor {
         var allFeatures = [Float]()
         allFeatures.reserveCapacity(numFrames * nMels)
 
+        var padded = [Float](repeating: 0, count: nFFT)
+        var realParts = [Float](repeating: 0, count: nBins)
+        var imagParts = [Float](repeating: 0, count: nBins)
+        var powerSpec = [Float](repeating: 0, count: nBins)
+        var melEnergies = [Float](repeating: 0, count: nMels)
+
         for frame in 0..<numFrames {
             let start = frame * frameShift
 
-            // Extract frame, scale to int16 range
+            // Scale to int16 range
             var rawFrame = [Float](repeating: 0, count: frameLength)
             for i in 0..<frameLength {
                 rawFrame[i] = samples[start + i] * 32768.0
@@ -386,36 +395,31 @@ final class KaldiFbankExtractor {
             }
             rawFrame[0] *= (1.0 - preemphCoeff)
 
-            // Window + zero-pad to nFFT
-            var padded = [Float](repeating: 0, count: 512)
-            for i in 0..<frameLength {
-                padded[i] = rawFrame[i] * window[i]
-            }
+            // Window + zero-pad
+            for i in 0..<frameLength { padded[i] = rawFrame[i] * window[i] }
+            for i in frameLength..<nFFT { padded[i] = 0 }
 
-            // DFT via matrix multiply (exact match with numpy.fft.rfft)
-            var powerSpec = [Float](repeating: 0, count: nBins)
-            for k in 0..<nBins {
-                var realPart: Float = 0
-                var imagPart: Float = 0
-                let cosOffset = k * 512
-                let sinOffset = k * 512
-                // Use vDSP dot product for speed
-                for n in 0..<512 {
-                    realPart += padded[n] * dftCos[cosOffset + n]
-                    imagPart += padded[n] * dftSin[sinOffset + n]
-                }
-                powerSpec[k] = realPart * realPart + imagPart * imagPart
-            }
+            // DFT via Accelerate matrix-vector multiply
+            // real[k] = sum_n padded[n] * cos(2πkn/N) = dftCos[257×512] × padded[512]
+            // imag[k] = sum_n padded[n] * sin(2πkn/N) = dftSin[257×512] × padded[512]
+            vDSP_mmul(dftCos, 1, padded, 1, &realParts, 1,
+                      vDSP_Length(nBins), 1, vDSP_Length(nFFT))
+            vDSP_mmul(dftSin, 1, padded, 1, &imagParts, 1,
+                      vDSP_Length(nBins), 1, vDSP_Length(nFFT))
 
-            // Apply mel filterbank + log
-            var melEnergies = [Float](repeating: 0, count: nMels)
+            // Power spectrum: |X(k)|² = real² + imag²
+            vDSP_vsq(realParts, 1, &powerSpec, 1, vDSP_Length(nBins))
+            var imagSq = [Float](repeating: 0, count: nBins)
+            vDSP_vsq(imagParts, 1, &imagSq, 1, vDSP_Length(nBins))
+            vDSP_vadd(powerSpec, 1, imagSq, 1, &powerSpec, 1, vDSP_Length(nBins))
+
+            // Mel filterbank: mel[m] = sum_b fb[m,b] * power[b]
+            vDSP_mmul(melFilterbank, 1, powerSpec, 1, &melEnergies, 1,
+                      vDSP_Length(nMels), 1, vDSP_Length(nBins))
+
+            // Log with Kaldi energy floor
             for m in 0..<nMels {
-                var energy: Float = 0
-                let offset = m * nBins
-                for b in 0..<nBins {
-                    energy += melFilterbank[offset + b] * powerSpec[b]
-                }
-                melEnergies[m] = log(max(energy, Float.ulpOfOne))
+                melEnergies[m] = log(max(melEnergies[m], Float.ulpOfOne))
             }
 
             allFeatures.append(contentsOf: melEnergies)
@@ -426,9 +430,10 @@ final class KaldiFbankExtractor {
 
     /// Build mel filterbank matrix [nMels, nBins] matching Kaldi's computation.
     ///
-    /// Key differences from naive implementation:
-    /// - Uses `floor()` for bin indices (Kaldi convention)
-    /// - Uses `(nFFT + 1) / sampleRate` for Hz-to-bin conversion (Kaldi convention)
+    /// Kaldi uses Hz-domain center frequencies for triangular filter weights,
+    /// not integer bin indices. Each FFT bin maps to a Hz frequency via
+    /// `bin * sampleRate / nFFT`, and the weight is computed from the distance
+    /// to the neighboring mel center frequencies in Hz.
     private static func buildMelFilterbank(
         nMels: Int, nBins: Int, sampleRate: Int, nFFT: Int
     ) -> [Float] {
@@ -444,33 +449,29 @@ final class KaldiFbankExtractor {
         let melMin = hzToMel(fMin)
         let melMax = hzToMel(fMax)
 
-        // Mel center frequencies
-        var melPoints = [Float](repeating: 0, count: nMels + 2)
+        // Mel center frequencies in Hz
+        var centerFreqs = [Float](repeating: 0, count: nMels + 2)
         for i in 0..<(nMels + 2) {
-            melPoints[i] = melMin + Float(i) * (melMax - melMin) / Float(nMels + 1)
+            let mel = melMin + Float(i) * (melMax - melMin) / Float(nMels + 1)
+            centerFreqs[i] = melToHz(mel)
         }
 
-        // Convert to FFT bin indices (Kaldi: floor, (nFFT+1)/sr)
-        var binCenters = [Int](repeating: 0, count: nMels + 2)
-        for i in 0..<(nMels + 2) {
-            binCenters[i] = Int(floor(melToHz(melPoints[i]) * Float(nFFT + 1) / Float(sampleRate)))
-        }
-
-        // Build triangular filters using integer bin centers
+        // Build triangular filters using Hz-domain weights (Kaldi convention)
         var filterbank = [Float](repeating: 0, count: nMels * nBins)
-        for m in 0..<nMels {
-            let left = binCenters[m]
-            let center = binCenters[m + 1]
-            let right = binCenters[m + 2]
+        let binToHz = Float(sampleRate) / Float(nFFT)
 
-            if center > left {
-                for b in max(0, left)...min(nBins - 1, center) {
-                    filterbank[m * nBins + b] = Float(b - left) / Float(center - left)
-                }
-            }
-            if right > center {
-                for b in max(0, center + 1)...min(nBins - 1, right) {
-                    filterbank[m * nBins + b] = Float(right - b) / Float(right - center)
+        for m in 0..<nMels {
+            let leftHz = centerFreqs[m]
+            let centerHz = centerFreqs[m + 1]
+            let rightHz = centerFreqs[m + 2]
+
+            for b in 0..<nBins {
+                let freqHz = Float(b) * binToHz
+
+                if freqHz >= leftHz && freqHz <= centerHz && centerHz > leftHz {
+                    filterbank[m * nBins + b] = (freqHz - leftHz) / (centerHz - leftHz)
+                } else if freqHz > centerHz && freqHz <= rightHz && rightHz > centerHz {
+                    filterbank[m * nBins + b] = (rightHz - freqHz) / (rightHz - centerHz)
                 }
             }
         }
