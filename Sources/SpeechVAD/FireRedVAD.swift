@@ -96,6 +96,39 @@ public final class FireRedVADModel {
 
     // MARK: - Inference
 
+    /// Detect speech from pre-computed features (for testing with reference features).
+    public func detectSpeechFromFeatures(_ features: [Float]) -> [SpeechSegment] {
+        let numFrames = features.count / 80
+        guard numFrames > 0 else { return [] }
+
+        #if canImport(CoreML)
+        let maxFrames = 6000
+        let probs: [Float]
+        if numFrames <= maxFrames {
+            probs = runCoreML(features: features, numFrames: numFrames)
+        } else {
+            var allProbs = [Float]()
+            var offset = 0
+            while offset < numFrames {
+                let chunkFrames = min(maxFrames, numFrames - offset)
+                let chunkStart = offset * 80
+                let chunkEnd = chunkStart + chunkFrames * 80
+                let chunkFeatures = Array(features[chunkStart..<chunkEnd])
+                let chunkProbs = runCoreML(features: chunkFeatures, numFrames: chunkFrames)
+                allProbs.append(contentsOf: chunkProbs)
+                offset += chunkFrames
+            }
+            probs = allProbs
+        }
+        #else
+        return []
+        #endif
+
+        let smoothed = smoothProbabilities(probs, windowSize: smoothWindowSize)
+        return extractSegments(smoothed, threshold: speechThreshold, frameShift: 0.01,
+                               minSpeechDuration: minSpeechDuration, minSilenceDuration: minSilenceDuration)
+    }
+
     /// Detect speech segments in audio.
     ///
     /// - Parameters:
@@ -283,14 +316,16 @@ final class KaldiFbankExtractor {
     let frameLength: Int = 400   // 25ms at 16kHz
     let frameShift: Int = 160    // 10ms at 16kHz
     let nMels: Int = 80
-    let nFFT: Int = 512          // next power of 2 from 400
-    let log2FFT: vDSP_Length = 9 // log2(512)
+    let nFFT: Int = 512
     let preemphCoeff: Float = 0.97
 
     private let window: [Float]
-    private let fftSetup: FFTSetup
-    private let melFilterbank: [Float] // [nMels, nBins]
-    private let nBins: Int
+    private let nBins: Int // nFFT/2 + 1 = 257
+    /// Pre-computed DFT basis: cos[k][n] and sin[k][n] for k=0..nBins-1, n=0..nFFT-1
+    /// Using matrix multiply instead of FFT for exact numerical match with numpy/torch.
+    private let dftCos: [Float] // [nBins * nFFT]
+    private let dftSin: [Float] // [nBins * nFFT]
+    private let melFilterbank: [Float] // [nMels * nBins]
 
     init() {
         // Povey window (Hann raised to 0.85 power)
@@ -300,97 +335,79 @@ final class KaldiFbankExtractor {
             w[i] = pow(hann, 0.85)
         }
         self.window = w
+        self.nBins = 257
 
-        self.fftSetup = vDSP_create_fftsetup(9, FFTRadix(kFFTRadix2))!
-        self.nBins = 257 // nFFT/2 + 1
+        // Pre-compute DFT basis vectors
+        // X[k] = sum_n x[n] * exp(-j*2*pi*k*n/N)
+        //      = sum_n x[n]*cos(2*pi*k*n/N) - j*sum_n x[n]*sin(2*pi*k*n/N)
+        var cosB = [Float](repeating: 0, count: 257 * 512)
+        var sinB = [Float](repeating: 0, count: 257 * 512)
+        for k in 0..<257 {
+            for n in 0..<512 {
+                let angle = 2.0 * Float.pi * Float(k) * Float(n) / 512.0
+                cosB[k * 512 + n] = cos(angle)
+                sinB[k * 512 + n] = sin(angle)
+            }
+        }
+        self.dftCos = cosB
+        self.dftSin = sinB
 
-        // Build mel filterbank
         self.melFilterbank = KaldiFbankExtractor.buildMelFilterbank(
             nMels: 80, nBins: 257, sampleRate: 16000, nFFT: 512)
-    }
-
-    deinit {
-        vDSP_destroy_fftsetup(fftSetup)
     }
 
     /// Extract 80-dim log Mel features from audio samples.
     /// Returns flat array [T * 80] where T is the number of frames.
     func extract(_ samples: [Float]) -> [Float] {
-        // snip_edges=true: first frame starts at 0, last frame ends within audio
         let numFrames = max(0, (samples.count - frameLength) / frameShift + 1)
         guard numFrames > 0 else { return [] }
 
         var allFeatures = [Float]()
         allFeatures.reserveCapacity(numFrames * nMels)
 
-        var paddedFrame = [Float](repeating: 0, count: nFFT)
-        var realPart = [Float](repeating: 0, count: nFFT / 2)
-        var imagPart = [Float](repeating: 0, count: nFFT / 2)
-
         for frame in 0..<numFrames {
             let start = frame * frameShift
 
-            // Extract raw frame, scale to int16 range
+            // Extract frame, scale to int16 range
             var rawFrame = [Float](repeating: 0, count: frameLength)
             for i in 0..<frameLength {
                 rawFrame[i] = samples[start + i] * 32768.0
             }
 
-            // Remove DC offset (Kaldi default)
+            // DC offset removal
             var dcMean: Float = 0
             vDSP_meanv(rawFrame, 1, &dcMean, vDSP_Length(frameLength))
             var negMean = -dcMean
             vDSP_vsadd(rawFrame, 1, &negMean, &rawFrame, 1, vDSP_Length(frameLength))
 
-            // Pre-emphasis: y[n] = x[n] - 0.97 * x[n-1]
+            // Pre-emphasis: y[0] = x[0]*(1-coeff), y[n] = x[n] - coeff*x[n-1]
             for i in stride(from: frameLength - 1, through: 1, by: -1) {
                 rawFrame[i] -= preemphCoeff * rawFrame[i - 1]
             }
-            rawFrame[0] -= preemphCoeff * rawFrame[0]  // Kaldi: first sample uses itself
+            rawFrame[0] *= (1.0 - preemphCoeff)
 
-            // Apply window
+            // Window + zero-pad to nFFT
+            var padded = [Float](repeating: 0, count: 512)
             for i in 0..<frameLength {
-                paddedFrame[i] = rawFrame[i] * window[i]
-            }
-            for i in frameLength..<nFFT {
-                paddedFrame[i] = 0
+                padded[i] = rawFrame[i] * window[i]
             }
 
-            // FFT
-            realPart.withUnsafeMutableBufferPointer { rp in
-                imagPart.withUnsafeMutableBufferPointer { ip in
-                    paddedFrame.withUnsafeBufferPointer { input in
-                        // Deinterleave
-                        var splitComplex = DSPSplitComplex(
-                            realp: rp.baseAddress!,
-                            imagp: ip.baseAddress!)
-                        input.baseAddress!.withMemoryRebound(
-                            to: DSPComplex.self,
-                            capacity: nFFT / 2
-                        ) { complexPtr in
-                            vDSP_ctoz(complexPtr, 2, &splitComplex, 1, vDSP_Length(nFFT / 2))
-                        }
-                        vDSP_fft_zrip(fftSetup, &splitComplex, 1, log2FFT, FFTDirection(kFFTDirection_Forward))
-                    }
-                }
-            }
-
-            // Power spectrum: |X(k)|² (Kaldi does NOT divide by N)
-            // vDSP_fft_zrip output is 2x the true FFT, so scale by 0.5
-            let fftScale: Float = 0.5
+            // DFT via matrix multiply (exact match with numpy.fft.rfft)
             var powerSpec = [Float](repeating: 0, count: nBins)
-            // DC (stored in realPart[0])
-            powerSpec[0] = (realPart[0] * fftScale) * (realPart[0] * fftScale)
-            // Nyquist (stored in imagPart[0])
-            powerSpec[nBins - 1] = (imagPart[0] * fftScale) * (imagPart[0] * fftScale)
-            // Remaining bins
-            for i in 1..<(nBins - 1) {
-                let r = realPart[i] * fftScale
-                let im = imagPart[i] * fftScale
-                powerSpec[i] = r * r + im * im
+            for k in 0..<nBins {
+                var realPart: Float = 0
+                var imagPart: Float = 0
+                let cosOffset = k * 512
+                let sinOffset = k * 512
+                // Use vDSP dot product for speed
+                for n in 0..<512 {
+                    realPart += padded[n] * dftCos[cosOffset + n]
+                    imagPart += padded[n] * dftSin[sinOffset + n]
+                }
+                powerSpec[k] = realPart * realPart + imagPart * imagPart
             }
 
-            // Apply mel filterbank
+            // Apply mel filterbank + log
             var melEnergies = [Float](repeating: 0, count: nMels)
             for m in 0..<nMels {
                 var energy: Float = 0
