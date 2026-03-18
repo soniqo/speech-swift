@@ -103,7 +103,7 @@ final class SpeakerEncoderUnitTests: XCTestCase {
 
 // MARK: - E2E Tests (require model download + GPU)
 
-final class VoiceCloningE2ETests: XCTestCase {
+final class E2EVoiceCloningTests: XCTestCase {
 
     static let ttsModelId = "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-4bit"
     static let ttsTokenizerModelId = "Qwen/Qwen3-TTS-Tokenizer-12Hz"

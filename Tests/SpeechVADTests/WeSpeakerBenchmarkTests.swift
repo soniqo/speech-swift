@@ -10,7 +10,7 @@ import AudioCommon
 /// - `aufklarer/WeSpeaker-ResNet34-LM-CoreML` for CoreML
 ///
 /// Run with: `swift test --filter WeSpeakerBenchmarkTests -c release`
-final class WeSpeakerBenchmarkTests: XCTestCase {
+final class E2EWeSpeakerBenchmarkTests: XCTestCase {
 
     func testMLXvsCoreMLLatency() async throws {
         let audioURL = URL(fileURLWithPath: "Tests/Qwen3ASRTests/Resources/test_audio.wav")

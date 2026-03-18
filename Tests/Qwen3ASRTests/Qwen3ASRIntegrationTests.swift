@@ -5,7 +5,7 @@ import MLX
 @testable import AudioCommon
 
 /// Integration tests that download and use actual model weights
-final class Qwen3ASRIntegrationTests: XCTestCase {
+final class E2EQwen3ASRIntegrationTests: XCTestCase {
 
     // Use 4-bit quantized model for smaller download (680MB vs 1.5GB)
     static let modelId = "aufklarer/Qwen3-ASR-0.6B-MLX-4bit"

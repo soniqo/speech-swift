@@ -378,7 +378,7 @@ final class InstructTokenTests: XCTestCase {
 
 /// End-to-end tests for CustomVoice model with instruct-based style control.
 /// Requires CustomVoice model weights (~1 GB download).
-final class CustomVoiceInstructE2ETests: XCTestCase {
+final class E2ECustomVoiceInstructTests: XCTestCase {
 
     static let customVoiceModelId = "aufklarer/Qwen3-TTS-12Hz-0.6B-CustomVoice-MLX-4bit"
     static let ttsTokenizerModelId = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
@@ -632,7 +632,7 @@ final class CustomVoiceInstructE2ETests: XCTestCase {
 
 /// Verifies that speaker token position in codec prefix produces correct voice identity.
 /// Regression test for #105: speaker token must come BEFORE pad+bos.
-final class SpeakerTokenPositionE2ETests: XCTestCase {
+final class E2ESpeakerTokenPositionTests: XCTestCase {
 
     static let customVoiceModelId = "aufklarer/Qwen3-TTS-12Hz-0.6B-CustomVoice-MLX-4bit"
     static let ttsTokenizerModelId = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
@@ -739,7 +739,7 @@ final class SpeakerTokenPositionE2ETests: XCTestCase {
 
 /// End-to-end tests for TTS synthesis with latency measurement.
 /// Requires TTS model weights (~1.7 GB). Tests are grouped by language.
-final class TTSE2ETests: XCTestCase {
+final class E2ETTSTests: XCTestCase {
 
     static let ttsModelId = "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-4bit"
     static let ttsTokenizerModelId = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
@@ -1036,7 +1036,7 @@ final class TTSE2ETests: XCTestCase {
 // MARK: - TTS 8-bit E2E Tests
 
 /// End-to-end tests for 8-bit TTS model variant.
-final class TTS8bitE2ETests: XCTestCase {
+final class E2ETTS8bitTests: XCTestCase {
 
     static let ttsModelId = "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-8bit"
     static let ttsTokenizerModelId = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
@@ -1122,7 +1122,7 @@ final class TTS8bitE2ETests: XCTestCase {
 
 // MARK: - 1.7B TTS Tests
 
-final class TTS17BE2ETests: XCTestCase {
+final class E2ETTS17BTests: XCTestCase {
 
     static let ttsModelId4bit = "aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-4bit"
     static let ttsModelId8bit = "aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-8bit"
@@ -1228,7 +1228,7 @@ final class TTS17BE2ETests: XCTestCase {
 
 // MARK: - Batch TTS Tests
 
-final class TTSBatchTests: XCTestCase {
+final class E2ETTSBatchTests: XCTestCase {
 
     static let ttsModelId = "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-4bit"
     static let ttsTokenizerModelId = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
@@ -1425,7 +1425,7 @@ final class TTSBatchTests: XCTestCase {
 
 /// End-to-end tests for streaming TTS synthesis.
 /// Requires TTS model weights (~1.7 GB).
-final class TTSStreamingTests: XCTestCase {
+final class E2ETTSStreamingTests: XCTestCase {
 
     static let ttsModelId = "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-4bit"
     static let ttsTokenizerModelId = "Qwen/Qwen3-TTS-Tokenizer-12Hz"

@@ -37,12 +37,10 @@ jobs:
             [ -d "$BUNDLE" ] && cp .build/debug/mlx.metallib "$BUNDLE/" 2>/dev/null || true
           done
 
-      - name: Run unit tests
+      - name: Run unit tests (skip E2E — those require model downloads)
         run: >
           swift test --skip-build
-          --skip E2ETests
-          --skip IntegrationTests
-          --skip BenchmarkTests
+          --skip E2E
           --skip StreamingASRTests
           --skip ForcedAlignerTests
           --skip SileroVADTests
@@ -53,9 +51,4 @@ jobs:
           --skip PersonaPlexTests
           --skip ParakeetASRTests
           --skip CosyVoiceTTSTests
-          --skip TTSBatchTests
-          --skip TTSStreamingTests
           --skip KokoroTTSTests
-          --skip E2EICLVoiceCloningTests
-          --skip E2EEOSCapTests
-          --skip E2EFireRedVADTests

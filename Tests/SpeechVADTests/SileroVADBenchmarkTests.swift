@@ -10,7 +10,7 @@ import AudioCommon
 /// - `aufklarer/Silero-VAD-v5-CoreML` for CoreML
 ///
 /// Run with: `swift test --filter SileroVADBenchmarkTests -c release`
-final class SileroVADBenchmarkTests: XCTestCase {
+final class E2ESileroVADBenchmarkTests: XCTestCase {
 
     func testMLXvsCoreMLLatency() async throws {
         let audioURL = URL(fileURLWithPath: "Tests/Qwen3ASRTests/Resources/test_audio.wav")

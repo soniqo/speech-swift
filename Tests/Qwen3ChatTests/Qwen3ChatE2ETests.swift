@@ -7,7 +7,7 @@ import CoreML
 /// These tests require the CoreML model to be downloaded or available locally.
 /// Tests using `loadModelOrSkip()` download from HuggingFace.
 /// The `testLocalModelGeneration` test uses a local model if available.
-final class Qwen3ChatE2ETests: XCTestCase {
+final class E2EQwen3ChatTests: XCTestCase {
 
     static let modelId = Qwen3ChatModel.defaultModelId
 

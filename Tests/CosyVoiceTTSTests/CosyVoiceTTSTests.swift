@@ -475,7 +475,7 @@ final class CamPlusPlusMelExtractorTests: XCTestCase {
 // These tests download the model (~2 GB) on first run and cache it.
 // Run with: swift test --filter CosyVoiceTTSE2ETests
 
-final class CosyVoiceTTSE2ETests: XCTestCase {
+final class E2ECosyVoiceTTSTests: XCTestCase {
 
     override func tearDown() {
         super.tearDown()

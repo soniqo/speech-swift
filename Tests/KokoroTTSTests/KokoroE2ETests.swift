@@ -4,7 +4,7 @@ import CoreML
 
 /// E2E tests that require downloaded CoreML models.
 /// Run with: swift test --filter KokoroE2ETests
-final class KokoroE2ETests: XCTestCase {
+final class E2EKokoroTests: XCTestCase {
 
     static let testModelDir = "/tmp/kokoro-coreml-test"
 

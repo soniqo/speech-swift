@@ -354,7 +354,7 @@ final class PersonaPlexTests: XCTestCase {
 // These tests download the model (~5.5 GB) on first run and cache it.
 // Run with: swift test --filter PersonaPlexE2ETests
 
-final class PersonaPlexE2ETests: XCTestCase {
+final class E2EPersonaPlexTests: XCTestCase {
 
     // Shared model instance to avoid reloading between tests (~5.5 GB)
     private static var _model: PersonaPlexModel?
