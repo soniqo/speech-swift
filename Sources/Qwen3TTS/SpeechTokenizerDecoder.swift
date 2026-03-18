@@ -407,6 +407,21 @@ public class VectorQuantizerCodebook: Module {
     public func decode(_ indices: MLXArray) -> MLXArray {
         embedding(indices)
     }
+
+    /// Encode: find nearest codebook entry for each input vector.
+    /// - Parameter x: [B, T, codebookDim]
+    /// - Returns: [B, T] — codebook indices
+    public func encode(_ x: MLXArray) -> MLXArray {
+        // codebook: [codebookSize, codebookDim]
+        let codebook = embedding.weight
+        // Compute L2 distances: ||x - c||² = ||x||² - 2*x·c + ||c||²
+        let xSq = (x * x).sum(axis: -1, keepDims: true)              // [B, T, 1]
+        let cSq = (codebook * codebook).sum(axis: -1, keepDims: true) // [codebookSize, 1]
+        let codebookT = codebook.T                                      // [codebookDim, codebookSize]
+        let xc = matmul(x, codebookT)                                     // [B, T, codebookSize]
+        let distances = xSq - 2 * xc + cSq.T                             // [B, T, codebookSize]
+        return argMin(distances, axis: -1)                             // [B, T]
+    }
 }
 
 /// Residual Vector Quantizer with output projection
@@ -445,6 +460,29 @@ public class ResidualVectorQuantizer: Module {
         // Apply output projection
         return outputProj(result!)  // [B, T, outputDim]
     }
+
+    /// Encode: quantize input through residual quantization.
+    /// - Parameter x: [B, T, outputDim] — input to quantize
+    /// - Returns: [B, numQuantizers, T] — codebook indices
+    public func encode(_ x: MLXArray) -> MLXArray {
+        // Project from outputDim back to codebookDim using transpose of the
+        // output projection weight. outputProj is Conv1d(codebookDim, outputDim, k=1)
+        // with weight shape [outputDim, codebookDim, 1].
+        // outputProj.weight: [outputDim, kernelSize=1, codebookDim] → squeeze kernel dim
+        let w = outputProj.weight.squeezed(axis: 1)  // [outputDim, codebookDim]
+        // Pseudo-inverse: x [B,T,outputDim] × w^T [codebookDim,outputDim]^T won't work
+        // Instead use least-squares: x @ pinv(w) ≈ x @ w^T (for orthogonal w)
+        var residual = matmul(x, w)  // [B, T, codebookDim]
+
+        var allCodes = [MLXArray]()
+        for i in 0..<numQuantizers {
+            let codes = quantizers[i].encode(residual)  // [B, T]
+            let quantized = quantizers[i].decode(codes)  // [B, T, codebookDim]
+            residual = residual - quantized
+            allCodes.append(codes.expandedDimensions(axis: 1))  // [B, 1, T]
+        }
+        return concatenated(allCodes, axis: 1)  // [B, numQuantizers, T]
+    }
 }
 
 /// Split RVQ: rvq_first (1 semantic) + rvq_rest (15 acoustic)
@@ -480,6 +518,17 @@ public class SplitResidualVectorQuantizer: Module {
         let restEmbed = rvqRest.decode(restCodes)        // [B, T, 512]
 
         return firstEmbed + restEmbed
+    }
+
+    /// Encode embeddings to all 16 codebook indices.
+    /// - Parameter x: [B, T, hiddenSize=512]
+    /// - Returns: [B, 16, T]
+    public func encode(_ x: MLXArray) -> MLXArray {
+        let firstCodes = rvqFirst.encode(x)   // [B, 1, T]
+        let firstDecoded = rvqFirst.decode(firstCodes)  // [B, T, 512]
+        let residual = x - firstDecoded
+        let restCodes = rvqRest.encode(residual)   // [B, 15, T]
+        return concatenated([firstCodes, restCodes], axis: 1)  // [B, 16, T]
     }
 }
 

@@ -49,7 +49,7 @@ public class Qwen3TTSModel {
     /// Whether the model weights are loaded and ready for inference.
     var _isLoaded = true
 
-    private var tokenizer: Qwen3Tokenizer?
+    var tokenizer: Qwen3Tokenizer?
 
     /// Compiled talker generation step (28-layer transformer + codec head) for kernel fusion.
     /// Fuses ~420 Metal kernel dispatches per step into fewer optimized kernels.
@@ -1364,7 +1364,7 @@ public class Qwen3TTSModel {
     /// 2. Sample first codebook token
     /// 3. Run code predictor autoregressively to predict 15 remaining codebook tokens
     /// 4. Build next-step input: trailing_text_embed + sum(all 16 codebook embeddings)
-    private func generateWithCodePredictor(
+    func generateWithCodePredictor(
         prefillEmbeds: MLXArray,
         trailingTextHidden: MLXArray,
         ttsPadEmbed: MLXArray,

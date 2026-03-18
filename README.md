@@ -330,10 +330,26 @@ CLI:
 
 ### Voice Cloning (Base model)
 
-Clone a speaker's voice from a reference audio file:
+Clone a speaker's voice from a reference audio file. Two modes:
+
+**ICL mode** (recommended) — encodes reference audio into codec tokens with transcript. Higher quality, reliable EOS:
 
 ```swift
+let (model, encoder) = try await Qwen3TTSModel.fromPretrainedWithEncoder()
 let refAudio = try AudioFileLoader.load(url: referenceURL, targetSampleRate: 24000)
+let audio = model.synthesizeWithVoiceCloneICL(
+    text: "Hello world",
+    referenceAudio: refAudio,
+    referenceSampleRate: 24000,
+    referenceText: "Exact transcript of reference audio.",
+    language: "english",
+    codecEncoder: encoder
+)
+```
+
+**X-vector mode** — speaker embedding only, no transcript needed but lower quality:
+
+```swift
 let audio = model.synthesizeWithVoiceClone(
     text: "Hello world",
     referenceAudio: refAudio,
