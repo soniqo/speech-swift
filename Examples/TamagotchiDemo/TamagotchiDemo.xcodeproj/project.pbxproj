@@ -10,6 +10,7 @@
 		0752CB8B419B6E9C4517A28F /* DiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F89CE951B7D9AA634C4F3DF /* DiagnosticsView.swift */; };
 		29B028341A346342699AF383 /* ChatBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = B697D09D2DAB1546B407426D /* ChatBubble.swift */; };
 		2F673300B797D3852645CA98 /* Qwen3Chat in Frameworks */ = {isa = PBXBuildFile; productRef = EC2D604406E793E6F8E82983 /* Qwen3Chat */; };
+		3A1B2C3D4E5F6A7B8C9D0E1F /* AppleSpeechASR.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B2C3D4E5F6A7B8C9D0E1F2A /* AppleSpeechASR.swift */; };
 		5E7A0838A8913B4EA373C5E5 /* CompanionChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 769A8EFA038D9E247CF0D207 /* CompanionChatViewModel.swift */; };
 		7102F8748F80696DDED0982D /* VoiceLevelBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7ACF5E20B409D8AF8A442ED /* VoiceLevelBar.swift */; };
 		741A001171143A8F2EA71EB6 /* AudioCommon in Frameworks */ = {isa = PBXBuildFile; productRef = 67C186316D0A5F54A654D403 /* AudioCommon */; };
@@ -18,12 +19,12 @@
 		AF4D284F67CBD20AE2D1C791 /* SpeechCore in Frameworks */ = {isa = PBXBuildFile; productRef = F42946FB4F015511147E5F48 /* SpeechCore */; };
 		BC9448E8C4266049803B79DF /* TamagotchiDemoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D05C44D63D0CEDA642EE8949 /* TamagotchiDemoApp.swift */; };
 		C6165AAB81ADF7719A4436D6 /* CompanionChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC8F634461EF57900A431467 /* CompanionChatView.swift */; };
-		C624A102C111BE92AFD93429 /* ParakeetASR in Frameworks */ = {isa = PBXBuildFile; productRef = 106E5E52CEE5DF5282EA0DDA /* ParakeetASR */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		1E409FB3AD00B9F0D82DCE3B /* TamagotchiDemo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TamagotchiDemo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1F89CE951B7D9AA634C4F3DF /* DiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsView.swift; sourceTree = "<group>"; };
+		4B2C3D4E5F6A7B8C9D0E1F2A /* AppleSpeechASR.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSpeechASR.swift; sourceTree = "<group>"; };
 		769A8EFA038D9E247CF0D207 /* CompanionChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionChatViewModel.swift; sourceTree = "<group>"; };
 		ADB73789636C5777730EC2F3 /* speech-swift */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "speech-swift"; path = ../..; sourceTree = SOURCE_ROOT; };
 		B697D09D2DAB1546B407426D /* ChatBubble.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatBubble.swift; sourceTree = "<group>"; };
@@ -40,7 +41,6 @@
 			files = (
 				2F673300B797D3852645CA98 /* Qwen3Chat in Frameworks */,
 				987DFC98DF23278A7AE9DF57 /* KokoroTTS in Frameworks */,
-				C624A102C111BE92AFD93429 /* ParakeetASR in Frameworks */,
 				80DE89951129E0629CB51E61 /* SpeechVAD in Frameworks */,
 				AF4D284F67CBD20AE2D1C791 /* SpeechCore in Frameworks */,
 				741A001171143A8F2EA71EB6 /* AudioCommon in Frameworks */,
@@ -70,6 +70,7 @@
 		9554F169F8C40F279474A43A /* TamagotchiDemo */ = {
 			isa = PBXGroup;
 			children = (
+				4B2C3D4E5F6A7B8C9D0E1F2A /* AppleSpeechASR.swift */,
 				B697D09D2DAB1546B407426D /* ChatBubble.swift */,
 				BC8F634461EF57900A431467 /* CompanionChatView.swift */,
 				769A8EFA038D9E247CF0D207 /* CompanionChatViewModel.swift */,
@@ -107,7 +108,6 @@
 			packageProductDependencies = (
 				EC2D604406E793E6F8E82983 /* Qwen3Chat */,
 				CE7B5AAD750DC1011C225B3D /* KokoroTTS */,
-				106E5E52CEE5DF5282EA0DDA /* ParakeetASR */,
 				177F68BE93906BBB9F3AA871 /* SpeechVAD */,
 				F42946FB4F015511147E5F48 /* SpeechCore */,
 				67C186316D0A5F54A654D403 /* AudioCommon */,
@@ -157,6 +157,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3A1B2C3D4E5F6A7B8C9D0E1F /* AppleSpeechASR.swift in Sources */,
 				29B028341A346342699AF383 /* ChatBubble.swift in Sources */,
 				C6165AAB81ADF7719A4436D6 /* CompanionChatView.swift in Sources */,
 				5E7A0838A8913B4EA373C5E5 /* CompanionChatViewModel.swift in Sources */,

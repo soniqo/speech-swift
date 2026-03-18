@@ -22,5 +22,7 @@
 	<dict/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Voice input for the companion chat</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Speech recognition for voice commands</string>
 </dict>
 </plist>

@@ -5,8 +5,8 @@ import os
 import Observation
 import Qwen3Chat
 import KokoroTTS
-import ParakeetASR
 import SpeechVAD
+import Speech
 import SpeechCore
 import AudioCommon
 
@@ -39,6 +39,7 @@ final class CompanionChatViewModel {
     var speakEnabled = true
 
     var modelsLoaded: Bool { chatModel != nil && ttsModel != nil && asrModel != nil && vadModel != nil }
+    var speechAuthorized = false
 
     let diagnostics = DiagnosticsMonitor()
 
@@ -46,7 +47,7 @@ final class CompanionChatViewModel {
 
     private var chatModel: Qwen3ChatModel?
     private var ttsModel: KokoroTTSModel?
-    private var asrModel: ParakeetASRModel?
+    private var asrModel: AppleSpeechASR?
     private var vadModel: SileroVADModel?
 
     // MARK: - Pipeline
@@ -72,54 +73,57 @@ final class CompanionChatViewModel {
         errorMessage = nil
         loadProgress = 0
 
-        // All models loaded sequentially. Total: ~960MB resident.
-        // iPhone 16 Pro (8GB) supports ~5-6GB with increased-memory-limit entitlement.
+        // Total: ~629MB (VAD 1 + Apple ASR 0 + LLM 318 + TTS 310).
+        // Apple SFSpeechRecognizer uses built-in engine — zero app memory.
         let units = coreMLUnits
 
         do {
-            // 1. VAD (~1 MB)
-            loadingStatus = "VAD..."
+            // 1. Speech recognition permission
+            loadingStatus = "Speech permission..."
             loadProgress = 0.05
+            speechAuthorized = await AppleSpeechASR.requestAuthorization()
+            guard speechAuthorized else {
+                errorMessage = "Speech recognition permission denied"
+                isLoading = false
+                return
+            }
+
+            // 2. VAD (~1 MB)
+            loadingStatus = "VAD..."
+            loadProgress = 0.1
             vadModel = try await Task.detached {
                 try await SileroVADModel.fromPretrained(engine: .coreml) { progress, status in
                     DispatchQueue.main.async { [weak self] in
-                        self?.loadProgress = 0.05 + progress * 0.05
+                        self?.loadProgress = 0.1 + progress * 0.05
                         if !status.isEmpty { self?.loadingStatus = "VAD: \(status)" }
                     }
                 }
             }.value
 
-            // 2. ASR (~332 MB)
-            loadingStatus = "Parakeet ASR..."
-            loadProgress = 0.1
-            asrModel = try await Task.detached {
-                try await ParakeetASRModel.fromPretrained { progress, status in
-                    DispatchQueue.main.async { [weak self] in
-                        self?.loadProgress = 0.1 + progress * 0.3
-                        if !status.isEmpty { self?.loadingStatus = "Parakeet: \(status)" }
-                    }
-                }
-            }.value
+            // 3. ASR (Apple Speech — 0 MB, instant)
+            loadingStatus = "Speech recognizer..."
+            loadProgress = 0.15
+            asrModel = AppleSpeechASR()
 
-            // 3. LLM (~318 MB)
+            // 4. LLM (~318 MB)
             loadingStatus = "Qwen3 Chat..."
-            loadProgress = 0.4
+            loadProgress = 0.2
             chatModel = try await Task.detached {
                 try await Qwen3ChatModel.fromPretrained(computeUnits: units) { progress, status in
                     DispatchQueue.main.async { [weak self] in
-                        self?.loadProgress = 0.4 + progress * 0.2
+                        self?.loadProgress = 0.2 + progress * 0.3
                         if !status.isEmpty { self?.loadingStatus = "Qwen3: \(status)" }
                     }
                 }
             }.value
 
-            // 4. TTS (~310 MB)
+            // 5. TTS (~310 MB)
             loadingStatus = "Kokoro TTS..."
-            loadProgress = 0.6
+            loadProgress = 0.5
             ttsModel = try await Task.detached {
                 try await KokoroTTSModel.fromPretrained { progress, status in
                     DispatchQueue.main.async { [weak self] in
-                        self?.loadProgress = 0.6 + progress * 0.3
+                        self?.loadProgress = 0.5 + progress * 0.4
                         if !status.isEmpty { self?.loadingStatus = "Kokoro: \(status)" }
                     }
                 }
