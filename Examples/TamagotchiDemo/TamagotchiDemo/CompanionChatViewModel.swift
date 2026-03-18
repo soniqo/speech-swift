@@ -140,6 +140,7 @@ final class CompanionChatViewModel {
         config.minSilenceDuration = 0.8
         config.maxResponseDuration = 10.0
         config.warmupSTT = true
+        config.autoUnloadModels = true  // Unload STT/LLM/TTS between phases
 
         pipeline = VoicePipeline(
             sttFactory: { try await ParakeetASRModel.fromPretrained { _, _ in } },
@@ -213,8 +214,6 @@ final class CompanionChatViewModel {
             messages.append(ChatBubbleMessage(role: .user, text: trimmed))
             pipelineState = "thinking..."
             isGenerating = true
-            // Free ASR memory (~332MB) before LLM runs
-            pipeline?.unloadSTT()
 
         case .responseCreated:
             pipelineLog.warning("Event: responseCreated")
@@ -278,8 +277,6 @@ final class CompanionChatViewModel {
 
     private func resumeAfterResponse() {
         guard isListening else { return }
-        // Free TTS memory (~310MB) before ASR reloads on next speech
-        pipeline?.unloadTTS()
         pipeline?.resumeListening()
         pipelineState = "listening"
     }

@@ -72,6 +72,11 @@ public struct PipelineConfig {
     public var language: String = ""
     public var mode: PipelineMode = .echo
 
+    /// Auto-unload lazy models between phases to minimize peak memory.
+    /// When enabled, STT is unloaded after transcription, LLM after response,
+    /// and TTS after playback. Models reload from CoreML cache (~0.1-0.3s).
+    public var autoUnloadModels: Bool = false
+
     public static let `default` = PipelineConfig()
 
     public init() {}
@@ -225,6 +230,9 @@ private final class LLMBridge {
 private final class EventBridge {
     let handler: (PipelineEvent) -> Void
     var sttBridge: STTBridge?
+    var ttsBridge: TTSBridge?
+    var llmBridge: LLMBridge?
+    var autoUnload = false
 
     init(_ handler: @escaping (PipelineEvent) -> Void) { self.handler = handler }
 }
@@ -293,6 +301,9 @@ public final class VoicePipeline {
         self.vadBridge = VADBridge(vad)
         self.eventBridge = EventBridge(onEvent)
         self.eventBridge.sttBridge = self.sttBridge
+        self.eventBridge.ttsBridge = self.ttsBridge
+        self.eventBridge.llmBridge = self.llmBridge
+        self.eventBridge.autoUnload = config.autoUnloadModels
         if let llm { self.llmBridge = LLMBridge(llm) }
 
         let sttVtable = Self.makeSTTVtable(sttBridge)
@@ -355,6 +366,9 @@ public final class VoicePipeline {
         self.vadBridge = VADBridge(vad)
         self.eventBridge = EventBridge(onEvent)
         self.eventBridge.sttBridge = self.sttBridge
+        self.eventBridge.ttsBridge = self.ttsBridge
+        self.eventBridge.llmBridge = self.llmBridge
+        self.eventBridge.autoUnload = config.autoUnloadModels
 
         if let llm {
             self.llmBridge = LLMBridge(llm)
@@ -524,16 +538,25 @@ public final class VoicePipeline {
             event = .speechEnded
         case SC_EVENT_TRANSCRIPTION_COMPLETED:
             let text = e.text.map { String(cString: $0) } ?? ""
-            // Read detected language from STT bridge (set during transcribe callback)
             var lang: String?
             if let sttBridge = bridge.sttBridge, !sttBridge.lastLanguage.isEmpty {
                 let langStr = String(cString: sttBridge.lastLanguage)
                 if !langStr.isEmpty { lang = langStr }
             }
             pipeLog("[EVT] transcriptionCompleted text='\(text)' lang=\(lang ?? "nil") conf=\(e.confidence)")
+            // Auto-unload STT after transcription — free memory before LLM
+            if bridge.autoUnload {
+                bridge.sttBridge?.unload()
+                pipeLog("[MEM] unloaded STT")
+            }
             event = .transcriptionCompleted(text: text, language: lang, confidence: e.confidence)
         case SC_EVENT_RESPONSE_CREATED:
             pipeLog("[EVT] responseCreated")
+            // Auto-unload LLM before TTS loads — free memory for TTS compilation
+            if bridge.autoUnload {
+                bridge.llmBridge?.unload()
+                pipeLog("[MEM] unloaded LLM")
+            }
             event = .responseCreated
         case SC_EVENT_RESPONSE_INTERRUPTED:
             pipeLog("[EVT] responseInterrupted")
@@ -542,6 +565,11 @@ public final class VoicePipeline {
             event = .responseAudioDelta(samples: pcm16ToFloat32(e.audio_data, count: e.audio_data_length))
         case SC_EVENT_RESPONSE_DONE:
             pipeLog("[EVT] responseDone")
+            // Auto-unload TTS after playback — free memory before next STT
+            if bridge.autoUnload {
+                bridge.ttsBridge?.unload()
+                pipeLog("[MEM] unloaded TTS")
+            }
             event = .responseDone
         case SC_EVENT_TOOL_CALL_STARTED:
             let name = e.text.map { String(cString: $0) } ?? ""
