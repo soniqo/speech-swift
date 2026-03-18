@@ -10,6 +10,19 @@ private func pipeLog(_ msg: String) {
     pipeLogger.warning("\(msg, privacy: .public)")
 }
 
+/// Report current app memory usage in MB.
+private func memoryMB() -> Int {
+    var info = mach_task_basic_info()
+    var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size) / 4
+    let result = withUnsafeMutablePointer(to: &info) {
+        $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+            task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
+        }
+    }
+    guard result == KERN_SUCCESS else { return 0 }
+    return Int(info.resident_size / (1024 * 1024))
+}
+
 // MARK: - Pipeline Types
 
 /// Voice pipeline mode.
@@ -528,7 +541,7 @@ public final class VoicePipeline {
         let event: PipelineEvent
         switch e.type {
         case SC_EVENT_SESSION_CREATED:
-            pipeLog("[EVT] sessionCreated")
+            pipeLog("[EVT] sessionCreated [MEM: \(memoryMB())MB]")
             event = .sessionCreated
         case SC_EVENT_SPEECH_STARTED:
             pipeLog("[EVT] speechStarted")
@@ -546,16 +559,18 @@ public final class VoicePipeline {
             pipeLog("[EVT] transcriptionCompleted text='\(text)' lang=\(lang ?? "nil") conf=\(e.confidence)")
             // Auto-unload STT after transcription — free memory before LLM
             if bridge.autoUnload {
+                pipeLog("[MEM] before STT unload: \(memoryMB())MB")
                 bridge.sttBridge?.unload()
-                pipeLog("[MEM] unloaded STT")
+                pipeLog("[MEM] after STT unload: \(memoryMB())MB")
             }
             event = .transcriptionCompleted(text: text, language: lang, confidence: e.confidence)
         case SC_EVENT_RESPONSE_CREATED:
             pipeLog("[EVT] responseCreated")
             // Auto-unload LLM before TTS loads — free memory for TTS compilation
             if bridge.autoUnload {
+                pipeLog("[MEM] before LLM unload: \(memoryMB())MB")
                 bridge.llmBridge?.unload()
-                pipeLog("[MEM] unloaded LLM")
+                pipeLog("[MEM] after LLM unload: \(memoryMB())MB")
             }
             event = .responseCreated
         case SC_EVENT_RESPONSE_INTERRUPTED:
@@ -567,8 +582,9 @@ public final class VoicePipeline {
             pipeLog("[EVT] responseDone")
             // Auto-unload TTS after playback — free memory before next STT
             if bridge.autoUnload {
+                pipeLog("[MEM] before TTS unload: \(memoryMB())MB")
                 bridge.ttsBridge?.unload()
-                pipeLog("[MEM] unloaded TTS")
+                pipeLog("[MEM] after TTS unload: \(memoryMB())MB")
             }
             event = .responseDone
         case SC_EVENT_TOOL_CALL_STARTED:
@@ -606,7 +622,7 @@ public final class VoicePipeline {
                 let duration = Double(length) / Double(sampleRate)
                 let rms = sqrt(samples.map { $0 * $0 }.reduce(0, +) / Float(max(length, 1)))
                 AudioLog.pipeline.info("STT input: \(length) samples, \(String(format: "%.2f", duration))s, RMS=\(String(format: "%.4f", rms))")
-                pipeLog("[STT] transcribe start: \(length) samples, \(String(format: "%.2f", duration))s, RMS=\(String(format: "%.4f", rms))")
+                pipeLog("[STT] transcribe start: \(length) samples, \(String(format: "%.2f", duration))s, RMS=\(String(format: "%.4f", rms)) [MEM: \(memoryMB())MB]")
                 let result = bridge.model.transcribeWithLanguage(
                     audio: samples,
                     sampleRate: Int(sampleRate),
@@ -654,7 +670,7 @@ public final class VoicePipeline {
                 // Block the C thread until streaming TTS completes.
                 // Streams audio chunks as they're generated — first audio
                 // arrives in ~240ms instead of waiting for full synthesis.
-                pipeLog("[TTS] synthesize start: text='\(textStr)' lang='\(langStr)'")
+                pipeLog("[TTS] synthesize start: text='\(textStr)' lang='\(langStr)' [MEM: \(memoryMB())MB]")
                 let sem = DispatchSemaphore(value: 0)
                 DispatchQueue.global(qos: .userInitiated).async {
                     let group = DispatchGroup()
