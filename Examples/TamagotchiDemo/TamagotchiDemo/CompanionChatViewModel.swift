@@ -38,19 +38,18 @@ final class CompanionChatViewModel {
     var errorMessage: String?
     var speakEnabled = true
 
-    var modelsLoaded: Bool { chatModel != nil && vadModel != nil }
+    var modelsLoaded: Bool { vadModel != nil }
 
     let diagnostics = DiagnosticsMonitor()
 
     // MARK: - Models
 
-    private var chatModel: Qwen3ChatModel?
     private var vadModel: SileroVADModel?
 
     // MARK: - Pipeline
 
     private var pipeline: VoicePipeline?
-    private var pipelineLLM: Qwen3PipelineLLM?
+    // LLM is now lazy-loaded inside the pipeline bridge
     private var audioEngine: AVAudioEngine?
     private let player = StreamingAudioPlayer()
     private var waitingForPlaybackEnd = false
@@ -70,38 +69,24 @@ final class CompanionChatViewModel {
         errorMessage = nil
         loadProgress = 0
 
-        // Lazy pipeline: only VAD (1MB) + LLM (318MB) loaded at startup = 319MB.
-        // ASR and TTS loaded on-demand by VoicePipeline's lazy bridges.
-        // Peak during pipeline: ~650MB (VAD + LLM + max(ASR, TTS)).
-        // CoreML caches compiled models — second load is ~0.1-0.3s.
-        let units = coreMLUnits
+        // Full lazy pipeline: only VAD (1MB) loaded at startup.
+        // ASR, LLM, TTS all loaded on-demand and auto-unloaded between phases.
+        // Peak: ~single model during CoreML compilation.
 
         do {
-            // 1. VAD (~1 MB) — always resident
+            // VAD (~1 MB) — always resident, tiny
             loadingStatus = "VAD..."
-            loadProgress = 0.1
+            loadProgress = 0.3
             vadModel = try await Task.detached {
                 try await SileroVADModel.fromPretrained(engine: .coreml) { progress, status in
                     DispatchQueue.main.async { [weak self] in
-                        self?.loadProgress = 0.1 + progress * 0.1
+                        self?.loadProgress = 0.3 + progress * 0.6
                         if !status.isEmpty { self?.loadingStatus = "VAD: \(status)" }
                     }
                 }
             }.value
 
-            // 2. LLM (~318 MB) — kept loaded (KV cache, conversation state)
-            loadingStatus = "Qwen3 Chat..."
-            loadProgress = 0.2
-            chatModel = try await Task.detached {
-                try await Qwen3ChatModel.fromPretrained(computeUnits: units) { progress, status in
-                    DispatchQueue.main.async { [weak self] in
-                        self?.loadProgress = 0.2 + progress * 0.7
-                        if !status.isEmpty { self?.loadingStatus = "Qwen3: \(status)" }
-                    }
-                }
-            }.value
-
-            // ASR + TTS loaded lazily by pipeline on first use
+            // All other models loaded lazily by pipeline
 
             loadProgress = 1.0
             loadingStatus = "Ready"
@@ -116,22 +101,12 @@ final class CompanionChatViewModel {
 
     func startListening() {
         guard !isListening else { return }
-        guard let vad = vadModel, let chat = chatModel else { return }
+        guard let vad = vadModel else { return }
 
         let sampling = ChatSamplingConfig(
             temperature: 0.3, topK: 20, maxTokens: 15, repetitionPenalty: 1.5)
-
-        let llm = Qwen3PipelineLLM(
-            model: chat,
-            systemPrompt: systemPrompt,
-            sampling: sampling
-        )
-        pipelineLLM = llm
-        llm.onToken = { [weak self] token in
-            DispatchQueue.main.async {
-                self?.appendToken(token)
-            }
-        }
+        let sysPrompt = systemPrompt
+        let units = coreMLUnits
 
         var config = PipelineConfig()
         config.mode = .voicePipeline
@@ -146,7 +121,16 @@ final class CompanionChatViewModel {
             sttFactory: { try await ParakeetASRModel.fromPretrained { _, _ in } },
             ttsFactory: { try await KokoroTTSModel.fromPretrained { _, _ in } },
             vad: vad,
-            llm: llm,
+            llmFactory: { [weak self] in
+                let chat = try await Qwen3ChatModel.fromPretrained(computeUnits: units) { _, _ in }
+                let llm = Qwen3PipelineLLM(model: chat, systemPrompt: sysPrompt, sampling: sampling)
+                llm.onToken = { token in
+                    DispatchQueue.main.async {
+                        self?.appendToken(token)
+                    }
+                }
+                return llm
+            },
             config: config,
             onEvent: { [weak self] event in
                 DispatchQueue.main.async {
@@ -171,10 +155,9 @@ final class CompanionChatViewModel {
     func stopListening() {
         diagnostics.stop()
         stopMicrophone()
-        pipelineLLM?.cancel()
+        pipeline?.unloadLLM()
         pipeline?.stop()
         pipeline = nil
-        pipelineLLM = nil
         isListening = false
         isGenerating = false
         isSpeechDetected = false
@@ -200,7 +183,7 @@ final class CompanionChatViewModel {
             // can process new speech. The pending phrase mechanism will
             // combine interrupted + new phrases on the next LLM call.
             if isGenerating {
-                pipelineLLM?.cancel()
+                pipeline?.unloadLLM()
             }
 
         case .speechEnded:
@@ -227,7 +210,7 @@ final class CompanionChatViewModel {
 
         case .responseInterrupted:
             player.fadeOutAndStop()
-            pipelineLLM?.cancel()  // Cancel LLM to unblock worker thread
+            pipeline?.unloadLLM()  // Cancel LLM to unblock worker thread
             isGenerating = false
             currentAssistantIdx = nil
             pipelineState = "interrupted"
@@ -408,7 +391,8 @@ final class CompanionChatViewModel {
 
     func clearChat() {
         messages = []
-        chatModel?.resetConversation()
+        // LLM conversation resets on next lazy load (fresh model)
+        pipeline?.unloadLLM()
     }
 
     // MARK: - LLM token streaming → UI
