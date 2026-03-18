@@ -4,6 +4,12 @@ import Foundation
 import os
 
 
+private let pipeLogger = Logger(subsystem: "audio.soniqo.speech", category: "Pipeline")
+
+private func pipeLog(_ msg: String) {
+    pipeLogger.warning("\(msg, privacy: .public)")
+}
+
 // MARK: - Pipeline Types
 
 /// Voice pipeline mode.
@@ -246,10 +252,12 @@ public final class VoicePipeline {
     // MARK: - Public API
 
     public func start() {
+        pipeLog("[API] start()")
         sc_pipeline_start(handle)
     }
 
     public func stop() {
+        pipeLog("[API] stop()")
         sc_pipeline_stop(handle)
     }
 
@@ -263,6 +271,7 @@ public final class VoicePipeline {
     /// Signal that response playback has finished.
     /// Transitions from speaking back to idle.
     public func resumeListening() {
+        pipeLog("[API] resumeListening()")
         sc_pipeline_resume_listening(handle)
     }
 
@@ -328,10 +337,13 @@ public final class VoicePipeline {
         let event: PipelineEvent
         switch e.type {
         case SC_EVENT_SESSION_CREATED:
+            pipeLog("[EVT] sessionCreated")
             event = .sessionCreated
         case SC_EVENT_SPEECH_STARTED:
+            pipeLog("[EVT] speechStarted")
             event = .speechStarted
         case SC_EVENT_SPEECH_ENDED:
+            pipeLog("[EVT] speechEnded")
             event = .speechEnded
         case SC_EVENT_TRANSCRIPTION_COMPLETED:
             let text = e.text.map { String(cString: $0) } ?? ""
@@ -341,17 +353,22 @@ public final class VoicePipeline {
                 let langStr = String(cString: sttBridge.lastLanguage)
                 if !langStr.isEmpty { lang = langStr }
             }
+            pipeLog("[EVT] transcriptionCompleted text='\(text)' lang=\(lang ?? "nil") conf=\(e.confidence)")
             event = .transcriptionCompleted(text: text, language: lang, confidence: e.confidence)
         case SC_EVENT_RESPONSE_CREATED:
+            pipeLog("[EVT] responseCreated")
             event = .responseCreated
         case SC_EVENT_RESPONSE_INTERRUPTED:
+            pipeLog("[EVT] responseInterrupted")
             event = .responseInterrupted
         case SC_EVENT_RESPONSE_AUDIO_DELTA:
             event = .responseAudioDelta(samples: pcm16ToFloat32(e.audio_data, count: e.audio_data_length))
         case SC_EVENT_RESPONSE_DONE:
+            pipeLog("[EVT] responseDone")
             event = .responseDone
         case SC_EVENT_TOOL_CALL_STARTED:
             let name = e.text.map { String(cString: $0) } ?? ""
+            pipeLog("[EVT] toolCallStarted name='\(name)'")
             event = .toolCallStarted(name: name)
         case SC_EVENT_TOOL_CALL_COMPLETED:
             // text contains "tool_name: result" for completed events
@@ -359,9 +376,11 @@ public final class VoicePipeline {
             let parts = text.split(separator: ":", maxSplits: 1)
             let name = parts.first.map(String.init) ?? ""
             let result = parts.count > 1 ? String(parts[1]).trimmingCharacters(in: .whitespaces) : ""
+            pipeLog("[EVT] toolCallCompleted name='\(name)' result='\(result)'")
             event = .toolCallCompleted(name: name, result: result)
         case SC_EVENT_ERROR:
             let text = e.text.map { String(cString: $0) } ?? "Unknown error"
+            pipeLog("[EVT] error: \(text)")
             event = .error(text)
         default:
             return
@@ -382,10 +401,12 @@ public final class VoicePipeline {
                 let duration = Double(length) / Double(sampleRate)
                 let rms = sqrt(samples.map { $0 * $0 }.reduce(0, +) / Float(max(length, 1)))
                 AudioLog.pipeline.info("STT input: \(length) samples, \(String(format: "%.2f", duration))s, RMS=\(String(format: "%.4f", rms))")
+                pipeLog("[STT] transcribe start: \(length) samples, \(String(format: "%.2f", duration))s, RMS=\(String(format: "%.4f", rms))")
                 let result = bridge.model.transcribeWithLanguage(
                     audio: samples,
                     sampleRate: Int(sampleRate),
                     language: nil)
+                pipeLog("[STT] transcribe done: text='\(result.text)' lang=\(result.language ?? "nil") conf=\(result.confidence)")
                 // Store as C strings on bridge — pointers valid until next transcribe call
                 bridge.lastText = Array(result.text.utf8CString)
                 bridge.lastLanguage = Array((result.language ?? "").utf8CString)
@@ -428,6 +449,7 @@ public final class VoicePipeline {
                 // Block the C thread until streaming TTS completes.
                 // Streams audio chunks as they're generated — first audio
                 // arrives in ~240ms instead of waiting for full synthesis.
+                pipeLog("[TTS] synthesize start: text='\(textStr)' lang='\(langStr)'")
                 let sem = DispatchSemaphore(value: 0)
                 DispatchQueue.global(qos: .userInitiated).async {
                     let group = DispatchGroup()
@@ -438,20 +460,27 @@ public final class VoicePipeline {
                             let stream = bridge.model.generateStream(
                                 text: textStr, language: langStr.isEmpty ? nil : langStr)
                             var sentFinal = false
+                            var totalSamples = 0
                             // Duration cap is enforced by C++ core (max_response_duration)
                             for try await chunk in stream {
-                                guard !bridge.cancelled else { break }
+                                guard !bridge.cancelled else {
+                                    pipeLog("[TTS] cancelled after \(totalSamples) samples")
+                                    break
+                                }
+                                totalSamples += chunk.samples.count
                                 let isFinal = chunk.isFinal
                                 chunk.samples.withUnsafeBufferPointer { buf in
                                     onChunk?(buf.baseAddress, buf.count, isFinal, chunkCtx)
                                 }
                                 if isFinal { sentFinal = true; break }
                             }
+                            pipeLog("[TTS] synthesize done: \(totalSamples) samples, final=\(sentFinal)")
                             // Ensure C++ always gets exactly one is_final=true
                             if !sentFinal && !bridge.cancelled {
                                 onChunk?(nil, 0, true, chunkCtx)
                             }
                         } catch {
+                            pipeLog("[TTS] synthesize error: \(error)")
                             onChunk?(nil, 0, true, chunkCtx)
                         }
                     }
@@ -515,7 +544,14 @@ public final class VoicePipeline {
                     swiftMessages.append((role: role, content: content))
                 }
 
+                let lastMsg = swiftMessages.last.map { "\($0.role): '\($0.content)'" } ?? "empty"
+                pipeLog("[LLM] chat start: \(swiftMessages.count) messages, last=\(lastMsg)")
+                var tokenCount = 0
                 bridge.model.chat(messages: swiftMessages) { token, isFinal in
+                    tokenCount += 1
+                    if isFinal {
+                        pipeLog("[LLM] chat done: \(tokenCount) tokens")
+                    }
                     token.withCString { cstr in
                         onToken?(cstr, isFinal, tokenCtx)
                     }

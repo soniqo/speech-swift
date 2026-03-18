@@ -58,9 +58,10 @@ final class CompanionChatViewModel {
     private var waitingForPlaybackEnd = false
     #if targetEnvironment(simulator)
     private let speechSynth = AVSpeechSynthesizer()
+    private var speechDelegate: SpeechFinishedDelegate?
     #endif
 
-    private let systemPrompt = "You are a helpful assistant. Reply in one short sentence."
+    private let systemPrompt = "You are Tama. Answer questions helpfully in one short sentence."
 
     // MARK: - Load Models
 
@@ -144,7 +145,7 @@ final class CompanionChatViewModel {
         guard let vad = vadModel, let asr = asrModel, let tts = ttsModel, let chat = chatModel else { return }
 
         let sampling = ChatSamplingConfig(
-            temperature: 0.6, topK: 40, maxTokens: 15, repetitionPenalty: 1.2)
+            temperature: 0.3, topK: 20, maxTokens: 15, repetitionPenalty: 1.5)
 
         let llm = Qwen3PipelineLLM(
             model: chat,
@@ -161,9 +162,10 @@ final class CompanionChatViewModel {
         var config = PipelineConfig()
         config.mode = .voicePipeline
         config.allowInterruptions = true
-        config.minSilenceDuration = 0.4
+        config.minInterruptionDuration = 1.0
+        config.minSilenceDuration = 0.8
         config.maxResponseDuration = 10.0
-        config.warmupSTT = false  // Warmup done during model loading
+        config.warmupSTT = true
 
         pipeline = VoicePipeline(
             stt: asr,
@@ -219,6 +221,12 @@ final class CompanionChatViewModel {
         case .speechStarted:
             isSpeechDetected = true
             pipelineState = "speech detected"
+            // If LLM is generating (thinking), cancel it so the pipeline
+            // can process new speech. The pending phrase mechanism will
+            // combine interrupted + new phrases on the next LLM call.
+            if isGenerating {
+                pipelineLLM?.cancel()
+            }
 
         case .speechEnded:
             isSpeechDetected = false
@@ -268,11 +276,25 @@ final class CompanionChatViewModel {
             currentAssistantIdx = nil
             #if targetEnvironment(simulator)
             if speakEnabled, !responseText.isEmpty {
+                // Stop mic to prevent self-listening
+                stopMicrophone()
+
+                if speechDelegate == nil {
+                    speechDelegate = SpeechFinishedDelegate { [weak self] in
+                        DispatchQueue.main.async {
+                            // Restart mic after speech ends
+                            self?.startMicrophone()
+                            self?.resumeAfterResponse()
+                        }
+                    }
+                }
+                speechSynth.delegate = speechDelegate
                 let utterance = AVSpeechUtterance(string: responseText)
                 utterance.rate = AVSpeechUtteranceDefaultSpeechRate
                 speechSynth.speak(utterance)
+            } else {
+                resumeAfterResponse()
             }
-            resumeAfterResponse()
             #else
             if player.isPlaying {
                 waitingForPlaybackEnd = true
@@ -534,3 +556,20 @@ final class CompanionChatViewModel {
         try? data.write(to: url)
     }
 }
+
+// MARK: - AVSpeechSynthesizer Delegate
+
+#if targetEnvironment(simulator)
+/// Notifies when all queued utterances finish playing.
+private class SpeechFinishedDelegate: NSObject, AVSpeechSynthesizerDelegate {
+    let onFinished: () -> Void
+    init(onFinished: @escaping () -> Void) { self.onFinished = onFinished }
+
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        // Only resume when no more utterances are queued
+        if !synthesizer.isSpeaking {
+            onFinished()
+        }
+    }
+}
+#endif
