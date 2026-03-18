@@ -344,7 +344,7 @@ public enum TTSWeightLoader {
         }
     }
 
-    private static func loadConvNeXtBlockWeights(
+    static func loadConvNeXtBlockWeights(
         to block: ConvNeXtBlock,
         prefix: String,
         from weights: [String: MLXArray]
@@ -365,7 +365,7 @@ public enum TTSWeightLoader {
         }
     }
 
-    private static func loadSnakeBetaWeights(
+    static func loadSnakeBetaWeights(
         to snake: SnakeBeta,
         prefix: String,
         from weights: [String: MLXArray]
