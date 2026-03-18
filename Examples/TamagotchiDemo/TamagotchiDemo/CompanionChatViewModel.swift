@@ -38,21 +38,16 @@ final class CompanionChatViewModel {
     var errorMessage: String?
     var speakEnabled = true
 
-    var modelsLoaded: Bool { vadModel != nil && chatModel != nil && modelsDownloaded }
-    private var modelsDownloaded = false
+    var modelsLoaded: Bool { chatModel != nil && ttsModel != nil && asrModel != nil && vadModel != nil }
 
     let diagnostics = DiagnosticsMonitor()
 
     // MARK: - Models
-    //
-    // Lazy loading: only VAD + LLM loaded at startup (~319MB).
-    // ASR and TTS use lazy wrappers — loaded on first use, unloaded between phases.
-    // Peak memory: ~650MB (VAD + LLM + max(ASR, TTS) during compilation).
 
     private var chatModel: Qwen3ChatModel?
+    private var ttsModel: KokoroTTSModel?
+    private var asrModel: ParakeetASRModel?
     private var vadModel: SileroVADModel?
-    private let lazyASR = LazyASR()
-    private let lazyTTS = LazyTTS()
 
     // MARK: - Pipeline
 
@@ -68,52 +63,68 @@ final class CompanionChatViewModel {
 
     // MARK: - Load Models
 
-    /// `.cpuAndNeuralEngine` avoids GPU VRAM duplication — saves ~200-400MB on device.
-    /// ANE has its own memory pool that doesn't count against app's RAM budget.
-    #if targetEnvironment(simulator)
+    /// `.all` lets CoreML pick the best backend. Use increased-memory-limit entitlement
+    /// to raise iOS kill threshold from ~3GB to ~5-6GB.
     private let coreMLUnits: MLComputeUnits = .all
-    #else
-    private let coreMLUnits: MLComputeUnits = .cpuAndNeuralEngine
-    #endif
 
     func loadModels() async {
         isLoading = true
         errorMessage = nil
         loadProgress = 0
 
-        // Lazy loading: only VAD (~1MB) + LLM (~318MB) loaded at startup.
-        // ASR (~332MB) and TTS (~310MB) use lazy wrappers — loaded on-demand
-        // by the C++ pipeline when needed, unloaded between phases.
-        // Peak: ~650MB (VAD + LLM + one of ASR/TTS during compilation).
+        // All models loaded sequentially. Total: ~960MB resident.
+        // iPhone 16 Pro (8GB) supports ~5-6GB with increased-memory-limit entitlement.
         let units = coreMLUnits
 
         do {
-            // 1. VAD (~1 MB) — always resident
+            // 1. VAD (~1 MB)
             loadingStatus = "VAD..."
-            loadProgress = 0.1
+            loadProgress = 0.05
             vadModel = try await Task.detached {
                 try await SileroVADModel.fromPretrained(engine: .coreml) { progress, status in
                     DispatchQueue.main.async { [weak self] in
-                        self?.loadProgress = 0.1 + progress * 0.1
+                        self?.loadProgress = 0.05 + progress * 0.05
                         if !status.isEmpty { self?.loadingStatus = "VAD: \(status)" }
                     }
                 }
             }.value
 
-            // 2. LLM (~318 MB) — kept loaded (used every turn, has KV cache)
+            // 2. ASR (~332 MB)
+            loadingStatus = "Parakeet ASR..."
+            loadProgress = 0.1
+            asrModel = try await Task.detached {
+                try await ParakeetASRModel.fromPretrained { progress, status in
+                    DispatchQueue.main.async { [weak self] in
+                        self?.loadProgress = 0.1 + progress * 0.3
+                        if !status.isEmpty { self?.loadingStatus = "Parakeet: \(status)" }
+                    }
+                }
+            }.value
+
+            // 3. LLM (~318 MB)
             loadingStatus = "Qwen3 Chat..."
-            loadProgress = 0.3
+            loadProgress = 0.4
             chatModel = try await Task.detached {
                 try await Qwen3ChatModel.fromPretrained(computeUnits: units) { progress, status in
                     DispatchQueue.main.async { [weak self] in
-                        self?.loadProgress = 0.3 + progress * 0.5
+                        self?.loadProgress = 0.4 + progress * 0.2
                         if !status.isEmpty { self?.loadingStatus = "Qwen3: \(status)" }
                     }
                 }
             }.value
 
-            // ASR + TTS will be loaded lazily on first pipeline use
-            modelsDownloaded = true
+            // 4. TTS (~310 MB)
+            loadingStatus = "Kokoro TTS..."
+            loadProgress = 0.6
+            ttsModel = try await Task.detached {
+                try await KokoroTTSModel.fromPretrained { progress, status in
+                    DispatchQueue.main.async { [weak self] in
+                        self?.loadProgress = 0.6 + progress * 0.3
+                        if !status.isEmpty { self?.loadingStatus = "Kokoro: \(status)" }
+                    }
+                }
+            }.value
+
             loadProgress = 1.0
             loadingStatus = "Ready"
         } catch {
@@ -127,7 +138,7 @@ final class CompanionChatViewModel {
 
     func startListening() {
         guard !isListening else { return }
-        guard let vad = vadModel, let chat = chatModel else { return }
+        guard let vad = vadModel, let asr = asrModel, let tts = ttsModel, let chat = chatModel else { return }
 
         let sampling = ChatSamplingConfig(
             temperature: 0.3, topK: 20, maxTokens: 15, repetitionPenalty: 1.5)
@@ -153,8 +164,8 @@ final class CompanionChatViewModel {
         config.warmupSTT = true
 
         pipeline = VoicePipeline(
-            stt: lazyASR,
-            tts: lazyTTS,
+            stt: asr,
+            tts: tts,
             vad: vad,
             llm: llm,
             config: config,
@@ -224,8 +235,6 @@ final class CompanionChatViewModel {
             messages.append(ChatBubbleMessage(role: .user, text: trimmed))
             pipelineState = "thinking..."
             isGenerating = true
-            // Unload ASR before LLM runs to free ~332MB
-            lazyASR.unload()
 
         case .responseCreated:
             pipelineLog.warning("Event: responseCreated")
@@ -289,8 +298,6 @@ final class CompanionChatViewModel {
 
     private func resumeAfterResponse() {
         guard isListening else { return }
-        // Unload TTS to free ~310MB before ASR loads on next speech
-        lazyTTS.unload()
         pipeline?.resumeListening()
         pipelineState = "listening"
     }
@@ -535,68 +542,9 @@ private class SpeechFinishedDelegate: NSObject, AVSpeechSynthesizerDelegate {
     }
 }
 
-// MARK: - Lazy Model Wrappers
-//
-// Load CoreML models on first use, unload when told.
-// Callbacks are synchronous (C++ worker thread) so we block with semaphore during load.
+// MARK: - DummyTTS (placeholder, not used when Kokoro is loaded)
 
-private final class LazyASR: SpeechRecognitionModel {
-    var inputSampleRate: Int { 16000 }
-    private var model: ParakeetASRModel?
-
-    func ensureLoaded() {
-        guard model == nil else { return }
-        let sem = DispatchSemaphore(value: 0)
-        Task {
-            self.model = try? await ParakeetASRModel.fromPretrained { _, _ in }
-            sem.signal()
-        }
-        sem.wait()
-    }
-
-    func transcribeWithLanguage(audio: [Float], sampleRate: Int, language: String?) -> TranscriptionResult {
-        ensureLoaded()
-        return model?.transcribeWithLanguage(audio: audio, sampleRate: sampleRate, language: language)
-            ?? TranscriptionResult(text: "")
-    }
-
-    func transcribe(audio: [Float], sampleRate: Int, language: String?) -> String {
-        ensureLoaded()
-        return model?.transcribe(audio: audio, sampleRate: sampleRate, language: language) ?? ""
-    }
-
-    func unload() { model = nil }
-    var isLoaded: Bool { model != nil }
-}
-
-private final class LazyTTS: SpeechGenerationModel {
-    var sampleRate: Int { 24000 }
-    private var model: KokoroTTSModel?
-
-    func ensureLoaded() {
-        guard model == nil else { return }
-        let sem = DispatchSemaphore(value: 0)
-        Task {
-            self.model = try? await KokoroTTSModel.fromPretrained { _, _ in }
-            sem.signal()
-        }
-        sem.wait()
-    }
-
-    func generate(text: String, language: String?) async throws -> [Float] {
-        ensureLoaded()
-        guard let model else { return [] }
-        return try await model.generate(text: text, language: language)
-    }
-
-    func generateStream(text: String, language: String?) -> AsyncThrowingStream<AudioChunk, Error> {
-        ensureLoaded()
-        guard let model else {
-            return AsyncThrowingStream { $0.finish() }
-        }
-        return model.generateStream(text: text, language: language)
-    }
-
-    func unload() { model = nil }
-    var isLoaded: Bool { model != nil }
+private final class DummyTTS: SpeechGenerationModel {
+    let sampleRate = 24000
+    func generate(text: String, language: String?) async throws -> [Float] { [] }
 }
