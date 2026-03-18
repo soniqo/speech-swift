@@ -41,6 +41,7 @@
 			files = (
 				2F673300B797D3852645CA98 /* Qwen3Chat in Frameworks */,
 				987DFC98DF23278A7AE9DF57 /* KokoroTTS in Frameworks */,
+				C624A102C111BE92AFD93429 /* ParakeetASR in Frameworks */,
 				80DE89951129E0629CB51E61 /* SpeechVAD in Frameworks */,
 				AF4D284F67CBD20AE2D1C791 /* SpeechCore in Frameworks */,
 				741A001171143A8F2EA71EB6 /* AudioCommon in Frameworks */,
@@ -108,6 +109,7 @@
 			packageProductDependencies = (
 				EC2D604406E793E6F8E82983 /* Qwen3Chat */,
 				CE7B5AAD750DC1011C225B3D /* KokoroTTS */,
+				106E5E52CEE5DF5282EA0DDA /* ParakeetASR */,
 				177F68BE93906BBB9F3AA871 /* SpeechVAD */,
 				F42946FB4F015511147E5F48 /* SpeechCore */,
 				67C186316D0A5F54A654D403 /* AudioCommon */,

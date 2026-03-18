@@ -5,8 +5,8 @@ import os
 import Observation
 import Qwen3Chat
 import KokoroTTS
+import ParakeetASR
 import SpeechVAD
-import Speech
 import SpeechCore
 import AudioCommon
 
@@ -39,7 +39,6 @@ final class CompanionChatViewModel {
     var speakEnabled = true
 
     var modelsLoaded: Bool { chatModel != nil && ttsModel != nil && asrModel != nil && vadModel != nil }
-    var speechAuthorized = false
 
     let diagnostics = DiagnosticsMonitor()
 
@@ -47,7 +46,7 @@ final class CompanionChatViewModel {
 
     private var chatModel: Qwen3ChatModel?
     private var ttsModel: KokoroTTSModel?
-    private var asrModel: AppleSpeechASR?
+    private var asrModel: ParakeetASRModel?
     private var vadModel: SileroVADModel?
 
     // MARK: - Pipeline
@@ -73,60 +72,82 @@ final class CompanionChatViewModel {
         errorMessage = nil
         loadProgress = 0
 
-        // Total: ~629MB (VAD 1 + Apple ASR 0 + LLM 318 + TTS 310).
-        // Apple SFSpeechRecognizer uses built-in engine — zero app memory.
+        // Prewarm pattern (from WhisperKit): load each model to trigger CoreML
+        // compilation caching, then nil it. After prewarm, cached loads are fast
+        // (~0.1-0.3s) with no compilation memory spike.
+        // Peak during prewarm: ~664MB (largest model × 2 during compile).
+        // Resident after all loaded: ~960MB.
         let units = coreMLUnits
 
         do {
-            // 1. Speech recognition permission
-            loadingStatus = "Speech permission..."
-            loadProgress = 0.05
-            speechAuthorized = await AppleSpeechASR.requestAuthorization()
-            guard speechAuthorized else {
-                errorMessage = "Speech recognition permission denied"
-                isLoading = false
-                return
-            }
-
-            // 2. VAD (~1 MB)
+            // 1. VAD (~1 MB) — tiny, just load directly
             loadingStatus = "VAD..."
-            loadProgress = 0.1
+            loadProgress = 0.05
             vadModel = try await Task.detached {
                 try await SileroVADModel.fromPretrained(engine: .coreml) { progress, status in
                     DispatchQueue.main.async { [weak self] in
-                        self?.loadProgress = 0.1 + progress * 0.05
+                        self?.loadProgress = 0.05 + progress * 0.05
                         if !status.isEmpty { self?.loadingStatus = "VAD: \(status)" }
                     }
                 }
             }.value
 
-            // 3. ASR (Apple Speech — 0 MB, instant)
-            loadingStatus = "Speech recognizer..."
-            loadProgress = 0.15
-            asrModel = AppleSpeechASR()
-
-            // 4. LLM (~318 MB)
-            loadingStatus = "Qwen3 Chat..."
-            loadProgress = 0.2
-            chatModel = try await Task.detached {
-                try await Qwen3ChatModel.fromPretrained(computeUnits: units) { progress, status in
+            // 2. Prewarm ASR → compile → nil (frees ~664MB peak back to ~1MB)
+            loadingStatus = "Preparing ASR..."
+            loadProgress = 0.1
+            var tempASR: ParakeetASRModel? = try await Task.detached {
+                try await ParakeetASRModel.fromPretrained { progress, status in
                     DispatchQueue.main.async { [weak self] in
-                        self?.loadProgress = 0.2 + progress * 0.3
-                        if !status.isEmpty { self?.loadingStatus = "Qwen3: \(status)" }
+                        self?.loadProgress = 0.1 + progress * 0.15
+                        if !status.isEmpty { self?.loadingStatus = "ASR: \(status)" }
                     }
                 }
             }.value
+            tempASR = nil  // Free to reclaim compilation memory
 
-            // 5. TTS (~310 MB)
-            loadingStatus = "Kokoro TTS..."
-            loadProgress = 0.5
-            ttsModel = try await Task.detached {
-                try await KokoroTTSModel.fromPretrained { progress, status in
+            // 3. Prewarm LLM → compile → nil
+            loadingStatus = "Preparing LLM..."
+            loadProgress = 0.25
+            var tempLLM: Qwen3ChatModel? = try await Task.detached {
+                try await Qwen3ChatModel.fromPretrained(computeUnits: units) { progress, status in
                     DispatchQueue.main.async { [weak self] in
-                        self?.loadProgress = 0.5 + progress * 0.4
-                        if !status.isEmpty { self?.loadingStatus = "Kokoro: \(status)" }
+                        self?.loadProgress = 0.25 + progress * 0.15
+                        if !status.isEmpty { self?.loadingStatus = "LLM: \(status)" }
                     }
                 }
+            }.value
+            tempLLM = nil
+
+            // 4. Prewarm TTS → compile → nil
+            loadingStatus = "Preparing TTS..."
+            loadProgress = 0.4
+            var tempTTS: KokoroTTSModel? = try await Task.detached {
+                try await KokoroTTSModel.fromPretrained { progress, status in
+                    DispatchQueue.main.async { [weak self] in
+                        self?.loadProgress = 0.4 + progress * 0.15
+                        if !status.isEmpty { self?.loadingStatus = "TTS: \(status)" }
+                    }
+                }
+            }.value
+            tempTTS = nil
+
+            // 5. Now load all from CoreML cache (fast, no compilation spike)
+            loadingStatus = "Loading ASR..."
+            loadProgress = 0.55
+            asrModel = try await Task.detached {
+                try await ParakeetASRModel.fromPretrained { _, _ in }
+            }.value
+
+            loadingStatus = "Loading LLM..."
+            loadProgress = 0.7
+            chatModel = try await Task.detached {
+                try await Qwen3ChatModel.fromPretrained(computeUnits: units) { _, _ in }
+            }.value
+
+            loadingStatus = "Loading TTS..."
+            loadProgress = 0.85
+            ttsModel = try await Task.detached {
+                try await KokoroTTSModel.fromPretrained { _, _ in }
             }.value
 
             loadProgress = 1.0
