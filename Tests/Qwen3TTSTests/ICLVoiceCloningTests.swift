@@ -1,5 +1,6 @@
 import XCTest
 @testable import Qwen3TTS
+import Qwen3ASR
 import MLX
 import AudioCommon
 
@@ -103,6 +104,70 @@ final class E2EICLVoiceCloningTests: XCTestCase {
         XCTAssertEqual(codes.dim(1), 16, "Should have 16 codebooks")
         XCTAssertGreaterThan(codes.dim(2), 0, "Should produce at least 1 frame")
         print("Encoder: 1s silence → \(codes.dim(2)) codec frames")
+    }
+
+    func testE2EICLRoundTrip() async throws {
+        // ICL synthesis → ASR transcription → verify text matches
+        let (tts, encoder) = try await Qwen3TTSModel.fromPretrainedWithEncoder()
+
+        let refAudio = try AudioFileLoader.load(
+            url: URL(fileURLWithPath: "Tests/Qwen3ASRTests/Resources/test_audio.wav"),
+            targetSampleRate: 24000)
+        let refSpeech = Array(refAudio[Int(5.17 * 24000)..<min(Int(8.37 * 24000), refAudio.count)])
+
+        let targetText = "Good morning everyone."
+        var sampling = SamplingConfig()
+        sampling.maxTokens = 100
+
+        let waveform = tts.synthesizeWithVoiceCloneICL(
+            text: targetText,
+            referenceAudio: refSpeech,
+            referenceSampleRate: 24000,
+            referenceText: "Can you guarantee that the replacement part will be shipped tomorrow?",
+            language: "english",
+            sampling: sampling,
+            codecEncoder: encoder)
+
+        XCTAssertGreaterThan(waveform.count, 0, "Should produce audio")
+
+        // Transcribe with ASR
+        let asr = try await Qwen3ASRModel.fromPretrained()
+        let transcription = asr.transcribe(audio: waveform, sampleRate: 24000)
+        print("ICL round-trip: '\(targetText)' → '\(transcription)'")
+
+        // Check keywords present
+        let lower = transcription.lowercased()
+        XCTAssertTrue(lower.contains("morning") || lower.contains("good"),
+                      "Transcription should contain target keywords: \(transcription)")
+    }
+
+    func testE2EICLGermanEOS() async throws {
+        // Issue #139: German text with x-vector hits maxTokens without EOS.
+        // ICL should produce EOS naturally.
+        let (tts, encoder) = try await Qwen3TTSModel.fromPretrainedWithEncoder()
+
+        let refAudio = try AudioFileLoader.load(
+            url: URL(fileURLWithPath: "Tests/Qwen3ASRTests/Resources/test_audio.wav"),
+            targetSampleRate: 24000)
+        let refSpeech = Array(refAudio[Int(5.17 * 24000)..<min(Int(8.37 * 24000), refAudio.count)])
+
+        var sampling = SamplingConfig()
+        sampling.maxTokens = 200  // Generous limit
+
+        let waveform = tts.synthesizeWithVoiceCloneICL(
+            text: "Hallo, das ist ein Test.",
+            referenceAudio: refSpeech,
+            referenceSampleRate: 24000,
+            referenceText: "Can you guarantee that the replacement part will be shipped tomorrow?",
+            language: "german",
+            sampling: sampling,
+            codecEncoder: encoder)
+
+        XCTAssertGreaterThan(waveform.count, 0, "Should produce audio")
+        let duration = Double(waveform.count) / 24000.0
+        print("German ICL: \(String(format: "%.2f", duration))s audio")
+        // Should be short (~2-3s for a short German sentence), not 16s (200 tokens)
+        XCTAssertLessThan(duration, 10.0, "Should stop before maxTokens (EOS should fire)")
     }
 
     func testE2EICLSynthesis() async throws {
