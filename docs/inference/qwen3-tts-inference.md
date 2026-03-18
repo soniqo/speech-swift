@@ -222,7 +222,32 @@ Reference audio (24kHz)
 .build/release/audio speak "Hello world" --voice-sample reference.wav --output cloned.wav
 ```
 
-### ICL Mode (Not Yet Implemented)
+### ICL Mode
 
-Uses the Speech Tokenizer Encoder to extract codec tokens from reference audio, prepended to the generation input for in-context learning. Requires porting the encoder (SEANet + transformer + RVQ encode).
+In-Context Learning mode for higher quality voice cloning. Encodes reference audio into codec tokens via the Mimi speech tokenizer encoder and prepends them with the reference transcript.
+
+```
+Reference Audio (24kHz)
+    +---> Mimi Encoder (SEANet downsample → transformer → RVQ encode) → [1, 16, T_ref]
+    +---> Speaker Encoder (ECAPA-TDNN) → 1024-dim x-vector
+
+Prefill: [role] [codec_prefix + speaker] [ref_text + target_text + codec_pad] [codec_bos + ref_codecs]
+    +---> Talker (autoregressive) → new codec tokens
+    +---> Code Predictor (15 remaining codebooks)
+    +---> Mimi Decoder → waveform
+```
+
+```swift
+let (model, encoder) = try await Qwen3TTSModel.fromPretrainedWithEncoder()
+let audio = model.synthesizeWithVoiceCloneICL(
+    text: "Target text",
+    referenceAudio: refSamples,
+    referenceSampleRate: 24000,
+    referenceText: "Exact transcript of reference.",
+    language: "english",
+    codecEncoder: encoder
+)
+```
+
+ICL fixes EOS failure on short texts and non-English languages (e.g. German) that occur with x-vector-only mode.
 
