@@ -74,10 +74,10 @@ final class CompanionChatViewModel {
         errorMessage = nil
         loadProgress = 0
 
-        // Models are loaded sequentially to avoid peak memory from concurrent
-        // CoreML compilation. Each model: download → compile → settle before next.
-        // Total footprint: ~960 MB (VAD 1 + ASR 332 + LLM 318 + TTS 310).
-        // iPhone allows ~2-3 GB — no warmup runs to avoid doubling memory.
+        // Models loaded sequentially with autoreleasepool between each
+        // to free CoreML compilation temporaries before loading next.
+        // Total resident: ~960 MB (VAD 1 + ASR 332 + LLM 318 + TTS 310).
+        // Peak during compilation: ~model_size * 2 (temp copy).
         let units = coreMLUnits
 
         do {

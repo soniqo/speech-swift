@@ -2,6 +2,7 @@ import SwiftUI
 
 struct CompanionChatView: View {
     @State private var vm = CompanionChatViewModel()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         NavigationStack {
@@ -28,6 +29,20 @@ struct CompanionChatView: View {
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
+            .onChange(of: scenePhase) { _, newPhase in
+                switch newPhase {
+                case .background:
+                    // Stop pipeline to free audio resources
+                    if vm.isListening { vm.stopListening() }
+                case .active:
+                    // If models were unloaded (OOM kill), reload
+                    if !vm.modelsLoaded && !vm.isLoading {
+                        Task { await vm.loadModels() }
+                    }
+                default:
+                    break
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .automatic) {
                     if vm.modelsLoaded {
