@@ -19,6 +19,12 @@ public class ParakeetASRModel {
     /// INT8 quantized variant (higher accuracy, larger size).
     public static let int8ModelId = "aufklarer/Parakeet-TDT-v3-CoreML-INT8"
 
+    /// iOS-optimized variants: 10s max duration, reduced CoreML buffer pre-allocation.
+    /// INT8: faster (native ANE), better accuracy, ~627MB disk.
+    /// INT4: smaller download, ~332MB disk.
+    public static let int8iOSModelId = "aufklarer/Parakeet-TDT-v3-CoreML-INT8-iOS"
+    public static let int4iOSModelId = "aufklarer/Parakeet-TDT-v3-CoreML-INT4-iOS"
+
     /// Whether the model is loaded and ready for inference.
     var _isLoaded = true
 

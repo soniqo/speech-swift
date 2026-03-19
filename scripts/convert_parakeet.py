@@ -232,6 +232,14 @@ def main():
         action="store_true",
         help="Compile .mlpackage to .mlmodelc",
     )
+    parser.add_argument(
+        "--max-duration",
+        type=int,
+        default=30,
+        help="Max audio duration in seconds (default: 30). "
+             "Lower values reduce CoreML memory by limiting buffer pre-allocation. "
+             "Use 10 for iOS to save ~1GB of runtime memory.",
+    )
     args = parser.parse_args()
 
     output_dir = Path(args.output_dir)
@@ -313,11 +321,17 @@ def main():
     print("=" * 60)
 
     # Encoder — use EnumeratedShapes to avoid BNNS crash with dynamic shapes.
-    # Cover durations from 1s to 30s of audio (100 to 3000 mel frames).
-    print("\nConverting encoder...")
+    # ~100 mel frames per second of audio.
+    # Smaller max = less CoreML buffer pre-allocation = less runtime memory.
+    max_frames = args.max_duration * 100
+    all_frame_sizes = [100, 200, 300, 400, 500, 750, 1000, 1500, 2000, 3000]
+    frame_sizes = [s for s in all_frame_sizes if s <= max_frames]
+    if not frame_sizes or frame_sizes[-1] < max_frames:
+        frame_sizes.append(max_frames)
+    print(f"\nConverting encoder (max {args.max_duration}s, shapes: {frame_sizes})...")
     mel_shapes = [
         ct.Shape(shape=(1, 128, l))
-        for l in [100, 200, 300, 400, 500, 750, 1000, 1500, 2000, 3000]
+        for l in frame_sizes
     ]
     enc_ml = convert_to_coreml(
         traced_dir / "encoder.pt",

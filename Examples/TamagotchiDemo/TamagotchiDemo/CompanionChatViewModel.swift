@@ -118,7 +118,12 @@ final class CompanionChatViewModel {
         config.autoUnloadModels = true  // Unload STT/LLM/TTS between phases
 
         pipeline = VoicePipeline(
-            sttFactory: { try await ParakeetASRModel.fromPretrained { _, _ in } },
+            sttFactory: {
+                // iOS variant: INT8 + 10s max = native ANE ops + 3x less buffer memory
+                try await ParakeetASRModel.fromPretrained(
+                    modelId: ParakeetASRModel.int8iOSModelId
+                ) { _, _ in }
+            },
             ttsFactory: { try await KokoroTTSModel.fromPretrained { _, _ in } },
             vad: vad,
             llmFactory: { [weak self] in
