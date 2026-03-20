@@ -1,18 +1,19 @@
 import Foundation
 import ArgumentParser
 import SpeechVAD
+import CosyVoiceTTS
 import AudioCommon
 
 public struct EmbedSpeakerCommand: ParsableCommand {
     public static let configuration = CommandConfiguration(
         commandName: "embed-speaker",
-        abstract: "Extract a 256-dim speaker embedding from audio"
+        abstract: "Extract a speaker embedding from audio"
     )
 
     @Argument(help: "Audio file containing speaker voice (WAV, any sample rate)")
     public var audioFile: String
 
-    @Option(name: .long, help: "Inference engine: mlx (default) or coreml")
+    @Option(name: .long, help: "Inference engine: mlx, coreml (WeSpeaker), or camplusplus (CAM++ CoreML)")
     public var engine: String = "mlx"
 
     @Flag(name: .long, help: "Output as JSON")
@@ -28,27 +29,41 @@ public struct EmbedSpeakerCommand: ParsableCommand {
             let duration = formatDuration(audio.count, sampleRate: 16000)
             print("  Loaded \(audio.count) samples (\(duration)s)")
 
-            guard let embEngine = WeSpeakerEngine(rawValue: engine) else {
-                print("Error: unknown engine '\(engine)'. Use 'mlx' or 'coreml'.")
-                return
+            let embedding: [Float]
+            let elapsed: TimeInterval
+
+            if engine == "camplusplus" {
+                print("Loading CAM++ speaker model (CoreML)...")
+                let model = try await CamPlusPlusSpeaker.fromPretrained(
+                    progressHandler: reportProgress
+                )
+
+                print("Extracting speaker embedding...")
+                let start = Date()
+                embedding = try model.embed(audio: audio, sampleRate: 16000)
+                elapsed = Date().timeIntervalSince(start)
+            } else {
+                guard let embEngine = WeSpeakerEngine(rawValue: engine) else {
+                    print("Error: unknown engine '\(engine)'. Use 'mlx', 'coreml', or 'camplusplus'.")
+                    return
+                }
+
+                print("Loading WeSpeaker model (engine: \(embEngine.rawValue))...")
+                let model = try await WeSpeakerModel.fromPretrained(
+                    engine: embEngine,
+                    progressHandler: reportProgress
+                )
+
+                print("Extracting speaker embedding...")
+                let start = Date()
+                embedding = model.embed(audio: audio, sampleRate: 16000)
+                elapsed = Date().timeIntervalSince(start)
             }
-
-            print("Loading speaker embedding model (engine: \(embEngine.rawValue))...")
-            let model = try await WeSpeakerModel.fromPretrained(
-                engine: embEngine,
-                progressHandler: reportProgress
-            )
-
-            print("Extracting speaker embedding...")
-            let start = Date()
-            let embedding = model.embed(audio: audio, sampleRate: 16000)
-            let elapsed = Date().timeIntervalSince(start)
 
             if json {
                 let embStrings = embedding.map { String(format: "%.6f", $0) }
-                print("{\"embedding\": [\(embStrings.joined(separator: ", "))], \"dimension\": \(embedding.count)}")
+                print("{\"embedding\": [\(embStrings.joined(separator: ", "))], \"dimension\": \(embedding.count), \"elapsed\": \(String(format: "%.3f", elapsed))}")
             } else {
-                // Print summary statistics
                 let minVal = embedding.min() ?? 0
                 let maxVal = embedding.max() ?? 0
                 let norm = sqrt(embedding.reduce(Float(0)) { $0 + $1 * $1 })
