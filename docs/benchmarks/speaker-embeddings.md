@@ -18,6 +18,24 @@
 | WeSpeaker CoreML | 256 | 148 ms | 10.7 ms | 141 ms |
 | CAM++ CoreML | 192 | 12 ms | 0.6 ms | 11 ms |
 
+## Speaker Verification (LibriSpeech test-clean)
+
+40 speakers, 2780 trial pairs (2000 positive, 780 negative) generated from LibriSpeech test-clean. Scoring with cosine similarity.
+
+| Engine | EER% | minDCF (p=0.01) | Pos Mean Sim | Neg Mean Sim |
+|--------|------|-----------------|--------------|--------------|
+| WeSpeaker MLX | **0.98** | **0.084** | 0.718 | 0.091 |
+| CAM++ CoreML | 10.53 | 0.558 | 0.718 | 0.407 |
+
+### Comparison with published results (VoxCeleb1-O)
+
+| Model | Published EER% | Params | Source |
+|-------|---------------|--------|--------|
+| CAM++ | 0.65 | 7.2M | 3D-Speaker (Interspeech 2023) |
+| WeSpeaker ResNet34-LM | 0.72 | 6.6M | WeSpeaker VoxSRC2023 |
+
+LibriSpeech test-clean is easier than VoxCeleb1-O (read speech, cleaner audio), so direct comparison is indicative only. WeSpeaker's 0.98% EER is consistent with published VoxCeleb1-O numbers (0.72%). CAM++'s 10.53% EER on LibriSpeech is higher than its published VoxCeleb1-O number (0.65%) — likely because our CoreML conversion uses fixed 500-frame input with zero-padding, which hurts short utterances.
+
 ## Embedding Quality (VoxConverse)
 
 Cosine similarity between segment-level embeddings extracted from VoxConverse test set (5 multi-speaker recordings). Measures how well embeddings discriminate speakers in real conversational audio.
@@ -31,36 +49,24 @@ Cosine similarity between segment-level embeddings extracted from VoxConverse te
 | WeSpeaker MLX | 0.726 +/- 0.210 | 0.142 +/- 0.145 | **0.584** |
 | CAM++ CoreML | 0.693 +/- 0.162 | 0.436 +/- 0.132 | 0.257 |
 
-WeSpeaker MLX produces the most discriminative embeddings on same-channel audio, with 0.584 separation — matching the Python pyannote reference (0.577 on same segments). Cosine similarity of 0.974 between Swift and Python embeddings on identical audio.
+WeSpeaker MLX matches the Python pyannote reference (0.577 separation on same segments, cosine similarity 0.974 between Swift and Python embeddings).
 
-### Comparison with published results
-
-| Model | VoxCeleb1-O EER% | Params | Source |
-|-------|------------------|--------|--------|
-| CAM++ | 0.65 | 7.2M | 3D-Speaker (Interspeech 2023) |
-| WeSpeaker ResNet34-LM | 0.72 | 6.6M | WeSpeaker VoxSRC2023 |
-
-VoxCeleb1-O EER requires audio download (license-gated). Our Swift embedding cosine similarity of 0.974 vs Python pyannote suggests we match published numbers within quantization tolerance.
-
-CAM++ trades separation for speed — 5x faster (12 ms vs 65 ms) with lower discrimination (0.257 vs 0.584), suited for real-time diarization on Neural Engine.
+CAM++ trades discrimination for speed — 5x faster (12 ms vs 65 ms), suited for real-time diarization on Neural Engine.
 
 ## Reproduction
 
 ```bash
 make build
 
-# Latency benchmark
-python scripts/benchmark_speaker.py --latency --engine mlx
-python scripts/benchmark_speaker.py --latency --engine coreml
-python scripts/benchmark_speaker.py --latency --engine camplusplus
+# Speaker verification (LibriSpeech test-clean, auto-downloaded)
+python scripts/benchmark_speaker.py --librispeech --engine mlx
 
 # VoxConverse embedding quality
 python scripts/benchmark_speaker.py --voxconverse --engine mlx
 
+# Latency benchmark
+python scripts/benchmark_speaker.py --latency --engine mlx
+
 # All engines comparison
 python scripts/benchmark_speaker.py --compare
-
-# VoxCeleb1-O verification (requires audio download)
-python scripts/benchmark_speaker.py --download-voxceleb
-python scripts/benchmark_speaker.py --voxceleb --engine mlx
 ```

@@ -52,6 +52,8 @@ VOXCELEB_DIR = Path("benchmarks/voxceleb1")
 VOXCELEB_AUDIO = VOXCELEB_DIR / "wav"
 VOXCELEB_TRIALS = VOXCELEB_DIR / "veri_test2.txt"
 
+LIBRISPEECH_DIR = Path("benchmarks/librispeech/test-clean")
+
 RESULTS_DIR = Path("benchmarks/speaker")
 
 VOXCELEB_TRIALS_URL = (
@@ -335,6 +337,168 @@ def run_voxceleb_benchmark(cli_path: str, engine: str,
 
 
 # ---------------------------------------------------------------------------
+# LibriSpeech speaker verification
+# ---------------------------------------------------------------------------
+
+def generate_librispeech_trials(audio_dir: Path,
+                                max_pos: int = 2000,
+                                max_neg: int = 2000) -> list:
+    """Generate trial pairs from LibriSpeech test-clean directory structure.
+
+    Directory layout: speaker_id/chapter_id/speaker-chapter-utterance.flac
+    Returns list of (label, path1, path2) tuples.
+    """
+    import random
+    random.seed(42)
+
+    # Collect utterances per speaker
+    speaker_utts = defaultdict(list)
+    for flac in sorted(audio_dir.rglob("*.flac")):
+        speaker_id = flac.parts[-3]  # speaker_id directory
+        speaker_utts[speaker_id].append(str(flac))
+
+    speakers = sorted(speaker_utts.keys())
+    print(f"  {len(speakers)} speakers, "
+          f"{sum(len(v) for v in speaker_utts.values())} utterances")
+
+    # Positive pairs: same speaker, different utterances
+    pos_pairs = []
+    for spk in speakers:
+        utts = speaker_utts[spk]
+        if len(utts) < 2:
+            continue
+        for i in range(len(utts)):
+            for j in range(i + 1, len(utts)):
+                pos_pairs.append((1, utts[i], utts[j]))
+    random.shuffle(pos_pairs)
+    pos_pairs = pos_pairs[:max_pos]
+
+    # Negative pairs: different speakers
+    neg_pairs = []
+    for i in range(len(speakers)):
+        for j in range(i + 1, len(speakers)):
+            u1 = random.choice(speaker_utts[speakers[i]])
+            u2 = random.choice(speaker_utts[speakers[j]])
+            neg_pairs.append((0, u1, u2))
+    random.shuffle(neg_pairs)
+    neg_pairs = neg_pairs[:max_neg]
+
+    trials = pos_pairs + neg_pairs
+    random.shuffle(trials)
+    return trials
+
+
+def run_librispeech_benchmark(cli_path: str, engine: str,
+                              max_pairs: int = 4000) -> dict:
+    """Run speaker verification on LibriSpeech test-clean."""
+    if not LIBRISPEECH_DIR.exists():
+        print("LibriSpeech test-clean not found. Run benchmark_asr.py first.")
+        return {}
+
+    half = max_pairs // 2
+    print(f"\nLibriSpeech verification ({engine}): generating trials...")
+    trials = generate_librispeech_trials(
+        LIBRISPEECH_DIR, max_pos=half, max_neg=half)
+
+    if not trials:
+        print("  No trials generated.")
+        return {}
+
+    print(f"  {len(trials)} trial pairs "
+          f"({sum(1 for t in trials if t[0]==1)} pos, "
+          f"{sum(1 for t in trials if t[0]==0)} neg)")
+
+    # Collect unique utterance paths
+    utterances = set()
+    for _, p1, p2 in trials:
+        utterances.add(p1)
+        utterances.add(p2)
+
+    print(f"  {len(utterances)} unique utterances to embed")
+
+    # Extract embeddings (with cache)
+    cache_file = RESULTS_DIR / f"emb_cache_libri_{engine}.json"
+    emb_cache = {}
+    if cache_file.exists():
+        try:
+            emb_cache = json.load(open(cache_file))
+            print(f"  Loaded {len(emb_cache)} cached embeddings")
+        except Exception:
+            pass
+
+    n_extracted = 0
+    n_cached = 0
+    n_failed = 0
+    total_time = 0
+    total = len(utterances)
+
+    for idx, utt in enumerate(sorted(utterances)):
+        if utt in emb_cache:
+            n_cached += 1
+            continue
+
+        emb, elapsed = extract_embedding(cli_path, utt, engine)
+        if emb is not None:
+            emb_cache[utt] = emb
+            n_extracted += 1
+            total_time += elapsed
+        else:
+            n_failed += 1
+
+        if (idx + 1) % 100 == 0:
+            print(f"  [{idx+1}/{total}] extracted={n_extracted} "
+                  f"cached={n_cached} failed={n_failed}", flush=True)
+
+    # Save cache
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    with open(cache_file, "w") as f:
+        json.dump(emb_cache, f)
+
+    print(f"  Done: {n_extracted} new, {n_cached} cached, {n_failed} failed")
+
+    # Score pairs
+    scores = []
+    labels = []
+    for label, p1, p2 in trials:
+        if p1 not in emb_cache or p2 not in emb_cache:
+            continue
+        sim = cosine_similarity(emb_cache[p1], emb_cache[p2])
+        scores.append(sim)
+        labels.append(label)
+
+    if not scores:
+        return {}
+
+    eer, eer_thresh = compute_eer(scores, labels)
+    min_dcf = compute_min_dcf(scores, labels)
+
+    pos_scores = [s for s, l in zip(scores, labels) if l == 1]
+    neg_scores = [s for s, l in zip(scores, labels) if l == 0]
+
+    results = {
+        "engine": engine,
+        "dataset": "librispeech-test-clean",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "num_pairs": len(scores),
+        "num_positive": len(pos_scores),
+        "num_negative": len(neg_scores),
+        "num_speakers": len(set(
+            Path(p).parts[-3] for _, p, _ in trials)),
+        "eer": round(eer * 100, 2),
+        "eer_threshold": round(eer_thresh, 4),
+        "min_dcf": round(min_dcf, 4),
+        "positive_mean_sim": round(
+            sum(pos_scores) / len(pos_scores), 4) if pos_scores else 0,
+        "negative_mean_sim": round(
+            sum(neg_scores) / len(neg_scores), 4) if neg_scores else 0,
+        "mean_extraction_time": round(
+            total_time / max(n_extracted, 1), 3),
+    }
+
+    return results
+
+
+# ---------------------------------------------------------------------------
 # VoxConverse embedding quality
 # ---------------------------------------------------------------------------
 
@@ -556,10 +720,10 @@ def run_latency_benchmark(cli_path: str, engine: str,
 # Printing
 # ---------------------------------------------------------------------------
 
-def print_voxceleb_summary(results: dict):
-    """Print VoxCeleb1-O verification results."""
+def print_verification_summary(results: dict):
+    """Print speaker verification results."""
     print(f"\n{'='*60}")
-    print(f"Speaker Verification: VoxCeleb1-O")
+    print(f"Speaker Verification: {results['dataset']}")
     print(f"Engine: {results['engine']}")
     print(f"{'='*60}")
     print(f"  Trial pairs:        {results['num_pairs']}")
@@ -648,6 +812,8 @@ def main():
                         help="Engine: mlx, coreml (WeSpeaker), camplusplus (CAM++)")
 
     # Evaluation modes
+    parser.add_argument("--librispeech", action="store_true",
+                        help="Run LibriSpeech test-clean verification (EER, minDCF)")
     parser.add_argument("--voxceleb", action="store_true",
                         help="Run VoxCeleb1-O speaker verification (EER, minDCF)")
     parser.add_argument("--voxconverse", action="store_true",
@@ -683,14 +849,16 @@ def main():
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
     # Default: run all available benchmarks
-    if not (args.voxceleb or args.voxconverse or args.latency or args.compare):
+    if not (args.librispeech or args.voxceleb or args.voxconverse
+            or args.latency or args.compare):
+        args.librispeech = True
         args.voxconverse = True
         args.latency = True
 
     if args.compare:
         all_latency = []
         all_voxconverse = []
-        all_voxceleb = []
+        all_verification = []
 
         for engine in ENGINES:
             print(f"\n{'#'*60}")
@@ -711,13 +879,21 @@ def main():
                 all_voxconverse.append(vc)
                 print_voxconverse_summary(vc)
 
+            # LibriSpeech verification
+            if LIBRISPEECH_DIR.exists():
+                ls = run_librispeech_benchmark(
+                    args.cli_path, engine, args.max_pairs or 4000)
+                if ls:
+                    all_verification.append(ls)
+                    print_verification_summary(ls)
+
             # VoxCeleb (if audio available)
             if VOXCELEB_AUDIO.exists():
                 vx = run_voxceleb_benchmark(
                     args.cli_path, engine, args.max_pairs)
                 if vx:
-                    all_voxceleb.append(vx)
-                    print_voxceleb_summary(vx)
+                    all_verification.append(vx)
+                    print_verification_summary(vx)
 
         print_comparison_table(all_latency, all_voxconverse)
 
@@ -726,7 +902,7 @@ def main():
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "latency": all_latency,
             "voxconverse": all_voxconverse,
-            "voxceleb": all_voxceleb,
+            "verification": all_verification,
         }
         out_file = RESULTS_DIR / "results_comparison.json"
         with open(out_file, "w") as f:
@@ -753,11 +929,20 @@ def main():
             with open(out_file, "w") as f:
                 json.dump(vc, f, indent=2)
 
+    if args.librispeech:
+        ls = run_librispeech_benchmark(
+            args.cli_path, args.engine, args.max_pairs or 4000)
+        if ls:
+            print_verification_summary(ls)
+            out_file = RESULTS_DIR / f"results_librispeech_{args.engine}.json"
+            with open(out_file, "w") as f:
+                json.dump(ls, f, indent=2)
+
     if args.voxceleb:
         vx = run_voxceleb_benchmark(
             args.cli_path, args.engine, args.max_pairs)
         if vx:
-            print_voxceleb_summary(vx)
+            print_verification_summary(vx)
             out_file = RESULTS_DIR / f"results_voxceleb_{args.engine}.json"
             with open(out_file, "w") as f:
                 json.dump(vx, f, indent=2)
