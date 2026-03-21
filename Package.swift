@@ -284,6 +284,12 @@ let package = Package(
             dependencies: [
                 "AudioServer"
             ]
+        ),
+        .testTarget(
+            name: "SpeechCoreTests",
+            dependencies: [
+                "SpeechCore"
+            ]
         )
     ]
 )

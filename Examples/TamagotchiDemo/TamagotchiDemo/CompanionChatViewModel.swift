@@ -60,21 +60,18 @@ final class CompanionChatViewModel {
 
     // MARK: - Load Models
 
-    /// `.all` lets CoreML pick the best backend. Use increased-memory-limit entitlement
-    /// to raise iOS kill threshold from ~3GB to ~5-6GB.
     private let coreMLUnits: MLComputeUnits = .all
+    private(set) var memoryTier: MemoryTier = .full
 
     func loadModels() async {
         isLoading = true
         errorMessage = nil
         loadProgress = 0
 
-        // Full lazy pipeline: only VAD (1MB) loaded at startup.
-        // ASR, LLM, TTS all loaded on-demand and auto-unloaded between phases.
-        // Peak: ~single model during CoreML compilation.
+        memoryTier = MemoryTier.detect()
+        pipelineLog.warning("Memory tier: \(self.memoryTier.description)")
 
         do {
-            // VAD (~1 MB) — always resident, tiny
             loadingStatus = "VAD..."
             loadProgress = 0.3
             vadModel = try await Task.detached {
@@ -86,10 +83,8 @@ final class CompanionChatViewModel {
                 }
             }.value
 
-            // All other models loaded lazily by pipeline
-
             loadProgress = 1.0
-            loadingStatus = "Ready"
+            loadingStatus = "Ready (\(memoryTier.rawValue))"
         } catch {
             errorMessage = "Load failed: \(error.localizedDescription)"
         }
@@ -107,6 +102,7 @@ final class CompanionChatViewModel {
             temperature: 0.3, topK: 20, maxTokens: 15, repetitionPenalty: 1.5)
         let sysPrompt = systemPrompt
         let units = coreMLUnits
+        let tier = memoryTier
 
         var config = PipelineConfig()
         config.mode = .voicePipeline
@@ -114,28 +110,52 @@ final class CompanionChatViewModel {
         config.minInterruptionDuration = 1.0
         config.minSilenceDuration = 0.8
         config.maxResponseDuration = 10.0
-        config.warmupSTT = true
-        config.autoUnloadModels = true  // Unload STT/LLM/TTS between phases
+        config.warmupSTT = tier.useCoreMLASR  // Only warmup if using CoreML ASR
+        config.autoUnloadModels = tier.autoUnload
 
-        pipeline = VoicePipeline(
-            sttFactory: {
-                // iOS variant: INT8 + 10s max = native ANE ops + 3x less buffer memory
-                try await ParakeetASRModel.fromPretrained(
+        pipelineLog.warning("Starting pipeline: tier=\(tier.rawValue) coremlASR=\(tier.useCoreMLASR) coremlTTS=\(tier.useCoreMLTTS) llm=\(tier.useLLM) autoUnload=\(tier.autoUnload)")
+
+        // STT factory: CoreML Parakeet on standard+, Apple Speech on constrained
+        let sttFactory: () async throws -> SpeechRecognitionModel = {
+            if tier.useCoreMLASR {
+                return try await ParakeetASRModel.fromPretrained(
                     modelId: ParakeetASRModel.int8iOSModelId
                 ) { _, _ in }
-            },
-            ttsFactory: { try await KokoroTTSModel.fromPretrained { _, _ in } },
-            vad: vad,
-            llmFactory: { [weak self] in
-                let chat = try await Qwen3ChatModel.fromPretrained(computeUnits: units) { _, _ in }
-                let llm = Qwen3PipelineLLM(model: chat, systemPrompt: sysPrompt, sampling: sampling)
-                llm.onToken = { token in
-                    DispatchQueue.main.async {
-                        self?.appendToken(token)
-                    }
+            } else {
+                return AppleSpeechASR()
+            }
+        }
+
+        // TTS factory: Kokoro on standard+, system TTS on minimal
+        let ttsFactory: () async throws -> SpeechGenerationModel = {
+            if tier.useCoreMLTTS {
+                return try await KokoroTTSModel.fromPretrained { _, _ in }
+            } else {
+                return SystemTTS()
+            }
+        }
+
+        // LLM factory: Qwen3Chat on standard+, nil on minimal
+        let llmFactory: (() async throws -> PipelineLLM)? = tier.useLLM ? { [weak self] in
+            let chat = try await Qwen3ChatModel.fromPretrained(computeUnits: units) { _, _ in }
+            let llm = Qwen3PipelineLLM(model: chat, systemPrompt: sysPrompt, sampling: sampling)
+            llm.onToken = { token in
+                DispatchQueue.main.async {
+                    self?.appendToken(token)
                 }
-                return llm
-            },
+            }
+            return llm
+        } : nil
+
+        if !tier.useLLM {
+            config.mode = .echo  // No LLM → echo mode (STT → TTS)
+        }
+
+        pipeline = VoicePipeline(
+            sttFactory: sttFactory,
+            ttsFactory: ttsFactory,
+            vad: vad,
+            llmFactory: llmFactory,
             config: config,
             onEvent: { [weak self] event in
                 DispatchQueue.main.async {

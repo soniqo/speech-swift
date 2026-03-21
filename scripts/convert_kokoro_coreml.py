@@ -293,6 +293,35 @@ def save_config(output_dir: Path, vocab_size: int, num_voices: int):
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
 
+def palettize_decoders(output_dir: Path, nbits: int = 4):
+    """Apply post-training palettization to decoder models for iOS memory reduction."""
+    import coremltools as ct
+    from coremltools.optimize.coreml import (
+        OpPalettizerConfig,
+        OptimizationConfig,
+        palettize_weights,
+    )
+
+    op_config = OpPalettizerConfig(mode="kmeans", nbits=nbits)
+    config = OptimizationConfig(global_config=op_config)
+
+    for name, _, _ in DECODER_BUCKETS:
+        pkg_path = output_dir / f"decoder_{name}.mlpackage"
+        if not pkg_path.exists():
+            print(f"    Skipping {name} (not found)")
+            continue
+
+        print(f"    Palettizing decoder_{name} to INT{nbits}...")
+        model = ct.models.MLModel(str(pkg_path))
+        model = palettize_weights(model, config)
+        model.save(str(pkg_path))
+
+        size_mb = sum(
+            f.stat().st_size for f in pkg_path.rglob("*") if f.is_file()
+        ) / 1024 / 1024
+        print(f"      Saved: {pkg_path} ({size_mb:.1f} MB)")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Convert Kokoro-82M to CoreML")
     parser.add_argument("--output", type=str, default="kokoro-coreml",
@@ -301,6 +330,8 @@ def main():
                         help="Cache directory for downloads")
     parser.add_argument("--quantize", action="store_true",
                         help="Use INT8 quantization for smaller model size")
+    parser.add_argument("--palettize", type=int, choices=[4, 8], default=0,
+                        help="Post-training palettization (4 or 8 bits). Reduces decoder size for iOS.")
     args = parser.parse_args()
 
     output_dir = Path(args.output)
@@ -345,6 +376,10 @@ def main():
     print("\nStep 5: Convert to CoreML")
     convert_duration_model(model, output_dir, quantize=args.quantize)
     convert_decoder(model, output_dir, quantize=args.quantize)
+
+    if args.palettize:
+        print(f"\nStep 5b: Palettize decoder models to INT{args.palettize}")
+        palettize_decoders(output_dir, nbits=args.palettize)
 
     print("\nStep 6: Save configuration")
     save_config(output_dir, vocab_size=len(vocab), num_voices=len(voices))
