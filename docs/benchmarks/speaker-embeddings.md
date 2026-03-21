@@ -25,7 +25,7 @@
 | Engine | EER% | minDCF (p=0.01) | Pos Mean Sim | Neg Mean Sim |
 |--------|------|-----------------|--------------|--------------|
 | WeSpeaker MLX | **0.98** | **0.084** | 0.718 | 0.091 |
-| CAM++ CoreML | 9.49 | 0.440 | 0.742 | 0.424 |
+| CAM++ CoreML | 7.27 | 0.288 | 0.746 | 0.364 |
 
 ### Comparison with published results (VoxCeleb1-O)
 
@@ -34,7 +34,7 @@
 | CAM++ | 0.65 | 7.2M | 3D-Speaker (Interspeech 2023) |
 | WeSpeaker ResNet34-LM | 0.72 | 6.6M | WeSpeaker VoxSRC2023 |
 
-LibriSpeech test-clean is easier than VoxCeleb1-O (read speech, cleaner audio), so direct comparison is indicative only. WeSpeaker's 0.98% EER is consistent with published VoxCeleb1-O numbers (0.72%). CAM++'s 9.49% EER is higher than its published VoxCeleb1-O number (0.65%) — the CoreML model uses a fixed 500-frame input shape (short audio is tiled, long audio is center-cropped).
+LibriSpeech test-clean is easier than VoxCeleb1-O (read speech, cleaner audio), so direct comparison is indicative only. WeSpeaker's 0.98% EER is consistent with published VoxCeleb1-O numbers (0.72%). CAM++'s 7.27% EER is higher than its published VoxCeleb1-O number (0.65%) — the CoreML model uses a fixed 500-frame input shape (short audio is tiled, long audio is center-cropped), and LibriSpeech read speech differs from VoxCeleb conversational audio.
 
 ## Embedding Quality (VoxConverse)
 
@@ -47,7 +47,7 @@ Cosine similarity between segment-level embeddings extracted from VoxConverse te
 | Engine | Intra (mean +/- std) | Inter (mean +/- std) | Separation |
 |--------|-------------------|-------------------|------------|
 | WeSpeaker MLX | 0.726 +/- 0.210 | 0.142 +/- 0.145 | **0.584** |
-| CAM++ CoreML | 0.693 +/- 0.162 | 0.436 +/- 0.132 | 0.257 |
+| CAM++ CoreML | 0.723 +/- 0.133 | 0.395 +/- 0.140 | 0.328 |
 
 WeSpeaker MLX matches the Python pyannote reference (0.577 separation on same segments, cosine similarity 0.974 between Swift and Python embeddings).
 

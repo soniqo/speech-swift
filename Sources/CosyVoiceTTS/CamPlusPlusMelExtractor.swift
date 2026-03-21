@@ -194,6 +194,25 @@ final class CamPlusPlusMelExtractor {
         vDSP_vclip(melSpec, 1, &epsilon, [Float.greatestFiniteMagnitude], &melSpec, 1, vDSP_Length(count))
         vvlogf(&melSpec, melSpec, &countN)
 
+        // CMN (Cepstral Mean Normalization): subtract per-bin temporal mean.
+        // Matches 3D-Speaker Python: feat = feat - feat.mean(0, keepdim=True)
+        if nFrames > 0 {
+            var binMeans = [Float](repeating: 0, count: nMels)
+            for frame in 0..<nFrames {
+                let base = frame * nMels
+                for bin in 0..<nMels {
+                    binMeans[bin] += melSpec[base + bin]
+                }
+            }
+            let invFrames = 1.0 / Float(nFrames)
+            vDSP_vsmul(binMeans, 1, [invFrames], &binMeans, 1, vDSP_Length(nMels))
+
+            for frame in 0..<nFrames {
+                let base = frame * nMels
+                vDSP_vsub(binMeans, 1, &melSpec + base, 1, &melSpec + base, 1, vDSP_Length(nMels))
+            }
+        }
+
         return (melSpec, nFrames)
     }
 }
