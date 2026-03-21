@@ -47,9 +47,16 @@ Cosine similarity between segment-level embeddings extracted from VoxConverse te
 | Engine | Intra (mean +/- std) | Inter (mean +/- std) | Separation |
 |--------|-------------------|-------------------|------------|
 | WeSpeaker MLX | 0.726 +/- 0.210 | 0.142 +/- 0.145 | **0.584** |
+| WeSpeaker CoreML | 0.726 +/- 0.193 | 0.143 +/- 0.139 | 0.582 |
 | CAM++ CoreML | 0.723 +/- 0.133 | 0.395 +/- 0.140 | 0.328 |
 
-WeSpeaker MLX matches the Python pyannote reference (0.577 separation on same segments, cosine similarity 0.974 between Swift and Python embeddings).
+All implementations verified against Python pyannote reference (0.577 separation on same segments):
+
+| Engine | Swift vs Python Cosine |
+|--------|----------------------|
+| WeSpeaker MLX | 0.974 |
+| WeSpeaker CoreML | 0.968 |
+| CAM++ CoreML | 0.965 |
 
 CAM++ trades discrimination for speed — 5x faster (12 ms vs 65 ms), suited for real-time diarization on Neural Engine.
 
