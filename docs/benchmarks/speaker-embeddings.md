@@ -12,67 +12,45 @@
 
 20s audio clip, 10 iterations after warmup.
 
-| Engine | Dim | Mean | Std | Min |
-|--------|-----|------|-----|-----|
-| WeSpeaker MLX | 256 | 65 ms | 3.9 ms | 60 ms |
-| WeSpeaker CoreML | 256 | 148 ms | 10.7 ms | 141 ms |
-| CAM++ CoreML | 192 | 12 ms | 0.6 ms | 11 ms |
+| Engine | Dim | Mean | Min |
+|--------|-----|------|-----|
+| WeSpeaker MLX | 256 | 65 ms | 60 ms |
+| WeSpeaker CoreML | 256 | 148 ms | 141 ms |
+| CAM++ CoreML | 192 | 12 ms | 11 ms |
 
 ## Speaker Verification (LibriSpeech test-clean)
 
-40 speakers, 2780 trial pairs (2000 positive, 780 negative) generated from LibriSpeech test-clean. Scoring with cosine similarity.
+40 speakers, 2780 trial pairs. Cosine similarity scoring.
 
-| Engine | EER% | minDCF (p=0.01) | Pos Mean Sim | Neg Mean Sim |
-|--------|------|-----------------|--------------|--------------|
-| WeSpeaker MLX | **0.98** | **0.084** | 0.718 | 0.091 |
-| CAM++ CoreML | 7.27 | 0.288 | 0.746 | 0.364 |
+| Engine | EER% | minDCF (p=0.01) |
+|--------|------|-----------------|
+| WeSpeaker MLX | **0.98** | **0.084** |
+| CAM++ CoreML | 7.27 | 0.288 |
 
-### Comparison with published results (VoxCeleb1-O)
-
-| Model | Published EER% | Params | Source |
-|-------|---------------|--------|--------|
-| CAM++ | 0.65 | 7.2M | 3D-Speaker (Interspeech 2023) |
-| WeSpeaker ResNet34-LM | 0.72 | 6.6M | WeSpeaker VoxSRC2023 |
-
-LibriSpeech test-clean is easier than VoxCeleb1-O (read speech, cleaner audio), so direct comparison is indicative only. WeSpeaker's 0.98% EER is consistent with published VoxCeleb1-O numbers (0.72%). CAM++'s 7.27% EER is higher than its published VoxCeleb1-O number (0.65%) — the CoreML model uses a fixed 500-frame input shape (short audio is tiled, long audio is center-cropped), and LibriSpeech read speech differs from VoxCeleb conversational audio.
+Published VoxCeleb1-O: WeSpeaker 0.72% EER (WeSpeaker VoxSRC2023), CAM++ 0.65% EER (3D-Speaker, Interspeech 2023). LibriSpeech is easier than VoxCeleb1-O (read speech, fewer speakers). CAM++ uses a fixed 500-frame CoreML input (short audio tiled, long audio center-cropped).
 
 ## Embedding Quality (VoxConverse)
 
-Cosine similarity between segment-level embeddings extracted from VoxConverse test set (5 multi-speaker recordings). Measures how well embeddings discriminate speakers in real conversational audio.
+Cosine similarity between segment-level embeddings from 5 multi-speaker recordings. Separation = intra-speaker mean - inter-speaker mean.
 
-- **Intra-speaker**: cosine similarity between different segments of the **same** speaker
-- **Inter-speaker**: cosine similarity between segments of **different** speakers
-- **Separation**: intra - inter (higher = more discriminative)
+| Engine | Intra-Speaker | Inter-Speaker | Separation |
+|--------|--------------|--------------|------------|
+| WeSpeaker MLX | 0.726 | 0.142 | **0.584** |
+| WeSpeaker CoreML | 0.726 | 0.143 | 0.582 |
+| CAM++ CoreML | 0.723 | 0.395 | 0.328 |
 
-| Engine | Intra (mean +/- std) | Inter (mean +/- std) | Separation |
-|--------|-------------------|-------------------|------------|
-| WeSpeaker MLX | 0.726 +/- 0.210 | 0.142 +/- 0.145 | **0.584** |
-| WeSpeaker CoreML | 0.726 +/- 0.193 | 0.143 +/- 0.139 | 0.582 |
-| CAM++ CoreML | 0.723 +/- 0.133 | 0.395 +/- 0.140 | 0.328 |
-
-All implementations verified against Python pyannote reference (0.577 separation on same segments):
-
-| Engine | Swift vs Python Cosine |
-|--------|----------------------|
-| WeSpeaker MLX | 0.974 |
-| WeSpeaker CoreML | 0.968 |
-| CAM++ CoreML | 0.965 |
-
-CAM++ trades discrimination for speed — 5x faster (12 ms vs 65 ms), suited for real-time diarization on Neural Engine.
+All implementations verified against Python pyannote reference (cosine >0.96).
 
 ## Reproduction
 
 ```bash
 make build
 
-# Speaker verification (LibriSpeech test-clean, auto-downloaded)
+# Speaker verification (LibriSpeech test-clean)
 python scripts/benchmark_speaker.py --librispeech --engine mlx
 
 # VoxConverse embedding quality
 python scripts/benchmark_speaker.py --voxconverse --engine mlx
-
-# Latency benchmark
-python scripts/benchmark_speaker.py --latency --engine mlx
 
 # All engines comparison
 python scripts/benchmark_speaker.py --compare
