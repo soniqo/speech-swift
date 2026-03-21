@@ -18,6 +18,9 @@ public final class KokoroTTSModel {
     /// Default HuggingFace model ID.
     public static let defaultModelId = "aufklarer/Kokoro-82M-CoreML"
 
+    /// iOS-optimized INT4 palettized variant (~80MB, reduced memory footprint).
+    public static let int4iOSModelId = "aufklarer/Kokoro-82M-CoreML-INT4"
+
     /// Output sample rate (24kHz).
     public static let outputSampleRate = 24000
 

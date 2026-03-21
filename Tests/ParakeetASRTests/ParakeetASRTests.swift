@@ -31,6 +31,14 @@ final class ParakeetASRTests: XCTestCase {
         XCTAssertEqual(ParakeetASRModel.int8ModelId, "aufklarer/Parakeet-TDT-v3-CoreML-INT8")
     }
 
+    func testIOSModelVariantConstants() {
+        XCTAssertEqual(ParakeetASRModel.int8iOSModelId, "aufklarer/Parakeet-TDT-v3-CoreML-INT8-iOS")
+        XCTAssertEqual(ParakeetASRModel.int4iOSModelId, "aufklarer/Parakeet-TDT-v3-CoreML-INT4-iOS")
+        // iOS variants should be different from default variants
+        XCTAssertNotEqual(ParakeetASRModel.int8iOSModelId, ParakeetASRModel.int8ModelId)
+        XCTAssertNotEqual(ParakeetASRModel.int4iOSModelId, ParakeetASRModel.defaultModelId)
+    }
+
     func testConfigCodable() throws {
         let original = ParakeetConfig.default
         let data = try JSONEncoder().encode(original)
