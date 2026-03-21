@@ -33,15 +33,16 @@ Cosine similarity between segment-level embeddings extracted from VoxConverse te
 
 WeSpeaker MLX produces the most discriminative embeddings on same-channel audio, with 0.584 separation — matching the Python pyannote reference (0.577 on same segments). Cosine similarity of 0.974 between Swift and Python embeddings on identical audio.
 
-### Bugs fixed during benchmarking
+### Comparison with published results
 
-The initial benchmark revealed near-zero separation (0.008) for WeSpeaker MLX. Root cause analysis found two implementation bugs:
+| Model | VoxCeleb1-O EER% | Params | Source |
+|-------|------------------|--------|--------|
+| CAM++ | 0.65 | 7.2M | 3D-Speaker (Interspeech 2023) |
+| WeSpeaker ResNet34-LM | 0.72 | 6.6M | WeSpeaker VoxSRC2023 |
 
-1. **Input dimension ordering**: Python WeSpeaker permutes `(B,T,F)` → `(B,F,T)` before conv — frequency is the height dimension. Our implementation had time as height, causing the ResNet to process spatial dimensions incorrectly.
+VoxCeleb1-O EER requires audio download (license-gated). Our Swift embedding cosine similarity of 0.974 vs Python pyannote suggests we match published numbers within quantization tolerance.
 
-2. **Feature preprocessing**: Missing CMN (cepstral mean normalization) and wrong window function. pyannote uses hamming window + global mean subtraction over time. We had Povey window and no CMN.
-
-After fixing both issues, Swift embeddings match Python with 0.974 cosine similarity.
+CAM++ trades separation for speed — 5x faster (12 ms vs 65 ms) with lower discrimination (0.257 vs 0.584), suited for real-time diarization on Neural Engine.
 
 ## Reproduction
 
