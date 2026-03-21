@@ -38,21 +38,21 @@ final class ModelLoaderTests: XCTestCase {
     }
 
     func testLoadAllModels() async throws {
-        var progressUpdates: [(Double, String)] = []
+        let collector = Atomic<[(Double, String)]>([])
 
         let models = try await ModelLoader.load([
             .vad { _ in MockVAD() },
             .stt { _ in MockSTT() },
             .tts { _ in MockTTS() },
         ], onProgress: { progress, stage in
-            progressUpdates.append((progress, stage))
+            collector.mutate { $0.append((progress, stage)) }
         })
 
         XCTAssertNotNil(models.vad)
         XCTAssertNotNil(models.stt)
         XCTAssertNotNil(models.tts)
 
-        // Progress should reach 1.0
+        let progressUpdates = collector.get()
         XCTAssertEqual(progressUpdates.last?.0, 1.0)
         XCTAssertEqual(progressUpdates.last?.1, "Ready")
     }
@@ -69,15 +69,17 @@ final class ModelLoaderTests: XCTestCase {
     }
 
     func testProgressIsMonotonic() async throws {
-        var progressValues: [Double] = []
+        let collector = Atomic<[Double]>([])
 
         _ = try await ModelLoader.load([
             .vad { p in p(0.5, "downloading"); p(1.0, "done"); return MockVAD() },
             .stt { p in p(0.5, "downloading"); p(1.0, "done"); return MockSTT() },
             .tts { p in p(0.5, "downloading"); p(1.0, "done"); return MockTTS() },
         ], onProgress: { progress, _ in
-            progressValues.append(progress)
+            collector.mutate { $0.append(progress) }
         })
+
+        let progressValues = collector.get()
 
         // Final value should be 1.0
         XCTAssertEqual(progressValues.last, 1.0)
@@ -280,5 +282,6 @@ final class ModelLoaderTests: XCTestCase {
         init(_ value: T) { self.value = value }
         func set(_ newValue: T) { lock.lock(); value = newValue; lock.unlock() }
         func get() -> T { lock.lock(); defer { lock.unlock() }; return value }
+        func mutate(_ transform: (inout T) -> Void) { lock.lock(); transform(&value); lock.unlock() }
     }
 }
