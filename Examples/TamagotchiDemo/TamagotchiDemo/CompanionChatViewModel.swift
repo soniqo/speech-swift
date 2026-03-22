@@ -99,16 +99,26 @@ final class CompanionChatViewModel {
         config.minSilenceDuration = 0.8
         config.maxResponseDuration = 10.0
         config.warmupSTT = true
-        config.autoUnloadModels = true
+        config.autoUnloadModels = false  // Keep all models loaded — INT8 variants fit in memory
 
         pipeline = VoicePipeline(
             sttFactory: {
-                try await ParakeetASRModel.fromPretrained(
-                    modelId: ParakeetASRModel.int8iOSModelId) { _, _ in }
+                #if targetEnvironment(simulator)
+                let asrModelId = ParakeetASRModel.defaultModelId
+                #else
+                let asrModelId = ParakeetASRModel.int8iOSModelId
+                #endif
+                return try await ParakeetASRModel.fromPretrained(
+                    modelId: asrModelId) { _, _ in }
             },
             ttsFactory: {
-                try await KokoroTTSModel.fromPretrained(
-                    modelId: KokoroTTSModel.int8iOSModelId) { _, _ in }
+                #if targetEnvironment(simulator)
+                let ttsModelId = KokoroTTSModel.defaultModelId
+                #else
+                let ttsModelId = KokoroTTSModel.int8iOSModelId
+                #endif
+                return try await KokoroTTSModel.fromPretrained(
+                    modelId: ttsModelId) { _, _ in }
             },
             vad: vad,
             llmFactory: { [weak self] in
@@ -141,7 +151,6 @@ final class CompanionChatViewModel {
     func stopListening() {
         diagnostics.stop()
         stopMicrophone()
-        pipeline?.unloadLLM()
         pipeline?.stop()
         pipeline = nil
         isListening = false
@@ -163,7 +172,10 @@ final class CompanionChatViewModel {
             pipelineLog.warning("[EVT] speechStarted (isGenerating=\(self.isGenerating))")
             isSpeechDetected = true
             pipelineState = "speech detected"
-            if isGenerating { pipeline?.unloadLLM() }
+            // Cancel LLM generation but don't unload — keep model warm for next turn
+            if isGenerating {
+                // TODO: cancel without unload when pipeline supports it
+            }
 
         case .speechEnded:
             pipelineLog.warning("[EVT] speechEnded")
@@ -191,7 +203,6 @@ final class CompanionChatViewModel {
             pipelineLog.warning("[EVT] responseInterrupted")
             player.fadeOutAndStop()
             isSpeaking = false
-            pipeline?.unloadLLM()
             isGenerating = false
             currentAssistantIdx = nil
             pipelineState = "interrupted"
@@ -361,7 +372,6 @@ final class CompanionChatViewModel {
 
     func clearChat() {
         messages = []
-        pipeline?.unloadLLM()
     }
 
     // MARK: - LLM Token Streaming
