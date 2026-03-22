@@ -418,6 +418,117 @@ def compute_positional_wer(results: list, data_dir: Path,
 # Entry point
 # ---------------------------------------------------------------------------
 
+def load_librispeech(data_dir: Path) -> list:
+    """Load LibriSpeech test-clean utterances with references."""
+    ls_dir = data_dir / "LibriSpeech" / "test-clean"
+    if not ls_dir.exists():
+        print(f"ERROR: LibriSpeech not found at {ls_dir}")
+        print("Download: curl -L https://www.openslr.org/resources/12/test-clean.tar.gz | tar xz -C benchmarks/data/")
+        sys.exit(1)
+
+    utterances = []
+    for trans_file in sorted(ls_dir.rglob("*.trans.txt")):
+        speaker_dir = trans_file.parent
+        refs = {}
+        for line in trans_file.read_text().strip().split("\n"):
+            parts = line.split(" ", 1)
+            if len(parts) == 2:
+                refs[parts[0]] = parts[1]
+
+        for flac in sorted(speaker_dir.glob("*.flac")):
+            uid = flac.stem
+            if uid in refs:
+                utterances.append({
+                    "path": str(flac),
+                    "reference": refs[uid],
+                    "id": uid,
+                })
+
+    return utterances
+
+
+def run_librispeech_sustained(engine: str, model: str, data_dir: Path,
+                              max_utterances: int, output_dir: Path):
+    """Process LibriSpeech utterances sequentially to simulate sustained load."""
+    utterances = load_librispeech(data_dir)
+    if max_utterances > 0:
+        utterances = utterances[:max_utterances]
+
+    print(f"\nEngine: {engine}, Utterances: {len(utterances)}")
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    results = []
+    total_audio_s = 0
+    session_start = time.monotonic()
+
+    for i, utt in enumerate(utterances):
+        result = transcribe_chunk(CLI_PATH, utt["path"], engine, model)
+
+        if "error" in result:
+            if i < 3:
+                print(f"  [{i}] ERROR: {result['error'][:80]}")
+            continue
+
+        dur = get_wav_duration(utt["path"]) if utt["path"].endswith(".wav") else 0
+        if dur == 0:
+            # Estimate from FLAC (~16kHz)
+            dur = result.get("inference_time", 0) / max(result.get("rtf", 0.01), 0.001)
+            if dur <= 0:
+                dur = 5.0  # fallback
+
+        total_audio_s += dur
+
+        wer_result = compute_wer(utt["reference"], result["text"])
+
+        result["chunk_index"] = i
+        result["reference"] = utt["reference"]
+        result["wer"] = wer_result["wer"]
+        result["ref_words"] = wer_result["ref_words"]
+        result["errors"] = wer_result["errors"]
+        result["cumulative_audio_s"] = total_audio_s
+        result["session_elapsed_s"] = time.monotonic() - session_start
+
+        results.append(result)
+
+        if (i + 1) % 100 == 0:
+            avg_rtf = sum(r["rtf"] for r in results) / len(results)
+            avg_wer = sum(r["wer"] * r["ref_words"] for r in results) / max(sum(r["ref_words"] for r in results), 1)
+            print(f"  [{i+1}/{len(utterances)}] avg_RTF={avg_rtf:.4f}, "
+                  f"WER={avg_wer:.2f}%, "
+                  f"audio={total_audio_s/60:.1f}min, "
+                  f"elapsed={results[-1]['session_elapsed_s']/60:.1f}min")
+
+    # Save results
+    results_path = output_dir / f"sustained_{engine}.json"
+    with open(results_path, "w") as f:
+        json.dump(results, f, indent=2)
+
+    # Analysis
+    print_analysis(results, engine, 0)
+
+    # Positional WER analysis
+    n = len(results)
+    if n >= 20:
+        q1 = results[:n//4]
+        q4 = results[-(n//4):]
+
+        q1_wer = sum(r["errors"] for r in q1) / max(sum(r["ref_words"] for r in q1), 1) * 100
+        q4_wer = sum(r["errors"] for r in q4) / max(sum(r["ref_words"] for r in q4), 1) * 100
+        overall_wer = sum(r["errors"] for r in results) / max(sum(r["ref_words"] for r in results), 1) * 100
+
+        print(f"\n  WER by Position:")
+        print(f"    Overall:        {overall_wer:.2f}%")
+        print(f"    First 25%:      {q1_wer:.2f}%")
+        print(f"    Last 25%:       {q4_wer:.2f}%")
+
+        if abs(q4_wer - q1_wer) > 0.5:
+            print(f"    ⚠️  WER drift: {q4_wer - q1_wer:+.2f}% (last vs first quarter)")
+        else:
+            print(f"    ✅ Stable WER (no positional degradation)")
+
+    return results
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Long-form ASR benchmark (sustained Neural Engine load)")
@@ -430,8 +541,13 @@ def main():
                         help="Chunk duration in seconds (default: 10)")
     parser.add_argument("--duration", type=float, default=60.0,
                         help="Total benchmark duration in minutes (default: 60)")
+    parser.add_argument("--max-utterances", type=int, default=0,
+                        help="Max utterances for LibriSpeech mode (0=all)")
     parser.add_argument("--data-dir", type=str, default="benchmarks/data",
                         help="Dataset directory")
+    parser.add_argument("--dataset", default="librispeech",
+                        choices=["librispeech", "earnings22"],
+                        help="Dataset to use")
     parser.add_argument("--download-only", action="store_true",
                         help="Download dataset and exit")
     parser.add_argument("--compare", action="store_true",
@@ -441,36 +557,46 @@ def main():
     data_dir = Path(args.data_dir)
 
     if args.download_only:
-        print("Downloading Earnings-22 dataset...")
-        download_earnings22(data_dir / "earnings22")
+        if args.dataset == "earnings22":
+            print("Downloading Earnings-22 dataset...")
+            download_earnings22(data_dir / "earnings22")
+        else:
+            print("LibriSpeech: download manually from https://www.openslr.org/12/")
+            print(f"  Extract to {data_dir}/LibriSpeech/test-clean/")
         return
 
     if args.compare:
-        # Compare existing result files
         result_dir = BENCHMARK_BASE
-        for f in sorted(result_dir.glob("longform_*.json")):
+        for f in sorted(result_dir.glob("*.json")):
             with open(f) as fh:
                 results = json.load(fh)
-            engine = f.stem.split("_")[1]
-            chunk_dur = float(f.stem.split("_")[2].replace("s", ""))
-            print_analysis(results, engine, chunk_dur)
+            name = f.stem
+            print_analysis(results, name, 0)
         return
 
-    # Download dataset if needed
-    print("Step 1: Prepare dataset")
-    earnings_dir = download_earnings22(data_dir / "earnings22")
-
-    # Run benchmark
-    print("\nStep 2: Run long-form benchmark")
     output_dir = BENCHMARK_BASE / datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    run_longform_benchmark(
-        engine=args.engine,
-        model=args.model,
-        data_dir=earnings_dir,
-        chunk_duration=args.chunk_duration,
-        max_duration=args.duration,
-        output_dir=output_dir,
-    )
+
+    if args.dataset == "librispeech":
+        print("Long-form benchmark: LibriSpeech sustained session")
+        run_librispeech_sustained(
+            engine=args.engine,
+            model=args.model,
+            data_dir=data_dir,
+            max_utterances=args.max_utterances,
+            output_dir=output_dir,
+        )
+    else:
+        print("Step 1: Prepare dataset")
+        earnings_dir = download_earnings22(data_dir / "earnings22")
+        print("\nStep 2: Run long-form benchmark")
+        run_longform_benchmark(
+            engine=args.engine,
+            model=args.model,
+            data_dir=earnings_dir,
+            chunk_duration=args.chunk_duration,
+            max_duration=args.duration,
+            output_dir=output_dir,
+        )
 
 
 if __name__ == "__main__":
