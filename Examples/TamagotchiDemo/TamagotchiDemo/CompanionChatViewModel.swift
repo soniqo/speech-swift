@@ -53,6 +53,8 @@ final class CompanionChatViewModel {
     private var audioEngine: AVAudioEngine?
     private let player = StreamingAudioPlayer()
     private var waitingForPlaybackEnd = false
+    /// Mute mic feed to pipeline during TTS playback to prevent echo loop.
+    private var muteAudioFeed = false
     private let speechSynth = AVSpeechSynthesizer()
     private var speechDelegate: SpeechFinishedDelegate?
 
@@ -238,6 +240,7 @@ final class CompanionChatViewModel {
 
         case .responseInterrupted:
             player.fadeOutAndStop()
+            muteAudioFeed = false  // Resume mic on interruption
             pipeline?.unloadLLM()  // Cancel LLM to unblock worker thread
             isGenerating = false
             currentAssistantIdx = nil
@@ -246,6 +249,7 @@ final class CompanionChatViewModel {
         case .responseAudioDelta(let samples):
             pipelineLog.warning("Event: responseAudioDelta \(samples.count) samples")
             pipelineState = "speaking..."
+            muteAudioFeed = true  // Stop feeding mic to pipeline during playback
             recordTTSSamples(samples, sampleRate: 24000)
             do {
                 try player.play(samples: samples, sampleRate: 24000)
@@ -288,6 +292,7 @@ final class CompanionChatViewModel {
 
     private func resumeAfterResponse() {
         guard isListening else { return }
+        muteAudioFeed = false  // Resume mic feed after playback
         pipeline?.resumeListening()
         pipelineState = "listening"
     }
@@ -330,6 +335,7 @@ final class CompanionChatViewModel {
 
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: hwFormat) { [weak self] buffer, _ in
             guard let self else { return }
+            guard !self.muteAudioFeed else { return }  // Muted during TTS playback
             guard let srcData = buffer.floatChannelData else { return }
             let frameLen = Int(buffer.frameLength)
             guard frameLen > 0 else { return }
