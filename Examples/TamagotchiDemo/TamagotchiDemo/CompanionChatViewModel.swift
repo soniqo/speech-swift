@@ -105,7 +105,8 @@ final class CompanionChatViewModel {
         config.minSilenceDuration = 0.8
         config.maxResponseDuration = 10.0
         config.warmupSTT = true
-        config.autoUnloadModels = false  // Keep all models loaded — INT8 variants fit in memory
+        config.preSpeechBufferDuration = 1.5  // Keep 1.5s before VAD trigger to capture phrase start
+        config.autoUnloadModels = false
 
         pipeline = VoicePipeline(
             sttFactory: {
