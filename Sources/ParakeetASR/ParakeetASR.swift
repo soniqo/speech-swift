@@ -241,8 +241,11 @@ public class ParakeetASRModel {
 
         // Step 5: Load CoreML models (encoder, decoder, joint — no preprocessor)
         progressHandler?(0.80, "Loading CoreML models...")
+        // Encoder uses .all — FastConformer has ops that require GPU on some shapes.
+        // Decoder/joint are small and run fine on CPU + Neural Engine.
+        let encoderUnits: MLComputeUnits = (computeUnits == .cpuAndNeuralEngine) ? .all : computeUnits
         let encoder = try loadCoreMLModel(
-            name: "encoder", from: cacheDir, computeUnits: computeUnits)
+            name: "encoder", from: cacheDir, computeUnits: encoderUnits)
         progressHandler?(0.90, "Loading decoder...")
         let decoder = try loadCoreMLModel(
             name: "decoder", from: cacheDir, computeUnits: .cpuAndNeuralEngine)
