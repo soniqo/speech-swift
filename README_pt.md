@@ -50,7 +50,7 @@ Veja a [discussao do Roadmap](https://github.com/soniqo/speech-swift/discussions
 | Qwen3-TTS-0.6B CustomVoice | Texto → Fala | Sim (~120ms) | 10 idiomas | [4-bit](https://huggingface.co/aufklarer/Qwen3-TTS-12Hz-0.6B-CustomVoice-MLX-4bit) 1.7 GB |
 | Qwen3-TTS-1.7B Base | Texto → Fala | Sim (~120ms) | 10 idiomas | [4-bit](https://huggingface.co/aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-4bit) 3.2 GB · [8-bit](https://huggingface.co/aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-8bit) 4.8 GB |
 | CosyVoice3-0.5B | Texto → Fala | Sim (~150ms) | 9 idiomas | [4-bit](https://huggingface.co/aufklarer/CosyVoice3-0.5B-MLX-4bit) 1.2 GB |
-| Kokoro-82M | Texto → Fala | Nao | 10 idiomas | [CoreML](https://huggingface.co/aufklarer/Kokoro-82M-CoreML) ~325 MB |
+| Kokoro-82M | Texto → Fala | Nao | 10 idiomas | [CoreML FP16](https://huggingface.co/aufklarer/Kokoro-82M-CoreML) ~325 MB · [CoreML INT8](https://huggingface.co/aufklarer/Kokoro-82M-CoreML-INT8) 89 MB |
 | Qwen3-0.6B Chat | Texto → Texto (LLM) | Sim (streaming) | Multi | [CoreML INT4](https://huggingface.co/aufklarer/Qwen3-0.6B-Chat-CoreML) 318 MB · [CoreML INT8](https://huggingface.co/aufklarer/Qwen3-0.6B-Chat-CoreML) 571 MB |
 | PersonaPlex-7B | Fala → Fala | Sim (~2s por bloco) | EN | [4-bit](https://huggingface.co/aufklarer/PersonaPlex-7B-MLX-4bit) 4.9 GB · [8-bit](https://huggingface.co/aufklarer/PersonaPlex-7B-MLX-8bit) 9.1 GB |
 | FireRedVAD | Deteccao de Atividade de Voz | Nao (offline) | 100+ idiomas | [CoreML](https://huggingface.co/aufklarer/FireRedVAD-CoreML) ~1.2 MB |
@@ -74,7 +74,8 @@ Memoria de pesos e a memoria da GPU (MLX) ou ANE (CoreML) consumida pelos parame
 | Qwen3-ForcedAligner-0.6B (4-bit, MLX) | 933 MB | ~1.5 GB |
 | Qwen3-TTS-0.6B (4-bit, MLX) | 977 MB | ~2 GB |
 | CosyVoice3-0.5B (4-bit, MLX) | 732 MB | ~1.5 GB |
-| Kokoro-82M (CoreML) | 325 MB | ~500 MB |
+| Kokoro-82M (CoreML FP16, 1 bucket) | 80 MB | ~200 MB |
+| Kokoro-82M (CoreML INT8, 1 bucket) | 80 MB | ~200 MB |
 | Qwen3-Chat-0.6B (INT4, CoreML) | 318 MB | ~600 MB |
 | Qwen3-Chat-0.6B (INT8, CoreML) | 571 MB | ~900 MB |
 | PersonaPlex-7B (4-bit, MLX) | 4,900 MB | ~6.5 GB |
@@ -1229,7 +1230,7 @@ Sim. speech-swift esta licenciado sob Apache 2.0. Os pesos dos modelos subjacent
 Todos os chips da serie M: M1, M2, M3, M4 e suas variantes Pro/Max/Ultra. Requer macOS 14+ (Sonoma) ou iOS 17+.
 
 **Quanta memoria e necessaria?**
-De ~3 MB (Silero VAD) ate ~6.5 GB (PersonaPlex 7B). Kokoro TTS usa ~500 MB, Qwen3-ASR ~2.2 GB. Veja a tabela de [Requisitos de Memoria](#requisitos-de-memoria) para detalhes completos.
+De ~3 MB (Silero VAD) ate ~6.5 GB (PersonaPlex 7B). Kokoro TTS usa ~200 MB, Qwen3-ASR ~2.2 GB. Veja a tabela de [Requisitos de Memoria](#requisitos-de-memoria) para detalhes completos.
 
 **Posso executar multiplos modelos simultaneamente?**
 Sim. Use modelos CoreML no Neural Engine junto com modelos MLX na GPU para evitar contencao — por exemplo, Silero VAD (CoreML) + Qwen3-ASR (MLX) + Qwen3-TTS (MLX).

@@ -50,7 +50,7 @@ Mac・iOS向けのオンデバイス音声認識・合成・理解。Apple Silic
 | Qwen3-TTS-0.6B CustomVoice | テキスト → 音声 | あり (~120ms) | 10言語 | [4-bit](https://huggingface.co/aufklarer/Qwen3-TTS-12Hz-0.6B-CustomVoice-MLX-4bit) 1.7 GB |
 | Qwen3-TTS-1.7B Base | テキスト → 音声 | あり (~120ms) | 10言語 | [4-bit](https://huggingface.co/aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-4bit) 3.2 GB · [8-bit](https://huggingface.co/aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-8bit) 4.8 GB |
 | CosyVoice3-0.5B | テキスト → 音声 | あり (~150ms) | 9言語 | [4-bit](https://huggingface.co/aufklarer/CosyVoice3-0.5B-MLX-4bit) 1.2 GB |
-| Kokoro-82M | テキスト → 音声 | なし | 10言語 | [CoreML](https://huggingface.co/aufklarer/Kokoro-82M-CoreML) ~325 MB |
+| Kokoro-82M | テキスト → 音声 | なし | 10言語 | [CoreML FP16](https://huggingface.co/aufklarer/Kokoro-82M-CoreML) ~325 MB · [CoreML INT8](https://huggingface.co/aufklarer/Kokoro-82M-CoreML-INT8) 89 MB |
 | Qwen3-0.6B Chat | テキスト → テキスト (LLM) | あり (ストリーミング) | 多言語 | [CoreML INT4](https://huggingface.co/aufklarer/Qwen3-0.6B-Chat-CoreML) 318 MB · [CoreML INT8](https://huggingface.co/aufklarer/Qwen3-0.6B-Chat-CoreML) 571 MB |
 | PersonaPlex-7B | 音声 → 音声 | あり (~2秒チャンク) | EN | [4-bit](https://huggingface.co/aufklarer/PersonaPlex-7B-MLX-4bit) 4.9 GB · [8-bit](https://huggingface.co/aufklarer/PersonaPlex-7B-MLX-8bit) 9.1 GB |
 | FireRedVAD | 音声区間検出 | なし (オフライン) | 100以上の言語 | [CoreML](https://huggingface.co/aufklarer/FireRedVAD-CoreML) ~1.2 MB |
@@ -74,7 +74,8 @@ Mac・iOS向けのオンデバイス音声認識・合成・理解。Apple Silic
 | Qwen3-ForcedAligner-0.6B (4-bit, MLX) | 933 MB | ~1.5 GB |
 | Qwen3-TTS-0.6B (4-bit, MLX) | 977 MB | ~2 GB |
 | CosyVoice3-0.5B (4-bit, MLX) | 732 MB | ~1.5 GB |
-| Kokoro-82M (CoreML) | 325 MB | ~500 MB |
+| Kokoro-82M (CoreML FP16, 1 bucket) | 80 MB | ~200 MB |
+| Kokoro-82M (CoreML INT8, 1 bucket) | 80 MB | ~200 MB |
 | Qwen3-Chat-0.6B (INT4, CoreML) | 318 MB | ~600 MB |
 | Qwen3-Chat-0.6B (INT8, CoreML) | 571 MB | ~900 MB |
 | PersonaPlex-7B (4-bit, MLX) | 4,900 MB | ~6.5 GB |
@@ -1229,7 +1230,7 @@ Qwen3-ASR-0.6BはM2 MaxでRTF 0.06を達成 — whisper.cpp経由のWhisper-larg
 すべてのMシリーズチップ: M1、M2、M3、M4とそのPro/Max/Ultraバリアント。macOS 14以上 (Sonoma) またはiOS 17以上が必要です。
 
 **必要なメモリはどのくらいですか？**
-~3 MB (Silero VAD) から~6.5 GB (PersonaPlex 7B) まで。Kokoro TTSは~500 MB、Qwen3-ASRは~2.2 GB使用します。詳細は[メモリ要件](#メモリ要件)の表を参照してください。
+~3 MB (Silero VAD) から~6.5 GB (PersonaPlex 7B) まで。Kokoro TTSは~200 MB、Qwen3-ASRは~2.2 GB使用します。詳細は[メモリ要件](#メモリ要件)の表を参照してください。
 
 **複数のモデルを同時に実行できますか？**
 はい。Neural Engine上のCoreMLモデルとGPU上のMLXモデルを併用することで競合を避けられます。例: Silero VAD (CoreML) + Qwen3-ASR (MLX) + Qwen3-TTS (MLX)。

@@ -50,7 +50,7 @@
 | Qwen3-TTS-0.6B CustomVoice | 文本 → 语音 | 是 (~120ms) | 10 种语言 | [4-bit](https://huggingface.co/aufklarer/Qwen3-TTS-12Hz-0.6B-CustomVoice-MLX-4bit) 1.7 GB |
 | Qwen3-TTS-1.7B Base | 文本 → 语音 | 是 (~120ms) | 10 种语言 | [4-bit](https://huggingface.co/aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-4bit) 3.2 GB · [8-bit](https://huggingface.co/aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-8bit) 4.8 GB |
 | CosyVoice3-0.5B | 文本 → 语音 | 是 (~150ms) | 9 种语言 | [4-bit](https://huggingface.co/aufklarer/CosyVoice3-0.5B-MLX-4bit) 1.2 GB |
-| Kokoro-82M | 文本 → 语音 | 否 | 10 种语言 | [CoreML](https://huggingface.co/aufklarer/Kokoro-82M-CoreML) ~325 MB |
+| Kokoro-82M | 文本 → 语音 | 否 | 10 种语言 | [CoreML FP16](https://huggingface.co/aufklarer/Kokoro-82M-CoreML) ~325 MB · [CoreML INT8](https://huggingface.co/aufklarer/Kokoro-82M-CoreML-INT8) 89 MB |
 | Qwen3-0.6B Chat | 文本 → 文本 (LLM) | 是（流式） | 多语言 | [CoreML INT4](https://huggingface.co/aufklarer/Qwen3-0.6B-Chat-CoreML) 318 MB · [CoreML INT8](https://huggingface.co/aufklarer/Qwen3-0.6B-Chat-CoreML) 571 MB |
 | PersonaPlex-7B | 语音 → 语音 | 是 (~2s 分块) | EN | [4-bit](https://huggingface.co/aufklarer/PersonaPlex-7B-MLX-4bit) 4.9 GB · [8-bit](https://huggingface.co/aufklarer/PersonaPlex-7B-MLX-8bit) 9.1 GB |
 | FireRedVAD | 语音活动检测 | 否（离线） | 100+ 种语言 | [CoreML](https://huggingface.co/aufklarer/FireRedVAD-CoreML) ~1.2 MB |
@@ -74,7 +74,8 @@
 | Qwen3-ForcedAligner-0.6B (4-bit, MLX) | 933 MB | ~1.5 GB |
 | Qwen3-TTS-0.6B (4-bit, MLX) | 977 MB | ~2 GB |
 | CosyVoice3-0.5B (4-bit, MLX) | 732 MB | ~1.5 GB |
-| Kokoro-82M (CoreML) | 325 MB | ~500 MB |
+| Kokoro-82M (CoreML FP16, 1 bucket) | 80 MB | ~200 MB |
+| Kokoro-82M (CoreML INT8, 1 bucket) | 80 MB | ~200 MB |
 | Qwen3-Chat-0.6B (INT4, CoreML) | 318 MB | ~600 MB |
 | Qwen3-Chat-0.6B (INT8, CoreML) | 571 MB | ~900 MB |
 | PersonaPlex-7B (4-bit, MLX) | 4,900 MB | ~6.5 GB |
@@ -1229,7 +1230,7 @@ Qwen3-ASR-0.6B 在 M2 Max 上达到 RTF 0.06——比通过 whisper.cpp 运行�
 所有 M 系列芯片：M1、M2、M3、M4 及其 Pro/Max/Ultra 变体。需要 macOS 14+ (Sonoma) 或 iOS 17+。
 
 **需要多少内存？**
-从约 3 MB（Silero VAD）到约 6.5 GB（PersonaPlex 7B）不等。Kokoro TTS 约 500 MB，Qwen3-ASR 约 2.2 GB。完整详情请参阅[内存需求](#内存需求)表。
+从约 3 MB（Silero VAD）到约 6.5 GB（PersonaPlex 7B）不等。Kokoro TTS 约 200 MB，Qwen3-ASR 约 2.2 GB。完整详情请参阅[内存需求](#内存需求)表。
 
 **可以同时运行多个模型吗？**
 可以。在神经引擎上使用 CoreML 模型，同时在 GPU 上使用 MLX 模型以避免争用——例如 Silero VAD (CoreML) + Qwen3-ASR (MLX) + Qwen3-TTS (MLX)。

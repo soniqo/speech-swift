@@ -50,7 +50,7 @@
 | Qwen3-TTS-0.6B CustomVoice | Текст → Речь | Да (~120мс) | 10 языков | [4-bit](https://huggingface.co/aufklarer/Qwen3-TTS-12Hz-0.6B-CustomVoice-MLX-4bit) 1.7 GB |
 | Qwen3-TTS-1.7B Base | Текст → Речь | Да (~120мс) | 10 языков | [4-bit](https://huggingface.co/aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-4bit) 3.2 GB · [8-bit](https://huggingface.co/aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-8bit) 4.8 GB |
 | CosyVoice3-0.5B | Текст → Речь | Да (~150мс) | 9 языков | [4-bit](https://huggingface.co/aufklarer/CosyVoice3-0.5B-MLX-4bit) 1.2 GB |
-| Kokoro-82M | Текст → Речь | Нет | 10 языков | [CoreML](https://huggingface.co/aufklarer/Kokoro-82M-CoreML) ~325 MB |
+| Kokoro-82M | Текст → Речь | Нет | 10 языков | [CoreML FP16](https://huggingface.co/aufklarer/Kokoro-82M-CoreML) ~325 MB · [CoreML INT8](https://huggingface.co/aufklarer/Kokoro-82M-CoreML-INT8) 89 MB |
 | Qwen3-0.6B Chat | Текст → Текст (LLM) | Да (потоковый) | Мульти | [CoreML INT4](https://huggingface.co/aufklarer/Qwen3-0.6B-Chat-CoreML) 318 MB · [CoreML INT8](https://huggingface.co/aufklarer/Qwen3-0.6B-Chat-CoreML) 571 MB |
 | PersonaPlex-7B | Речь → Речь | Да (~2с фрагменты) | EN | [4-bit](https://huggingface.co/aufklarer/PersonaPlex-7B-MLX-4bit) 4.9 GB · [8-bit](https://huggingface.co/aufklarer/PersonaPlex-7B-MLX-8bit) 9.1 GB |
 | FireRedVAD | Обнаружение голосовой активности | Нет (офлайн) | 100+ языков | [CoreML](https://huggingface.co/aufklarer/FireRedVAD-CoreML) ~1.2 MB |
@@ -74,7 +74,8 @@
 | Qwen3-ForcedAligner-0.6B (4-bit, MLX) | 933 MB | ~1.5 GB |
 | Qwen3-TTS-0.6B (4-bit, MLX) | 977 MB | ~2 GB |
 | CosyVoice3-0.5B (4-bit, MLX) | 732 MB | ~1.5 GB |
-| Kokoro-82M (CoreML) | 325 MB | ~500 MB |
+| Kokoro-82M (CoreML FP16, 1 bucket) | 80 MB | ~200 MB |
+| Kokoro-82M (CoreML INT8, 1 bucket) | 80 MB | ~200 MB |
 | Qwen3-Chat-0.6B (INT4, CoreML) | 318 MB | ~600 MB |
 | Qwen3-Chat-0.6B (INT8, CoreML) | 571 MB | ~900 MB |
 | PersonaPlex-7B (4-bit, MLX) | 4,900 MB | ~6.5 GB |
@@ -1229,7 +1230,7 @@ Qwen3-ASR-0.6B достигает RTF 0.06 на M2 Max — на 40% быстре
 Все чипы M-серии: M1, M2, M3, M4 и их варианты Pro/Max/Ultra. Требуется macOS 14+ (Sonoma) или iOS 17+.
 
 **Сколько памяти нужно?**
-От ~3 MB (Silero VAD) до ~6.5 GB (PersonaPlex 7B). Kokoro TTS использует ~500 MB, Qwen3-ASR ~2.2 GB. Полные данные см. в таблице [Требования к памяти](#требования-к-памяти).
+От ~3 MB (Silero VAD) до ~6.5 GB (PersonaPlex 7B). Kokoro TTS использует ~200 MB, Qwen3-ASR ~2.2 GB. Полные данные см. в таблице [Требования к памяти](#требования-к-памяти).
 
 **Можно ли запускать несколько моделей одновременно?**
 Да. Используйте CoreML-модели на Neural Engine вместе с MLX-моделями на GPU, чтобы избежать конкуренции — например, Silero VAD (CoreML) + Qwen3-ASR (MLX) + Qwen3-TTS (MLX).
