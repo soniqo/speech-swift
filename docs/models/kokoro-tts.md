@@ -56,6 +56,34 @@ Five pre-compiled CoreML buckets handle different output lengths:
 
 The runtime selects the smallest bucket that fits the input token count. v2.4 models use newer CoreML operations (iOS 17+); v2.1 models provide backward compatibility.
 
+### Memory: maxBuckets
+
+Each loaded bucket allocates CoreML intermediate buffers (~200-300 MB). Loading all 5 buckets uses ~1.4 GB. Use `maxBuckets` to limit how many are loaded (default: 1, smallest first):
+
+```swift
+// Default: loads only the smallest bucket (~200 MB peak)
+let tts = try await KokoroTTSModel.fromPretrained()
+
+// Load 2 buckets for longer text support
+let tts = try await KokoroTTSModel.fromPretrained(maxBuckets: 2)
+
+// Load all buckets (CLI/server use, ~1.4 GB)
+let tts = try await KokoroTTSModel.fromPretrained(maxBuckets: 0)
+```
+
+For voice pipelines and iOS, `maxBuckets: 1` (the default) is recommended — pipeline responses are short and fit in the 5s bucket.
+
+### INT8 Palettized Variant (iOS)
+
+A palettized INT8 variant reduces decoder size from 311 MB to 79 MB per bucket (4x reduction) with no quality loss:
+
+```swift
+let tts = try await KokoroTTSModel.fromPretrained(
+    modelId: KokoroTTSModel.int8iOSModelId)
+```
+
+Weights: [aufklarer/Kokoro-82M-CoreML-INT8](https://huggingface.co/aufklarer/Kokoro-82M-CoreML-INT8)
+
 ## Phonemizer
 
 Three-tier pipeline, all Apache-2.0 licensed (no GPL dependencies):
@@ -91,8 +119,10 @@ Weights: [aufklarer/Kokoro-82M-CoreML](https://huggingface.co/aufklarer/Kokoro-8
 | Metric | Value |
 |--------|-------|
 | Inference latency | ~45ms (constant) |
-| Weight memory | 325 MB |
-| Peak inference memory | ~500 MB |
+| Weight memory (FP16, 1 bucket) | ~80 MB |
+| Weight memory (INT8, 1 bucket) | ~80 MB |
+| Peak inference memory (1 bucket) | ~200 MB |
+| Peak inference memory (all buckets) | ~1.4 GB |
 | Backend | CoreML (Neural Engine) |
 
 Non-autoregressive — latency is constant regardless of output length, unlike autoregressive models (Qwen3-TTS, CosyVoice3) where latency scales with audio duration.
