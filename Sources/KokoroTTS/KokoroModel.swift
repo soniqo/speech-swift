@@ -25,7 +25,7 @@ class KokoroNetwork {
     ///   - computeUnits: CoreML compute units
     ///   - maxBuckets: Maximum number of buckets to load (smallest first).
     ///     Loading fewer buckets saves memory. Default 0 = load all available.
-    init(directory: URL, computeUnits: MLComputeUnits = .all, maxBuckets: Int = 0) throws {
+    init(directory: URL, computeUnits: MLComputeUnits = .all, maxBuckets: Int = 1) throws {
         let config = MLModelConfiguration()
         config.computeUnits = computeUnits
 

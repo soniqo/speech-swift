@@ -196,7 +196,7 @@ public final class KokoroTTSModel {
     public static func fromPretrained(
         modelId: String = defaultModelId,
         voice: String = defaultVoice,
-        maxBuckets: Int = 0,
+        maxBuckets: Int = 1,
         progressHandler: ((Double, String) -> Void)? = nil
     ) async throws -> KokoroTTSModel {
         AudioLog.modelLoading.info("Loading Kokoro model: \(modelId)")
