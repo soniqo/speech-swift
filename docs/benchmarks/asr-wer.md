@@ -83,6 +83,23 @@ How much accuracy do we lose by quantizing to lower bit widths? This establishes
 
 **Parakeet TDT**: INT4 adds 0.94% WER (34% more errors) for 48% size reduction. INT4 loses more quality than Qwen3's 4-bit — CoreML k-means palettization is less precise than MLX group quantization at low bit widths.
 
+## Long-Form Stability (Sustained Neural Engine Load)
+
+Tested whether WER or latency degrade under sustained transcription sessions (simulating meeting transcription). 200 LibriSpeech test-clean utterances processed sequentially (~30 min of audio) on M2 Max.
+
+| Metric | First 25% | Last 25% | Overall |
+|--------|-----------|----------|---------|
+| WER% | 1.30 | 1.23 | 2.43 |
+| RTF | 0.672 | 0.400 | 0.539 |
+
+**Key findings:**
+- No WER degradation — last quarter is actually slightly better (1.23% vs 1.30%), within noise
+- RTF **improves** over the session (0.67 → 0.40) as CoreML warms up its execution plan cache
+- No thermal throttling detected on M2 Max after 42 minutes of continuous Neural Engine inference
+- Parakeet processes each chunk independently (no cross-chunk state), so quality cannot accumulate errors
+
+RTF includes per-invocation model loading overhead (~3s). Pure inference RTF is ~0.023 (43x real-time).
+
 ## Reproduction
 
 ```bash
@@ -94,6 +111,16 @@ python scripts/benchmark_asr.py --batch --engine parakeet --model int8
 ```
 
 First run downloads LibriSpeech test-clean (~350 MB). Results saved to `benchmarks/librispeech/`.
+
+### Long-form stability
+
+```bash
+# Download LibriSpeech test-clean first (~350 MB)
+# Then run sustained benchmark (all 2620 utterances, ~5.4 hours)
+python scripts/benchmark_longform.py --engine parakeet
+# Or a quick 200-utterance test (~30 min audio)
+python scripts/benchmark_longform.py --engine parakeet --max-utterances 200
+```
 
 ### FLEURS (multilingual, auto-download)
 
