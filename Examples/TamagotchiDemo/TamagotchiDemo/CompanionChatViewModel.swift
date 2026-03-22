@@ -129,11 +129,13 @@ final class CompanionChatViewModel {
             DispatchQueue.main.async { self?.playbackDidFinish() }
         }
 
+        pipelineLog.warning("[START] pipeline created, starting...")
         pipeline?.start()
         isListening = true
         pipelineState = "listening"
         diagnostics.start()
         startMicrophone()
+        pipelineLog.warning("[START] mic started, pipeline running")
     }
 
     func stopListening() {
@@ -155,25 +157,29 @@ final class CompanionChatViewModel {
     private func handleEvent(_ event: PipelineEvent) {
         switch event {
         case .sessionCreated:
-            break
+            pipelineLog.warning("[EVT] sessionCreated")
 
         case .speechStarted:
+            pipelineLog.warning("[EVT] speechStarted (isGenerating=\(self.isGenerating))")
             isSpeechDetected = true
             pipelineState = "speech detected"
             if isGenerating { pipeline?.unloadLLM() }
 
         case .speechEnded:
+            pipelineLog.warning("[EVT] speechEnded")
             isSpeechDetected = false
             pipelineState = "transcribing..."
 
-        case .transcriptionCompleted(let text, _, _):
+        case .transcriptionCompleted(let text, let lang, let conf):
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            pipelineLog.warning("[EVT] transcription: '\(trimmed)' lang=\(lang ?? "-") conf=\(conf)")
             guard !trimmed.isEmpty else { return }
             messages.append(ChatBubbleMessage(role: .user, text: trimmed))
             pipelineState = "thinking..."
             isGenerating = true
 
         case .responseCreated:
+            pipelineLog.warning("[EVT] responseCreated")
             if currentAssistantIdx == nil {
                 currentResponseText = ""
                 currentAssistantIdx = messages.count
@@ -182,6 +188,7 @@ final class CompanionChatViewModel {
             }
 
         case .responseInterrupted:
+            pipelineLog.warning("[EVT] responseInterrupted")
             player.fadeOutAndStop()
             isSpeaking = false
             pipeline?.unloadLLM()
@@ -190,12 +197,14 @@ final class CompanionChatViewModel {
             pipelineState = "interrupted"
 
         case .responseAudioDelta(let samples):
+            pipelineLog.warning("[EVT] audioDelta \(samples.count) samples")
             pipelineState = "speaking..."
             isSpeaking = true
             do { try player.play(samples: samples, sampleRate: 24000) }
-            catch { pipelineLog.error("Playback error: \(error)") }
+            catch { pipelineLog.error("[EVT] playback error: \(error)") }
 
         case .responseDone:
+            pipelineLog.warning("[EVT] responseDone")
             isGenerating = false
             currentAssistantIdx = nil
             if player.isPlaying {
@@ -204,10 +213,14 @@ final class CompanionChatViewModel {
                 resumeAfterResponse()
             }
 
-        case .toolCallStarted, .toolCallCompleted:
+        case .toolCallStarted(let name):
+            pipelineLog.warning("[EVT] toolCall: \(name)")
+
+        case .toolCallCompleted:
             break
 
         case .error(let msg):
+            pipelineLog.error("[EVT] error: \(msg)")
             errorMessage = msg
             pipelineState = "error"
             isGenerating = false
