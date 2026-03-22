@@ -54,7 +54,13 @@ final class CompanionChatViewModel {
     private var currentAssistantIdx: Int?
 
     private let systemPrompt = "You are Tama. Answer questions helpfully in one short sentence."
+    /// Echo suppression threshold. On device with speaker echo, 0.06 works.
+    /// On simulator (no echo), set lower to avoid blocking real speech.
+    #if targetEnvironment(simulator)
+    private let echoThreshold: Float = 0.01
+    #else
     private let echoThreshold: Float = 0.06
+    #endif
 
     // MARK: - Load Models
 
@@ -161,12 +167,14 @@ final class CompanionChatViewModel {
             pipelineLog.warning("[EVT] sessionCreated")
 
         case .speechStarted:
-            pipelineLog.warning("[EVT] speechStarted (isGenerating=\(self.isGenerating))")
+            pipelineLog.warning("[EVT] speechStarted (isGenerating=\(self.isGenerating) isSpeaking=\(self.isSpeaking))")
             isSpeechDetected = true
             pipelineState = "speech detected"
-            if isGenerating {
-                pipeline?.cancelLLM()  // Cancel generation, keep model warm
+            if isGenerating || isSpeaking {
+                pipeline?.cancelLLM()
                 player.fadeOutAndStop()
+                isSpeaking = false
+                isGenerating = false
             }
 
         case .speechEnded:
