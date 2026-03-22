@@ -18,6 +18,9 @@ public final class KokoroTTSModel {
     /// Default HuggingFace model ID.
     public static let defaultModelId = "aufklarer/Kokoro-82M-CoreML"
 
+    /// iOS-optimized INT8 palettized variant (single 5s bucket, ~89MB total).
+    public static let int8iOSModelId = "aufklarer/Kokoro-82M-CoreML-INT8"
+
     /// Output sample rate (24kHz).
     public static let outputSampleRate = 24000
 
@@ -65,23 +68,15 @@ public final class KokoroTTSModel {
         // Step 1: Phonemize text → token IDs
         let tokenIds = phonemizer.tokenize(text, maxLength: config.maxPhonemeLength)
 
-        // Step 2: Select model bucket based on token count
-        guard let bucket = ModelBucket.select(forTokenCount: tokenIds.count) else {
+        // Step 2: Select model bucket based on token count and loaded models
+        let available = Set(network.availableBuckets)
+        guard let activeBucket = ModelBucket.select(
+            forTokenCount: tokenIds.count, available: available
+        ) else {
             throw AudioModelError.inferenceFailed(
                 operation: "kokoro-synthesize",
-                reason: "Text too long (\(tokenIds.count) tokens), max \(ModelBucket.v21_15s.maxTokens)")
-        }
-
-        // Check if we have this bucket loaded, fall back if needed
-        let activeBucket: ModelBucket
-        if network.availableBuckets.contains(bucket) {
-            activeBucket = bucket
-        } else if let fallback = network.availableBuckets.first(where: { $0.maxTokens >= tokenIds.count }) {
-            activeBucket = fallback
-        } else {
-            throw AudioModelError.inferenceFailed(
-                operation: "kokoro-synthesize",
-                reason: "No suitable model bucket for \(tokenIds.count) tokens")
+                reason: "No suitable model bucket for \(tokenIds.count) tokens "
+                    + "(available: \(available.map(\.modelName)))")
         }
 
         // Step 3: Get voice style embedding (256-dim)
@@ -190,6 +185,7 @@ public final class KokoroTTSModel {
     public static func fromPretrained(
         modelId: String = defaultModelId,
         voice: String = defaultVoice,
+        maxBuckets: Int = 1,
         progressHandler: ((Double, String) -> Void)? = nil
     ) async throws -> KokoroTTSModel {
         AudioLog.modelLoading.info("Loading Kokoro model: \(modelId)")
@@ -283,7 +279,7 @@ public final class KokoroTTSModel {
         progressHandler?(0.85, "Loading CoreML models...")
         let network: KokoroNetwork
         do {
-            network = try KokoroNetwork(directory: cacheDir)
+            network = try KokoroNetwork(directory: cacheDir, maxBuckets: maxBuckets)
             AudioLog.modelLoading.debug("Loaded buckets: \(network.availableBuckets.map { $0.modelName })")
         } catch {
             throw AudioModelError.modelLoadFailed(

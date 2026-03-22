@@ -3,6 +3,26 @@ import AudioCommon
 import Foundation
 import os
 
+
+private let pipeLogger = Logger(subsystem: "audio.soniqo.speech", category: "Pipeline")
+
+private func pipeLog(_ msg: String) {
+    pipeLogger.warning("\(msg, privacy: .public)")
+}
+
+/// Report current app memory usage in MB.
+private func memoryMB() -> Int {
+    var info = mach_task_basic_info()
+    var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size) / 4
+    let result = withUnsafeMutablePointer(to: &info) {
+        $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+            task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
+        }
+    }
+    guard result == KERN_SUCCESS else { return 0 }
+    return Int(info.resident_size / (1024 * 1024))
+}
+
 // MARK: - Pipeline Types
 
 /// Voice pipeline mode.
@@ -65,6 +85,11 @@ public struct PipelineConfig {
     public var language: String = ""
     public var mode: PipelineMode = .echo
 
+    /// Auto-unload lazy models between phases to minimize peak memory.
+    /// When enabled, STT is unloaded after transcription, LLM after response,
+    /// and TTS after playback. Models reload from CoreML cache (~0.1-0.3s).
+    public var autoUnloadModels: Bool = false
+
     public static let `default` = PipelineConfig()
 
     public init() {}
@@ -77,11 +102,46 @@ public struct PipelineConfig {
 // MARK: - Bridge Classes
 
 /// Bridges a SpeechRecognitionModel to the C vtable.
+/// Supports lazy loading: provide a factory closure instead of a preloaded model.
+/// The model is loaded on first vtable callback and can be unloaded to free memory.
 private final class STTBridge {
-    let model: SpeechRecognitionModel
-    var lastText: [CChar] = []  // keeps C string alive between calls
-    var lastLanguage: [CChar] = []  // keeps language C string alive
-    init(_ model: SpeechRecognitionModel) { self.model = model }
+    private var _model: SpeechRecognitionModel?
+    private let factory: (() async throws -> SpeechRecognitionModel)?
+    var lastText: [CChar] = []
+    var lastLanguage: [CChar] = []
+
+    /// Preloaded model (always resident).
+    init(_ model: SpeechRecognitionModel) {
+        self._model = model
+        self.factory = nil
+    }
+
+    /// Lazy model: loaded on first use from factory, can be unloaded.
+    init(factory: @escaping () async throws -> SpeechRecognitionModel) {
+        self._model = nil
+        self.factory = factory
+    }
+
+    var model: SpeechRecognitionModel {
+        if let m = _model { return m }
+        guard let factory else { fatalError("STTBridge: no model and no factory") }
+        let sem = DispatchSemaphore(value: 0)
+        var loaded: SpeechRecognitionModel?
+        Task {
+            loaded = try? await factory()
+            sem.signal()
+        }
+        sem.wait()
+        _model = loaded
+        return _model!
+    }
+
+    func unload() {
+        guard factory != nil else { return }  // Don't unload preloaded models
+        _model = nil
+    }
+
+    var isLoaded: Bool { _model != nil }
 }
 
 /// Bridges a PipelineTool to the C callback.
@@ -93,15 +153,46 @@ private final class ToolBridge {
 }
 
 /// Bridges a SpeechGenerationModel to the C vtable.
+/// Supports lazy loading like STTBridge.
 private final class TTSBridge {
-    let model: SpeechGenerationModel
+    private var _model: SpeechGenerationModel?
+    private let factory: (() async throws -> SpeechGenerationModel)?
     private let _cancelled = OSAllocatedUnfairLock(initialState: false)
     var cancelled: Bool {
         get { _cancelled.withLock { $0 } }
         set { _cancelled.withLock { $0 = newValue } }
     }
 
-    init(_ model: SpeechGenerationModel) { self.model = model }
+    init(_ model: SpeechGenerationModel) {
+        self._model = model
+        self.factory = nil
+    }
+
+    init(factory: @escaping () async throws -> SpeechGenerationModel) {
+        self._model = nil
+        self.factory = factory
+    }
+
+    var model: SpeechGenerationModel {
+        if let m = _model { return m }
+        guard let factory else { fatalError("TTSBridge: no model and no factory") }
+        let sem = DispatchSemaphore(value: 0)
+        var loaded: SpeechGenerationModel?
+        Task {
+            loaded = try? await factory()
+            sem.signal()
+        }
+        sem.wait()
+        _model = loaded
+        return _model!
+    }
+
+    func unload() {
+        guard factory != nil else { return }
+        _model = nil
+    }
+
+    var isLoaded: Bool { _model != nil }
 }
 
 /// Bridges a StreamingVADProvider to the C vtable.
@@ -113,15 +204,53 @@ private final class VADBridge {
 
 /// Bridges a PipelineLLM to the C vtable.
 private final class LLMBridge {
-    let model: PipelineLLM
+    private var _model: PipelineLLM?
+    private let factory: (() async throws -> PipelineLLM)?
 
-    init(_ model: PipelineLLM) { self.model = model }
+    init(_ model: PipelineLLM) {
+        self._model = model
+        self.factory = nil
+    }
+
+    init(factory: @escaping () async throws -> PipelineLLM) {
+        self._model = nil
+        self.factory = factory
+    }
+
+    var model: PipelineLLM {
+        if let m = _model { return m }
+        guard let factory else { fatalError("LLMBridge: no model and no factory") }
+        let sem = DispatchSemaphore(value: 0)
+        var loaded: PipelineLLM?
+        Task {
+            loaded = try? await factory()
+            sem.signal()
+        }
+        sem.wait()
+        _model = loaded
+        return _model!
+    }
+
+    func unload() {
+        guard factory != nil else { return }
+        _model?.cancel()
+        _model = nil
+    }
+
+    func cancel() {
+        _model?.cancel()
+    }
+
+    var isLoaded: Bool { _model != nil }
 }
 
 /// Bridges the event callback.
 private final class EventBridge {
     let handler: (PipelineEvent) -> Void
     var sttBridge: STTBridge?
+    var ttsBridge: TTSBridge?
+    var llmBridge: LLMBridge?
+    var autoUnload = false
 
     init(_ handler: @escaping (PipelineEvent) -> Void) { self.handler = handler }
 }
@@ -137,17 +266,25 @@ private final class EventBridge {
 /// audio → VAD → STT → LLM → TTS → audio
 /// ```
 ///
-/// Usage:
+/// Usage (preloaded models):
 /// ```swift
 /// let pipeline = VoicePipeline(
-///     stt: asrModel,
-///     tts: ttsModel,
-///     vad: sileroVAD,
+///     stt: asrModel, tts: ttsModel, vad: sileroVAD,
 ///     config: .init(mode: .echo),
 ///     onEvent: { event in print(event) }
 /// )
-/// pipeline.start()
-/// pipeline.pushAudio(micSamples)
+/// ```
+///
+/// Usage (lazy loading — only VAD preloaded, ASR/TTS/LLM loaded on demand):
+/// ```swift
+/// let pipeline = VoicePipeline(
+///     sttFactory: { try await ParakeetASRModel.fromPretrained() },
+///     ttsFactory: { try await KokoroTTSModel.fromPretrained() },
+///     vad: sileroVAD,
+///     llm: llm,
+///     config: .init(mode: .voicePipeline),
+///     onEvent: { event in print(event) }
+/// )
 /// ```
 public final class VoicePipeline {
 
@@ -182,6 +319,9 @@ public final class VoicePipeline {
         self.vadBridge = VADBridge(vad)
         self.eventBridge = EventBridge(onEvent)
         self.eventBridge.sttBridge = self.sttBridge
+        self.eventBridge.ttsBridge = self.ttsBridge
+        self.eventBridge.llmBridge = self.llmBridge
+        self.eventBridge.autoUnload = config.autoUnloadModels
         if let llm { self.llmBridge = LLMBridge(llm) }
 
         let sttVtable = Self.makeSTTVtable(sttBridge)
@@ -225,6 +365,86 @@ public final class VoicePipeline {
         }
     }
 
+    /// Create a voice pipeline with lazy model loading.
+    ///
+    /// Models are loaded on first use (from CoreML cache: ~0.1-0.3s) and can be
+    /// unloaded between phases to free memory. Only VAD must be preloaded.
+    /// Peak memory: largest single model instead of sum of all models.
+    public init(
+        sttFactory: @escaping () async throws -> SpeechRecognitionModel,
+        ttsFactory: @escaping () async throws -> SpeechGenerationModel,
+        vad: StreamingVADProvider,
+        llm: PipelineLLM? = nil,
+        llmFactory: (() async throws -> PipelineLLM)? = nil,
+        config: PipelineConfig = .default,
+        onEvent: @escaping (PipelineEvent) -> Void
+    ) {
+        self.sttBridge = STTBridge(factory: sttFactory)
+        self.ttsBridge = TTSBridge(factory: ttsFactory)
+        self.vadBridge = VADBridge(vad)
+        self.eventBridge = EventBridge(onEvent)
+        self.eventBridge.sttBridge = self.sttBridge
+        self.eventBridge.ttsBridge = self.ttsBridge
+        self.eventBridge.llmBridge = self.llmBridge
+        self.eventBridge.autoUnload = config.autoUnloadModels
+
+        if let llm {
+            self.llmBridge = LLMBridge(llm)
+        } else if let llmFactory {
+            self.llmBridge = LLMBridge(factory: llmFactory)
+        }
+
+        let sttVtable = Self.makeSTTVtable(sttBridge)
+        let ttsVtable = Self.makeTTSVtable(ttsBridge)
+        let vadVtable = Self.makeVADVtable(vadBridge)
+
+        var cConfig = sc_config_default()
+        cConfig.vad_onset = config.vadOnset
+        cConfig.vad_offset = config.vadOffset
+        cConfig.min_speech_duration = config.minSpeechDuration
+        cConfig.min_silence_duration = config.minSilenceDuration
+        cConfig.allow_interruptions = config.allowInterruptions
+        cConfig.min_interruption_duration = config.minInterruptionDuration
+        cConfig.interruption_recovery_timeout = config.interruptionRecoveryTimeout
+        cConfig.max_utterance_duration = config.maxUtteranceDuration
+        cConfig.pre_speech_buffer_duration = config.preSpeechBufferDuration
+        cConfig.max_response_duration = config.maxResponseDuration
+        cConfig.post_playback_guard = config.postPlaybackGuard
+        cConfig.eager_stt = config.eagerSTT
+        cConfig.eager_stt_delay = config.eagerSTTDelay
+        cConfig.warmup_stt = config.warmupSTT
+        cConfig.mode = sc_mode_t(rawValue: UInt32(config.mode.rawValue))
+
+        let eventCtx = Unmanaged.passRetained(eventBridge).toOpaque()
+
+        if let llmBridge {
+            var llmVtable = Self.makeLLMVtable(llmBridge)
+            config.language.withCString { langPtr in
+                cConfig.language = langPtr
+                handle = sc_pipeline_create(
+                    sttVtable, ttsVtable, &llmVtable, vadVtable,
+                    cConfig, Self.eventCallback, eventCtx)
+            }
+        } else {
+            config.language.withCString { langPtr in
+                cConfig.language = langPtr
+                handle = sc_pipeline_create(
+                    sttVtable, ttsVtable, nil, vadVtable,
+                    cConfig, Self.eventCallback, eventCtx)
+            }
+        }
+    }
+
+    /// Unload a lazy-loaded model to free memory.
+    /// No-op for preloaded models. Model reloads automatically on next use.
+    public func unloadSTT() { sttBridge.unload() }
+    public func unloadTTS() { ttsBridge.unload() }
+    public func unloadLLM() { llmBridge?.unload() }
+
+    /// Cancel LLM generation without unloading the model.
+    /// Keeps model warm (system prompt cached) for fast next turn.
+    public func cancelLLM() { llmBridge?.cancel() }
+
     deinit {
         if handle != nil {
             sc_pipeline_stop(handle)
@@ -245,10 +465,12 @@ public final class VoicePipeline {
     // MARK: - Public API
 
     public func start() {
+        pipeLog("[API] start()")
         sc_pipeline_start(handle)
     }
 
     public func stop() {
+        pipeLog("[API] stop()")
         sc_pipeline_stop(handle)
     }
 
@@ -262,6 +484,7 @@ public final class VoicePipeline {
     /// Signal that response playback has finished.
     /// Transitions from speaking back to idle.
     public func resumeListening() {
+        pipeLog("[API] resumeListening()")
         sc_pipeline_resume_listening(handle)
     }
 
@@ -327,30 +550,55 @@ public final class VoicePipeline {
         let event: PipelineEvent
         switch e.type {
         case SC_EVENT_SESSION_CREATED:
+            pipeLog("[EVT] sessionCreated [MEM: \(memoryMB())MB]")
             event = .sessionCreated
         case SC_EVENT_SPEECH_STARTED:
+            pipeLog("[EVT] speechStarted")
             event = .speechStarted
         case SC_EVENT_SPEECH_ENDED:
+            pipeLog("[EVT] speechEnded")
             event = .speechEnded
         case SC_EVENT_TRANSCRIPTION_COMPLETED:
             let text = e.text.map { String(cString: $0) } ?? ""
-            // Read detected language from STT bridge (set during transcribe callback)
             var lang: String?
             if let sttBridge = bridge.sttBridge, !sttBridge.lastLanguage.isEmpty {
                 let langStr = String(cString: sttBridge.lastLanguage)
                 if !langStr.isEmpty { lang = langStr }
             }
+            pipeLog("[EVT] transcriptionCompleted text='\(text)' lang=\(lang ?? "nil") conf=\(e.confidence)")
+            // Auto-unload STT after transcription — free memory before LLM
+            if bridge.autoUnload {
+                pipeLog("[MEM] before STT unload: \(memoryMB())MB")
+                bridge.sttBridge?.unload()
+                pipeLog("[MEM] after STT unload: \(memoryMB())MB")
+            }
             event = .transcriptionCompleted(text: text, language: lang, confidence: e.confidence)
         case SC_EVENT_RESPONSE_CREATED:
+            pipeLog("[EVT] responseCreated")
+            // Auto-unload LLM before TTS loads — free memory for TTS compilation
+            if bridge.autoUnload {
+                pipeLog("[MEM] before LLM unload: \(memoryMB())MB")
+                bridge.llmBridge?.unload()
+                pipeLog("[MEM] after LLM unload: \(memoryMB())MB")
+            }
             event = .responseCreated
         case SC_EVENT_RESPONSE_INTERRUPTED:
+            pipeLog("[EVT] responseInterrupted")
             event = .responseInterrupted
         case SC_EVENT_RESPONSE_AUDIO_DELTA:
             event = .responseAudioDelta(samples: pcm16ToFloat32(e.audio_data, count: e.audio_data_length))
         case SC_EVENT_RESPONSE_DONE:
+            pipeLog("[EVT] responseDone")
+            // Auto-unload TTS after playback — free memory before next STT
+            if bridge.autoUnload {
+                pipeLog("[MEM] before TTS unload: \(memoryMB())MB")
+                bridge.ttsBridge?.unload()
+                pipeLog("[MEM] after TTS unload: \(memoryMB())MB")
+            }
             event = .responseDone
         case SC_EVENT_TOOL_CALL_STARTED:
             let name = e.text.map { String(cString: $0) } ?? ""
+            pipeLog("[EVT] toolCallStarted name='\(name)'")
             event = .toolCallStarted(name: name)
         case SC_EVENT_TOOL_CALL_COMPLETED:
             // text contains "tool_name: result" for completed events
@@ -358,9 +606,11 @@ public final class VoicePipeline {
             let parts = text.split(separator: ":", maxSplits: 1)
             let name = parts.first.map(String.init) ?? ""
             let result = parts.count > 1 ? String(parts[1]).trimmingCharacters(in: .whitespaces) : ""
+            pipeLog("[EVT] toolCallCompleted name='\(name)' result='\(result)'")
             event = .toolCallCompleted(name: name, result: result)
         case SC_EVENT_ERROR:
             let text = e.text.map { String(cString: $0) } ?? "Unknown error"
+            pipeLog("[EVT] error: \(text)")
             event = .error(text)
         default:
             return
@@ -381,10 +631,12 @@ public final class VoicePipeline {
                 let duration = Double(length) / Double(sampleRate)
                 let rms = sqrt(samples.map { $0 * $0 }.reduce(0, +) / Float(max(length, 1)))
                 AudioLog.pipeline.info("STT input: \(length) samples, \(String(format: "%.2f", duration))s, RMS=\(String(format: "%.4f", rms))")
+                pipeLog("[STT] transcribe start: \(length) samples, \(String(format: "%.2f", duration))s, RMS=\(String(format: "%.4f", rms)) [MEM: \(memoryMB())MB]")
                 let result = bridge.model.transcribeWithLanguage(
                     audio: samples,
                     sampleRate: Int(sampleRate),
                     language: nil)
+                pipeLog("[STT] transcribe done: text='\(result.text)' lang=\(result.language ?? "nil") conf=\(result.confidence)")
                 // Store as C strings on bridge — pointers valid until next transcribe call
                 bridge.lastText = Array(result.text.utf8CString)
                 bridge.lastLanguage = Array((result.language ?? "").utf8CString)
@@ -427,6 +679,7 @@ public final class VoicePipeline {
                 // Block the C thread until streaming TTS completes.
                 // Streams audio chunks as they're generated — first audio
                 // arrives in ~240ms instead of waiting for full synthesis.
+                pipeLog("[TTS] synthesize start: text='\(textStr)' lang='\(langStr)' [MEM: \(memoryMB())MB]")
                 let sem = DispatchSemaphore(value: 0)
                 DispatchQueue.global(qos: .userInitiated).async {
                     let group = DispatchGroup()
@@ -437,20 +690,27 @@ public final class VoicePipeline {
                             let stream = bridge.model.generateStream(
                                 text: textStr, language: langStr.isEmpty ? nil : langStr)
                             var sentFinal = false
+                            var totalSamples = 0
                             // Duration cap is enforced by C++ core (max_response_duration)
                             for try await chunk in stream {
-                                guard !bridge.cancelled else { break }
+                                guard !bridge.cancelled else {
+                                    pipeLog("[TTS] cancelled after \(totalSamples) samples")
+                                    break
+                                }
+                                totalSamples += chunk.samples.count
                                 let isFinal = chunk.isFinal
                                 chunk.samples.withUnsafeBufferPointer { buf in
                                     onChunk?(buf.baseAddress, buf.count, isFinal, chunkCtx)
                                 }
                                 if isFinal { sentFinal = true; break }
                             }
+                            pipeLog("[TTS] synthesize done: \(totalSamples) samples, final=\(sentFinal)")
                             // Ensure C++ always gets exactly one is_final=true
                             if !sentFinal && !bridge.cancelled {
                                 onChunk?(nil, 0, true, chunkCtx)
                             }
                         } catch {
+                            pipeLog("[TTS] synthesize error: \(error)")
                             onChunk?(nil, 0, true, chunkCtx)
                         }
                     }
@@ -514,7 +774,14 @@ public final class VoicePipeline {
                     swiftMessages.append((role: role, content: content))
                 }
 
+                let lastMsg = swiftMessages.last.map { "\($0.role): '\($0.content)'" } ?? "empty"
+                pipeLog("[LLM] chat start: \(swiftMessages.count) messages, last=\(lastMsg)")
+                var tokenCount = 0
                 bridge.model.chat(messages: swiftMessages) { token, isFinal in
+                    tokenCount += 1
+                    if isFinal {
+                        pipeLog("[LLM] chat done: \(tokenCount) tokens")
+                    }
                     token.withCString { cstr in
                         onToken?(cstr, isFinal, tokenCtx)
                     }

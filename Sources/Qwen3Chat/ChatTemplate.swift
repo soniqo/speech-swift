@@ -29,6 +29,7 @@ public struct ChatMessage: Sendable {
 /// ```
 enum ChatTemplate {
     // Qwen3 special token IDs
+    static let endOfTextId = 151643   // <|endoftext|>
     static let imStartId = 151644
     static let imEndId = 151645
     static let newlineId = 198
@@ -56,10 +57,15 @@ enum ChatTemplate {
     }
 
     /// Encode a conversation into token IDs using Qwen3 chat template.
+    ///
+    /// - Parameters:
+    ///   - enableThinking: If false, injects empty `<think>\n\n</think>\n\n` block
+    ///     after the generation prompt so the model skips reasoning and responds directly.
     static func encode(
         messages: [ChatMessage],
         tokenizer: ChatTokenizer,
-        addGenerationPrompt: Bool = true
+        addGenerationPrompt: Bool = true,
+        enableThinking: Bool = true
     ) -> [Int] {
         var tokens: [Int] = []
 
@@ -80,6 +86,17 @@ enum ChatTemplate {
             tokens.append(imStartId)
             tokens.append(contentsOf: tokenizer.encode("assistant"))
             tokens.append(newlineId)
+
+            // Official Qwen3 enable_thinking=False:
+            // Inject empty think block so model starts responding directly.
+            if !enableThinking {
+                tokens.append(thinkStartId)
+                tokens.append(newlineId)
+                tokens.append(newlineId)
+                tokens.append(thinkEndId)
+                tokens.append(newlineId)
+                tokens.append(newlineId)
+            }
         }
 
         return tokens

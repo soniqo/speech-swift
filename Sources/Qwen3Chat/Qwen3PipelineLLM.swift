@@ -4,6 +4,12 @@ import os
 
 private let log = Logger(subsystem: "com.qwen3speech", category: "PipelineLLM")
 
+private let llmLogger = Logger(subsystem: "audio.soniqo.speech", category: "LLM")
+
+private func llmDebug(_ msg: String) {
+    llmLogger.warning("[LLM] \(msg, privacy: .public)")
+}
+
 /// Adapter bridging Qwen3ChatModel to the PipelineLLM protocol for VoicePipeline.
 ///
 /// Handles async-to-blocking bridge, cancellation, token cleanup, and
@@ -75,19 +81,38 @@ public final class Qwen3PipelineLLM: PipelineLLM {
         // Block until stream completes (pipeline calls from background thread)
         let sem = DispatchSemaphore(value: 0)
         var fullResponse = ""
+        llmDebug("start: '\(combinedInput)' maxTokens=\(sampling.maxTokens)")
         let task = Task {
-            defer { sem.signal() }
+            defer {
+                llmDebug("done: \(fullResponse.count) chars response='\(fullResponse)'")
+                sem.signal()
+            }
             do {
                 for try await token in stream {
+                    llmDebug("token: '\(token)'")
                     guard !self.cancelled else {
                         log.info("Cancelled after \(fullResponse.count) chars")
                         break
                     }
-                    // Skip garbage tokens (broken unicode from INT4 quantization)
-                    let clean = token.filter {
-                        $0.isASCII || $0.isLetter || $0.isNumber ||
-                        $0.isPunctuation || $0.isWhitespace
+                    // Clean token: strip thinking tags, markdown, newlines, broken unicode.
+                    // Keep leading whitespace — tokenizer uses it to mark word boundaries.
+                    var clean = token
+                        .replacingOccurrences(of: "</think>", with: "")
+                        .replacingOccurrences(of: "<think>", with: "")
+                        .replacingOccurrences(of: "/think", with: "")
+                        .replacingOccurrences(of: "**", with: "")
+                        .replacingOccurrences(of: "* ", with: "")
+                        .replacingOccurrences(of: "#", with: "")
+                        .replacingOccurrences(of: "```", with: "")
+                        .replacingOccurrences(of: "\n", with: " ")
+                        .replacingOccurrences(of: "  ", with: " ")
+                    // Strip non-ASCII / broken unicode from INT4 — keep only Latin text
+                    clean = clean.filter {
+                        $0.isASCII && ($0.isLetter || $0.isNumber || $0.isPunctuation ||
+                        $0.isWhitespace || $0 == "'" || $0 == "-")
                     }
+                    // Only trim trailing whitespace — leading space is word boundary marker
+                    while clean.hasSuffix(" ") { clean = String(clean.dropLast()) }
                     guard !clean.isEmpty else { continue }
 
                     // Cap response length to prevent TTS OOM
@@ -101,6 +126,11 @@ public final class Qwen3PipelineLLM: PipelineLLM {
                     onToken(clean, false)
                 }
                 log.info("Output (\(fullResponse.count) chars): '\(fullResponse)'")
+                // If model produced nothing, emit a minimal response so pipeline doesn't stall
+                if fullResponse.isEmpty {
+                    llmDebug("empty response — emitting fallback")
+                    onToken("...", false)
+                }
                 onToken("", true)
             } catch {
                 log.error("Error: \(error)")
@@ -121,5 +151,6 @@ public final class Qwen3PipelineLLM: PipelineLLM {
     public func cancel() {
         cancelled = true
         consumeTask?.cancel()
+        model.cancelGeneration()
     }
 }
