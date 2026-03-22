@@ -94,6 +94,28 @@ public final class FireRedVADModel {
         #endif
     }
 
+    /// Load FireRedVAD from a local directory containing fireredvad.mlmodelc.
+    public static func fromLocal(path: String) throws -> FireRedVADModel {
+        #if canImport(CoreML)
+        let modelURL = URL(fileURLWithPath: path)
+            .appendingPathComponent("fireredvad.mlmodelc", isDirectory: true)
+        guard FileManager.default.fileExists(atPath: modelURL.path) else {
+            throw AudioModelError.modelLoadFailed(
+                modelId: path,
+                reason: "CoreML model not found at \(modelURL.path)")
+        }
+
+        let mlConfig = MLModelConfiguration()
+        mlConfig.computeUnits = .cpuAndNeuralEngine
+
+        let model = try MLModel(contentsOf: modelURL, configuration: mlConfig)
+        return FireRedVADModel(coremlModel: model)
+        #else
+        throw AudioModelError.invalidConfiguration(
+            model: "FireRedVAD", reason: "CoreML not available on this platform")
+        #endif
+    }
+
     // MARK: - Inference
 
     /// Detect speech from pre-computed features (for testing with reference features).
@@ -211,7 +233,6 @@ public final class FireRedVADModel {
         )?.multiArrayValue else { return [] }
 
         // Extract probabilities — output is [1, T, 1]
-        // Use MLMultiArray subscript to handle strides and float16 conversion
         var probs = [Float](repeating: 0, count: numFrames)
         for i in 0..<numFrames {
             probs[i] = outputArray[[0, NSNumber(value: i), 0]].floatValue

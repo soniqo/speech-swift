@@ -15,7 +15,7 @@ public struct VadCommand: ParsableCommand {
     @Option(name: .long, help: "VAD engine: pyannote (default) or firered")
     public var engine: String = "pyannote"
 
-    @Option(name: .shortAndLong, help: "Model ID on HuggingFace")
+    @Option(name: .shortAndLong, help: "Model ID on HuggingFace (or local path for firered)")
     public var model: String?
 
     @Option(name: .long, help: "Onset threshold (speech start)")
@@ -29,6 +29,12 @@ public struct VadCommand: ParsableCommand {
 
     @Option(name: .long, help: "Minimum silence duration in seconds")
     public var minSilence: Float = VADConfig.default.minSilenceDuration
+
+    @Option(name: .long, help: "FireRedVAD: speech probability threshold (default 0.4)")
+    public var threshold: Float = 0.4
+
+    @Option(name: .long, help: "FireRedVAD: smoothing window size in frames (default 5)")
+    public var smoothWindow: Int = 5
 
     @Flag(name: .long, help: "Output as JSON")
     public var json: Bool = false
@@ -48,22 +54,25 @@ public struct VadCommand: ParsableCommand {
             let elapsed: TimeInterval
 
             if engine.lowercased() == "firered" {
-                let modelId = model ?? FireRedVADModel.defaultModelId
-                print("Loading FireRedVAD model: \(modelId)")
-                let vad = try await FireRedVADModel.fromPretrained(
-                    modelId: modelId,
-                    progressHandler: reportProgress
-                )
-                // Only override defaults if user explicitly set them
-                // FireRedVAD default threshold is 0.4 (vs Pyannote 0.767)
-                if minSpeech != VADConfig.default.minSpeechDuration {
-                    vad.minSpeechDuration = minSpeech
-                }
-                if minSilence != VADConfig.default.minSilenceDuration {
-                    vad.minSilenceDuration = minSilence
+                let vad: FireRedVADModel
+                if let modelPath = model, FileManager.default.fileExists(atPath: modelPath) {
+                    print("Loading FireRedVAD from local: \(modelPath)")
+                    vad = try FireRedVADModel.fromLocal(path: modelPath)
+                } else {
+                    let modelId = model ?? FireRedVADModel.defaultModelId
+                    print("Loading FireRedVAD model: \(modelId)")
+                    vad = try await FireRedVADModel.fromPretrained(
+                        modelId: modelId,
+                        progressHandler: reportProgress
+                    )
                 }
 
-                print("Detecting speech segments...")
+                vad.speechThreshold = threshold
+                vad.smoothWindowSize = smoothWindow
+                vad.minSpeechDuration = minSpeech
+                vad.minSilenceDuration = minSilence
+
+                print("Detecting speech segments (threshold=\(threshold), smooth=\(smoothWindow))...")
                 start = Date()
                 segments = vad.detectSpeech(audio: audio, sampleRate: 16000)
                 elapsed = Date().timeIntervalSince(start)

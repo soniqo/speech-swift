@@ -138,8 +138,9 @@ class FireRedVADModel(nn.Module):
     into a single traceable module.
     """
 
-    def __init__(self, cmvn_mean, cmvn_inv_std, D, R, M, H, P, N1, S1, N2, S2):
+    def __init__(self, cmvn_mean, cmvn_inv_std, D, R, M, H, P, N1, S1, N2, S2, O=1):
         super().__init__()
+        self.odim = O
         # CMVN as registered buffers (baked into CoreML model)
         self.register_buffer("cmvn_mean", torch.tensor(cmvn_mean, dtype=torch.float32))
         self.register_buffer(
@@ -162,8 +163,8 @@ class FireRedVADModel(nn.Module):
             dnn_layers += [nn.Linear(H, H, bias=True), nn.ReLU()]
         self.dnns = nn.Sequential(*dnn_layers)
 
-        # Output head
-        self.out = nn.Linear(H, 1)
+        # Output head (1 for VAD, 3 for AED: speech/singing/music)
+        self.out = nn.Linear(H, O)
 
     def forward(self, feat):
         """Non-streaming forward pass.
@@ -515,6 +516,7 @@ def main():
         S1=model_args.S1,
         N2=model_args.N2,
         S2=model_args.S2,
+        O=model_args.odim,
     )
 
     load_weights(model, state_dict)
