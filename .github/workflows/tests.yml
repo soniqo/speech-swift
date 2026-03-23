@@ -52,3 +52,10 @@ jobs:
           --skip ParakeetASRTests
           --skip CosyVoiceTTSTests
           --skip KokoroTTSTests
+
+      - name: Build demo apps (compilation check)
+        run: |
+          for demo in Examples/SpeechDemo Examples/PersonaPlexDemo; do
+            echo "Building $demo..."
+            (cd "$demo" && swift build) || exit 1
+          done
