@@ -32,6 +32,22 @@ swift build -c release --disable-sandbox
 
 The metallib step compiles MLX Metal shaders — without it, inference runs ~5x slower due to JIT shader compilation.
 
+## Skills (Slash Commands)
+
+Project skills in `.claude/skills/`:
+
+| Command | Description |
+|---------|-------------|
+| `/build` or `/build release` | Release build with metallib |
+| `/build debug` | Debug build |
+| `/test` or `/test unit` | Run unit tests (skip E2E) |
+| `/test e2e` | Full test suite with model downloads |
+| `/test FilterName` | Run specific test filter |
+| `/benchmark asr` | Benchmark ASR speed |
+| `/benchmark tts` | Benchmark TTS speed |
+| `/benchmark vad` | VAD benchmark on VoxConverse |
+| `/benchmark diarize` | DER benchmark on VoxConverse |
+
 ## Project Structure
 
 - `Sources/Qwen3ASR/` — Speech-to-text (Qwen3-ASR)
