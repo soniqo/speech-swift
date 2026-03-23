@@ -78,6 +78,7 @@
 | Kokoro-82M (CoreML) | 325 MB | ~350 MB |
 | Qwen3-Chat-0.6B (INT4, CoreML) | 318 MB | ~600 MB |
 | Qwen3-Chat-0.6B (INT8, CoreML) | 571 MB | ~900 MB |
+| PersonaPlex-7B (8-bit, MLX) | 9,100 MB | ~11 GB |
 | PersonaPlex-7B (4-bit, MLX) | 4,900 MB | ~6.5 GB |
 | Silero-VAD-v5 (MLX) | 1.2 MB | ~5 MB |
 | Silero-VAD-v5 (CoreML) | 0.7 MB | ~3 MB |
@@ -1042,9 +1043,10 @@ ws.send(JSON.stringify({
 
 | 模型 | 框架 | ms/步 | RTF | 说明 |
 |------|------|-------|-----|------|
-| PersonaPlex-7B (4-bit) | MLX Swift (release) | ~68ms | ~0.87 | 20s 输入 → 36s 输出，约 31s 完成 |
+| PersonaPlex-7B (8-bit) | MLX Swift (release) | ~112ms | ~1.4 | 推荐——连贯的响应，比 4-bit 快 30% |
+| PersonaPlex-7B (4-bit) | MLX Swift (release) | ~158ms | ~1.97 | 不推荐——输出质量下降 |
 
-> PersonaPlex 以约 68ms/步运行——远低于 12.5 Hz 下 80ms 的实时阈值，实现**快于实时**的推理（RTF < 1.0）。temporal transformer 和 depformer 均为 4-bit 量化。
+> **请使用 8-bit。** INT8 更快（112 ms/步 vs. 158 ms/步）且能生成连贯的全双工响应。INT4 量化会降低生成质量，产生不连贯的语音。INT8 在 M2 Max 上以约 112ms/步运行。
 
 ### VAD 与说话人嵌入
 

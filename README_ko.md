@@ -78,6 +78,7 @@ Mac과 iOS를 위한 온디바이스 음성 인식, 합성 및 이해. Apple Sil
 | Kokoro-82M (CoreML) | 325 MB | ~350 MB |
 | Qwen3-Chat-0.6B (INT4, CoreML) | 318 MB | ~600 MB |
 | Qwen3-Chat-0.6B (INT8, CoreML) | 571 MB | ~900 MB |
+| PersonaPlex-7B (8-bit, MLX) | 9,100 MB | ~11 GB |
 | PersonaPlex-7B (4-bit, MLX) | 4,900 MB | ~6.5 GB |
 | Silero-VAD-v5 (MLX) | 1.2 MB | ~5 MB |
 | Silero-VAD-v5 (CoreML) | 0.7 MB | ~3 MB |
@@ -1042,9 +1043,10 @@ ws.send(JSON.stringify({
 
 | 모델 | 프레임워크 | ms/step | RTF | 비고 |
 |-------|-----------|---------|-----|-------|
-| PersonaPlex-7B (4-bit) | MLX Swift (release) | ~68ms | ~0.87 | 20초 입력 → 36초 출력 ~31초 소요 |
+| PersonaPlex-7B (8-bit) | MLX Swift (release) | ~112ms | ~1.4 | 권장 — 일관된 응답, 4-bit보다 30% 빠름 |
+| PersonaPlex-7B (4-bit) | MLX Swift (release) | ~158ms | ~1.97 | 비권장 — 출력 품질 저하 |
 
-> PersonaPlex는 스텝당 ~68ms로 실행됩니다 — 12.5 Hz에서의 80ms 실시간 임계값을 충분히 밑돌며, **실시간보다 빠른** 추론 (RTF < 1.0)을 달성합니다. temporal 트랜스포머와 depformer 모두 4-bit 양자화되었습니다.
+> **8-bit를 사용하세요.** INT8은 더 빠르고 (112 ms/step vs. 158 ms/step) 일관된 전이중 응답을 생성합니다. INT4 양자화는 생성 품질을 저하시켜 알아들을 수 없는 음성을 생성합니다. INT8은 M2 Max에서 ~112ms/step으로 실행됩니다.
 
 ### VAD 및 화자 임베딩
 

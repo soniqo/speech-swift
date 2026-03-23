@@ -78,6 +78,7 @@ La memoire des poids correspond a la memoire GPU (MLX) ou ANE (CoreML) consommee
 | Kokoro-82M (CoreML) | 325 MB | ~350 MB |
 | Qwen3-Chat-0.6B (INT4, CoreML) | 318 MB | ~600 MB |
 | Qwen3-Chat-0.6B (INT8, CoreML) | 571 MB | ~900 MB |
+| PersonaPlex-7B (8-bit, MLX) | 9,100 MB | ~11 GB |
 | PersonaPlex-7B (4-bit, MLX) | 4,900 MB | ~6.5 GB |
 | Silero-VAD-v5 (MLX) | 1.2 MB | ~5 MB |
 | Silero-VAD-v5 (CoreML) | 0.7 MB | ~3 MB |
@@ -1042,9 +1043,10 @@ Le serveur est un module `AudioServer` separe et un executable `audio-server` --
 
 | Modele | Framework | ms/etape | RTF | Notes |
 |--------|-----------|----------|-----|-------|
-| PersonaPlex-7B (4-bit) | MLX Swift (release) | ~68ms | ~0.87 | 20s entree → 36s sortie en ~31s |
+| PersonaPlex-7B (8-bit) | MLX Swift (release) | ~112ms | ~1.4 | Recommande — reponses coherentes, 30% plus rapide que 4-bit |
+| PersonaPlex-7B (4-bit) | MLX Swift (release) | ~158ms | ~1.97 | Non recommande — qualite de sortie degradee |
 
-> PersonaPlex fonctionne a ~68ms/etape -- bien en dessous du seuil temps reel de 80ms a 12.5 Hz, atteignant une inference **plus rapide que le temps reel** (RTF < 1.0). Le transformer temporel et le depformer sont tous deux quantifies en 4-bit.
+> **Utilisez 8-bit.** INT8 est plus rapide (112 ms/etape vs. 158 ms/etape) et produit des reponses full-duplex coherentes. La quantification INT4 degrade la qualite de generation, produisant un discours incoherent. INT8 fonctionne a ~112ms/etape sur M2 Max.
 
 ### VAD et empreinte vocale
 

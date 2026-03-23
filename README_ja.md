@@ -78,6 +78,7 @@ Mac・iOS向けのオンデバイス音声認識・合成・理解。Apple Silic
 | Kokoro-82M (CoreML) | 325 MB | ~350 MB |
 | Qwen3-Chat-0.6B (INT4, CoreML) | 318 MB | ~600 MB |
 | Qwen3-Chat-0.6B (INT8, CoreML) | 571 MB | ~900 MB |
+| PersonaPlex-7B (8-bit, MLX) | 9,100 MB | ~11 GB |
 | PersonaPlex-7B (4-bit, MLX) | 4,900 MB | ~6.5 GB |
 | Silero-VAD-v5 (MLX) | 1.2 MB | ~5 MB |
 | Silero-VAD-v5 (CoreML) | 0.7 MB | ~3 MB |
@@ -1042,9 +1043,10 @@ ws.send(JSON.stringify({
 
 | モデル | フレームワーク | ms/step | RTF | 備考 |
 |-------|-----------|---------|-----|-------|
-| PersonaPlex-7B (4-bit) | MLX Swift (release) | ~68ms | ~0.87 | 20s入力 → 36s出力を~31sで処理 |
+| PersonaPlex-7B (8-bit) | MLX Swift (release) | ~112ms | ~1.4 | 推奨 — 一貫した応答、4-bitより30%高速 |
+| PersonaPlex-7B (4-bit) | MLX Swift (release) | ~158ms | ~1.97 | 非推奨 — 出力品質が劣化 |
 
-> PersonaPlexは~68ms/stepで動作 — 12.5 Hzのリアルタイム閾値80msを大幅に下回り、**リアルタイムより高速**な推論 (RTF < 1.0) を実現します。temporal transformerとdepformerの両方が4-bit量子化されています。
+> **8-bitを使用してください。** INT8はより高速（112 ms/step vs. 158 ms/step）で、一貫した全二重応答を生成します。INT4量子化は生成品質を劣化させ、意味不明な音声を生成します。INT8はM2 Maxで~112ms/stepで動作します。
 
 ### VAD & 話者埋め込み
 
