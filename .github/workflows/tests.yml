@@ -53,5 +53,10 @@ jobs:
           --skip CosyVoiceTTSTests
           --skip KokoroTTSTests
 
-      # Demo compilation check removed — adds ~4 min to CI for each demo
-      # (full dependency rebuild). Import errors caught by developers locally.
+      - name: Build demo apps
+        run: |
+          # First demo does full build, second reuses SPM cache
+          for demo in Examples/SpeechDemo Examples/PersonaPlexDemo; do
+            echo "Building $demo..."
+            (cd "$demo" && swift build --disable-sandbox) || exit 1
+          done
