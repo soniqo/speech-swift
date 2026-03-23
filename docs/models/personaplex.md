@@ -4,11 +4,13 @@
 
 PersonaPlex is NVIDIA's 7B parameter full-duplex speech-to-speech model built on Kyutai's [Moshi](https://github.com/kyutai-labs/moshi) architecture. It enables simultaneous listening and speaking with controllable voice and role.
 
-This implementation ports inference to Swift/MLX with 4-bit or 8-bit quantization (~3.5 GB / ~6 GB temporal transformer, ~650 MB / ~1.2 GB depformer), supporting both offline and streaming output.
+This implementation ports inference to Swift/MLX with 8-bit or 4-bit quantization (~6 GB / ~3.5 GB temporal transformer, ~1.2 GB / ~650 MB depformer), supporting both offline and streaming output.
 
 Two quantization variants are available:
-- **4-bit** (`aufklarer/PersonaPlex-7B-MLX-4bit`) — ~5.5 GB total, fits 16 GB RAM
-- **8-bit** (`aufklarer/PersonaPlex-7B-MLX-8bit`) — ~9 GB total, higher accuracy
+- **8-bit** (`aufklarer/PersonaPlex-7B-MLX-8bit`) — ~9 GB total, **recommended** (30% faster, coherent responses)
+- **4-bit** (`aufklarer/PersonaPlex-7B-MLX-4bit`) — ~5.5 GB total, for memory-constrained systems (16 GB RAM)
+
+> **Use 8-bit.** Benchmarks show INT8 is both faster (112 ms/step vs 158 ms/step) and produces significantly higher quality full-duplex responses. INT4 quantization degrades generation quality, resulting in incoherent speech output.
 
 ## Architecture
 
@@ -34,7 +36,7 @@ Two quantization variants are available:
 - **Sample rate**: 24 kHz
 - **Architecture**: Same `tokenizer-e351c8d8-checkpoint125.safetensors` as Moshi
 
-### Temporal Transformer (7B, 4-bit quantized)
+### Temporal Transformer (7B, 8-bit quantized by default)
 - **Layers**: 32
 - **Dimension**: 4096
 - **Heads**: 32 (head_dim=128)
@@ -51,7 +53,7 @@ Two quantization variants are available:
 
 All embeddings are summed before entering the transformer.
 
-### Depformer (per-codebook weights, 4-bit quantized)
+### Depformer (per-codebook weights, 8-bit quantized by default)
 - **Layers**: 6
 - **Dimension**: 1024
 - **Heads**: 16 (head_dim=64)
@@ -89,10 +91,17 @@ for k in 0..<16:
 8. Decode agent tokens with Mimi → 24kHz response audio
 ```
 
-**Example run** (M2 Max, 4-bit):
+**Example run** (M2 Max, 8-bit, recommended):
 - Input: "Can you guarantee that the replacement part will be shipped tomorrow?" (20s)
-- Output: "I can't promise a specific time, but we'll do our best to get it out tomorrow. It's one of the top priorities, so yes, we'll try to get it done as soon as possible and ship it first thing in the morning." (36s)
-- RTF: ~0.87 (faster than real-time, both transformers 4-bit quantized)
+- Output: "I can't guarantee it will fit tomorrow. It depends on..." (coherent, natural)
+- Step latency: ~112 ms/step
+- RTF: ~1.4 (near real-time, both transformers 8-bit quantized)
+
+**Example run** (M2 Max, 4-bit, not recommended):
+- Input: Same as above
+- Output: "I go tea my coffee brewing..." (garbled, incoherent)
+- Step latency: ~158 ms/step
+- RTF: ~1.97 (slower than 8-bit, degraded quality)
 
 ## Delay Pattern
 
@@ -156,12 +165,21 @@ The conversion script (`scripts/convert_personaplex.py`) maps PyTorch key conven
 
 ## Memory Requirements
 
+**8-bit (recommended):**
+- Temporal transformer (8-bit): ~6 GB
+- Depformer (8-bit, 16-step MultiLinear): ~1.2 GB
+- Embeddings + output heads: ~943 MB
+- Mimi codec: ~367 MB
+- KV cache (context=3000): ~1 GB
+- **Total**: ~9.5 GB (requires 24+ GB RAM for comfortable operation)
+
+**4-bit (memory-constrained):**
 - Temporal transformer (4-bit): ~3.4 GB
 - Depformer (4-bit, 16-step MultiLinear): ~650 MB
 - Embeddings + output heads: ~943 MB
 - Mimi codec: ~367 MB
 - KV cache (context=3000): ~1 GB
-- **Total**: ~6.4 GB (fits comfortably on M-series Macs with 16+ GB RAM)
+- **Total**: ~6.4 GB (fits on M-series Macs with 16+ GB RAM)
 
 ## Streaming Inference
 

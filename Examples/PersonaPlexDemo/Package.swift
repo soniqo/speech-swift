@@ -20,5 +20,10 @@ let package = Package(
             path: "PersonaPlexDemo",
             exclude: ["PersonaPlexDemo.entitlements", "Info.plist"]
         ),
+        .testTarget(
+            name: "PersonaPlexDemoTests",
+            dependencies: ["PersonaPlexDemo"],
+            path: "Tests"
+        ),
     ]
 )

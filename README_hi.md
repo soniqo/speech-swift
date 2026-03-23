@@ -78,6 +78,7 @@ Mac और iOS के लिए ऑन-डिवाइस स्पीच रि
 | Kokoro-82M (CoreML) | 325 MB | ~350 MB |
 | Qwen3-Chat-0.6B (INT4, CoreML) | 318 MB | ~600 MB |
 | Qwen3-Chat-0.6B (INT8, CoreML) | 571 MB | ~900 MB |
+| PersonaPlex-7B (8-bit, MLX) | 9,100 MB | ~11 GB |
 | PersonaPlex-7B (4-bit, MLX) | 4,900 MB | ~6.5 GB |
 | Silero-VAD-v5 (MLX) | 1.2 MB | ~5 MB |
 | Silero-VAD-v5 (CoreML) | 0.7 MB | ~3 MB |
@@ -1042,9 +1043,10 @@ ws.send(JSON.stringify({
 
 | Model | Framework | ms/step | RTF | नोट्स |
 |-------|-----------|---------|-----|-------|
-| PersonaPlex-7B (4-bit) | MLX Swift (release) | ~68ms | ~0.87 | 20s इनपुट → 36s आउटपुट ~31s में |
+| PersonaPlex-7B (8-bit) | MLX Swift (release) | ~112ms | ~1.4 | अनुशंसित — सुसंगत प्रतिक्रियाएँ, 4-bit से 30% तेज़ |
+| PersonaPlex-7B (4-bit) | MLX Swift (release) | ~158ms | ~1.97 | अनुशंसित नहीं — आउटपुट गुणवत्ता में गिरावट |
 
-> PersonaPlex ~68ms/step पर चलता है — 12.5 Hz पर 80ms रियल-टाइम थ्रेशोल्ड से काफ़ी कम, **रियल-टाइम से तेज़** इनफ़रेंस (RTF < 1.0) प्राप्त करता है। temporal transformer और depformer दोनों 4-bit क्वांटाइज़्ड हैं।
+> **8-bit का उपयोग करें।** INT8 तेज़ (112 ms/step बनाम 158 ms/step) और सुसंगत फुल-डुप्लेक्स प्रतिक्रियाएँ उत्पन्न करता है। INT4 क्वांटाइज़ेशन जनरेशन गुणवत्ता को ख़राब करता है और अस्पष्ट भाषण उत्पन्न करता है। INT8 M2 Max पर ~112ms/step पर चलता है।
 
 ### VAD और स्पीकर एम्बेडिंग
 
