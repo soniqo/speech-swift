@@ -146,19 +146,7 @@ final class AudioPlayer {
             guard let self else { return }
             self.lock.lock()
             self.pendingBuffers -= 1
-            let done = self.pendingBuffers <= 0 && self.generationComplete
             self.lock.unlock()
-
-            if done {
-                DispatchQueue.main.async {
-                    self.lock.lock()
-                    let stillDone = self.pendingBuffers <= 0 && self.generationComplete
-                    self.lock.unlock()
-                    guard stillDone else { return }
-                    self.isPlaying = false
-                    self.onPlaybackFinished?()
-                }
-            }
         }
     }
 
@@ -167,13 +155,22 @@ final class AudioPlayer {
     func markGenerationComplete() {
         lock.lock()
         generationComplete = true
-        let done = pendingBuffers <= 0
         lock.unlock()
 
-        if done {
+        guard let playerNode, let outputFormat else {
+            isPlaying = false
+            onPlaybackFinished?()
+            return
+        }
+        let silenceFrames = AVAudioFrameCount(outputFormat.sampleRate * 0.05)
+        guard let silence = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: silenceFrames) else { return }
+        silence.frameLength = silenceFrames
+
+        playerNode.scheduleBuffer(silence, completionCallbackType: .dataPlayedBack) { [weak self] _ in
+            guard let self else { return }
             DispatchQueue.main.async {
                 self.lock.lock()
-                let stillDone = self.pendingBuffers <= 0 && self.generationComplete
+                let stillDone = self.generationComplete
                 self.lock.unlock()
                 guard stillDone else { return }
                 self.isPlaying = false

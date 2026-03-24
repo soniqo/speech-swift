@@ -13,9 +13,9 @@ public final class StreamingAudioPlayer: @unchecked Sendable {
     private var playerNode: AVAudioPlayerNode?
     private var format: AVAudioFormat?
     private var pendingBuffers = 0
+    private var generationComplete = false
+    public private(set) var isPlaying = false
     private let lock = NSLock()
-
-    public var isPlaying: Bool { playerNode?.isPlaying ?? false }
 
     /// Callback when all scheduled buffers finish playing.
     public var onPlaybackFinished: (() -> Void)?
@@ -84,16 +84,13 @@ public final class StreamingAudioPlayer: @unchecked Sendable {
         }
         lock.lock()
         pendingBuffers += 1
+        isPlaying = true
         lock.unlock()
-        node.scheduleBuffer(buffer) { [weak self] in
+        node.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
             guard let self else { return }
             self.lock.lock()
             self.pendingBuffers -= 1
-            let remaining = self.pendingBuffers
             self.lock.unlock()
-            if remaining == 0 {
-                self.onPlaybackFinished?()
-            }
         }
     }
 
@@ -141,12 +138,51 @@ public final class StreamingAudioPlayer: @unchecked Sendable {
         }
     }
 
+    /// Signal that TTS generation is complete — no more chunks will arrive.
+    /// Schedules a silent sentinel buffer; its .dataPlayedBack callback is the
+    /// real "done" signal, guaranteeing all preceding audio has been played.
+    public func markGenerationComplete() {
+        lock.lock()
+        generationComplete = true
+        lock.unlock()
+
+        guard let node = playerNode, let fmt = format else {
+            isPlaying = false
+            onPlaybackFinished?()
+            return
+        }
+        let silenceFrames = AVAudioFrameCount(fmt.sampleRate * 0.05)
+        guard let silence = AVAudioPCMBuffer(pcmFormat: fmt, frameCapacity: silenceFrames) else { return }
+        silence.frameLength = silenceFrames
+
+        node.scheduleBuffer(silence, completionCallbackType: .dataPlayedBack) { [weak self] _ in
+            guard let self else { return }
+            DispatchQueue.main.async {
+                self.lock.lock()
+                let stillDone = self.generationComplete
+                self.lock.unlock()
+                guard stillDone else { return }
+                self.isPlaying = false
+                self.onPlaybackFinished?()
+            }
+        }
+    }
+
+    /// Reset for a new generation cycle (call before first chunk).
+    public func resetGeneration() {
+        lock.lock()
+        generationComplete = false
+        lock.unlock()
+    }
+
     /// Fade out and stop immediately.
     public func fadeOutAndStop() {
         playerNode?.stop()
         lock.lock()
         pendingBuffers = 0
+        generationComplete = false
         lock.unlock()
+        isPlaying = false
     }
 
     /// Stop and release resources.
