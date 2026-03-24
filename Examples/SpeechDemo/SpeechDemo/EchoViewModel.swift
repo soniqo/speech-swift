@@ -26,7 +26,7 @@ final class EchoViewModel {
     private var tts: Qwen3TTSModel?
     private var pipeline: VoicePipeline?
     private var audioEngine: AVAudioEngine?
-    private let player = AudioPlayer()
+    private let player = StreamingAudioPlayer()
     private var debugRecordBuffer: [Float] = []
     private var debugTTSBuffer: [Float] = []
     private var isRecordingDebug = false

@@ -1,3 +1,4 @@
+import AudioCommon
 import AVFoundation
 import Foundation
 import Observation
@@ -34,7 +35,7 @@ final class SpeakViewModel {
 
     #if os(macOS)
     private var ttsModel: Qwen3TTSModel?
-    private let player = AudioPlayer()
+    private let player = StreamingAudioPlayer()
     var isPlaying: Bool { player.isPlaying }
     var modelLoaded: Bool { ttsModel != nil }
     #else
