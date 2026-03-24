@@ -37,6 +37,10 @@ let package = Package(
             targets: ["SpeechEnhancement"]
         ),
         .library(
+            name: "SourceSeparation",
+            targets: ["SourceSeparation"]
+        ),
+        .library(
             name: "ParakeetASR",
             targets: ["ParakeetASR"]
         ),
@@ -138,6 +142,16 @@ let package = Package(
             dependencies: [
                 "AudioCommon",
                 "MLXCommon",
+            ]
+        ),
+        .target(
+            name: "SourceSeparation",
+            dependencies: [
+                "AudioCommon",
+                "MLXCommon",
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXFast", package: "mlx-swift"),
+                .product(name: "MLXNN", package: "mlx-swift"),
             ]
         ),
         .target(
@@ -283,6 +297,13 @@ let package = Package(
             name: "AudioServerTests",
             dependencies: [
                 "AudioServer"
+            ]
+        ),
+        .testTarget(
+            name: "SourceSeparationTests",
+            dependencies: [
+                "SourceSeparation",
+                .product(name: "MLX", package: "mlx-swift"),
             ]
         )
     ]
