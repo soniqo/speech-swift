@@ -18,6 +18,7 @@ Mac과 iOS를 위한 온디바이스 음성 인식, 합성 및 이해. Apple Sil
 - **Kokoro TTS** — 온디바이스 텍스트-음성 변환 (82M 파라미터, CoreML/Neural Engine, 50개 음색, iOS 지원, 10개 언어)
 - **Qwen3-Chat** — 온디바이스 LLM 채팅 (0.6B, CoreML/Neural Engine, INT4/INT8, 스트리밍 토큰, 사고 모드)
 - **PersonaPlex** — 전이중 음성-음성 대화 (7B, 오디오 입력 → 오디오 출력, 18개 음색 프리셋)
+- **Open-Unmix** — 음악 소스 분리 (보컬, 드럼, 베이스, 기타 — BiLSTM, 4배 실시간, 스테레오 입출력)
 - **DeepFilterNet3** — 음성 향상 / 노이즈 억제 (2.1M 파라미터, 실시간 48kHz)
 - **FireRedVAD** — 오프라인 음성 활동 감지 (DFSMN, CoreML, 100개 이상 언어, 97.6% F1)
 - **Silero VAD** — 스트리밍 음성 활동 감지 (32ms 청크, 밀리초 미만 지연 시간)
@@ -60,6 +61,8 @@ Mac과 iOS를 위한 온디바이스 음성 인식, 합성 및 이해. Apple Sil
 | WeSpeaker-ResNet34-LM | 화자 임베딩 (256차원) | 아니오 | 언어 무관 | [MLX](https://huggingface.co/aufklarer/WeSpeaker-ResNet34-LM-MLX) · [CoreML](https://huggingface.co/aufklarer/WeSpeaker-ResNet34-LM-CoreML) ~25 MB |
 | CAM++ | 화자 임베딩 (192차원) | 아니오 | 언어 무관 | [CoreML](https://huggingface.co/aufklarer/CamPlusPlus-Speaker-CoreML) ~14 MB |
 | Sortformer | 화자 분리 (엔드투엔드) | 예 (청크) | 언어 무관 | [CoreML](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) ~240 MB |
+| Open-Unmix HQ | Music Source Separation (4 stems) | No | Language-agnostic | [MLX](https://huggingface.co/aufklarer/OpenUnmix-HQ-MLX) ~136 MB |
+| Open-Unmix L | Music Source Separation (4 stems) | No | Language-agnostic | [MLX](https://huggingface.co/aufklarer/OpenUnmix-L-MLX) ~432 MB |
 
 ### 메모리 요구 사항
 

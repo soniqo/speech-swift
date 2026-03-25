@@ -18,6 +18,7 @@
 - **Kokoro TTS** — 端侧文本转语音（82M 参数，CoreML/神经引擎，50 种音色，iOS 就绪，10 种语言）
 - **Qwen3-Chat** — 端侧 LLM 对话（0.6B，CoreML/神经引擎，INT4/INT8，流式 token，思考模式）
 - **PersonaPlex** — 全双工语音到语音对话（7B，音频输入 → 音频输出，18 种预设音色）
+- **Open-Unmix** — 音乐源分离（人声、鼓、贝斯、其他 — BiLSTM，4 倍实时，立体声输入/输出）
 - **DeepFilterNet3** — 语音增强 / 噪声抑制（2.1M 参数，实时 48kHz）
 - **FireRedVAD** — 离线语音活动检测（DFSMN，CoreML，100+ 种语言，97.6% F1）
 - **Silero VAD** — 流式语音活动检测（32ms 分块，亚毫秒延迟）
@@ -60,6 +61,8 @@
 | WeSpeaker-ResNet34-LM | 说话人嵌入向量 (256 维) | 否 | 语言无关 | [MLX](https://huggingface.co/aufklarer/WeSpeaker-ResNet34-LM-MLX) · [CoreML](https://huggingface.co/aufklarer/WeSpeaker-ResNet34-LM-CoreML) ~25 MB |
 | CAM++ | 说话人嵌入向量 (192 维) | 否 | 语言无关 | [CoreML](https://huggingface.co/aufklarer/CamPlusPlus-Speaker-CoreML) ~14 MB |
 | Sortformer | 说话人分离（端到端） | 是（分块） | 语言无关 | [CoreML](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) ~240 MB |
+| Open-Unmix HQ | Music Source Separation (4 stems) | No | Language-agnostic | [MLX](https://huggingface.co/aufklarer/OpenUnmix-HQ-MLX) ~136 MB |
+| Open-Unmix L | Music Source Separation (4 stems) | No | Language-agnostic | [MLX](https://huggingface.co/aufklarer/OpenUnmix-L-MLX) ~432 MB |
 
 ### 内存需求
 

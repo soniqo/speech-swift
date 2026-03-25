@@ -18,6 +18,7 @@ Spracherkennung, -synthese und -verständnis auf dem Gerät für Mac und iOS. L�
 - **Kokoro TTS** — Sprachsynthese auf dem Gerät (82M Parameter, CoreML/Neural Engine, 50 Stimmen, iOS-tauglich, 10 Sprachen)
 - **Qwen3-Chat** — LLM-Chat auf dem Gerät (0.6B, CoreML/Neural Engine, INT4/INT8, Token-Streaming, Denkmodus)
 - **PersonaPlex** — Vollduplex-Sprache-zu-Sprache-Konversation (7B, Audio rein → Audio raus, 18 Stimmvoreinstellungen)
+- **Open-Unmix** — Musiktrennung (Gesang, Schlagzeug, Bass, Sonstiges — BiLSTM, 4x Echtzeit, Stereo Ein-/Ausgang)
 - **DeepFilterNet3** — Sprachverbesserung / Rauschunterdrückung (2,1M Parameter, Echtzeit 48kHz)
 - **FireRedVAD** — Offline-Sprachaktivitätserkennung (DFSMN, CoreML, 100+ Sprachen, 97,6% F1)
 - **Silero VAD** — Streaming-Sprachaktivitätserkennung (32ms-Blöcke, Latenz unter einer Millisekunde)
@@ -60,6 +61,8 @@ Siehe [Roadmap-Diskussion](https://github.com/soniqo/speech-swift/discussions/81
 | WeSpeaker-ResNet34-LM | Sprechereinbettung (256-dim) | Nein | Sprachunabhängig | [MLX](https://huggingface.co/aufklarer/WeSpeaker-ResNet34-LM-MLX) · [CoreML](https://huggingface.co/aufklarer/WeSpeaker-ResNet34-LM-CoreML) ~25 MB |
 | CAM++ | Sprechereinbettung (192-dim) | Nein | Sprachunabhängig | [CoreML](https://huggingface.co/aufklarer/CamPlusPlus-Speaker-CoreML) ~14 MB |
 | Sortformer | Sprecherdiarisierung (durchgängig) | Ja (blockweise) | Sprachunabhängig | [CoreML](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) ~240 MB |
+| Open-Unmix HQ | Music Source Separation (4 stems) | No | Language-agnostic | [MLX](https://huggingface.co/aufklarer/OpenUnmix-HQ-MLX) ~136 MB |
+| Open-Unmix L | Music Source Separation (4 stems) | No | Language-agnostic | [MLX](https://huggingface.co/aufklarer/OpenUnmix-L-MLX) ~432 MB |
 
 ### Speicheranforderungen
 

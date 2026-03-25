@@ -18,6 +18,7 @@ Mac・iOS向けのオンデバイス音声認識・合成・理解。Apple Silic
 - **Kokoro TTS** — オンデバイステキスト読み上げ (82Mパラメーター、CoreML/Neural Engine、50種類の声、iOS対応、10言語)
 - **Qwen3-Chat** — オンデバイスLLMチャット (0.6B、CoreML/Neural Engine、INT4/INT8、ストリーミングトークン、思考モード)
 - **PersonaPlex** — 全二重音声間会話 (7B、音声入力 → 音声出力、18種類のボイスプリセット)
+- **Open-Unmix** — 音楽ソース分離（ボーカル、ドラム、ベース、その他 — BiLSTM、4倍リアルタイム、ステレオ入出力）
 - **DeepFilterNet3** — 音声強調 / ノイズ抑制 (2.1Mパラメーター、リアルタイム48kHz)
 - **FireRedVAD** — オフライン音声区間検出 (DFSMN、CoreML、100以上の言語、97.6% F1)
 - **Silero VAD** — ストリーミング音声区間検出 (32msチャンク、サブミリ秒レイテンシー)
@@ -60,6 +61,8 @@ Mac・iOS向けのオンデバイス音声認識・合成・理解。Apple Silic
 | WeSpeaker-ResNet34-LM | 話者埋め込み (256次元) | なし | 言語非依存 | [MLX](https://huggingface.co/aufklarer/WeSpeaker-ResNet34-LM-MLX) · [CoreML](https://huggingface.co/aufklarer/WeSpeaker-ResNet34-LM-CoreML) ~25 MB |
 | CAM++ | 話者埋め込み (192次元) | なし | 言語非依存 | [CoreML](https://huggingface.co/aufklarer/CamPlusPlus-Speaker-CoreML) ~14 MB |
 | Sortformer | 話者ダイアライゼーション (エンドツーエンド) | あり (チャンク) | 言語非依存 | [CoreML](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) ~240 MB |
+| Open-Unmix HQ | Music Source Separation (4 stems) | No | Language-agnostic | [MLX](https://huggingface.co/aufklarer/OpenUnmix-HQ-MLX) ~136 MB |
+| Open-Unmix L | Music Source Separation (4 stems) | No | Language-agnostic | [MLX](https://huggingface.co/aufklarer/OpenUnmix-L-MLX) ~432 MB |
 
 ### メモリ要件
 

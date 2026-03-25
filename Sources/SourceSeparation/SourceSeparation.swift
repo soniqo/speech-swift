@@ -15,6 +15,7 @@ import AudioCommon
 public final class SourceSeparator {
 
     public static let defaultModelId = "aufklarer/OpenUnmix-HQ-MLX"
+    public static let largeModelId = "aufklarer/OpenUnmix-L-MLX"
 
     public let config: OpenUnmixConfig
     private let models: [SeparationTarget: OpenUnmixStemModel]
@@ -103,20 +104,19 @@ public final class SourceSeparator {
         var results: [SeparationTarget: [[Float]]] = [:]
 
         if wiener && targetMags.count > 1 {
-            // Wiener soft-mask: ratio of squared magnitudes (per-channel)
+            // Multichannel Wiener EM: produces complex STFT directly
             let allLeftMags = targetMags.map(\.left)
             let allRightMags = targetMags.map(\.right)
-            let (refinedLeft, refinedRight) = WienerFilter.apply(
-                targetSpecsL: allLeftMags,
-                targetSpecsR: allRightMags,
-                mixReal: leftReal, mixImag: leftImag,
-                mixRealR: rightReal, mixImagR: rightImag)
+            let refined = WienerFilter.apply(
+                targetMagsL: allLeftMags,
+                targetMagsR: allRightMags,
+                mixRealL: leftReal, mixImagL: leftImag,
+                mixRealR: rightReal, mixImagR: rightImag,
+                iterations: 1)
 
             for (i, entry) in targetMags.enumerated() {
-                let leftStem = stft.applyMaskAndInvert(
-                    maskedMag: refinedLeft[i], origReal: leftReal, origImag: leftImag, length: length)
-                let rightStem = stft.applyMaskAndInvert(
-                    maskedMag: refinedRight[i], origReal: rightReal, origImag: rightImag, length: length)
+                let leftStem = stft.inverse(real: refined[i].realL, imag: refined[i].imagL, length: length)
+                let rightStem = stft.inverse(real: refined[i].realR, imag: refined[i].imagR, length: length)
                 results[entry.target] = [leftStem, rightStem]
             }
         } else {
@@ -138,7 +138,7 @@ public final class SourceSeparator {
         modelId: String = defaultModelId,
         progressHandler: ((Double, String) -> Void)? = nil
     ) async throws -> SourceSeparator {
-        let config = OpenUnmixConfig.umxhq
+        let config = modelId.contains("L-MLX") ? OpenUnmixConfig.umxl : OpenUnmixConfig.umxhq
 
         let cacheDir: URL
         do {

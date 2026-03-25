@@ -18,6 +18,7 @@
 - **Kokoro TTS** — Синтез речи на устройстве (82M параметров, CoreML/Neural Engine, 50 голосов, готов для iOS, 10 языков)
 - **Qwen3-Chat** — Локальный чат на базе LLM (0.6B, CoreML/Neural Engine, INT4/INT8, потоковая генерация токенов, режим размышления)
 - **PersonaPlex** — Полнодуплексная генерация речи из речи (7B, аудио на входе → аудио на выходе, 18 голосовых пресетов)
+- **Open-Unmix** — Разделение музыкальных источников (вокал, ударные, бас, прочее — BiLSTM, 4x реальное время, стерео вход/выход)
 - **DeepFilterNet3** — Улучшение речи / подавление шума (2.1M параметров, реальное время 48kHz)
 - **FireRedVAD** — Офлайн-обнаружение голосовой активности (DFSMN, CoreML, 100+ языков, 97.6% F1)
 - **Silero VAD** — Потоковое обнаружение голосовой активности (фрагменты по 32мс, субмиллисекундная задержка)
@@ -60,6 +61,8 @@
 | WeSpeaker-ResNet34-LM | Голосовые эмбеддинги (256-мерные) | Нет | Языконезависимый | [MLX](https://huggingface.co/aufklarer/WeSpeaker-ResNet34-LM-MLX) · [CoreML](https://huggingface.co/aufklarer/WeSpeaker-ResNet34-LM-CoreML) ~25 MB |
 | CAM++ | Голосовые эмбеддинги (192-мерные) | Нет | Языконезависимый | [CoreML](https://huggingface.co/aufklarer/CamPlusPlus-Speaker-CoreML) ~14 MB |
 | Sortformer | Диаризация спикеров (сквозная) | Да (фрагментами) | Языконезависимый | [CoreML](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) ~240 MB |
+| Open-Unmix HQ | Music Source Separation (4 stems) | No | Language-agnostic | [MLX](https://huggingface.co/aufklarer/OpenUnmix-HQ-MLX) ~136 MB |
+| Open-Unmix L | Music Source Separation (4 stems) | No | Language-agnostic | [MLX](https://huggingface.co/aufklarer/OpenUnmix-L-MLX) ~432 MB |
 
 ### Требования к памяти
 

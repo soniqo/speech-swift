@@ -18,6 +18,7 @@ Mac और iOS के लिए ऑन-डिवाइस स्पीच रि
 - **Kokoro TTS** — ऑन-डिवाइस टेक्स्ट-टू-स्पीच (82M params, CoreML/Neural Engine, 50 वॉयस, iOS-ready, 10 भाषाएँ)
 - **Qwen3-Chat** — ऑन-डिवाइस LLM चैट (0.6B, CoreML/Neural Engine, INT4/INT8, स्ट्रीमिंग टोकन, थिंकिंग मोड)
 - **PersonaPlex** — फुल-डुप्लेक्स स्पीच-टू-स्पीच वार्तालाप (7B, ऑडियो इन → ऑडियो आउट, 18 वॉयस प्रीसेट)
+- **Open-Unmix** — म्यूज़िक सोर्स सेपरेशन (वोकल्स, ड्रम्स, बेस, अन्य — BiLSTM, 4x रियल-टाइम, स्टीरियो इनपुट/आउटपुट)
 - **DeepFilterNet3** — स्पीच एन्हांसमेंट / नॉइज़ सप्रेशन (2.1M params, रियल-टाइम 48kHz)
 - **FireRedVAD** — ऑफ़लाइन वॉयस एक्टिविटी डिटेक्शन (DFSMN, CoreML, 100+ भाषाएँ, 97.6% F1)
 - **Silero VAD** — स्ट्रीमिंग वॉयस एक्टिविटी डिटेक्शन (32ms chunks, सब-मिलीसेकंड लेटेंसी)
@@ -60,6 +61,8 @@ Mac और iOS के लिए ऑन-डिवाइस स्पीच रि
 | WeSpeaker-ResNet34-LM | Speaker Embedding (256-dim) | No | Language-agnostic | [MLX](https://huggingface.co/aufklarer/WeSpeaker-ResNet34-LM-MLX) · [CoreML](https://huggingface.co/aufklarer/WeSpeaker-ResNet34-LM-CoreML) ~25 MB |
 | CAM++ | Speaker Embedding (192-dim) | No | Language-agnostic | [CoreML](https://huggingface.co/aufklarer/CamPlusPlus-Speaker-CoreML) ~14 MB |
 | Sortformer | Speaker Diarization (end-to-end) | Yes (chunked) | Language-agnostic | [CoreML](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) ~240 MB |
+| Open-Unmix HQ | Music Source Separation (4 stems) | No | Language-agnostic | [MLX](https://huggingface.co/aufklarer/OpenUnmix-HQ-MLX) ~136 MB |
+| Open-Unmix L | Music Source Separation (4 stems) | No | Language-agnostic | [MLX](https://huggingface.co/aufklarer/OpenUnmix-L-MLX) ~432 MB |
 
 ### मेमोरी आवश्यकताएँ
 

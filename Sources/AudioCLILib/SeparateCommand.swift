@@ -18,8 +18,8 @@ public struct SeparateCommand: ParsableCommand {
     @Option(name: .long, help: "Stems to extract: vocals,drums,bass,other (default: all)")
     public var stems: String?
 
-    @Option(name: .long, help: "HuggingFace model ID")
-    public var modelId: String = SourceSeparator.defaultModelId
+    @Option(name: .long, help: "Model variant: hq (default, 8.9M/stem) or l (28.3M/stem)")
+    public var model: String = "hq"
 
     @Flag(name: .long, help: "Show timing info")
     public var verbose: Bool = false
@@ -44,7 +44,8 @@ public struct SeparateCommand: ParsableCommand {
         try FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
 
         try runAsync {
-            print("Loading model...")
+            let modelId = model.lowercased() == "l" ? SourceSeparator.largeModelId : SourceSeparator.defaultModelId
+            print("Loading model (\(model.lowercased() == "l" ? "UMX-L" : "UMX-HQ"))...")
             let separator = try await SourceSeparator.fromPretrained(
                 modelId: modelId, progressHandler: reportProgress)
 
