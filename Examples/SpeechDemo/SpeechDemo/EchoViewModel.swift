@@ -31,6 +31,16 @@ final class EchoViewModel {
     private var debugTTSBuffer: [Float] = []
     private var isRecordingDebug = false
 
+    /// Echo reference gate: stores RMS of recently played TTS audio (at 16kHz)
+    /// to distinguish real user speech from speaker echo in the mic signal.
+    private let echoRef = EchoReferenceGate()
+
+    /// Buffer mic audio during TTS playback. When playback finishes,
+    /// replay buffered audio to the pipeline so speech spoken during
+    /// TTS isn't lost.
+    private var pendingMicBuffer: [Float] = []
+    private var isBufferingDuringTTS = false
+
     var modelsLoaded: Bool { vad != nil && asr != nil && tts != nil }
     var isPlaying: Bool { player.isPlaying }
 
@@ -166,12 +176,18 @@ final class EchoViewModel {
         case .responseCreated:
             pipelineState = "speaking..."
             player.resetGeneration()
+            echoRef.reset()
+            isBufferingDuringTTS = true
+            pendingMicBuffer = []
         case .responseInterrupted:
             player.stop()
+            isBufferingDuringTTS = false
+            pendingMicBuffer = []
             pipelineState = "interrupted → listening"
             appendLog("[Interrupted] Stopping playback")
         case .responseAudioDelta(let samples):
             if isRecordingDebug { debugTTSBuffer.append(contentsOf: samples) }
+            echoRef.feedReference(samples, sampleRate: 24000)
             do {
                 try player.play(samples: samples, sampleRate: 24000)
             } catch {
@@ -180,6 +196,7 @@ final class EchoViewModel {
         case .responseDone:
             appendLog("[TTS] Done")
             player.markGenerationComplete()
+            echoRef.markPlaybackDone()
         case .toolCallStarted(let name):
             appendLog("[Tool] \(name) started")
         case .toolCallCompleted(let name, let result):
@@ -197,9 +214,35 @@ final class EchoViewModel {
 
     private func resumeAfterResponse() {
         guard isRunning else { return }
+        isBufferingDuringTTS = false
         pipeline?.resumeListening()
         pipelineState = "listening"
         appendLog("Listening...")
+
+        // Replay any mic audio captured during TTS playback.
+        // This ensures speech spoken while TTS was playing isn't lost.
+        // Replay on a background thread with pacing to simulate real-time
+        // mic input — VAD needs natural timing to detect speech boundaries.
+        let buffered = pendingMicBuffer
+        pendingMicBuffer = []
+        if !buffered.isEmpty {
+            let durationSec = Float(buffered.count) / 16000.0
+            appendLog("[Replay] \(buffered.count) samples (\(String(format: "%.1f", durationSec))s buffered during TTS)")
+            let pipeline = self.pipeline
+            DispatchQueue.global(qos: .userInitiated).async {
+                let chunkSize = 1600  // ~100ms at 16kHz
+                var offset = 0
+                while offset < buffered.count {
+                    let end = min(offset + chunkSize, buffered.count)
+                    let chunk = Array(buffered[offset..<end])
+                    pipeline?.pushAudio(chunk)
+                    offset = end
+                    // Pace at real-time: 100ms of audio every 50ms
+                    // (2x speed — fast enough to not feel laggy, slow enough for VAD)
+                    Thread.sleep(forTimeInterval: 0.05)
+                }
+            }
+        }
     }
 
     // MARK: - Microphone (Full-duplex with AEC)
@@ -306,6 +349,25 @@ final class EchoViewModel {
             // Record for debug
             if self.isRecordingDebug {
                 self.debugRecordBuffer.append(contentsOf: samples)
+            }
+
+            // During TTS playback: buffer mic audio that's louder than the
+            // expected echo floor. VP cancels our TTS but also kills user speech.
+            // By comparing mic energy to known TTS reference energy, we can
+            // detect when user speech is present above the echo.
+            if self.isBufferingDuringTTS {
+                // Buffer all non-silent audio during TTS. VP already removes
+                // most echo — whatever survives with meaningful energy likely
+                // contains user speech. STT is robust to residual echo.
+                if rms > 0.002 {
+                    self.pendingMicBuffer.append(contentsOf: samples)
+                }
+                return
+            }
+
+            // Echo reference gate: suppress echo from recently-played TTS
+            if self.echoRef.isLikelyEcho(micRMS: rms) {
+                return
             }
 
             self.pipeline?.pushAudio(samples)

@@ -196,7 +196,35 @@ final class StreamingAudioPlayerTests: XCTestCase {
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { expectation.fulfill() }
         wait(for: [expectation], timeout: 3.0)
 
-        XCTAssertGreaterThanOrEqual(count, 1)
+        XCTAssertEqual(count, 1, "onPlaybackFinished must fire exactly once, not \(count) times")
+        player.stop()
+    }
+
+    /// Regression: render callback was firing onPlaybackFinished on every cycle
+    /// after buffer drained, causing "Listening..." spam and pipeline resets.
+    func testCallbackFiresExactlyOnce() {
+        let player = StreamingAudioPlayer()
+        var count = 0
+        player.onPlaybackFinished = { count += 1 }
+
+        // No engine — markGenerationComplete fires callback directly
+        player.resetGeneration()
+        player.markGenerationComplete()
+
+        // Wait to ensure no duplicate fires from async paths
+        let expectation = XCTestExpectation(description: "wait")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { expectation.fulfill() }
+        wait(for: [expectation], timeout: 1.0)
+
+        XCTAssertEqual(count, 1, "Callback must fire exactly once (got \(count))")
+
+        // Calling markGenerationComplete again should NOT fire again
+        player.markGenerationComplete()
+        let expectation2 = XCTestExpectation(description: "wait2")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { expectation2.fulfill() }
+        wait(for: [expectation2], timeout: 1.0)
+
+        XCTAssertEqual(count, 1, "Second markGenerationComplete must not fire again (got \(count))")
         player.stop()
     }
 

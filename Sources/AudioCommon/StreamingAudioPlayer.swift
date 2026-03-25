@@ -110,6 +110,7 @@ public final class StreamingAudioPlayer: @unchecked Sendable {
     private var totalRead: Int = 0
 
     public private(set) var isPlaying = false
+    private var playbackFinishedFired = false
 
     /// Pre-buffer duration in seconds. Playback starts after this much audio accumulates.
     /// Default 1.0s — sufficient for streaming TTS at RTF < 0.6.
@@ -273,6 +274,8 @@ public final class StreamingAudioPlayer: @unchecked Sendable {
 
         // No engine or nothing was written — fire immediately
         if !hasEngine || (empty && totalWritten == 0) {
+            guard !playbackFinishedFired else { return }
+            playbackFinishedFired = true
             isPlaying = false
             onPlaybackFinished?()
         }
@@ -282,6 +285,7 @@ public final class StreamingAudioPlayer: @unchecked Sendable {
     public func resetGeneration() {
         lock.lock()
         generationComplete = false
+        playbackFinishedFired = false
         playbackStarted = false
         isFirstChunk = true
         totalWritten = 0
@@ -370,8 +374,9 @@ public final class StreamingAudioPlayer: @unchecked Sendable {
                 self.lock.lock()
                 self.totalRead += read
                 self.lock.unlock()
-            } else if complete {
-                // Buffer empty + generation done = playback finished
+            } else if complete && !self.playbackFinishedFired {
+                // Buffer empty + generation done = playback finished (fire once)
+                self.playbackFinishedFired = true
                 dst.update(repeating: 0, count: frames)
                 DispatchQueue.main.async {
                     self.isPlaying = false
