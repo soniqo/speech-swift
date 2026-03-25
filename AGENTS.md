@@ -139,22 +139,27 @@ Architecture and implementation docs live in this repo:
 
 ```
 docs/
-  models/                   Model architecture, weights, layers
-    asr-model.md            Qwen3-ASR architecture
-    tts-model.md            Qwen3-TTS architecture
-    cosyvoice-tts.md        CosyVoice3 architecture
-    kokoro-tts.md           Kokoro-82M architecture
-    parakeet-asr.md         Parakeet TDT architecture
-    personaplex.md          PersonaPlex architecture
-  inference/                Pipelines, usage, configs
-    asr-inference.md        ASR inference pipeline
-    qwen3-tts-inference.md  TTS inference pipeline
-    forced-aligner.md       Forced alignment pipeline
-    silero-vad.md           Silero VAD streaming
-    speaker-diarization.md  Speaker diarization pipeline
-    speech-enhancement.md   DeepFilterNet3 pipeline
-    audio-playback.md       Streaming audio playback, pre-buffer, ring buffer
-  benchmarks/               WER, DER, RTF results
+  models/                       Model architecture, weights, layers
+    asr-model.md                Qwen3-ASR architecture
+    tts-model.md                Qwen3-TTS architecture
+    cosyvoice-tts.md            CosyVoice3 architecture
+    kokoro-tts.md               Kokoro-82M architecture
+    parakeet-asr.md             Parakeet TDT architecture
+    personaplex.md              PersonaPlex architecture
+    fireredvad.md               FireRedVAD (DFSMN) architecture
+  inference/                    Pipelines, usage, configs
+    qwen3-asr-inference.md      Qwen3-ASR inference pipeline
+    parakeet-asr-inference.md   Parakeet TDT inference (CoreML)
+    qwen3-tts-inference.md      TTS inference pipeline
+    forced-aligner.md           Forced alignment pipeline
+    silero-vad.md               Silero VAD streaming
+    fireredvad.md               FireRedVAD inference + tuning results
+    speaker-diarization.md      Speaker diarization pipeline
+    speech-enhancement.md       DeepFilterNet3 pipeline
+  audio/                        Audio I/O, playback, voice pipeline
+    playback.md                 Streaming playback, pre-buffer, Apple audio architecture
+    voice-pipeline.md           VoicePipeline state machine, events, config
+  benchmarks/                   WER, DER, RTF results
   shared-protocols.md       Protocol reference (cross-cutting)
 ```
 

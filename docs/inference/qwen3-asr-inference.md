@@ -42,3 +42,17 @@ Converts raw audio to a mel spectrogram `[128, T]` using Accelerate framework.
 | Qwen3-ASR-0.6B (4-bit) | MLX Swift | ~0.06 | ~0.6s |
 | Whisper-large-v3 | whisper.cpp (Q5_0) | ~0.10 | ~1.0s |
 | Whisper-small | whisper.cpp (Q5_0) | ~0.04 | ~0.4s |
+
+## Streaming / Partial Transcription
+
+Qwen3-ASR operates in batch mode only. The entire audio input is processed in a single forward pass — there is no streaming or partial transcription support. The audio encoder uses block attention over the full mel spectrogram, and the text decoder generates tokens autoregressively conditioned on the complete encoder output.
+
+For real-time transcription use cases where partial results are needed, consider chunking the audio externally and running separate inference passes on each chunk.
+
+## Language Detection
+
+The model automatically detects the spoken language from the audio content. No language hint or locale parameter is required. The text decoder emits a language token at the start of generation, followed by the transcribed text. Supported languages include English, Chinese, Japanese, Korean, and many European languages.
+
+## Model Architecture Reference
+
+See [docs/models/asr-model.md](../models/asr-model.md) for detailed architecture documentation including layer dimensions, weight formats, and quantization details.

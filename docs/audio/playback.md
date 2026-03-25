@@ -177,3 +177,92 @@ RTF = Real-Time Factor (time to generate / audio duration). RTF < 1.0 means gene
 Sources/AudioCommon/
   StreamingAudioPlayer.swift   Event-driven player with ring buffer + pre-buffer
 ```
+
+## Apple Audio Architecture
+
+### AVAudioEngine Graph Topology
+
+`AVAudioEngine` manages a processing graph of audio nodes connected by buses:
+
+```
+Input Node (mic) ──► Main Mixer Node ──► Output Node (speaker)
+                          ▲
+Player/Source Nodes ───────┘
+```
+
+The input node captures microphone audio. Player and source nodes inject synthesized audio. The main mixer node mixes all sources and routes the result to the output node (speaker hardware). Each connection has a format (sample rate, channel count, interleaved/non-interleaved).
+
+### Voice Processing (AEC)
+
+Acoustic Echo Cancellation (AEC) prevents the microphone from picking up audio that the speaker is playing. Apple implements this via Voice Processing I/O:
+
+```swift
+try engine.inputNode.setVoiceProcessingEnabled(true)
+```
+
+Critical ordering: `setVoiceProcessingEnabled(true)` must be called on the input node **before** reading its format. Enabling Voice Processing changes the input node's format — the channel count often jumps to 9 channels (Apple's internal processing format). The echo-cancelled mono signal is on channel 0; the remaining channels carry internal VP metadata.
+
+If you read the format before enabling VP, you get the raw hardware format. After enabling VP, the format changes, and any previously configured taps or connections using the old format will break.
+
+### AVAudioPlayerNode vs AVAudioSourceNode
+
+Apple provides two ways to inject audio into the engine graph:
+
+**AVAudioPlayerNode** schedules buffers for playback. The engine knows exactly what audio will be played because the buffers are submitted ahead of time. This means Voice Processing can predict the speaker output and subtract it from the microphone signal — AEC works correctly.
+
+```swift
+let playerNode = AVAudioPlayerNode()
+engine.attach(playerNode)
+engine.connect(playerNode, to: engine.mainMixerNode, format: monoFormat)
+playerNode.scheduleBuffer(buffer, completionHandler: nil)
+playerNode.play()
+```
+
+**AVAudioSourceNode** uses a render callback — a function called by the audio hardware thread to pull samples on demand. Voice Processing cannot see the render callback's output ahead of time, so it cannot predict what the speaker will play. AEC fails: the microphone picks up the speaker audio as if it were a real voice.
+
+```swift
+let sourceNode = AVAudioSourceNode { _, _, frameCount, bufferList -> OSStatus in
+    // fill bufferList from ring buffer
+    return noErr
+}
+engine.attach(sourceNode)
+engine.connect(sourceNode, to: engine.mainMixerNode, format: monoFormat)
+```
+
+### The Fundamental Tradeoff
+
+| | AVAudioPlayerNode | AVAudioSourceNode |
+|---|---|---|
+| AEC compatible | Yes — VP can predict and cancel its output | No — VP can't see render callback output |
+| Streaming gaps | Risk of underflow between scheduled buffers | Zero underflow — callback always returns audio (silence if empty) |
+| Use case | Full-duplex (mic + speaker simultaneously) | Standalone playback (no mic needed) |
+
+PlayerNode is gap-prone for streaming TTS because each buffer must be scheduled before the previous one finishes. If there is any delay between `scheduleBuffer` calls — even a few milliseconds — the node stops and must be restarted, causing a click. SourceNode avoids this entirely because the render callback always executes and always fills the buffer (with silence if no audio is available).
+
+### Our Solution
+
+- **Speak tab (standalone TTS playback)**: Uses `AVAudioSourceNode` with the ring buffer architecture described above. No microphone is active, so AEC is irrelevant. The render callback guarantees gap-free audio even when TTS chunk timing is uneven.
+
+- **Echo tab (full-duplex voice pipeline)**: Uses `AVAudioPlayerNode` because AEC is essential — without it, the microphone picks up TTS output and feeds it back into the pipeline as a new utterance, creating an infinite echo loop. The pre-buffer strategy mitigates the gap risk by accumulating enough audio before playback starts.
+
+### Resampling
+
+TTS models generate audio at 24kHz (Qwen3-TTS, CosyVoice, Kokoro). The audio engine typically runs at 48kHz (macOS default hardware sample rate). An `AVAudioConverter` handles on-the-fly upsampling from 24kHz to 48kHz when writing into the ring buffer:
+
+```swift
+let converter = AVAudioConverter(from: ttsFormat, to: engineFormat)  // 24kHz → 48kHz
+converter.convert(to: outputBuffer, from: inputBuffer)
+```
+
+The converter uses Apple's built-in sample rate conversion (high-quality sinc interpolation). The ring buffer stores audio at the engine's native rate (48kHz), so the render callback can copy directly without further conversion.
+
+### Format Negotiation
+
+The player node is configured with a mono format matching the TTS output channel count:
+
+```swift
+let monoFormat = AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 1)
+engine.connect(playerNode, to: engine.mainMixerNode, format: monoFormat)
+```
+
+The engine's main mixer node automatically upmixes mono to stereo (or whatever the output hardware expects). This happens transparently — no manual channel mapping is needed. The mixer applies equal-power panning, placing the mono signal equally in both left and right channels.
