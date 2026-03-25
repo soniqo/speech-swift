@@ -19,9 +19,11 @@ struct STFTProcessor {
         self.nHop = nHop
         self.nBins = nFFT / 2 + 1
 
-        // Hann window (periodic)
+        // Hann window (periodic — matches PyTorch torch.hann_window default)
         var w = [Float](repeating: 0, count: nFFT)
-        vDSP_hann_window(&w, vDSP_Length(nFFT), Int32(vDSP_HANN_NORM))
+        for i in 0..<nFFT {
+            w[i] = 0.5 * (1.0 - cos(2.0 * Float.pi * Float(i) / Float(nFFT)))
+        }
         self.window = w
 
         // vDSP DFT setup (supports non-power-of-2, but 4096 is power-of-2)

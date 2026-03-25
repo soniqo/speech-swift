@@ -103,10 +103,12 @@ public final class SourceSeparator {
         var results: [SeparationTarget: [[Float]]] = [:]
 
         if wiener && targetMags.count > 1 {
-            // Wiener soft-mask: ratio of squared magnitudes
+            // Wiener soft-mask: ratio of squared magnitudes (per-channel)
             let allLeftMags = targetMags.map(\.left)
+            let allRightMags = targetMags.map(\.right)
             let (refinedLeft, refinedRight) = WienerFilter.apply(
-                targetSpecs: allLeftMags,
+                targetSpecsL: allLeftMags,
+                targetSpecsR: allRightMags,
                 mixReal: leftReal, mixImag: leftImag,
                 mixRealR: rightReal, mixImagR: rightImag)
 

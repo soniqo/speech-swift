@@ -49,9 +49,8 @@ public struct SeparateCommand: ParsableCommand {
                 modelId: modelId, progressHandler: reportProgress)
 
             print("Loading audio: \(input)")
-            let mono = try AudioFileLoader.load(url: inputURL, targetSampleRate: 44100)
-            let audio = [mono, mono]  // Duplicate mono to stereo (TODO: proper stereo loading)
-            let duration = Double(mono.count) / 44100.0
+            let audio = try AudioFileLoader.loadStereo(url: inputURL, targetSampleRate: 44100)
+            let duration = Double(audio[0].count) / 44100.0
             print("  Duration: \(String(format: "%.1f", duration))s")
 
             print("Separating into \(targets.map(\.rawValue).joined(separator: ", "))...")
@@ -64,9 +63,7 @@ public struct SeparateCommand: ParsableCommand {
 
             for (target, stemAudio) in results {
                 let outputURL = outDir.appendingPathComponent("\(target.rawValue).wav")
-                // Mix stereo to mono for WAV output (TODO: stereo WAV writer)
-                let mixedMono = zip(stemAudio[0], stemAudio[1]).map { ($0 + $1) / 2 }
-                try WAVWriter.write(samples: mixedMono, sampleRate: 44100, to: outputURL)
+                try WAVWriter.writeStereo(left: stemAudio[0], right: stemAudio[1], sampleRate: 44100, to: outputURL)
                 print("  Saved: \(outputURL.lastPathComponent)")
             }
 

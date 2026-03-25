@@ -1,60 +1,67 @@
 import Foundation
 import Accelerate
 
-/// Multichannel Wiener EM post-filtering for source separation.
+/// Multichannel Wiener soft-mask post-filtering for source separation.
 ///
-/// Refines initial magnitude-mask estimates by exploiting spatial (stereo)
-/// information. All sources must be estimated simultaneously.
+/// Refines initial magnitude-mask estimates using per-channel ratio masks.
+/// All sources must be estimated simultaneously.
 ///
 /// Reference: Nugraha et al. (2016), "Multichannel audio source separation
 /// with deep neural networks"
 struct WienerFilter {
 
-    /// Apply Wiener EM filtering to refine source estimates.
+    /// Apply Wiener soft-mask filtering to refine source estimates.
+    ///
+    /// Uses per-channel model outputs for mask computation (left and right
+    /// channels get independent masks from their respective model estimates).
     ///
     /// - Parameters:
-    ///   - targetSpecs: Per-target complex spectrograms [target][channel][T][2] (real, imag pairs)
-    ///     Initial estimates from magnitude masking + original phase
-    ///   - mixReal: Mixture STFT real [channel][T][bins]
-    ///   - mixImag: Mixture STFT imag [channel][T][bins]
-    ///   - niter: Number of EM iterations (1 recommended)
-    ///   - eps: Regularization
-    /// - Returns: Refined complex spectrograms per target
+    ///   - targetSpecsL: Per-target left-channel magnitude estimates [target][T][bins]
+    ///   - targetSpecsR: Per-target right-channel magnitude estimates [target][T][bins]
+    ///   - mixReal: Left STFT real [T][bins]
+    ///   - mixImag: Left STFT imag [T][bins]
+    ///   - mixRealR: Right STFT real [T][bins]
+    ///   - mixImagR: Right STFT imag [T][bins]
+    ///   - eps: Regularization to avoid division by zero
+    /// - Returns: Refined magnitude spectrograms per target, per channel
     static func apply(
-        targetSpecs: [[[Float]]],  // [target][T][bins] magnitude estimates
-        mixReal: [[Float]],        // [T][bins] left channel
-        mixImag: [[Float]],        // [T][bins]
-        mixRealR: [[Float]],       // [T][bins] right channel
-        mixImagR: [[Float]],       // [T][bins]
-        niter: Int = 1,
+        targetSpecsL: [[[Float]]],  // [target][T][bins] left channel magnitudes
+        targetSpecsR: [[[Float]]],  // [target][T][bins] right channel magnitudes
+        mixReal: [[Float]],
+        mixImag: [[Float]],
+        mixRealR: [[Float]],
+        mixImagR: [[Float]],
         eps: Float = 1e-10
     ) -> (leftMag: [[[Float]]], rightMag: [[[Float]]]) {
-        // For mono-duplicated stereo (our current case), Wiener simplifies
-        // to a ratio mask: target_j / sum(all_targets)
-        let nTargets = targetSpecs.count
-        let T = targetSpecs[0].count
-        let bins = targetSpecs[0][0].count
+        let nTargets = targetSpecsL.count
+        let T = targetSpecsL[0].count
+        let bins = targetSpecsL[0][0].count
 
         var leftResults = [[[Float]]](repeating: [[Float]](repeating: [Float](repeating: 0, count: bins), count: T), count: nTargets)
         var rightResults = leftResults
 
-        // Compute soft masks: target_mag^2 / sum(all_target_mag^2)
         for t in 0..<T {
             for f in 0..<bins {
-                // Sum of squared magnitudes across all targets
-                var totalPower: Float = eps
+                // Left channel: mask from left-channel model outputs
+                var totalPowerL: Float = eps
                 for j in 0..<nTargets {
-                    totalPower += targetSpecs[j][t][f] * targetSpecs[j][t][f]
+                    totalPowerL += targetSpecsL[j][t][f] * targetSpecsL[j][t][f]
                 }
-
-                // Compute left/right mixture magnitude at this TF bin
                 let leftMixMag = sqrt(mixReal[t][f] * mixReal[t][f] + mixImag[t][f] * mixImag[t][f])
+
+                // Right channel: mask from right-channel model outputs
+                var totalPowerR: Float = eps
+                for j in 0..<nTargets {
+                    totalPowerR += targetSpecsR[j][t][f] * targetSpecsR[j][t][f]
+                }
                 let rightMixMag = sqrt(mixRealR[t][f] * mixRealR[t][f] + mixImagR[t][f] * mixImagR[t][f])
 
                 for j in 0..<nTargets {
-                    let mask = (targetSpecs[j][t][f] * targetSpecs[j][t][f]) / totalPower
-                    leftResults[j][t][f] = mask * leftMixMag
-                    rightResults[j][t][f] = mask * rightMixMag
+                    let maskL = (targetSpecsL[j][t][f] * targetSpecsL[j][t][f]) / totalPowerL
+                    leftResults[j][t][f] = maskL * leftMixMag
+
+                    let maskR = (targetSpecsR[j][t][f] * targetSpecsR[j][t][f]) / totalPowerR
+                    rightResults[j][t][f] = maskR * rightMixMag
                 }
             }
         }

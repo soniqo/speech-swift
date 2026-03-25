@@ -85,9 +85,14 @@ def main():
     data_dir = Path(args.data_dir)
     data_dir.mkdir(parents=True, exist_ok=True)
 
-    # Download MUSDB18 (7.4 GB)
+    # Load MUSDB18 dataset
     print("Loading MUSDB18 dataset...")
-    db = musdb.DB(root=str(data_dir), download=True, subsets="test")
+    # Try WAV format (MUSDB18-HQ) first, fall back to stem format with download
+    is_wav = (data_dir / "test").exists() and any((data_dir / "test").iterdir())
+    if is_wav:
+        db = musdb.DB(root=str(data_dir), is_wav=True, subsets="test")
+    else:
+        db = musdb.DB(root=str(data_dir), download=True, subsets="test")
     print(f"  {len(db)} test tracks")
 
     if args.download_only:
