@@ -79,7 +79,8 @@ public struct Qwen3ChatConfig: Codable, Sendable {
         return types.filter { $0 == "full_attention" }.count
     }
 
-    /// Default config for Qwen3-0.6B.
+    /// Legacy config for Qwen3-0.6B (CoreML). Use qwen35_08B for new code.
+    @available(*, deprecated, message: "Use qwen35_08B")
     public static let qwen3_06B = Qwen3ChatConfig(
         hiddenSize: 1024,
         numHiddenLayers: 28,
