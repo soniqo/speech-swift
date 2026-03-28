@@ -2,13 +2,11 @@ import Foundation
 
 /// Model architecture type.
 public enum ChatModelArch: String, Codable, Sendable {
-    /// Standard Qwen3 transformer (all layers use full attention)
-    case qwen3 = "qwen3"
     /// Qwen3.5 hybrid (DeltaNet linear attention + GatedAttention)
     case qwen35 = "qwen3_5_text"
 }
 
-/// Configuration for Qwen3/3.5 chat model (CoreML).
+/// Configuration for Qwen3.5 chat model.
 public struct Qwen3ChatConfig: Codable, Sendable {
     public let hiddenSize: Int
     public let numHiddenLayers: Int
@@ -78,34 +76,6 @@ public struct Qwen3ChatConfig: Codable, Sendable {
         guard let types = layerTypes else { return numHiddenLayers }
         return types.filter { $0 == "full_attention" }.count
     }
-
-    /// Legacy config for Qwen3-0.6B (CoreML). Use qwen35_08B for new code.
-    @available(*, deprecated, message: "Use qwen35_08B")
-    public static let qwen3_06B = Qwen3ChatConfig(
-        hiddenSize: 1024,
-        numHiddenLayers: 28,
-        numAttentionHeads: 16,
-        numKeyValueHeads: 8,
-        headDim: 128,
-        intermediateSize: 3072,
-        vocabSize: 151936,
-        maxSeqLen: 2048,
-        ropeTheta: 1_000_000.0,
-        rmsNormEps: 1e-6,
-        eosTokenId: 151645,
-        padTokenId: 151643,
-        quantization: "int4",
-        modelType: .qwen3,
-        layerTypes: nil,
-        fullAttentionInterval: nil,
-        linearNumKeyHeads: nil,
-        linearKeyHeadDim: nil,
-        linearNumValueHeads: nil,
-        linearValueHeadDim: nil,
-        linearConvKernelDim: nil,
-        partialRotaryFactor: nil,
-        tieWordEmbeddings: false
-    )
 
     /// Default config for Qwen3.5-0.8B.
     public static let qwen35_08B = Qwen3ChatConfig(

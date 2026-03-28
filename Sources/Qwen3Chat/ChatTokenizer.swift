@@ -11,7 +11,7 @@ public final class ChatTokenizer: @unchecked Sendable {
     private var bpeMergeRanks: [String: Int] = [:]
     private var addedTokens: [String: Int] = [:]
 
-    public var eosTokenId: Int = 151645
+    public var eosTokenId: Int = 248046  // <|im_end|>
     public var vocabSize: Int { idToToken.count }
 
     public init() {}

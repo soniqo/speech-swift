@@ -8,7 +8,7 @@ import AudioCommon
 
 /// MLX-based text generator for Qwen3.5-0.8B hybrid model.
 ///
-/// Provides the same interface as CoreMLGenerator but uses MLX for inference
+/// Uses MLX for GPU inference
 /// on Apple Silicon GPUs. The hybrid DeltaNet + GatedAttention architecture
 /// requires managing two types of state:
 ///   1. DeltaNet recurrent states (carried across all tokens, O(1) per layer)
@@ -224,19 +224,19 @@ public final class Qwen35MLXChat: @unchecked Sendable {
                 previousTokens: promptTokens + generatedTokens)
 
             if nextToken == config.eosTokenId { break }
-            if nextToken == ChatTemplate.imEndId || nextToken == ChatTemplate.qwen35ImEndId { break }
+            if nextToken == ChatTemplate.imEndId { break }
 
             generatedTokens.append(nextToken)
 
             // Thinking token tracking (handle both Qwen3 and Qwen3.5 token IDs)
-            if nextToken == ChatTemplate.thinkStartId || nextToken == ChatTemplate.qwen35ThinkStartId {
+            if nextToken == ChatTemplate.thinkStartId {
                 inThinking = true
-            } else if nextToken == ChatTemplate.thinkEndId || nextToken == ChatTemplate.qwen35ThinkEndId {
+            } else if nextToken == ChatTemplate.thinkEndId {
                 inThinking = false
             }
 
             if inThinking && generatedTokens.count > thinkBudget {
-                let thinkEnd = config.isQwen35 ? ChatTemplate.qwen35ThinkEndId : ChatTemplate.thinkEndId
+                let thinkEnd = ChatTemplate.thinkEndId
                 generatedTokens.append(thinkEnd)
                 let tokenArr = MLXArray([Int32(thinkEnd)])
                     .expandedDimensions(axis: 0)
@@ -249,8 +249,7 @@ public final class Qwen35MLXChat: @unchecked Sendable {
             }
 
             let thinkTokens: Set<Int> = [
-                ChatTemplate.thinkStartId, ChatTemplate.thinkEndId,
-                ChatTemplate.qwen35ThinkStartId, ChatTemplate.qwen35ThinkEndId
+                ChatTemplate.thinkStartId, ChatTemplate.thinkEndId
             ]
             let responseCount = generatedTokens.filter { !thinkTokens.contains($0) }.count
             if !inThinking && responseCount >= sampling.maxTokens { break }
@@ -305,13 +304,13 @@ public final class Qwen35MLXChat: @unchecked Sendable {
                             previousTokens: promptTokens + generatedTokens)
 
                         if nextToken == self.config.eosTokenId { break }
-                        if nextToken == ChatTemplate.imEndId || nextToken == ChatTemplate.qwen35ImEndId { break }
+                        if nextToken == ChatTemplate.imEndId { break }
 
                         generatedTokens.append(nextToken)
 
-                        if nextToken == ChatTemplate.thinkStartId || nextToken == ChatTemplate.qwen35ThinkStartId {
+                        if nextToken == ChatTemplate.thinkStartId {
                             inThinking = true
-                        } else if nextToken == ChatTemplate.thinkEndId || nextToken == ChatTemplate.qwen35ThinkEndId {
+                        } else if nextToken == ChatTemplate.thinkEndId {
                             inThinking = false
                         } else if !inThinking,
                                   let text = self.tokenizer.decodeToken(nextToken),

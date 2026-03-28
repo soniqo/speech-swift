@@ -6,31 +6,6 @@ import AudioCommon
 
 final class Qwen3ChatConfigTests: XCTestCase {
 
-    func testDefaultQwen3_06B() {
-        let config = Qwen3ChatConfig.qwen3_06B
-        XCTAssertEqual(config.hiddenSize, 1024)
-        XCTAssertEqual(config.numHiddenLayers, 28)
-        XCTAssertEqual(config.numAttentionHeads, 16)
-        XCTAssertEqual(config.numKeyValueHeads, 8)
-        XCTAssertEqual(config.headDim, 128)
-        XCTAssertEqual(config.intermediateSize, 3072)
-        XCTAssertEqual(config.vocabSize, 151936)
-        XCTAssertEqual(config.maxSeqLen, 2048)
-        XCTAssertEqual(config.ropeTheta, 1_000_000.0, accuracy: 1.0)
-        XCTAssertEqual(config.rmsNormEps, 1e-6, accuracy: 1e-9)
-        XCTAssertEqual(config.eosTokenId, 151645)
-        XCTAssertEqual(config.padTokenId, 151643)
-        XCTAssertEqual(config.quantization, "int4")
-    }
-
-    func testGQARatio() {
-        let config = Qwen3ChatConfig.qwen3_06B
-        // GQA: 16 attention heads, 8 KV heads → 2:1 ratio
-        XCTAssertEqual(config.numAttentionHeads / config.numKeyValueHeads, 2)
-    }
-
-    // MARK: - Qwen3.5 Config
-
     func testQwen35_08B() {
         let config = Qwen3ChatConfig.qwen35_08B
         XCTAssertEqual(config.hiddenSize, 1024)
@@ -130,7 +105,7 @@ final class Qwen3ChatConfigTests: XCTestCase {
     }
 
     func testCodableRoundTrip() throws {
-        let original = Qwen3ChatConfig.qwen3_06B
+        let original = Qwen3ChatConfig.qwen35_08B
         let data = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(Qwen3ChatConfig.self, from: data)
 
@@ -181,18 +156,19 @@ final class Qwen3ChatConfigTests: XCTestCase {
         let json = """
         {
             "hidden_size": 1024,
-            "num_hidden_layers": 28,
-            "num_attention_heads": 16,
-            "num_key_value_heads": 8,
-            "head_dim": 128,
-            "intermediate_size": 3072,
-            "vocab_size": 151936,
+            "num_hidden_layers": 24,
+            "num_attention_heads": 8,
+            "num_key_value_heads": 2,
+            "head_dim": 256,
+            "intermediate_size": 3584,
+            "vocab_size": 248320,
             "max_seq_len": 2048,
-            "rope_theta": 1000000.0,
+            "rope_theta": 10000000.0,
             "rms_norm_eps": 1e-6,
-            "eos_token_id": 151645,
-            "pad_token_id": 151643,
-            "quantization": "int4"
+            "eos_token_id": 248046,
+            "pad_token_id": 248044,
+            "quantization": "int4",
+            "model_type": "qwen3_5_text"
         }
         """.data(using: .utf8)!
 
@@ -203,8 +179,9 @@ final class Qwen3ChatConfigTests: XCTestCase {
 
         let config = try Qwen3ChatConfig.load(from: tmpURL)
         XCTAssertEqual(config.hiddenSize, 1024)
-        XCTAssertEqual(config.numHiddenLayers, 28)
-        XCTAssertEqual(config.vocabSize, 151936)
+        XCTAssertEqual(config.numHiddenLayers, 24)
+        XCTAssertEqual(config.vocabSize, 248320)
+        XCTAssertTrue(config.isQwen35)
     }
 }
 
@@ -278,11 +255,11 @@ final class ChatMessageTests: XCTestCase {
 final class ChatTemplateTests: XCTestCase {
 
     func testSpecialTokenIds() {
-        XCTAssertEqual(ChatTemplate.imStartId, 151644)
-        XCTAssertEqual(ChatTemplate.imEndId, 151645)
+        XCTAssertEqual(ChatTemplate.imStartId, 248045)
+        XCTAssertEqual(ChatTemplate.imEndId, 248046)
         XCTAssertEqual(ChatTemplate.newlineId, 198)
-        XCTAssertEqual(ChatTemplate.thinkStartId, 151667)
-        XCTAssertEqual(ChatTemplate.thinkEndId, 151668)
+        XCTAssertEqual(ChatTemplate.thinkStartId, 248068)
+        XCTAssertEqual(ChatTemplate.thinkEndId, 248069)
     }
 
     func testStripThinkingNoThinking() {
@@ -424,7 +401,7 @@ final class ChatTokenizerTests: XCTestCase {
 
     func testDefaultEosToken() {
         let tokenizer = ChatTokenizer()
-        XCTAssertEqual(tokenizer.eosTokenId, 151645)
+        XCTAssertEqual(tokenizer.eosTokenId, 248046)
     }
 
     func testEmptyVocabSize() {
@@ -761,7 +738,7 @@ final class Qwen3ChatSendableTests: XCTestCase {
     }
 
     func testQwen3ChatConfigSendable() async {
-        let config = Qwen3ChatConfig.qwen3_06B
+        let config = Qwen3ChatConfig.qwen35_08B
         let result = await Task { config }.value
         XCTAssertEqual(result.hiddenSize, config.hiddenSize)
     }
@@ -775,7 +752,7 @@ final class Qwen3ChatSendableTests: XCTestCase {
     func testConfigsSendableInTaskGroup() async {
         await withTaskGroup(of: Bool.self) { group in
             group.addTask {
-                let _ = Qwen3ChatConfig.qwen3_06B
+                let _ = Qwen3ChatConfig.qwen35_08B
                 return true
             }
             group.addTask {
@@ -800,17 +777,8 @@ final class Qwen3ChatSendableTests: XCTestCase {
 
 final class Qwen3ChatMemoryTests: XCTestCase {
 
-    func testMemoryFootprintReturnsNonZero() throws {
-        // We can't load the real model in unit tests, but we can verify the
-        // protocol conformance compiles and the estimate is reasonable.
-        // The actual value is a compile-time constant (318 MB).
-        let expected = 318 * 1024 * 1024
-        XCTAssertEqual(expected, 333_447_168)
-    }
-
     func testModelMemoryManageableConformance() {
-        // Verify Qwen3ChatModel conforms to ModelMemoryManageable at compile time.
-        // This test passes if the code compiles — no runtime model needed.
-        let _: any AudioCommon.ModelMemoryManageable.Type = Qwen3ChatModel.self
+        // Verify Qwen35MLXChat conforms to ModelMemoryManageable at compile time.
+        let _: any AudioCommon.ModelMemoryManageable.Type = Qwen35MLXChat.self
     }
 }
