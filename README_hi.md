@@ -525,10 +525,17 @@ for try await chunk in stream {
 
 ### सिस्टम प्रॉम्प्ट
 
-सिस्टम प्रॉम्प्ट मॉडल के वार्तालाप व्यवहार को निर्देशित करता है। `focused` डिफ़ॉल्ट प्रतिक्रियाओं को विषय पर केंद्रित रखता है:
+सिस्टम प्रॉम्प्ट मॉडल के वार्तालाप व्यवहार को निर्देशित करता है। कोई भी कस्टम प्रॉम्प्ट सादे स्ट्रिंग के रूप में पास करें:
 
 ```swift
-// प्रीसेट का उपयोग करें
+// कस्टम सिस्टम प्रॉम्प्ट (स्वचालित रूप से टोकनाइज़ होता है)
+let response = model.respond(
+    userAudio: audio,
+    voice: .NATM0,
+    systemPrompt: "You enjoy having a good conversation."
+)
+
+// या प्रीसेट का उपयोग करें
 let response = model.respond(
     userAudio: audio,
     voice: .NATM0,
@@ -551,6 +558,9 @@ make build
 
 # JSON आउटपुट (ऑडियो पाथ, ट्रांसक्रिप्ट, लेटेंसी मेट्रिक्स)
 .build/release/audio respond --input question.wav --json
+
+# कस्टम सिस्टम प्रॉम्प्ट टेक्स्ट
+.build/release/audio respond --input question.wav --system-prompt-text "You enjoy having a good conversation."
 
 # वॉयस और सिस्टम प्रॉम्प्ट प्रीसेट चुनें
 .build/release/audio respond --input question.wav --voice NATF1 --system-prompt focused

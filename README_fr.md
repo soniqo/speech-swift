@@ -525,10 +525,17 @@ for try await chunk in stream {
 
 ### Prompts systeme
 
-Le prompt systeme oriente le comportement conversationnel du modele. Le preset `focused` par defaut maintient les reponses sur le sujet :
+Le prompt systeme oriente le comportement conversationnel du modele. Vous pouvez passer n'importe quel prompt personnalise sous forme de chaine de caracteres :
 
 ```swift
-// Utiliser un preset
+// Prompt systeme personnalise (tokenise automatiquement)
+let response = model.respond(
+    userAudio: audio,
+    voice: .NATM0,
+    systemPrompt: "You enjoy having a good conversation."
+)
+
+// Ou utiliser un preset
 let response = model.respond(
     userAudio: audio,
     voice: .NATM0,
@@ -551,6 +558,9 @@ make build
 
 # Sortie JSON (chemin audio, transcription, metriques de latence)
 .build/release/audio respond --input question.wav --json
+
+# Texte de prompt systeme personnalise
+.build/release/audio respond --input question.wav --system-prompt-text "You enjoy having a good conversation."
 
 # Choisir une voix et un preset de prompt systeme
 .build/release/audio respond --input question.wav --voice NATF1 --system-prompt focused
