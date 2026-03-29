@@ -219,3 +219,5 @@ Translated READMEs live in the repo root: `README_zh.md`, `README_ja.md`, `READM
 | Performance improvement | `benchmarks/` | Landing page perf section + relevant guide |
 | Build/install change | — | `/getting-started/index.html` |
 | New CLI command | Relevant inference doc | `/cli/index.html` + new guide + landing page |
+| Build/dependency change in demo | `Examples/<Demo>/README.md` | — |
+| New demo app | `Examples/<Demo>/README.md` | Landing page + relevant guide |
