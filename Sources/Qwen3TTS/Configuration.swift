@@ -237,6 +237,10 @@ public struct StreamingConfig: Sendable {
 
     /// Low-latency preset: ~120ms first-packet latency, smaller chunks.
     public static var lowLatency: StreamingConfig { .init(firstChunkFrames: 1, chunkFrames: 15) }
+
+    /// No chunking: decode entire utterance at once for best quality.
+    /// Higher latency (no audio until generation completes) but no chunk boundary artifacts.
+    public static var noChunking: StreamingConfig { .init(firstChunkFrames: 500, chunkFrames: 500, decoderLeftContext: 0) }
 }
 
 // MARK: - Model Variant

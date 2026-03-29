@@ -46,6 +46,11 @@ public class Qwen3TTSModel {
     /// Set this before passing to VoicePipeline for consistent voice.
     public var defaultSpeaker: String?
 
+    /// Streaming config for protocol-based generation.
+    /// Set to `.noChunking` for best quality (no chunk boundary artifacts).
+    /// Set to `.default` for low-latency streaming.
+    public var defaultStreamingConfig: StreamingConfig = .default
+
     /// Whether the model weights are loaded and ready for inference.
     var _isLoaded = true
 

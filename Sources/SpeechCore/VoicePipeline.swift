@@ -416,17 +416,14 @@ public final class VoicePipeline {
         return sc_tts_vtable_t(
             context: ctx,
             synthesize: { ctx, text, language, onChunk, chunkCtx in
-                // Legacy batch synthesis — called when streaming not available
                 let bridge = Unmanaged<TTSBridge>.fromOpaque(ctx!).takeUnretainedValue()
                 bridge.cancelled = false
                 let textStr = String(cString: text!)
                 let langStr = language.map { String(cString: $0) } ?? ""
                 AudioLog.pipeline.info("TTS synthesize: text='\(textStr)', language='\(langStr)'")
 
-
-                // Block the C thread until streaming TTS completes.
-                // Streams audio chunks as they're generated — first audio
-                // arrives in ~240ms instead of waiting for full synthesis.
+                // Single TTS call for the full text — consistent voice, no
+                // chunk boundary artifacts (with noChunking streaming config).
                 let sem = DispatchSemaphore(value: 0)
                 DispatchQueue.global(qos: .userInitiated).async {
                     let group = DispatchGroup()
@@ -437,7 +434,6 @@ public final class VoicePipeline {
                             let stream = bridge.model.generateStream(
                                 text: textStr, language: langStr.isEmpty ? nil : langStr)
                             var sentFinal = false
-                            // Duration cap is enforced by C++ core (max_response_duration)
                             for try await chunk in stream {
                                 guard !bridge.cancelled else { break }
                                 let isFinal = chunk.isFinal
@@ -446,7 +442,6 @@ public final class VoicePipeline {
                                 }
                                 if isFinal { sentFinal = true; break }
                             }
-                            // Ensure C++ always gets exactly one is_final=true
                             if !sentFinal && !bridge.cancelled {
                                 onChunk?(nil, 0, true, chunkCtx)
                             }
@@ -541,4 +536,18 @@ public final class VoicePipeline {
             return Float(raw) / 32768.0
         }
     }
+}
+
+/// Split text into sentences for per-sentence TTS synthesis.
+private func splitTTSSentences(_ text: String) -> [String] {
+    var sentences = [String]()
+    text.enumerateSubstrings(in: text.startIndex..., options: .bySentences) { sub, _, _, _ in
+        if let s = sub?.trimmingCharacters(in: .whitespaces), !s.isEmpty {
+            sentences.append(s)
+        }
+    }
+    if sentences.isEmpty && !text.trimmingCharacters(in: .whitespaces).isEmpty {
+        sentences.append(text)
+    }
+    return sentences
 }

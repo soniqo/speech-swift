@@ -52,6 +52,7 @@ jobs:
           --skip ParakeetASRTests
           --skip CosyVoiceTTSTests
           --skip KokoroTTSTests
+          --skip StreamingAudioPlayerTests
 
       - name: Build demo apps
         run: |

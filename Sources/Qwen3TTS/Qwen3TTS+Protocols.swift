@@ -14,7 +14,8 @@ extension Qwen3TTSModel: SpeechGenerationModel {
     public func generateStream(text: String, language: String?) -> AsyncThrowingStream<AudioChunk, Error> {
         let lang = language ?? "english"
         let speaker = speakerForLanguage(lang)
-        return synthesizeStream(text: text, language: lang, speaker: speaker)
+        return synthesizeStream(text: text, language: lang, speaker: speaker,
+                                streaming: defaultStreamingConfig)
     }
 
     /// Select the best speaker for a given language.

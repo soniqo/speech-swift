@@ -105,6 +105,12 @@ let package = Package(
             ]
         ),
         .target(
+            name: "Qwen3TTSCoreML",
+            dependencies: [
+                "AudioCommon",
+            ]
+        ),
+        .target(
             name: "CosyVoiceTTS",
             dependencies: [
                 "AudioCommon",
@@ -176,6 +182,7 @@ let package = Package(
                 "Qwen3ASR",
                 "Qwen3TTS",
                 "CosyVoiceTTS",
+                "Qwen3TTSCoreML",
                 "PersonaPlex",
                 "SpeechVAD",
                 "SpeechEnhancement",
@@ -224,6 +231,10 @@ let package = Package(
         .testTarget(
             name: "Qwen3TTSTests",
             dependencies: ["Qwen3TTS", "Qwen3ASR", "AudioCommon"]
+        ),
+        .testTarget(
+            name: "Qwen3TTSCoreMLTests",
+            dependencies: ["Qwen3TTSCoreML", "AudioCommon"]
         ),
         .testTarget(
             name: "CosyVoiceTTSTests",
