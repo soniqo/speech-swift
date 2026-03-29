@@ -422,8 +422,7 @@ public final class VoicePipeline {
                 let langStr = language.map { String(cString: $0) } ?? ""
                 AudioLog.pipeline.info("TTS synthesize: text='\(textStr)', language='\(langStr)'")
 
-                // Single TTS call for the full text — consistent voice, no
-                // chunk boundary artifacts (with noChunking streaming config).
+                // Stream TTS chunks for progressive playback.
                 let sem = DispatchSemaphore(value: 0)
                 DispatchQueue.global(qos: .userInitiated).async {
                     let group = DispatchGroup()
