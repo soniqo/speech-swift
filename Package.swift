@@ -1,11 +1,11 @@
-// swift-tools-version: 5.9
+// swift-tools-version: 5.10
 import PackageDescription
 
 let package = Package(
     name: "Qwen3Speech",
     platforms: [
-        .macOS(.v14),
-        .iOS(.v17)
+        .macOS("15.0"),
+        .iOS("18.0")
     ],
     products: [
         .library(
@@ -287,6 +287,16 @@ let package = Package(
             name: "AudioServerTests",
             dependencies: [
                 "AudioServer"
+            ]
+        ),
+        .testTarget(
+            name: "SpeechCoreTests",
+            dependencies: [
+                "SpeechCore",
+                "AudioCommon",
+                "SpeechVAD",
+                "KokoroTTS",
+                "ParakeetASR"
             ]
         )
     ]
