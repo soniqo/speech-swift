@@ -346,6 +346,7 @@ final class EchoViewModel {
             ) else { return }
             appendLog("[Player] Mixer: \(Int(engineRate))Hz, \(mixerFormat.channelCount)ch → Player: mono \(Int(engineRate))Hz")
             player.attach(to: engine, format: playerFormat)
+            player.startPlayback()
             appendLog("[Player] Attached to shared engine")
         } catch {
             appendLog("[Mic] Engine error: \(error.localizedDescription)")

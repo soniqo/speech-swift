@@ -525,10 +525,17 @@ for try await chunk in stream {
 
 ### システムプロンプト
 
-システムプロンプトはモデルの会話動作を制御します。`focused`デフォルトは応答をトピックに集中させます：
+システムプロンプトはモデルの会話動作を制御します。任意のカスタムプロンプトをプレーンな文字列として渡すことができます：
 
 ```swift
-// プリセットを使用
+// カスタムシステムプロンプト（自動的にトークン化されます）
+let response = model.respond(
+    userAudio: audio,
+    voice: .NATM0,
+    systemPrompt: "You enjoy having a good conversation."
+)
+
+// またはプリセットを使用
 let response = model.respond(
     userAudio: audio,
     voice: .NATM0,
@@ -551,6 +558,9 @@ make build
 
 # JSON出力 (音声パス、トランスクリプト、レイテンシーメトリクス)
 .build/release/audio respond --input question.wav --json
+
+# カスタムシステムプロンプトテキスト
+.build/release/audio respond --input question.wav --system-prompt-text "You enjoy having a good conversation."
 
 # ボイスとシステムプロンプトプリセットを選択
 .build/release/audio respond --input question.wav --voice NATF1 --system-prompt focused

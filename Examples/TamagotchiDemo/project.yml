@@ -1,0 +1,40 @@
+name: TamagotchiDemo
+options:
+  bundleIdPrefix: audio.soniqo
+  deploymentTarget:
+    iOS: "18.0"
+
+packages:
+  qwen3-asr-swift:
+    path: ../..
+
+targets:
+  TamagotchiDemo:
+    type: application
+    platform: iOS
+    sources:
+      - TamagotchiDemo
+    info:
+      path: TamagotchiDemo/Info.plist
+      properties:
+        UILaunchScreen: {}
+        NSMicrophoneUsageDescription: Voice input for the companion chat
+        NSSpeechRecognitionUsageDescription: On-device speech recognition for the companion chat
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: audio.soniqo.TamagotchiDemo
+      INFOPLIST_KEY_NSMicrophoneUsageDescription: "Voice input for the companion chat"
+      CODE_SIGN_STYLE: Automatic
+      OTHER_LDFLAGS: ["-Wl,-undefined,dynamic_lookup"]
+    dependencies:
+      - package: qwen3-asr-swift
+        product: Qwen3Chat
+      - package: qwen3-asr-swift
+        product: KokoroTTS
+      - package: qwen3-asr-swift
+        product: ParakeetASR
+      - package: qwen3-asr-swift
+        product: SpeechVAD
+      - package: qwen3-asr-swift
+        product: SpeechCore
+      - package: qwen3-asr-swift
+        product: AudioCommon

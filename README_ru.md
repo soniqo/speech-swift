@@ -525,10 +525,17 @@ for try await chunk in stream {
 
 ### Системные промпты
 
-Системный промпт определяет поведение модели в диалоге. Промпт `focused` по умолчанию удерживает ответы в рамках темы:
+Системный промпт определяет поведение модели в диалоге. Можно передать любой пользовательский промпт в виде обычной строки:
 
 ```swift
-// Использование пресета
+// Пользовательский системный промпт (токенизируется автоматически)
+let response = model.respond(
+    userAudio: audio,
+    voice: .NATM0,
+    systemPrompt: "You enjoy having a good conversation."
+)
+
+// Или использование пресета
 let response = model.respond(
     userAudio: audio,
     voice: .NATM0,
@@ -551,6 +558,9 @@ make build
 
 # JSON-вывод (путь к аудио, транскрипт, метрики задержки)
 .build/release/audio respond --input question.wav --json
+
+# Пользовательский текст системного промпта
+.build/release/audio respond --input question.wav --system-prompt-text "You enjoy having a good conversation."
 
 # Выбор голоса и пресета системного промпта
 .build/release/audio respond --input question.wav --voice NATF1 --system-prompt focused

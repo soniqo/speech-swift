@@ -525,10 +525,17 @@ for try await chunk in stream {
 
 ### 시스템 프롬프트
 
-시스템 프롬프트는 모델의 대화 동작을 조정합니다. `focused` 기본값은 응답이 주제에서 벗어나지 않도록 합니다:
+시스템 프롬프트는 모델의 대화 동작을 조정합니다. 임의의 커스텀 프롬프트를 일반 문자열로 전달할 수 있습니다:
 
 ```swift
-// 프리셋 사용
+// 커스텀 시스템 프롬프트 (자동 토큰화)
+let response = model.respond(
+    userAudio: audio,
+    voice: .NATM0,
+    systemPrompt: "You enjoy having a good conversation."
+)
+
+// 또는 프리셋 사용
 let response = model.respond(
     userAudio: audio,
     voice: .NATM0,
@@ -551,6 +558,9 @@ make build
 
 # JSON 출력 (오디오 경로, 트랜스크립트, 지연 시간 메트릭)
 .build/release/audio respond --input question.wav --json
+
+# 커스텀 시스템 프롬프트 텍스트
+.build/release/audio respond --input question.wav --system-prompt-text "You enjoy having a good conversation."
 
 # 음색 및 시스템 프롬프트 프리셋 선택
 .build/release/audio respond --input question.wav --voice NATF1 --system-prompt focused

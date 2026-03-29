@@ -18,6 +18,9 @@ public final class KokoroTTSModel {
     /// Default HuggingFace model ID.
     public static let defaultModelId = "aufklarer/Kokoro-82M-CoreML"
 
+    /// iOS-optimized INT8 palettized variant (single 5s bucket, ~89MB total).
+    public static let int8iOSModelId = "aufklarer/Kokoro-82M-CoreML-INT8"
+
     /// Output sample rate (24kHz).
     public static let outputSampleRate = 24000
 
@@ -65,23 +68,15 @@ public final class KokoroTTSModel {
         // Step 1: Phonemize text → token IDs
         let tokenIds = phonemizer.tokenize(text, maxLength: config.maxPhonemeLength)
 
-        // Step 2: Select model bucket based on token count
-        guard let bucket = ModelBucket.select(forTokenCount: tokenIds.count) else {
+        // Step 2: Select model bucket based on token count and loaded models
+        let available = Set(network.availableBuckets)
+        guard let activeBucket = ModelBucket.select(
+            forTokenCount: tokenIds.count, available: available
+        ) else {
             throw AudioModelError.inferenceFailed(
                 operation: "kokoro-synthesize",
-                reason: "Text too long (\(tokenIds.count) tokens), max \(ModelBucket.v21_15s.maxTokens)")
-        }
-
-        // Check if we have this bucket loaded, fall back if needed
-        let activeBucket: ModelBucket
-        if network.availableBuckets.contains(bucket) {
-            activeBucket = bucket
-        } else if let fallback = network.availableBuckets.first(where: { $0.maxTokens >= tokenIds.count }) {
-            activeBucket = fallback
-        } else {
-            throw AudioModelError.inferenceFailed(
-                operation: "kokoro-synthesize",
-                reason: "No suitable model bucket for \(tokenIds.count) tokens")
+                reason: "No suitable model bucket for \(tokenIds.count) tokens "
+                    + "(available: \(available.map(\.modelName)))")
         }
 
         // Step 3: Get voice style embedding (256-dim)
@@ -187,9 +182,15 @@ public final class KokoroTTSModel {
     /// Default voice preset.
     public static let defaultVoice = "af_heart"
 
+    /// - Parameters:
+    ///   - loadG2P: Load neural G2P models for OOV words (~80MB extra memory).
+    ///     Set to `false` for voice pipelines where responses use common words.
     public static func fromPretrained(
         modelId: String = defaultModelId,
         voice: String = defaultVoice,
+        maxBuckets: Int = 1,
+        computeUnits: MLComputeUnits = .all,
+        loadG2P: Bool = true,
         progressHandler: ((Double, String) -> Void)? = nil
     ) async throws -> KokoroTTSModel {
         AudioLog.modelLoading.info("Loading Kokoro model: \(modelId)")
@@ -249,19 +250,23 @@ public final class KokoroTTSModel {
         progressHandler?(0.74, "Loading pronunciation dictionaries...")
         try phonemizer.loadDictionaries(from: cacheDir)
 
-        // Load G2P models (separate encoder + decoder)
-        progressHandler?(0.76, "Loading G2P models...")
-        let g2pEncoderURL = cacheDir.appendingPathComponent("G2PEncoder.mlmodelc", isDirectory: true)
-        let g2pDecoderURL = cacheDir.appendingPathComponent("G2PDecoder.mlmodelc", isDirectory: true)
-        let g2pVocabURL = cacheDir.appendingPathComponent("g2p_vocab.json")
-        if FileManager.default.fileExists(atPath: g2pEncoderURL.path) &&
-           FileManager.default.fileExists(atPath: g2pDecoderURL.path) {
-            try phonemizer.loadG2PModels(
-                encoderURL: g2pEncoderURL,
-                decoderURL: g2pDecoderURL,
-                vocabURL: g2pVocabURL
-            )
-            AudioLog.modelLoading.debug("Loaded CoreML G2P encoder + decoder")
+        // Load G2P models (separate encoder + decoder) — optional, ~80MB extra
+        if loadG2P {
+            progressHandler?(0.76, "Loading G2P models...")
+            let g2pEncoderURL = cacheDir.appendingPathComponent("G2PEncoder.mlmodelc", isDirectory: true)
+            let g2pDecoderURL = cacheDir.appendingPathComponent("G2PDecoder.mlmodelc", isDirectory: true)
+            let g2pVocabURL = cacheDir.appendingPathComponent("g2p_vocab.json")
+            if FileManager.default.fileExists(atPath: g2pEncoderURL.path) &&
+               FileManager.default.fileExists(atPath: g2pDecoderURL.path) {
+                try phonemizer.loadG2PModels(
+                    encoderURL: g2pEncoderURL,
+                    decoderURL: g2pDecoderURL,
+                    vocabURL: g2pVocabURL
+                )
+                AudioLog.modelLoading.debug("Loaded CoreML G2P encoder + decoder")
+            }
+        } else {
+            AudioLog.modelLoading.debug("Skipped G2P models (loadG2P=false)")
         }
 
         // Load voice embeddings from per-voice JSON files
@@ -283,7 +288,7 @@ public final class KokoroTTSModel {
         progressHandler?(0.85, "Loading CoreML models...")
         let network: KokoroNetwork
         do {
-            network = try KokoroNetwork(directory: cacheDir)
+            network = try KokoroNetwork(directory: cacheDir, computeUnits: computeUnits, maxBuckets: maxBuckets)
             AudioLog.modelLoading.debug("Loaded buckets: \(network.availableBuckets.map { $0.modelName })")
         } catch {
             throw AudioModelError.modelLoadFailed(

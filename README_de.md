@@ -525,10 +525,17 @@ for try await chunk in stream {
 
 ### Systemaufforderungen
 
-Die Systemaufforderung steuert das Gesprächsverhalten des Modells. Die `focused`-Standardeinstellung hält Antworten beim Thema:
+Die Systemaufforderung steuert das Gesprächsverhalten des Modells. Sie können eine beliebige benutzerdefinierte Aufforderung als Zeichenkette übergeben:
 
 ```swift
-// Eine Voreinstellung verwenden
+// Benutzerdefinierte Systemaufforderung (automatisch tokenisiert)
+let response = model.respond(
+    userAudio: audio,
+    voice: .NATM0,
+    systemPrompt: "You enjoy having a good conversation."
+)
+
+// Oder eine Voreinstellung verwenden
 let response = model.respond(
     userAudio: audio,
     voice: .NATM0,
@@ -551,6 +558,9 @@ make build
 
 # JSON-Ausgabe (Audiopfad, Transkript, Latenzmetriken)
 .build/release/audio respond --input question.wav --json
+
+# Benutzerdefinierter Systemaufforderungstext
+.build/release/audio respond --input question.wav --system-prompt-text "You enjoy having a good conversation."
 
 # Stimme und Systemaufforderungs-Voreinstellung wählen
 .build/release/audio respond --input question.wav --voice NATF1 --system-prompt focused

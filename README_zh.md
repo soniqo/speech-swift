@@ -525,10 +525,17 @@ for try await chunk in stream {
 
 ### 系统提示词
 
-系统提示词引导模型的对话行为。默认的 `focused` 提示词使回复保持主题聚焦：
+系统提示词引导模型的对话行为。可以将任意自定义提示词作为纯字符串传入：
 
 ```swift
-// 使用预设
+// 自定义系统提示词（自动分词）
+let response = model.respond(
+    userAudio: audio,
+    voice: .NATM0,
+    systemPrompt: "You enjoy having a good conversation."
+)
+
+// 或使用预设
 let response = model.respond(
     userAudio: audio,
     voice: .NATM0,
@@ -551,6 +558,9 @@ make build
 
 # JSON 输出（音频路径、转录、延迟指标）
 .build/release/audio respond --input question.wav --json
+
+# 自定义系统提示词文本
+.build/release/audio respond --input question.wav --system-prompt-text "You enjoy having a good conversation."
 
 # 选择音色和系统提示词预设
 .build/release/audio respond --input question.wav --voice NATF1 --system-prompt focused
