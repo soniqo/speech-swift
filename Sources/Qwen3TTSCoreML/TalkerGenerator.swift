@@ -49,7 +49,6 @@ final class TalkerGenerator {
         keyCache = makeZeroArray(shape: [1, totalKVDim, 1, maxSeqLen])
         valueCache = makeZeroArray(shape: [1, totalKVDim, 1, maxSeqLen])
         currentPos = 0
-        print("[Talker] Cache reset: maxSeqLen=\(maxSeqLen), kvDim=\(totalKVDim)")
     }
 
     /// Last hidden state from the most recent forward pass [1, 1024, 1, 1].

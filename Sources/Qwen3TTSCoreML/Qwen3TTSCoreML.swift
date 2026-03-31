@@ -53,13 +53,12 @@ public final class Qwen3TTSCoreMLModel {
             ) { progress in progressHandler?(progress * 0.7, "Downloading model...") }
         }
 
-        // Force CPU-only for all models to match Python coremltools precision.
-        // ANE/GPU produce different FP16 results that compound in autoregressive loop.
         let config = MLModelConfiguration()
-        config.computeUnits = .cpuOnly
+        config.computeUnits = computeUnits
 
+        // MCD on CPU+NE (avoid GPU-only which can miscompile some ops)
         let mcdConfig = MLModelConfiguration()
-        mcdConfig.computeUnits = .cpuOnly
+        mcdConfig.computeUnits = .cpuAndNeuralEngine
 
         let model = Qwen3TTSCoreMLModel()
 
@@ -67,8 +66,15 @@ public final class Qwen3TTSCoreMLModel {
 
         // Load 6 models
         func loadML(_ name: String, _ cfg: MLModelConfiguration = config) throws -> MLModel {
-            let url = cacheDir.appendingPathComponent("\(name).mlmodelc", isDirectory: true)
-            return try MLModel(contentsOf: url, configuration: cfg)
+            // Try pre-compiled .mlmodelc first
+            let compiledURL = cacheDir.appendingPathComponent("\(name).mlmodelc", isDirectory: true)
+            if FileManager.default.fileExists(atPath: compiledURL.path) {
+                return try MLModel(contentsOf: compiledURL, configuration: cfg)
+            }
+            // Compile from .mlpackage at runtime
+            let pkgURL = cacheDir.appendingPathComponent("\(name).mlpackage", isDirectory: true)
+            let compiled = try MLModel.compileModel(at: pkgURL)
+            return try MLModel(contentsOf: compiled, configuration: cfg)
         }
 
         // Embedders on CPU for FP32 precision (ANE returns FP16 which causes accumulation drift)
@@ -162,7 +168,6 @@ public final class Qwen3TTSCoreMLModel {
         var allCodebooks = (0..<16).map { _ in [Int32]() }
         allCodebooks[0].append(nextToken)
         var generatedCB0 = [nextToken]
-        print("[CoreML] Prefill: \(prefillEmbeds.count) positions, first CB0=\(nextToken)")
 
         // MultiCodeDecoder: predict CB1-15 for first frame
         var cpTokens = try multiCodeDecoder.predict(

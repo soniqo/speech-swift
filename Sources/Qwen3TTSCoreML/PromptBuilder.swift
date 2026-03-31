@@ -51,7 +51,13 @@ struct PromptBuilder {
 
         // [0:3] Role: TextProjector only
         for tid in roleIds {
-            prefill.append(ensureNCHW(try textProjector.embed(tid), channels: 1024))
+            let e = ensureNCHW(try textProjector.embed(tid), channels: 1024)
+            if tid == roleIds[0] {
+                let p = e.dataType == .float16
+                    ? (0..<3).map { Float(e.dataPointer.assumingMemoryBound(to: Float16.self)[$0]) }
+                    : (0..<3).map { e.dataPointer.assumingMemoryBound(to: Float.self)[$0] }
+            }
+            prefill.append(e)
         }
 
         // [3:7] Control: tts_pad + CodeEmbedder(think tokens)
@@ -88,7 +94,8 @@ struct PromptBuilder {
     private static func prepareTextTokens(text: String, tokenizer: Qwen3Tokenizer) -> [Int] {
         var tokens = [Int]()
         tokens.append(contentsOf: [imStartId, assistantId, newlineId])
-        tokens.append(contentsOf: tokenizer.encode(text))
+        let encoded = tokenizer.encode(text)
+        tokens.append(contentsOf: encoded)
         tokens.append(contentsOf: [imEndId, newlineId, imStartId, assistantId, newlineId])
         return tokens
     }
