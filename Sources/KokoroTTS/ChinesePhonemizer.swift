@@ -86,69 +86,38 @@ final class ChinesePhonemizer {
 
     /// Convert Chinese text to IPA phoneme string.
     func phonemize(_ text: String) -> String {
-        let locale = Locale(identifier: "zh_CN") as CFLocale
-        let cfText = text as CFString
-        let length = CFStringGetLength(cfText)
-        guard length > 0 else { return "" }
-
-        let tokenizer = CFStringTokenizerCreate(nil, cfText, CFRangeMake(0, length),
-                                                 kCFStringTokenizerUnitWord, locale)
-
         var result = ""
         var lastWasWord = false
 
-        // Process character by character, using tokenizer for word boundaries
-        var tokenResult = CFStringTokenizerAdvanceToNextToken(tokenizer)
-        var tokens: [(word: String, pinyin: String?)] = []
+        // Process character by character to get individual pinyin syllables.
+        // CFStringTokenizer per-word concatenates multi-char pinyin (e.g. "nǐhǎo"),
+        // so we tokenize each Chinese character individually for correct syllable boundaries.
+        for ch in text {
+            if let punct = Self.punctuationMap[ch] {
+                result += punct
+                lastWasWord = false
+            } else if ch.isPunctuation || ch.isSymbol {
+                lastWasWord = false
+            } else if ch.isWhitespace {
+                if lastWasWord { result += " " }
+                lastWasWord = false
+            } else if ch.isASCII && ch.isLetter {
+                // English letter passthrough
+                if !lastWasWord { result += " " }
+                result += String(ch).lowercased()
+                lastWasWord = true
+            } else {
+                // Chinese character — get pinyin via CFStringTransform
+                let mutable = NSMutableString(string: String(ch))
+                CFStringTransform(mutable, nil, kCFStringTransformMandarinLatin, false)
+                let pinyin = mutable as String
 
-        while tokenResult != [] {
-            let range = CFStringTokenizerGetCurrentTokenRange(tokenizer)
-            let latin = CFStringTokenizerCopyCurrentTokenAttribute(
-                tokenizer, kCFStringTokenizerAttributeLatinTranscription) as? String
-            let nsText = text as NSString
-            let word = nsText.substring(with: NSRange(location: range.location, length: range.length))
-            tokens.append((word: word, pinyin: latin))
-            tokenResult = CFStringTokenizerAdvanceToNextToken(tokenizer)
-        }
-
-        // Also handle punctuation between tokens
-        var cursor = text.startIndex
-        for token in tokens {
-            // Find this token in the text
-            if let tokenRange = text.range(of: token.word, range: cursor..<text.endIndex) {
-                // Handle any punctuation/whitespace before this token
-                let gap = String(text[cursor..<tokenRange.lowerBound])
-                for ch in gap {
-                    if let punct = Self.punctuationMap[ch] {
-                        result += punct
-                        lastWasWord = false
-                    } else if ch.isWhitespace {
-                        if lastWasWord { result += " " }
-                        lastWasWord = false
-                    }
-                }
-
-                // Convert word
-                if let pinyin = token.pinyin {
+                // Skip if transform returned the same character (not Chinese)
+                if pinyin != String(ch) {
                     if lastWasWord { result += " " }
                     result += Self.pinyinToIPA(pinyin)
                     lastWasWord = true
-                } else if token.word.allSatisfy({ $0.isASCII && $0.isLetter }) {
-                    // English passthrough — leave as-is for the main phonemizer
-                    if lastWasWord { result += " " }
-                    result += token.word.lowercased()
-                    lastWasWord = true
                 }
-
-                cursor = tokenRange.upperBound
-            }
-        }
-
-        // Handle trailing punctuation
-        let trailing = String(text[cursor...])
-        for ch in trailing {
-            if let punct = Self.punctuationMap[ch] {
-                result += punct
             }
         }
 

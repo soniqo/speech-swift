@@ -275,6 +275,7 @@ let package = Package(
             dependencies: [
                 "KokoroTTS",
                 "AudioCommon",
+                "Qwen3ASR",
             ]
         ),
         .testTarget(
