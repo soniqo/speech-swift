@@ -172,6 +172,9 @@ let package = Package(
             name: "KokoroTTS",
             dependencies: [
                 "AudioCommon",
+            ],
+            resources: [
+                .copy("Resources"),
             ]
         ),
         .target(

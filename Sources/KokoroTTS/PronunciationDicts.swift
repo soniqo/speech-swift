@@ -2,117 +2,36 @@ import Foundation
 
 /// Pronunciation dictionaries for Kokoro TTS multilingual support.
 ///
-/// IPA transcriptions generated to match the format Kokoro was trained on.
-/// Dictionary lookup is the primary phonemization method for these languages;
-/// rule-based G2P in LatinPhonemizer/HindiPhonemizer serves as fallback for
-/// out-of-vocabulary words.
+/// Large dictionaries (French, Portuguese, Hindi) are loaded from JSON resource
+/// files at runtime. Smaller ones (Spanish, Italian, German, Korean) are
+/// embedded as Swift literals. Source: ipa-dict (MIT, open-dict-data/ipa-dict)
+/// and standard phonetic references.
 enum PronunciationDicts {
 
-    // MARK: - French (359 entries)
+    // MARK: - JSON Resource Loading
 
-    static let fr: [String: String] = [
-        "a": "ˈa", "acheter": "aʃtˈe", "aimer": "ɛmˈe", "aller": "alˈe",
-        "allez": "alˈe", "alors": "alˈɔʁ", "ami": "amˈi", "amie": "amˈi",
-        "an": "ˈɑ̃", "ancienne": "ɑ̃sjˈɛn", "année": "anˈe", "août": "ˈut",
-        "apprendre": "apʁˈɑ̃dʁ", "après": "apʁˈɛ", "arriver": "aʁivˈe",
-        "as": "ˈas", "assez": "asˈe", "aujourd'hui": "oʒuʁdyˈi", "aussi": "osˈi",
-        "autre": "ˈotʁ", "autres": "ˈotʁ", "avait": "avˈɛ", "avec": "avˈɛk",
-        "avez": "avˈe", "avion": "avjˈɔ̃", "avoir": "avwˈaʁ", "avons": "avˈɔ̃",
-        "avril": "avʁˈil", "aéroport": "aeʁopˈɔʁ", "beau": "bˈo",
-        "beaucoup": "bokˈu", "belle": "bˈɛl", "bien": "bjˈɛ̃",
-        "bientôt": "bjɛ̃tˈoː", "blanc": "blˈɑ̃", "blanche": "blˈɑ̃ʃ",
-        "bleu": "blˈø", "bleue": "blˈø", "boire": "bwˈaʁ", "bon": "bˈɔ̃",
-        "bonjour": "bɔ̃ʒˈuʁ", "bonne": "bˈɔn", "bonsoir": "bɔ̃swˈaʁ",
-        "bouche": "bˈuʃ", "bras": "bʁˈa", "bureau": "byʁˈo", "bus": "bˈys",
-        "café": "kafˈe", "car": "kˈaʁ", "ce": "sˈə", "ceci": "səsˈi",
-        "cent": "sˈɑ̃", "cette": "sˈɛt", "changer": "ʃɑ̃ʒˈe", "chaud": "ʃˈo",
-        "chercher": "ʃɛʁʃˈe", "chez": "ʃˈe", "chose": "ʃˈɔz", "choses": "ʃˈoz",
-        "cinq": "sˈɛ̃k", "coeur": "kˈœʁ", "combien": "kɔ̃bjˈɛ̃",
-        "comme": "kˈɔm", "commencer": "kɔmɑ̃sˈe", "comment": "kɔmˈɑ̃",
-        "comprendre": "kɔ̃pʁˈɑ̃dʁ", "connaître": "kɔnˈɛtʁ", "content": "kɔ̃tˈɑ̃",
-        "contre": "kˈɔ̃tʁ", "coûter": "kutˈe", "croire": "kʁwˈaʁ",
-        "côté": "kotˈe", "dans": "dˈɑ̃", "de": "dˈə", "demain": "dəmˈɛ̃",
-        "demander": "dəmɑ̃dˈe", "depuis": "dəpyˈi", "dernier": "dɛʁnjˈe",
-        "dernière": "dɛʁnjˈɛʁ", "derrière": "dɛʁjˈɛʁ", "des": "dˈe",
-        "deuxième": "døzjˈɛm", "devant": "dəvˈɑ̃", "difficile": "difisˈil",
-        "différent": "difeʁˈɑ̃", "dimanche": "dimˈɑ̃ʃ", "dire": "dˈiʁ",
-        "dix": "dˈis", "donc": "dˈɔ̃k", "donner": "dɔnˈe", "dormir": "dɔʁmˈiʁ",
-        "doux": "dˈu", "du": "dˈy", "dur": "dˈyʁ", "début": "debˈy",
-        "décembre": "desˈɑ̃bʁ", "déjà": "deʒˈa", "eau": "ˈo", "elle": "ˈɛl",
-        "elles": "ˈɛl", "en": "ˈɑ̃", "encore": "ɑ̃kˈɔʁ", "enfant": "ɑ̃fˈɑ̃",
-        "enfants": "ɑ̃fˈɑ̃", "ensemble": "ɑ̃sˈɑ̃bl", "ensuite": "ɑ̃syˈit",
-        "entre": "ˈɑ̃tʁ", "entrer": "ɑ̃tʁˈe", "es": "ˈɛ", "est": "ˈɛ",
-        "et": "ˈe", "excusez": "ɛkskyzˈe", "exemple": "ɛɡzˈɑ̃pl",
-        "facile": "fasˈil", "faire": "fˈɛʁ", "fait": "fˈɛ", "famille": "famˈij",
-        "fatigué": "fatiɡˈe", "femme": "fˈam", "femmes": "fˈam",
-        "fermer": "fɛʁmˈe", "fille": "fˈij", "fils": "fˈil", "fin": "fˈɛ̃",
-        "finir": "finˈiʁ", "froid": "fʁwˈa", "frère": "fʁˈɛʁ",
-        "février": "fevʁiˈe", "gare": "ɡˈaʁ", "gens": "ʒˈɑ̃", "grand": "ɡʁˈɑ̃",
-        "grande": "ɡʁˈɑ̃d", "heure": "ˈœʁ", "heureux": "øʁˈø", "hier": "jˈɛʁ",
-        "homme": "ˈɔm", "hommes": "ˈɔm", "huit": "yˈit", "hôpital": "opitˈal",
-        "hôtel": "otˈɛl", "ici": "isˈi", "idée": "idˈe", "il": "ˈil",
-        "ils": "ˈil", "important": "ɛ̃pɔʁtˈɑ̃", "j'ai": "ʒˈe", "jamais": "ʒamˈɛ",
-        "jambe": "ʒˈɑ̃b", "janvier": "ʒɑ̃vjˈe", "jaune": "ʒˈon", "je": "ʒˈə",
-        "jeudi": "ʒødˈi", "jeune": "ʒˈøn", "jeunes": "ʒˈøn", "jour": "ʒˈuʁ",
-        "juillet": "ʒyijˈɛ", "juin": "ʒyˈɛ̃", "la": "lˈa", "lait": "lˈɛ",
-        "le": "lˈə", "lentement": "lɑ̃tmˈɑ̃", "les": "lˈe", "lettre": "lˈɛtʁ",
-        "leur": "lˈœʁ", "lire": "lˈiʁ", "loin": "lwˈɛ̃", "long": "lˈɔ̃",
-        "longue": "lˈɔ̃ɡ", "lundi": "lœ̃dˈi", "là": "lˈa", "ma": "mˈa",
-        "madame": "madˈam", "mademoiselle": "madmwazˈɛl", "magasin": "maɡazˈɛ̃",
-        "mai": "mˈɛ", "main": "mˈɛ̃", "maintenant": "mɛ̃tnˈɑ̃", "mais": "mˈɛ",
-        "maison": "mɛzˈɔ̃", "malade": "malˈad", "manger": "mɑ̃ʒˈe",
-        "mardi": "maʁdˈi", "mars": "mˈaʁs", "matin": "matˈɛ̃",
-        "merci": "mɛʁsˈi", "mercredi": "mɛʁkʁədˈi", "mes": "mˈe",
-        "message": "mɛsˈaʒ", "mettre": "mˈɛtʁ", "mille": "mˈil",
-        "minute": "minˈyt", "moderne": "modˈɛʁn", "mois": "mwˈa", "mon": "mˈɔ̃",
-        "monde": "mˈɔ̃d", "monsieur": "məsjˈø", "montrer": "mɔ̃tʁˈe",
-        "mot": "mˈo", "mère": "mˈɛʁ", "métro": "metʁˈo", "même": "mˈɛm",
-        "ne": "nˈə", "neuf": "nˈœf", "ni": "nˈi", "noir": "nwˈaʁ",
-        "noire": "nwˈaʁ", "nombre": "nˈɔ̃bʁ", "non": "nˈɔ̃", "notre": "nˈotʁ",
-        "nous": "nˈu", "nouveau": "nuvˈo", "nouvelle": "nuvˈɛl",
-        "novembre": "novˈɑ̃bʁ", "nuit": "nyˈi", "nécessaire": "nesɛsˈɛʁ",
-        "octobre": "ɔktˈɔbʁ", "on": "ˈɔ̃", "ont": "ˈɔ̃", "or": "ˈɔʁ",
-        "ou": "ˈu", "oui": "wˈi", "ouvrir": "uvʁˈiʁ", "où": "ˈu",
-        "pain": "pˈɛ̃", "par": "pˈaʁ", "pardon": "paʁdˈɔ̃", "parfois": "paʁfwˈa",
-        "parler": "paʁlˈe", "partie": "paʁtˈi", "partir": "paʁtˈiʁ",
-        "pas": "pˈa", "payer": "pɛjˈe", "pays": "pɛˈi", "pendant": "pɑ̃dˈɑ̃",
-        "penser": "pɑ̃sˈe", "personne": "pɛʁsˈɔn", "petit": "pətˈi",
-        "petite": "pətˈit", "peu": "pˈø", "peuple": "pˈøpl", "peut": "pˈø",
-        "phrase": "fʁˈaz", "pied": "pjˈe", "place": "plˈas", "plus": "plˈy",
-        "point": "pwˈɛ̃", "porter": "pɔʁtˈe", "possible": "pɔsˈibl",
-        "pour": "pˈuʁ", "pourquoi": "puʁkwˈa", "pouvoir": "puvwˈaʁ",
-        "premier": "pʁəmjˈe", "première": "pʁəmjˈɛʁ", "prendre": "pʁˈɑ̃dʁ",
-        "problème": "pʁɔblˈɛm", "près": "pʁˈɛ", "père": "pˈɛʁ",
-        "quand": "kˈɑ̃", "quatre": "kˈatʁ", "que": "kˈə", "quel": "kˈɛl",
-        "quelle": "kˈɛl", "quelles": "kˈɛl", "quelqu'un": "kɛlkˈœ̃",
-        "quelque": "kˈɛlkə", "quelques": "kˈɛlkə", "quels": "kˈɛl",
-        "question": "kɛstjˈɔ̃", "qui": "kˈi", "raison": "ʁɛzˈɔ̃",
-        "regarder": "ʁəɡaʁdˈe", "restaurant": "ʁɛstoʁˈɑ̃", "rester": "ʁɛstˈe",
-        "rien": "ʁiˈɛ̃", "rouge": "ʁˈuʒ", "rue": "ʁˈy", "répondre": "ʁepˈɔ̃dʁ",
-        "réponse": "ʁepˈɔ̃s", "sa": "sˈa", "salut": "salˈy", "samedi": "samdˈi",
-        "sans": "sˈɑ̃", "savoir": "savwˈaʁ", "se": "sˈə", "seconde": "səɡˈɔ̃d",
-        "semaine": "səmˈɛn", "sens": "sˈɑ̃s", "sept": "sˈɛt",
-        "septembre": "sɛptˈɑ̃bʁ", "sera": "səʁˈa", "serait": "səʁˈɛ",
-        "ses": "sˈe", "seul": "sˈœl", "seulement": "sølmˈɑ̃", "si": "sˈi",
-        "simple": "sˈɛ̃pl", "six": "sˈis", "soeur": "sˈœʁ", "soir": "swˈaʁ",
-        "solution": "solysjˈɔ̃", "sommes": "sˈɔm", "son": "sˈɔ̃", "sont": "sˈɔ̃",
-        "sortir": "sɔʁtˈiʁ", "sous": "sˈu", "souvent": "suvˈɑ̃", "suis": "syˈi",
-        "sur": "sˈyʁ", "ta": "tˈa", "tard": "tˈaʁ", "taxi": "taksˈi",
-        "temps": "tˈɑ̃", "tes": "tˈe", "test": "tˈɛst", "ton": "tˈɔ̃",
-        "toujours": "tuʒˈuʁ", "tous": "tˈus", "tout": "tˈu", "toute": "tˈut",
-        "toutes": "tˈut", "train": "tʁˈɛ̃", "travail": "tʁavˈaj",
-        "triste": "tʁˈist", "trois": "tʁwˈa", "troisième": "tʁwazjˈɛm",
-        "trop": "tʁˈo", "trouver": "tʁuvˈe", "très": "tʁˈɛ", "tu": "tˈy",
-        "tête": "tˈɛt", "tôt": "tˈoː", "un": "ˈœ̃", "une": "ˈyn",
-        "vendre": "vˈɑ̃dʁ", "vendredi": "vɑ̃dʁədˈi", "venir": "vənˈiʁ",
-        "ventre": "vˈɑ̃tʁ", "vers": "vˈɛʁ", "vert": "vˈɛʁ", "verte": "vˈɛʁt",
-        "vie": "vˈi", "vielle": "vjˈɛl", "vieux": "vjˈø", "ville": "vˈil",
-        "vin": "vˈɛ̃", "vite": "vˈit", "voici": "vwasˈi", "voilà": "vwalˈa",
-        "voir": "vwˈaʁ", "voiture": "vwatˈyʁ", "votre": "vˈotʁ",
-        "vouloir": "vulwˈaʁ", "vous": "vˈu", "yeux": "jˈø", "école": "ekˈɔl",
-        "écouter": "ekutˈe", "écrire": "ekʁˈiʁ", "était": "etˈɛ",
-        "êtes": "ˈɛt", "être": "ˈɛtʁ",
-    ]
+    private static func loadJSON(_ name: String) -> [String: String] {
+        guard let url = Bundle.module.url(forResource: name, withExtension: "json", subdirectory: "Resources") else {
+            return [:]
+        }
+        guard let data = try? Data(contentsOf: url),
+              let dict = try? JSONDecoder().decode([String: String].self, from: data) else {
+            return [:]
+        }
+        return dict
+    }
+
+    // MARK: - French (3093 entries, JSON)
+
+    static let fr: [String: String] = loadJSON("dict_fr")
+
+    // MARK: - Portuguese (2001 entries, JSON)
+
+    static let pt: [String: String] = loadJSON("dict_pt")
+
+    // MARK: - Hindi (146 entries, JSON)
+
+    static let hi: [String: String] = loadJSON("dict_hi")
 
     // MARK: - Spanish (125 entries)
 
@@ -150,50 +69,6 @@ enum PronunciationDicts {
         "un": "ˈun", "una": "ˈuna", "uno": "ˈuno", "usted": "ustˈed",
         "ventana": "bentˈana", "ver": "bˈeɾ", "verde": "bˈeɾðe", "vida": "bˈiða",
         "viejo": "bjˈexo", "vino": "bˈino", "yo": "ʝˈo", "él": "ˈel",
-    ]
-
-    // MARK: - Portuguese (115 entries)
-
-    static let pt: [String: String] = [
-        "a": "ˈa", "adeus": "ɐdˈeʊʃ", "agora": "ˌɐɡˈɔɾɐ", "alto": "ˈɑltʊ",
-        "amarelo": "ɐmɐɾˈɛlʊ", "amigo": "ɐmˈiɡʊ", "ano": "ˈɐ̃nʊ",
-        "antes": "ˈɐ̃ŋtɨʃ", "aqui": "ɐkˈi", "as": "ˈɐʃ", "até": "ɐtˈɛ",
-        "azul": "ɐzˈuw", "baixo": "bˈaɪʃʊ", "bem": "bˈeɪŋ", "boca": "bˈokɐ",
-        "bom": "bˈoŋ", "branco": "bɹˈɐ̃ŋkʊ", "cabeça": "kˌɐbˈesɐ",
-        "café": "kɐfˈɛ", "casa": "kˈazɐ", "chegar": "ʃɨɡˈaɹ",
-        "cidade": "sˌidˈadɨ", "cinco": "sˈiŋkʊ", "com": "kˈom", "como": "kˈomʊ",
-        "coração": "kˌuɾɐsˈɐ̃ʊ̃", "da": "dˈɐ", "dar": "dˈaɹ", "de": "dˈɨ",
-        "depois": "dɨpˈoɪʃ", "desde": "dˈeʒdɨ", "dia": "dˈiɐ", "dizer": "dizˈeɹ",
-        "do": "dˈʊ", "dois": "dˈoɪʃ", "ela": "ˈɛlɐ", "elas": "ˈelɐʃ",
-        "ele": "ˈelɨ", "eles": "ˈelɨʃ", "em": "ˈeɪŋ", "entre": "ˈeɪŋtɹɨ",
-        "estar": "ɨʃtˈɐɹ", "eu": "ˈeʊ", "família": "fɐmˈiljɐ",
-        "fazer": "fɐzˈeɹ", "filha": "fˈiʎɐ", "filho": "fˈiʎʊ",
-        "grande": "ɡɹˈɐ̃ŋdɨ", "homem": "ˈomeɪŋ", "ir": "ˈiɹ",
-        "irmão": "iɾəmˈɐ̃ʊ̃", "isso": "ˈisʊ", "isto": "ˈiʃtʊ",
-        "janela": "ʒɐnˈɛlɐ", "jovem": "ʒˈɔveɪŋ", "leite": "lˈeɪtɨ",
-        "mais": "mˈaɪʃ", "mas": "mˈɐʃ", "mesa": "mˈezɐ", "muito": "mwˈiŋtʊ",
-        "mulher": "muʎˈɛɹ", "mundo": "mˈũŋdʊ", "mãe": "mˈɐ̃j", "mão": "mˈɐ̃ʊ̃",
-        "na": "nˈɐ", "no": "nˈʊ", "novo": "nˈovʊ", "nunca": "nˈũŋkɐ",
-        "não": "nˈɐ̃ʊ̃", "nós": "nˈɔʃ", "o": "ˈɔ", "obrigado": "ˌɔbɹiɡˈadʊ",
-        "olho": "ˈɔʎʊ", "olá": "ɔlˈa", "onde": "ˈoŋdɨ", "os": "ˈʊʃ",
-        "pai": "pˈaɪ", "para": "pˈɐɾɐ", "país": "pɐˈiʃ", "pequeno": "pˌekˈenʊ",
-        "poder": "pudˈeɹ", "por": "pˈuɹ", "porque": "pˈoɾəkɨ",
-        "porta": "pˈɔɾətɐ", "preto": "pɹˈetʊ", "pão": "pˈɐ̃ʊ̃", "pé": "pˈɛ",
-        "quando": "kwˈɐ̃ŋdʊ", "quatro": "kwˈatɹʊ", "que": "kˈɨ",
-        "querer": "kɨɾˈeɹ", "rua": "ʁˈuɐ", "saber": "sɐbˈeɹ", "sem": "sˈeɪŋ",
-        "sempre": "sˈeɪmpɹɨ", "ser": "sˈɨɹ", "sim": "sˈiŋ", "sobre": "sˈobɹɨ",
-        "também": "tɐ̃mbˈeɪŋ", "tempo": "tˈeɪmpʊ", "ter": "tˈɨɹ",
-        "teste": "tˈɛʃtɨ", "todo": "tˈodʊ", "três": "tɹˈeʃ", "tu": "tˈu",
-        "um": "ˈũŋ", "uma": "ˈumɐ", "velho": "vˈɛʎʊ", "ver": "vˈeɹ",
-        "verde": "vˈeɾədɨ", "vermelho": "vˌeɾəmˈeʎʊ", "vida": "vˈidɐ",
-        "vinho": "vˈiɲʊ", "você": "vosˈe", "água": "ˈaɡwɐ",
-        // Additional common words
-        "é": "ˈɛ", "boa": "bˈoɐ", "tarde": "tˈaɾədɨ",
-        "noite": "nˈoɪtɨ", "nome": "nˈomɨ", "tudo": "tˈudʊ", "nada": "nˈadɐ",
-        "hoje": "ˈoʒɨ", "amanhã": "ɐmɐ̃ɲˈɐ̃", "ontem": "ˈoŋteɪŋ",
-        "senhor": "sɨɲˈoɹ", "senhora": "sˌeɲˈoɾɐ", "favor": "fɐvˈoɹ",
-        "obrigada": "ˌɔbɹiɡˈadɐ", "comer": "kumˈeɹ", "beber": "bɨbˈeɹ",
-        "falar": "fɐlˈaɹ", "gostar": "ɡuʃtˈaɹ", "precisar": "pɹˌɨsizˈaɹ",
     ]
 
     // MARK: - Italian (174 entries)
@@ -250,28 +125,6 @@ enum PronunciationDicts {
         "uomo": "wˈɔmo", "vecchio": "vˈɛkːio", "vedere": "vedˈere",
         "venire": "venˈire", "verde": "vˈerde", "vino": "vˈino",
         "vita": "vˈita", "voi": "vˈoi", "volere": "volˈere", "è": "ˈɛː",
-    ]
-
-    // MARK: - Hindi (60 entries)
-
-    static let hi: [String: String] = [
-        "अगर": "ˈʌɡəɾ", "अच्छा": "ˈʌcʰcʰaː", "आँख": "ˈaːnkʰ",
-        "आना": "ˈaːnaː", "आप": "ˈaːp", "एक": "ˈeːk", "और": "ˈɔːɾ",
-        "करना": "kˈʌɾnˌaː", "कहाँ": "kˈʌhã", "काला": "kˈaːlaː",
-        "कृपया": "kɾˈɪpjˌaː", "कैसे": "kˈɛːseː", "क्या": "kːjˈaː",
-        "खाना": "kʰˈaːnaː", "घर": "ɡʰˈʌɾ", "चाय": "cˈaːj", "चार": "cˈaːɾ",
-        "छोटा": "cʰˈoːʈaː", "जब": "ɟˈʌb", "जाना": "ɟˈaːnaː",
-        "तीन": "tˈiːn", "तुम": "tˈʊm", "तो": "tˈoː", "था": "tʰˈaː",
-        "थे": "tʰˈeː", "दिल": "dˈɪl", "दुनिया": "dˈʊnɪjˌaː",
-        "दूध": "dˈuːdʰ", "देना": "dˈeːnaː", "दो": "dˈoː", "दोस्त": "dˈoːst",
-        "धन्यवाद": "dʰˌənjəʋˈaːd", "नमस्ते": "nəmˈʌsteː", "नया": "nˈʌjaː",
-        "नीला": "nˈiːlaː", "परिवार": "pˌəɾɪʋˈaːɾ", "परीक्षा": "pəɾˈiːkʃaː",
-        "पानी": "pˈaːni", "पिता": "pˈɪtaː", "पीला": "pˈiːlaː", "पैर": "pˈɛːɾ",
-        "बड़ा": "bˈʌɾaː", "बहन": "bˈʌhən", "बेटा": "bˈeːʈaː",
-        "भाई": "bʰˈaːi", "माँ": "mˈã", "मैं": "mˈɛ̃", "यह": "jˈəh",
-        "या": "jˈaː", "लाल": "lˈaːl", "लेकिन": "lˈeːkɪn", "लेना": "lˈeːnaː",
-        "वह": "ʋˈəh", "वे": "ʋˈeː", "सिर": "sˈɪɾ", "हम": "hˈəm",
-        "हरा": "hˈʌɾaː", "हाथ": "hˈaːtʰ", "है": "hˈɛː", "हैं": "hˈɛ̃",
     ]
 
     // MARK: - German (142 entries)
@@ -341,4 +194,5 @@ enum PronunciationDicts {
         "하나": "hana", "하늘": "hanɯl", "하다": "hada", "학교": "hakkjo",
         "해": "hɛ", "형": "hjʌŋ", "회사": "hwesa",
     ]
+
 }
