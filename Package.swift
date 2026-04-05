@@ -41,6 +41,10 @@ let package = Package(
             targets: ["ParakeetASR"]
         ),
         .library(
+            name: "ParakeetStreamingASR",
+            targets: ["ParakeetStreamingASR"]
+        ),
+        .library(
             name: "SpeechCore",
             targets: ["SpeechCore"]
         ),
@@ -156,6 +160,12 @@ let package = Package(
                 "AudioCommon",
             ]
         ),
+        .target(
+            name: "ParakeetStreamingASR",
+            dependencies: [
+                "AudioCommon",
+            ]
+        ),
         .binaryTarget(
             name: "CSpeechCore",
             url: "https://github.com/soniqo/speech-core/releases/download/v0.0.5/SpeechCore.xcframework.zip",
@@ -198,6 +208,7 @@ let package = Package(
                 "SpeechVAD",
                 "SpeechEnhancement",
                 "ParakeetASR",
+                "ParakeetStreamingASR",
                 "KokoroTTS",
                 "AudioCommon",
                 .product(name: "MLX", package: "mlx-swift"),
@@ -265,6 +276,13 @@ let package = Package(
             resources: [
                 .copy("Resources/test_audio.wav"),
                 .copy("Resources/test_audio_german.wav")
+            ]
+        ),
+        .testTarget(
+            name: "ParakeetStreamingASRTests",
+            dependencies: ["ParakeetStreamingASR", "AudioCommon"],
+            resources: [
+                .copy("Resources/test_audio.wav")
             ]
         ),
         .testTarget(
