@@ -129,9 +129,15 @@ public class ParakeetStreamingASRModel {
         }
 
         let session = try createSession()
-        _ = try session.pushAudio(samples)
-        let finals = try session.finalize()
-        return finals.last?.text ?? ""
+        // Collect all partials — EOU may fire during pushAudio, clearing allTokens
+        var allPartials = try session.pushAudio(samples)
+        allPartials.append(contentsOf: try session.finalize())
+
+        // Return the last final transcript, or the last partial if no final
+        if let lastFinal = allPartials.last(where: { $0.isFinal }) {
+            return lastFinal.text
+        }
+        return allPartials.last?.text ?? ""
     }
 
     // MARK: - Warmup
