@@ -184,13 +184,14 @@ public class StreamingSession {
         let (rawMel, melLength) = try melPreprocessor.extract(audio)
         guard melLength > 0 else { return nil }
 
-        // Truncate mel to exact expected frame count (encoder has fixed input shape)
+        // Truncate/pad mel to exact expected frame count (encoder has fixed input shape)
         let expectedFrames = config.streaming.melFrames
+        let actualMelFrames = rawMel.shape[2].intValue
         let mel: MLMultiArray
-        if melLength > expectedFrames {
+        if actualMelFrames > expectedFrames {
             mel = try truncateMel(rawMel, to: expectedFrames)
-        } else if melLength < expectedFrames {
-            mel = try padMel(rawMel, actualLength: melLength, targetLength: expectedFrames)
+        } else if actualMelFrames < expectedFrames {
+            mel = try padMel(rawMel, actualLength: actualMelFrames, targetLength: expectedFrames)
         } else {
             mel = rawMel
         }

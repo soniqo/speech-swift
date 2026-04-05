@@ -3,208 +3,238 @@ import AudioCommon
 import CoreML
 import Foundation
 
-/// Streaming mel spectrogram preprocessor for Parakeet EOU.
+/// Mel spectrogram preprocessor for Parakeet EOU streaming ASR.
 ///
-/// Accumulates audio samples and extracts mel spectrograms for fixed-size chunks.
-/// Uses the same DSP pipeline as the batch Parakeet mel preprocessor (pre-emphasis,
-/// Hann window, FFT, Slaney mel filterbank, log, normalization) but operates on
-/// streaming windows with running normalization.
+/// Implements the NeMo `AudioToMelSpectrogramPreprocessor` pipeline in Swift:
+/// pre-emphasis → STFT → power spectrum → mel filterbank → log → per-feature normalization.
+///
+/// Ported from ParakeetASR/MelPreprocessor (proven to match NeMo output).
+/// Outputs float32 (EOU encoder expects float32 input).
 struct StreamingMelPreprocessor {
     let config: ParakeetEOUConfig
 
     private let paddedFFT: Int = 512
-    private let nBins: Int = 257  // paddedFFT / 2 + 1
+    private let log2PaddedFFT: vDSP_Length = 9
+    private let nBins: Int = 257          // paddedFFT / 2 + 1
+    private let reflectPad: Int = 256     // n_fft / 2
     private let logGuard: Float = 5.960464477539063e-08  // 2^{-24}
 
-    /// Mel filterbank matrix [numMelBins, nBins]
-    private let melFilterbank: [Float]
-    /// Hann window (periodic)
+    private let fftSetup: FFTSetup
     private let hannWindow: [Float]
+    private let melFilterbank: [Float]    // [nMels, nBins]
 
     init(config: ParakeetEOUConfig) {
         self.config = config
 
-        // Build Slaney-normalized mel filterbank
-        let sampleRate = Float(config.sampleRate)
-        let nBins = 257
-        let numMelBins = config.numMelBins
-
-        let fftFreqs = (0..<nBins).map { Float($0) * sampleRate / Float(512) }
-        let melLow = Self.hzToMel(0)
-        let melHigh = Self.hzToMel(sampleRate / 2)
-        let melPoints = (0...numMelBins + 1).map { i in
-            Self.melToHz(melLow + Float(i) * (melHigh - melLow) / Float(numMelBins + 1))
-        }
-
-        var filterbank = [Float](repeating: 0, count: numMelBins * nBins)
-        for m in 0..<numMelBins {
-            let fLow = melPoints[m]
-            let fCenter = melPoints[m + 1]
-            let fHigh = melPoints[m + 2]
-            let norm: Float = 2.0 / (fHigh - fLow)
-
-            for k in 0..<nBins {
-                let f = fftFreqs[k]
-                var val: Float = 0
-                if f >= fLow && f <= fCenter && fCenter > fLow {
-                    val = (f - fLow) / (fCenter - fLow)
-                } else if f > fCenter && f <= fHigh && fHigh > fCenter {
-                    val = (fHigh - f) / (fHigh - fCenter)
-                }
-                filterbank[m * nBins + k] = val * norm
-            }
-        }
-        self.melFilterbank = filterbank
-
-        // Periodic Hann window
-        let winLen = config.winLength
-        var window = [Float](repeating: 0, count: winLen)
-        for i in 0..<winLen {
-            window[i] = 0.5 * (1.0 - cos(2.0 * .pi * Float(i) / Float(winLen)))
+        var window = [Float](repeating: 0, count: config.winLength)
+        for i in 0..<config.winLength {
+            window[i] = 0.5 * (1.0 - cos(2.0 * Float.pi * Float(i) / Float(config.winLength)))
         }
         self.hannWindow = window
+
+        guard let setup = vDSP_create_fftsetup(9, FFTRadix(kFFTRadix2)) else {
+            fatalError("Failed to create vDSP FFT setup")
+        }
+        self.fftSetup = setup
+
+        self.melFilterbank = Self.buildMelFilterbank(
+            nMels: config.numMelBins,
+            nBins: 257,
+            sampleRate: config.sampleRate,
+            paddedFFT: 512
+        )
     }
 
-    /// Extract mel spectrogram from audio samples for one streaming chunk.
+    /// Extract mel spectrogram from audio samples.
     ///
     /// - Parameter audio: PCM Float32 samples at config.sampleRate
-    /// - Returns: Mel MLMultiArray [1, numMelBins, melFrames] in float16 + valid frame count
+    /// - Returns: Mel MLMultiArray [1, numMelBins, nFrames] in float32 + valid frame count
     func extract(_ audio: [Float]) throws -> (mel: MLMultiArray, melLength: Int) {
         guard !audio.isEmpty else {
-            let mel = try MLMultiArray(shape: [1, config.numMelBins as NSNumber, 1], dataType: .float16)
+            let mel = try MLMultiArray(shape: [1, config.numMelBins as NSNumber, 1], dataType: .float32)
             return (mel, 0)
         }
 
-        // Pre-emphasis: y[n] = x[n] - alpha * x[n-1]
-        var emphasized = [Float](repeating: 0, count: audio.count)
-        emphasized[0] = audio[0]
-        for i in 1..<audio.count {
-            emphasized[i] = audio[i] - config.preEmphasis * audio[i - 1]
+        // Pre-emphasis: x[n] = audio[n] - 0.97 * audio[n-1]
+        var preemphasized = [Float](repeating: 0, count: audio.count)
+        preemphasized[0] = audio[0]
+        audio.withUnsafeBufferPointer { src in
+            preemphasized.withUnsafeMutableBufferPointer { dst in
+                var negCoeff = -config.preEmphasis
+                vDSP_vsma(src.baseAddress!, 1, &negCoeff,
+                          src.baseAddress! + 1, 1,
+                          dst.baseAddress! + 1, 1,
+                          vDSP_Length(audio.count - 1))
+            }
         }
 
-        // Reflect padding for STFT center=True
-        let reflectPad = paddedFFT / 2
-        var padded = [Float](repeating: 0, count: reflectPad + audio.count + reflectPad)
+        // Reflect padding (center=True)
+        let totalLen = reflectPad + preemphasized.count + reflectPad
+        var padded = [Float](repeating: 0, count: totalLen)
         for i in 0..<reflectPad {
-            padded[reflectPad - 1 - i] = emphasized[min(i + 1, emphasized.count - 1)]
+            padded[i] = preemphasized[reflectPad - i]
         }
-        padded[reflectPad..<reflectPad + emphasized.count] = emphasized[...]
+        for i in 0..<preemphasized.count {
+            padded[reflectPad + i] = preemphasized[i]
+        }
         for i in 0..<reflectPad {
-            let srcIdx = max(0, emphasized.count - 2 - i)
-            padded[reflectPad + emphasized.count + i] = emphasized[srcIdx]
+            let srcIdx = preemphasized.count - 2 - i
+            padded[reflectPad + preemphasized.count + i] = preemphasized[max(0, srcIdx)]
         }
 
-        // STFT
-        let hopLength = config.hopLength
-        let winLength = config.winLength
-        let nFrames = (padded.count - winLength) / hopLength + 1
+        let nFrames = (padded.count - paddedFFT) / config.hopLength + 1
+        let melLength = audio.count / config.hopLength
 
-        // FFT setup
-        let log2n = vDSP_Length(log2(Float(paddedFFT)))
-        guard let fftSetup = vDSP_create_fftsetup(log2n, FFTRadix(kFFTRadix2)) else {
-            throw AudioModelError.inferenceFailed(operation: "mel FFT", reason: "Failed to create FFT setup")
-        }
-        defer { vDSP_destroy_fftsetup(fftSetup) }
+        let halfPadded = paddedFFT / 2
 
-        var powerSpec = [Float](repeating: 0, count: nBins * nFrames)
-        var windowedFrame = [Float](repeating: 0, count: paddedFFT)
-        var splitReal = [Float](repeating: 0, count: paddedFFT / 2)
-        var splitImag = [Float](repeating: 0, count: paddedFFT / 2)
+        // STFT + power spectrum
+        var powerSpec = [Float](repeating: 0, count: nFrames * nBins)
+        var splitReal = [Float](repeating: 0, count: halfPadded)
+        var splitImag = [Float](repeating: 0, count: halfPadded)
+        var paddedFrame = [Float](repeating: 0, count: paddedFFT)
 
         for frame in 0..<nFrames {
-            let start = frame * hopLength
-            // Zero out frame buffer
-            memset(&windowedFrame, 0, paddedFFT * MemoryLayout<Float>.stride)
-            // Apply window
-            vDSP_vmul(Array(padded[start..<start + winLength]), 1, hannWindow, 1,
-                       &windowedFrame, 1, vDSP_Length(winLength))
+            let start = frame * config.hopLength
 
-            // Pack for real FFT
-            windowedFrame.withUnsafeMutableBufferPointer { buf in
-                splitReal.withUnsafeMutableBufferPointer { real in
-                    splitImag.withUnsafeMutableBufferPointer { imag in
-                        var split = DSPSplitComplex(realp: real.baseAddress!, imagp: imag.baseAddress!)
-                        buf.baseAddress!.withMemoryRebound(to: DSPComplex.self, capacity: paddedFFT / 2) { complex in
-                            vDSP_ctoz(complex, 2, &split, 1, vDSP_Length(paddedFFT / 2))
-                        }
-                        vDSP_fft_zrip(fftSetup, &split, 1, log2n, FFTDirection(kFFTDirection_Forward))
+            padded.withUnsafeBufferPointer { buf in
+                vDSP_vmul(buf.baseAddress! + start, 1, hannWindow, 1,
+                          &paddedFrame, 1, vDSP_Length(config.winLength))
+            }
+            for i in config.winLength..<paddedFFT {
+                paddedFrame[i] = 0
+            }
 
-                        // Power spectrum |X[k]|^2
-                        // DC component
-                        powerSpec[0 * nFrames + frame] = split.realp[0] * split.realp[0]
-                        // Nyquist
-                        powerSpec[(nBins - 1) * nFrames + frame] = split.imagp[0] * split.imagp[0]
-                        // Other bins
-                        for k in 1..<(nBins - 1) {
-                            powerSpec[k * nFrames + frame] =
-                                split.realp[k] * split.realp[k] + split.imagp[k] * split.imagp[k]
-                        }
-                    }
+            for i in 0..<halfPadded {
+                splitReal[i] = paddedFrame[2 * i]
+                splitImag[i] = paddedFrame[2 * i + 1]
+            }
+
+            splitReal.withUnsafeMutableBufferPointer { realBuf in
+                splitImag.withUnsafeMutableBufferPointer { imagBuf in
+                    var splitComplex = DSPSplitComplex(
+                        realp: realBuf.baseAddress!,
+                        imagp: imagBuf.baseAddress!)
+                    vDSP_fft_zrip(fftSetup, &splitComplex, 1,
+                                  log2PaddedFFT, FFTDirection(kFFTDirection_Forward))
                 }
             }
-        }
 
-        // Mel filterbank: melSpec[m, t] = sum_k(filterbank[m, k] * powerSpec[k, t])
-        let numMelBins = config.numMelBins
-        var melSpec = [Float](repeating: 0, count: numMelBins * nFrames)
-
-        // Matrix multiply: filterbank [numMelBins, nBins] × powerSpec [nBins, nFrames]
-        vDSP_mmul(melFilterbank, 1, powerSpec, 1, &melSpec, 1,
-                  vDSP_Length(numMelBins), vDSP_Length(nFrames), vDSP_Length(nBins))
-
-        // Log mel
-        var guard_val = logGuard
-        vDSP_vsadd(melSpec, 1, &guard_val, &melSpec, 1, vDSP_Length(melSpec.count))
-        var count = Int32(melSpec.count)
-        vvlogf(&melSpec, melSpec, &count)
-
-        // Per-bin normalization (mean-subtraction + variance normalization)
-        for bin in 0..<numMelBins {
-            let offset = bin * nFrames
-
-            // Mean subtraction
-            var mean: Float = 0
-            melSpec.withUnsafeBufferPointer { buf in
-                vDSP_meanv(buf.baseAddress! + offset, 1, &mean, vDSP_Length(nFrames))
-            }
-            var negMean = -mean
-            melSpec.withUnsafeMutableBufferPointer { buf in
-                vDSP_vsadd(buf.baseAddress! + offset, 1, &negMean,
-                            buf.baseAddress! + offset, 1, vDSP_Length(nFrames))
-            }
-
-            // Variance normalization
-            var meanSq: Float = 0
-            melSpec.withUnsafeBufferPointer { buf in
-                vDSP_measqv(buf.baseAddress! + offset, 1, &meanSq, vDSP_Length(nFrames))
-            }
-            let std = sqrt(max(meanSq, 1e-10))
-            var invStd: Float = 1.0 / (std + 1e-5)
-            melSpec.withUnsafeMutableBufferPointer { buf in
-                vDSP_vsmul(buf.baseAddress! + offset, 1, &invStd,
-                            buf.baseAddress! + offset, 1, vDSP_Length(nFrames))
+            let base = frame * nBins
+            powerSpec[base] = splitReal[0] * splitReal[0]
+            powerSpec[base + halfPadded] = splitImag[0] * splitImag[0]
+            for k in 1..<halfPadded {
+                powerSpec[base + k] = splitReal[k] * splitReal[k] + splitImag[k] * splitImag[k]
             }
         }
 
-        // Convert to MLMultiArray [1, numMelBins, nFrames] float32
-        // (encoder CoreML model expects float32 input)
+        // Mel filterbank: [nMels, nBins] × [nBins, nFrames] → [nMels, nFrames]
+        var powerSpecT = [Float](repeating: 0, count: nBins * nFrames)
+        vDSP_mtrans(powerSpec, 1, &powerSpecT, 1,
+                    vDSP_Length(nBins), vDSP_Length(nFrames))
+
+        var melSpec = [Float](repeating: 0, count: config.numMelBins * nFrames)
+        vDSP_mmul(melFilterbank, 1, powerSpecT, 1, &melSpec, 1,
+                  vDSP_Length(config.numMelBins), vDSP_Length(nFrames), vDSP_Length(nBins))
+
+        // Log
+        var guardVal = logGuard
+        vDSP_vsadd(melSpec, 1, &guardVal, &melSpec, 1, vDSP_Length(melSpec.count))
+        var countN = Int32(melSpec.count)
+        vvlogf(&melSpec, melSpec, &countN)
+
+        // Per-feature normalization over valid frames
+        melSpec.withUnsafeMutableBufferPointer { buf in
+            for bin in 0..<config.numMelBins {
+                let base = buf.baseAddress! + bin * nFrames
+
+                var mean: Float = 0
+                vDSP_meanv(base, 1, &mean, vDSP_Length(melLength))
+
+                var negMean = -mean
+                vDSP_vsadd(base, 1, &negMean, base, 1, vDSP_Length(melLength))
+
+                var meanSq: Float = 0
+                vDSP_measqv(base, 1, &meanSq, vDSP_Length(melLength))
+                let std = sqrt(Float(melLength) * meanSq / Float(max(melLength - 1, 1)))
+                var invStd = 1.0 / (std + 1e-5)
+                vDSP_vsmul(base, 1, &invStd, base, 1, vDSP_Length(melLength))
+
+                // Zero pad frames beyond melLength
+                memset(base + melLength, 0, (nFrames - melLength) * MemoryLayout<Float>.stride)
+            }
+        }
+
+        // Create MLMultiArray [1, numMelBins, nFrames] in float32
         let mel = try MLMultiArray(
-            shape: [1, numMelBins as NSNumber, nFrames as NSNumber], dataType: .float32)
-        let dstPtr = mel.dataPointer.assumingMemoryBound(to: Float.self)
-        memcpy(dstPtr, melSpec, numMelBins * nFrames * MemoryLayout<Float>.stride)
+            shape: [1, config.numMelBins as NSNumber, nFrames as NSNumber],
+            dataType: .float32)
+        let melPtr = mel.dataPointer.assumingMemoryBound(to: Float.self)
+        memcpy(melPtr, melSpec, config.numMelBins * nFrames * MemoryLayout<Float>.stride)
 
-        return (mel, nFrames)
+        return (mel, melLength)
     }
 
-    // MARK: - Mel Scale (Slaney)
+    // MARK: - Mel Filterbank
 
-    private static func hzToMel(_ hz: Float) -> Float {
-        if hz < 1000 { return 3.0 * hz / 200.0 }
-        return 15.0 + 27.0 / log(6.4) * log(hz / 1000.0)
-    }
+    private static func buildMelFilterbank(
+        nMels: Int, nBins: Int, sampleRate: Int, paddedFFT: Int
+    ) -> [Float] {
+        let fMax: Float = Float(sampleRate) / 2.0
+        let minLogHertz: Float = 1000.0
+        let minLogMel: Float = 15.0
+        let logstepHzToMel: Float = 27.0 / log(6.4)
+        let logstepMelToHz: Float = log(6.4) / 27.0
 
-    private static func melToHz(_ mel: Float) -> Float {
-        if mel < 15 { return 200.0 * mel / 3.0 }
-        return 1000.0 * exp((mel - 15.0) * log(6.4) / 27.0)
+        func hzToMel(_ hz: Float) -> Float {
+            hz < minLogHertz ? 3.0 * hz / 200.0 : minLogMel + log(hz / minLogHertz) * logstepHzToMel
+        }
+        func melToHz(_ mel: Float) -> Float {
+            mel < minLogMel ? 200.0 * mel / 3.0 : minLogHertz * exp((mel - minLogMel) * logstepMelToHz)
+        }
+
+        var fftFreqs = [Float](repeating: 0, count: nBins)
+        for i in 0..<nBins {
+            fftFreqs[i] = Float(i) * Float(sampleRate) / Float(paddedFFT)
+        }
+
+        let melMin = hzToMel(0)
+        let melMax = hzToMel(fMax)
+        let nMelPoints = nMels + 2
+        var melPoints = [Float](repeating: 0, count: nMelPoints)
+        for i in 0..<nMelPoints {
+            melPoints[i] = melMin + Float(i) * (melMax - melMin) / Float(nMelPoints - 1)
+        }
+        let filterFreqs = melPoints.map { melToHz($0) }
+
+        var filterDiff = [Float](repeating: 0, count: nMelPoints - 1)
+        for i in 0..<(nMelPoints - 1) {
+            filterDiff[i] = filterFreqs[i + 1] - filterFreqs[i]
+        }
+
+        var filterbank = [Float](repeating: 0, count: nBins * nMels)
+        for bin in 0..<nBins {
+            let freq = fftFreqs[bin]
+            for mel in 0..<nMels {
+                let downSlope = (freq - filterFreqs[mel]) / filterDiff[mel]
+                let upSlope = (filterFreqs[mel + 2] - freq) / filterDiff[mel + 1]
+                filterbank[bin * nMels + mel] = max(0.0, min(downSlope, upSlope))
+            }
+        }
+
+        for mel in 0..<nMels {
+            let enorm = 2.0 / (filterFreqs[mel + 2] - filterFreqs[mel])
+            for bin in 0..<nBins {
+                filterbank[bin * nMels + mel] *= enorm
+            }
+        }
+
+        var transposed = [Float](repeating: 0, count: nMels * nBins)
+        for mel in 0..<nMels {
+            for bin in 0..<nBins {
+                transposed[mel * nBins + bin] = filterbank[bin * nMels + mel]
+            }
+        }
+
+        return transposed
     }
 }
