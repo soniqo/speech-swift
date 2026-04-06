@@ -297,24 +297,12 @@ public class StreamingSession {
         )
     }
 
-    /// Full reset after EOU: zero encoder caches, reset decoder, clear tokens.
-    /// Each utterance starts with fresh state.
+    /// Reset after EOU: clear decoder + tokens, keep encoder caches.
+    /// Encoder caches carry acoustic context that helps re-engagement.
+    /// Only decoder state and tokens need resetting for a new utterance.
     private func resetForNextUtterance() {
-        let layers = config.encoderLayers
-        let hidden = config.encoderHidden
-        let attCtx = config.attentionContext
-        let convCache = config.convCacheSize
-
-        // Zero pre-encode mel cache
-        preEncodeMelCache = [Float](repeating: 0,
-            count: config.numMelBins * config.streaming.preCacheSize)
-
-        // Zero encoder caches
-        memset(cacheLastChannel.dataPointer, 0,
-               layers * attCtx * hidden * MemoryLayout<Float>.stride)
-        memset(cacheLastTime.dataPointer, 0,
-               layers * hidden * convCache * MemoryLayout<Float>.stride)
-        cacheLastChannelLen[0] = NSNumber(value: Int32(0))
+        // Keep encoder caches (preEncodeMelCache, cacheLastChannel,
+        // cacheLastTime, cacheLastChannelLen) — they carry context
 
         // Reset decoder LSTM
         memset(h.dataPointer, 0, config.decoderLayers * config.decoderHidden * MemoryLayout<Float16>.stride)

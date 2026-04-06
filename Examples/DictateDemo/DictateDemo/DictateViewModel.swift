@@ -1,6 +1,6 @@
 import AppKit
-import Combine
 import Foundation
+import Observation
 import ParakeetStreamingASR
 import SpeechVAD
 
@@ -30,13 +30,60 @@ final class ASRProcessor: Sendable {
         self.session = session
         self.vad = vad
         _buffer.initialize(to: [])
+        _allAudio.initialize(to: [])
     }
-    deinit { _buffer.deinitialize(count: 1); _buffer.deallocate() }
+    deinit {
+        _buffer.deinitialize(count: 1); _buffer.deallocate()
+        _allAudio.deinitialize(count: 1); _allAudio.deallocate()
+    }
+
+    // Debug: save all audio to file
+    private let _allAudio = UnsafeMutablePointer<[Float]>.allocate(capacity: 1)
 
     func appendAudio(_ samples: [Float]) {
         lock.lock()
         _buffer.pointee.append(contentsOf: samples)
         lock.unlock()
+    }
+
+    func appendDebugAudio(_ samples: [Float]) {
+        lock.lock()
+        _allAudio.pointee.append(contentsOf: samples)
+        lock.unlock()
+    }
+
+    /// Save captured audio to WAV for debugging.
+    func saveDebugAudio() {
+        lock.lock()
+        let audio = _allAudio.pointee
+        lock.unlock()
+        guard !audio.isEmpty else { return }
+
+        let path = "/tmp/dictate-debug.wav"
+        // Write raw WAV (16kHz, mono, float32)
+        var header = Data()
+        let dataSize = UInt32(audio.count * 4)
+        let fileSize = UInt32(36 + dataSize)
+        header.append(contentsOf: "RIFF".utf8)
+        header.append(contentsOf: withUnsafeBytes(of: fileSize.littleEndian) { Array($0) })
+        header.append(contentsOf: "WAVE".utf8)
+        header.append(contentsOf: "fmt ".utf8)
+        header.append(contentsOf: withUnsafeBytes(of: UInt32(16).littleEndian) { Array($0) })
+        header.append(contentsOf: withUnsafeBytes(of: UInt16(3).littleEndian) { Array($0) })  // float
+        header.append(contentsOf: withUnsafeBytes(of: UInt16(1).littleEndian) { Array($0) })  // mono
+        header.append(contentsOf: withUnsafeBytes(of: UInt32(16000).littleEndian) { Array($0) })
+        header.append(contentsOf: withUnsafeBytes(of: UInt32(64000).littleEndian) { Array($0) })
+        header.append(contentsOf: withUnsafeBytes(of: UInt16(4).littleEndian) { Array($0) })
+        header.append(contentsOf: withUnsafeBytes(of: UInt16(32).littleEndian) { Array($0) })
+        header.append(contentsOf: "data".utf8)
+        header.append(contentsOf: withUnsafeBytes(of: dataSize.littleEndian) { Array($0) })
+
+        var fileData = header
+        audio.withUnsafeBufferPointer { buf in
+            fileData.append(UnsafeBufferPointer(start: UnsafeRawPointer(buf.baseAddress!).assumingMemoryBound(to: UInt8.self), count: buf.count * 4))
+        }
+        try? fileData.write(to: URL(fileURLWithPath: path))
+        dlog("Saved \(audio.count) samples (\(String(format: "%.1f", Float(audio.count)/16000))s) to \(path)")
     }
 
     var bufferedCount: Int {
@@ -61,9 +108,22 @@ final class ASRProcessor: Sendable {
             offset += 512
         }
 
-        // ASR
+        // Normalize audio volume — mic audio is typically quiet (rms ~0.01-0.05),
+        // but the EOU model expects louder input. Scale to target RMS ~0.1.
+        var normalized = chunk
+        let rms = sqrt(chunk.reduce(0) { $0 + $1 * $1 } / Float(chunk.count))
+        if rms > 0.001 {
+            let gain = min(0.1 / rms, 10.0)  // Target RMS 0.1, max 10x gain
+            for i in 0..<normalized.count { normalized[i] *= gain }
+        }
+
+        // ASR — feed all audio (speech + silence) for encoder context
         do {
-            let partials = try session.pushAudio(chunk)
+            self.appendDebugAudio(normalized)
+            let partials = try session.pushAudio(normalized)
+            if !partials.isEmpty {
+                dlog("ASR: \(partials.count) partials — '\(partials.map { $0.text }.joined(separator: ", "))'")
+            }
             return (partials, speechActive)
         } catch {
             dlog("ASR error: \(error)")
@@ -78,16 +138,16 @@ final class ASRProcessor: Sendable {
     }
 }
 
+@Observable
 @MainActor
-final class DictateViewModel: ObservableObject {
-    @Published var sentences: [String] = []
-    @Published var partialText = ""
-    @Published var isRecording = false
-    @Published var isLoading = false
-    @Published var loadingStatus = ""
-    @Published var errorMessage: String?
-    @Published var isSpeechActive = false
-    @Published var shouldShowHUD = false
+final class DictateViewModel {
+    var sentences: [String] = []
+    var partialText = ""
+    var isRecording = false
+    var isLoading = false
+    var loadingStatus = ""
+    var errorMessage: String?
+    var isSpeechActive = false
 
     private var model: ParakeetStreamingASRModel?
     private var vad: SileroVADModel?
@@ -183,7 +243,6 @@ final class DictateViewModel: ObservableObject {
             timer.resume()
             processTimer = timer
             isRecording = true
-            shouldShowHUD = true
             dlog("Recording started")
         } catch {
             errorMessage = "Failed: \(error.localizedDescription)"
@@ -194,6 +253,7 @@ final class DictateViewModel: ObservableObject {
         processTimer?.cancel(); processTimer = nil
         recorder.stop(); isRecording = false; isSpeechActive = false
         if let processor {
+            processor.saveDebugAudio()
             for p in processor.finalize() where !p.text.isEmpty { sentences.append(p.text) }
         }
         processor = nil; partialText = ""

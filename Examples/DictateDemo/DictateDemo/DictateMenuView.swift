@@ -1,78 +1,47 @@
 import SwiftUI
 
 struct DictateMenuView: View {
-    @ObservedObject var viewModel: DictateViewModel
-    @Environment(\.openWindow) private var openWindow
+    @Bindable var viewModel: DictateViewModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(spacing: 8) {
             if viewModel.isLoading {
-                HStack(spacing: 8) {
-                    ProgressView().controlSize(.small)
-                    Text(viewModel.loadingStatus)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal)
+                Text(viewModel.loadingStatus)
+                    .font(.caption)
             } else if !viewModel.modelLoaded {
                 Button("Load Models") {
                     Task { await viewModel.loadModels() }
                 }
-                .padding(.horizontal)
             } else {
                 Button {
-                    if !viewModel.isRecording {
-                        openWindow(id: "dictate-hud")
-                    }
                     viewModel.toggleRecording()
                 } label: {
                     HStack {
                         Image(systemName: viewModel.isRecording ? "stop.circle.fill" : "mic.circle.fill")
                             .foregroundStyle(viewModel.isRecording ? .red : .accentColor)
-                        Text(viewModel.isRecording ? "Stop" : "Start Dictation")
+                        Text(viewModel.isRecording ? "Stop Dictation" : "Start Dictation")
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .keyboardShortcut("d", modifiers: [.command, .shift])
+                .buttonStyle(.plain)
                 .padding(.horizontal)
 
                 if viewModel.isRecording {
-                    HStack(spacing: 8) {
-                        Circle()
-                            .fill(viewModel.isSpeechActive ? .green : .orange)
-                            .frame(width: 6, height: 6)
-                        Text(viewModel.isSpeechActive ? "Speech" : "Silence")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Text("\(viewModel.wordCount)w")
-                            .font(.caption2).monospacedDigit()
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.horizontal)
+                    Text(viewModel.isSpeechActive ? "Speech detected" : "Listening...")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal)
                 }
 
                 if !viewModel.fullText.isEmpty {
                     Divider()
-
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 2) {
-                            ForEach(Array(viewModel.sentences.enumerated()), id: \.offset) { _, sentence in
-                                Text(sentence)
-                                    .font(.system(.body, design: .rounded))
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                            if !viewModel.partialText.isEmpty {
-                                Text(viewModel.partialText)
-                                    .font(.system(.body, design: .rounded))
-                                    .foregroundStyle(.secondary)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                        }
+                    Text(viewModel.fullText)
+                        .font(.system(.body, design: .rounded))
+                        .lineLimit(8)
+                        .frame(maxWidth: 300, alignment: .leading)
                         .padding(.horizontal)
-                    }
-                    .frame(maxWidth: 320, maxHeight: 150)
 
-                    HStack(spacing: 8) {
+                    HStack {
                         Button("Copy") { viewModel.copyToClipboard() }
                         Button("Paste") { viewModel.pasteToFrontApp() }
                         Spacer()
@@ -88,10 +57,9 @@ struct DictateMenuView: View {
 
             Divider()
             Button("Quit") { NSApplication.shared.terminate(nil) }
-                .keyboardShortcut("q").padding(.horizontal)
+                .padding(.horizontal)
         }
         .padding(.vertical, 8)
-        .frame(minWidth: 250)
-        // Models loaded from DictateDemoApp.swift .task modifier
+        .frame(minWidth: 280)
     }
 }

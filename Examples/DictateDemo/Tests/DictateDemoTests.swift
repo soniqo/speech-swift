@@ -145,6 +145,64 @@ final class E2EDictateDemoTests: XCTestCase {
         XCTAssertLessThan(prob, 0.5, "Silence should have low speech probability")
     }
 
+    func testDebugAudioSmallChunks() async throws {
+        guard let model = Self.model else { throw XCTSkip("Model not loaded") }
+
+        let path = "/tmp/dictate-debug.wav"
+        guard FileManager.default.fileExists(atPath: path) else {
+            throw XCTSkip("No debug audio at \(path) — run DictateDemo first")
+        }
+
+        let audio = try AudioFileLoader.load(url: URL(fileURLWithPath: path), targetSampleRate: 16000)
+        print("Debug audio: \(audio.count) samples (\(Float(audio.count)/16000)s)")
+
+        // Test multiple chunk sizes
+        for chunkSize in [4800, 5120, 5440, 8000] {
+            let session2 = try model.createSession()
+            var partials2: [ParakeetStreamingASRModel.PartialTranscript] = []
+            var off = 0
+            while off < audio.count {
+                let end = min(off + chunkSize, audio.count)
+                partials2.append(contentsOf: try session2.pushAudio(Array(audio[off..<end])))
+                off = end
+            }
+            partials2.append(contentsOf: try session2.finalize())
+            let texts = partials2.filter { $0.isFinal }.map { $0.text }
+            print("chunk=\(chunkSize): \(partials2.count) partials, finals=\(texts)")
+        }
+
+        // Use 5440 (matching session internal buffer) for the assertion
+        let session = try model.createSession()
+        var allPartials: [ParakeetStreamingASRModel.PartialTranscript] = []
+        var offset = 0
+        while offset < audio.count {
+            let end = min(offset + 5440, audio.count)
+            let chunk = Array(audio[offset..<end])
+            let partials = try session.pushAudio(chunk)
+            allPartials.append(contentsOf: partials)
+            offset = end
+        }
+        let finals = try session.finalize()
+        allPartials.append(contentsOf: finals)
+
+        let finalTexts = allPartials.filter { $0.isFinal }.map { $0.text }
+        print("5440-chunk results: \(allPartials.count) partials, finals: \(finalTexts)")
+
+        // Also test transcribeStream API
+        var streamPartials: [ParakeetStreamingASRModel.PartialTranscript] = []
+        for await p in model.transcribeStream(audio: audio, sampleRate: 16000) {
+            streamPartials.append(p)
+        }
+        let streamFinals = streamPartials.filter { $0.isFinal }.map { $0.text }
+        print("transcribeStream: \(streamPartials.count) partials, finals=\(streamFinals)")
+
+        // Also test batch
+        let batchText = try model.transcribeAudio(audio, sampleRate: 16000)
+        print("batch: '\(batchText)'")
+
+        XCTAssertFalse(streamPartials.isEmpty || !batchText.isEmpty, "Should produce text from mic audio")
+    }
+
     // MARK: - Latency
 
     func testStreamingChunkLatency() throws {

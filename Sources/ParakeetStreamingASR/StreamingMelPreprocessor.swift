@@ -31,9 +31,10 @@ class StreamingMelPreprocessor {
     init(config: ParakeetEOUConfig) {
         self.config = config
 
+        // Symmetric Hann window (NeMo default: periodic=False, divides by N-1)
         var window = [Float](repeating: 0, count: config.winLength)
         for i in 0..<config.winLength {
-            window[i] = 0.5 * (1.0 - cos(2.0 * Float.pi * Float(i) / Float(config.winLength)))
+            window[i] = 0.5 * (1.0 - cos(2.0 * Float.pi * Float(i) / Float(config.winLength - 1)))
         }
         self.hannWindow = window
 
@@ -184,12 +185,16 @@ class StreamingMelPreprocessor {
 
     /// Extract mel WITHOUT normalization — raw log mel values.
     /// Some streaming models handle normalization internally or don't need it.
+    /// Extract mel WITHOUT normalization — raw log mel values.
+    /// Uses NeMo EOU streaming config: symmetric Hann window, zero center padding,
+    /// no per-feature normalization.
     func extractRaw(_ audio: [Float]) throws -> (mel: MLMultiArray, melLength: Int) {
         guard !audio.isEmpty else {
             let mel = try MLMultiArray(shape: [1, config.numMelBins as NSNumber, 1], dataType: .float32)
             return (mel, 0)
         }
 
+        // Pre-emphasis: y[n] = x[n] - 0.97 * x[n-1]
         var preemphasized = [Float](repeating: 0, count: audio.count)
         preemphasized[0] = audio[0]
         audio.withUnsafeBufferPointer { src in
@@ -202,13 +207,13 @@ class StreamingMelPreprocessor {
             }
         }
 
+        // Zero center padding (NeMo streaming: pad_mode='constant', NOT reflect)
         let totalLen = reflectPad + preemphasized.count + reflectPad
         var padded = [Float](repeating: 0, count: totalLen)
-        for i in 0..<reflectPad { padded[i] = preemphasized[reflectPad - i] }
+        // Left pad: zeros (already zeroed)
+        // Center: copy pre-emphasized audio
         for i in 0..<preemphasized.count { padded[reflectPad + i] = preemphasized[i] }
-        for i in 0..<reflectPad {
-            padded[reflectPad + preemphasized.count + i] = preemphasized[max(0, preemphasized.count - 2 - i)]
-        }
+        // Right pad: zeros (already zeroed)
 
         let nFrames = (padded.count - paddedFFT) / config.hopLength + 1
         let melLength = audio.count / config.hopLength
