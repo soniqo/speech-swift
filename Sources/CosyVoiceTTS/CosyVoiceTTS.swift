@@ -55,13 +55,15 @@ public final class CosyVoiceTTSModel {
     /// Caches to ~/Library/Caches/qwen3-speech/
     public static func fromPretrained(
         modelId: String = "aufklarer/CosyVoice3-0.5B-MLX-4bit",
+        cacheDir: URL? = nil,
+        offlineMode: Bool = false,
         progressHandler: ((Double, String) -> Void)? = nil
     ) async throws -> CosyVoiceTTSModel {
         let config = CosyVoiceConfig.default
         let model = CosyVoiceTTSModel(config: config)
 
         // Get cache directory
-        let cacheDir = try HuggingFaceDownloader.getCacheDirectory(for: modelId)
+        let cacheDir = try cacheDir ?? HuggingFaceDownloader.getCacheDirectory(for: modelId)
 
         // Download if needed (check both weights and tokenizer)
         let needsWeights = !HuggingFaceDownloader.weightsExist(in: cacheDir)
@@ -76,7 +78,8 @@ public final class CosyVoiceTTSModel {
                 additionalFiles: [
                     "llm.safetensors", "flow.safetensors", "hifigan.safetensors",
                     "vocab.json", "merges.txt", "tokenizer_config.json",
-                ]
+                ],
+                offlineMode: offlineMode
             ) { progress in
                 progressHandler?(progress * 0.5, "Downloading...")
             }

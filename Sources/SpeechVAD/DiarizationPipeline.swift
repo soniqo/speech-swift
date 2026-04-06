@@ -123,7 +123,7 @@ public final class PyannoteDiarizationPipeline {
         progressHandler?(0.0, "Downloading segmentation model...")
 
         // Load segmentation model
-        let segCacheDir = try cacheBaseDir ?? HuggingFaceDownloader.getCacheDirectory(for: segModelId)
+        let segCacheDir = try HuggingFaceDownloader.getCacheDirectory(for: segModelId, basePath: cacheBaseDir)
         try await HuggingFaceDownloader.downloadWeights(
             modelId: segModelId,
             to: segCacheDir,
@@ -140,9 +140,12 @@ public final class PyannoteDiarizationPipeline {
         progressHandler?(0.3, "Downloading speaker embedding model...")
 
         // Load embedding model
+        let resolvedEmbModelId = embModelId ?? (embeddingEngine == .coreml ? WeSpeakerModel.defaultCoreMLModelId : WeSpeakerModel.defaultModelId)
+        let embCacheDir: URL? = if let cacheBaseDir { try HuggingFaceDownloader.getCacheDirectory(for: resolvedEmbModelId, basePath: cacheBaseDir) } else { nil }
         let embModel = try await WeSpeakerModel.fromPretrained(
             modelId: embModelId,
             engine: embeddingEngine,
+            cacheDir: embCacheDir,
             offlineMode: offlineMode,
             progressHandler: { progress, status in
                 progressHandler?(0.3 + progress * 0.4, status)
@@ -153,8 +156,10 @@ public final class PyannoteDiarizationPipeline {
         var vadModel: SileroVADModel? = nil
         if useVADFilter {
             progressHandler?(0.7, "Downloading VAD filter model...")
+            let vadCacheDir: URL? = if let cacheBaseDir { try HuggingFaceDownloader.getCacheDirectory(for: SileroVADModel.defaultModelId, basePath: cacheBaseDir) } else { nil }
             vadModel = try await SileroVADModel.fromPretrained(
                 engine: .mlx,
+                cacheDir: vadCacheDir,
                 offlineMode: offlineMode,
                 progressHandler: { progress, status in
                     progressHandler?(0.7 + progress * 0.25, status)

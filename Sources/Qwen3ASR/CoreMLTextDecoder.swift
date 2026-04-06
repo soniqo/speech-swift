@@ -94,9 +94,11 @@ public class CoreMLTextDecoder {
     public static func fromPretrained(
         modelId: String = defaultModelId,
         computeUnits: MLComputeUnits = .all,
+        cacheDir: URL? = nil,
+        offlineMode: Bool = false,
         progressHandler: ((Double, String) -> Void)? = nil
     ) async throws -> CoreMLTextDecoder {
-        let cacheDir = try HuggingFaceDownloader.getCacheDirectory(for: modelId)
+        let cacheDir = try cacheDir ?? HuggingFaceDownloader.getCacheDirectory(for: modelId)
 
         progressHandler?(0.0, "Downloading CoreML decoder...")
         try await HuggingFaceDownloader.downloadWeights(
@@ -106,7 +108,8 @@ public class CoreMLTextDecoder {
                 "embedding.mlmodelc/**",
                 "decoder.mlmodelc/**",
                 "config.json",
-            ]
+            ],
+            offlineMode: offlineMode
         ) { fraction in
             progressHandler?(fraction * 0.8, "Downloading CoreML decoder...")
         }

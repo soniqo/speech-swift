@@ -31,17 +31,19 @@ public final class Qwen3TTSCoreMLModel {
     public static func fromPretrained(
         modelId: String = defaultModelId,
         localPath: String? = nil,
+        cacheDir: URL? = nil,
+        offlineMode: Bool = false,
         computeUnits: MLComputeUnits = .all,
         progressHandler: ((Double, String) -> Void)? = nil
     ) async throws -> Qwen3TTSCoreMLModel {
-        let cacheDir: URL
+        let resolvedCacheDir: URL
         if let localPath {
-            cacheDir = URL(fileURLWithPath: localPath, isDirectory: true)
+            resolvedCacheDir = URL(fileURLWithPath: localPath, isDirectory: true)
         } else {
-            cacheDir = try HuggingFaceDownloader.getCacheDirectory(for: modelId)
+            resolvedCacheDir = try cacheDir ?? HuggingFaceDownloader.getCacheDirectory(for: modelId)
             progressHandler?(0.0, "Downloading model...")
             try await HuggingFaceDownloader.downloadWeights(
-                modelId: modelId, to: cacheDir,
+                modelId: modelId, to: resolvedCacheDir,
                 additionalFiles: [
                     "TextProjector.mlmodelc/**", "CodeEmbedder.mlmodelc/**",
                     "MultiCodeEmbedder.mlmodelc/**", "CodeDecoder.mlmodelc/**",
@@ -49,7 +51,8 @@ public final class Qwen3TTSCoreMLModel {
                     "speaker_embedding.npy", "tts_pad_embed.npy",
                     "tts_bos_embed.npy", "tts_eos_embed.npy",
                     "config.json", "vocab.json", "merges.txt",
-                ]
+                ],
+                offlineMode: offlineMode
             ) { progress in progressHandler?(progress * 0.7, "Downloading model...") }
         }
 
@@ -69,12 +72,12 @@ public final class Qwen3TTSCoreMLModel {
         // Load 6 models
         func loadML(_ name: String, _ cfg: MLModelConfiguration = defaultConfig) throws -> MLModel {
             // Try pre-compiled .mlmodelc first
-            let compiledURL = cacheDir.appendingPathComponent("\(name).mlmodelc", isDirectory: true)
+            let compiledURL = resolvedCacheDir.appendingPathComponent("\(name).mlmodelc", isDirectory: true)
             if FileManager.default.fileExists(atPath: compiledURL.path) {
                 return try MLModel(contentsOf: compiledURL, configuration: cfg)
             }
             // Compile from .mlpackage at runtime
-            let pkgURL = cacheDir.appendingPathComponent("\(name).mlpackage", isDirectory: true)
+            let pkgURL = resolvedCacheDir.appendingPathComponent("\(name).mlpackage", isDirectory: true)
             let compiled = try MLModel.compileModel(at: pkgURL)
             return try MLModel(contentsOf: compiled, configuration: cfg)
         }
@@ -90,7 +93,7 @@ public final class Qwen3TTSCoreMLModel {
 
         // Load special embeddings from .npy or compute from TextProjector
         func loadNpy(_ name: String) -> MLMultiArray? {
-            let url = cacheDir.appendingPathComponent("\(name).npy")
+            let url = resolvedCacheDir.appendingPathComponent("\(name).npy")
             guard let data = try? Data(contentsOf: url), data.count > 10 else { return nil }
             var headerEnd = 10
             for i in 8..<min(256, data.count) { if data[i] == 0x0A { headerEnd = i + 1; break } }
@@ -114,7 +117,7 @@ public final class Qwen3TTSCoreMLModel {
 
         // Load tokenizer
         let tokenizer = Qwen3Tokenizer()
-        let vocabURL = cacheDir.appendingPathComponent("vocab.json")
+        let vocabURL = resolvedCacheDir.appendingPathComponent("vocab.json")
         if FileManager.default.fileExists(atPath: vocabURL.path) {
             try tokenizer.load(from: vocabURL)
         }

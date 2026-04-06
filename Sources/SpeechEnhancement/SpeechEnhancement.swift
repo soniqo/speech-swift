@@ -226,11 +226,13 @@ public final class SpeechEnhancer {
     /// - Returns: Ready-to-use speech enhancer
     public static func fromPretrained(
         modelId: String = defaultModelId,
+        cacheDir: URL? = nil,
+        offlineMode: Bool = false,
         progressHandler: ((Double, String) -> Void)? = nil
     ) async throws -> SpeechEnhancer {
         progressHandler?(0.0, "Downloading model...")
 
-        let cacheDir = try HuggingFaceDownloader.getCacheDirectory(for: modelId)
+        let cacheDir = try cacheDir ?? HuggingFaceDownloader.getCacheDirectory(for: modelId)
 
         try await HuggingFaceDownloader.downloadWeights(
             modelId: modelId,
@@ -240,6 +242,7 @@ public final class SpeechEnhancer {
                 "DeepFilterNet3.mlpackage/**",
                 "auxiliary.npz",
             ],
+            offlineMode: offlineMode,
             progressHandler: { progress in
                 progressHandler?(progress * 0.8, "Downloading model...")
             }

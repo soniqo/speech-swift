@@ -216,20 +216,23 @@ public extension Mimi {
         repoId: String = "kyutai/moshiko-pytorch-bf16",
         filename: String = "tokenizer-e351c8d8-checkpoint125.safetensors",
         numCodebooks: Int = 16,
+        cacheDir: URL? = nil,
+        offlineMode: Bool = false,
         progressHandler: ((Double, String) -> Void)? = nil
     ) async throws -> Mimi {
         let cfg = MimiConfig.moshiko(numCodebooks: numCodebooks)
         let model = Mimi(cfg: cfg)
 
         progressHandler?(0.1, "Downloading Mimi codec...")
-        let mimiDir = try HuggingFaceDownloader.getCacheDirectory(for: repoId)
+        let mimiDir = try cacheDir ?? HuggingFaceDownloader.getCacheDirectory(for: repoId)
         let weightFile = mimiDir.appendingPathComponent(filename)
 
         if !FileManager.default.fileExists(atPath: weightFile.path) {
             try await HuggingFaceDownloader.downloadWeights(
                 modelId: repoId,
                 to: mimiDir,
-                additionalFiles: [filename]
+                additionalFiles: [filename],
+                offlineMode: offlineMode
             )
         }
 

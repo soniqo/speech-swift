@@ -51,15 +51,18 @@ public final class PyannoteVADModel {
     public static func fromPretrained(
         modelId: String = defaultModelId,
         vadConfig: VADConfig = .default,
+        cacheDir: URL? = nil,
+        offlineMode: Bool = false,
         progressHandler: ((Double, String) -> Void)? = nil
     ) async throws -> PyannoteVADModel {
         progressHandler?(0.0, "Downloading model...")
 
-        let cacheDir = try HuggingFaceDownloader.getCacheDirectory(for: modelId)
+        let cacheDir = try cacheDir ?? HuggingFaceDownloader.getCacheDirectory(for: modelId)
 
         try await HuggingFaceDownloader.downloadWeights(
             modelId: modelId,
             to: cacheDir,
+            offlineMode: offlineMode,
             progressHandler: { progress in
                 progressHandler?(progress * 0.8, "Downloading weights...")
             }

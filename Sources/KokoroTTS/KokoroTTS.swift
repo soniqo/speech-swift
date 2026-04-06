@@ -125,11 +125,13 @@ public final class KokoroTTSModel {
     public static func fromPretrained(
         modelId: String = defaultModelId,
         voice: String = defaultVoice,
+        cacheDir: URL? = nil,
+        offlineMode: Bool = false,
         progressHandler: ((Double, String) -> Void)? = nil
     ) async throws -> KokoroTTSModel {
         AudioLog.modelLoading.info("Loading Kokoro model: \(modelId)")
 
-        let cacheDir = try HuggingFaceDownloader.getCacheDirectory(for: modelId)
+        let cacheDir = try cacheDir ?? HuggingFaceDownloader.getCacheDirectory(for: modelId)
 
         // Download E2E model + G2P + voice
         progressHandler?(0.0, "Downloading model...")
@@ -145,7 +147,8 @@ public final class KokoroTTSModel {
                 "us_gold.json",
                 "us_silver.json",
                 "voices/\(voice).json",
-            ]
+            ],
+            offlineMode: offlineMode
         ) { fraction in
             progressHandler?(fraction * 0.7, "Downloading model...")
         }

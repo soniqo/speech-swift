@@ -29,8 +29,8 @@ public enum HuggingFaceDownloader {
     ///
     /// Returns the old flat cache path if it already contains model files (preserving
     /// ~10 GB of existing cached models), otherwise returns the new Hub-style path.
-    public static func getCacheDirectory(for modelId: String, cacheDirName: String = "qwen3-speech") throws -> URL {
-        let base = resolveBaseCacheDir(cacheDirName: cacheDirName)
+    public static func getCacheDirectory(for modelId: String, basePath: URL? = nil, cacheDirName: String = "qwen3-speech") throws -> URL {
+        let base = basePath ?? resolveBaseCacheDir(cacheDirName: cacheDirName)
         let fm = FileManager.default
 
         // Check old (flat) cache path for backward compat:

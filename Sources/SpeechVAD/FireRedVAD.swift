@@ -51,12 +51,14 @@ public final class FireRedVADModel {
     /// Load FireRedVAD from HuggingFace.
     public static func fromPretrained(
         modelId: String = defaultModelId,
+        cacheDir: URL? = nil,
+        offlineMode: Bool = false,
         progressHandler: ((Double, String) -> Void)? = nil
     ) async throws -> FireRedVADModel {
         #if canImport(CoreML)
         progressHandler?(0.0, "Downloading model...")
 
-        let cacheDir = try HuggingFaceDownloader.getCacheDirectory(for: modelId)
+        let cacheDir = try cacheDir ?? HuggingFaceDownloader.getCacheDirectory(for: modelId)
 
         try await HuggingFaceDownloader.downloadWeights(
             modelId: modelId,
@@ -66,6 +68,7 @@ public final class FireRedVADModel {
                 "config.json",
                 "cmvn.json",
             ],
+            offlineMode: offlineMode,
             progressHandler: { progress in
                 progressHandler?(progress * 0.8, "Downloading model...")
             }

@@ -29,13 +29,17 @@ public class CoreMLASRModel {
         decoderModelId: String = CoreMLASREncoder.defaultModelId,
         tokenizerModelId: String = "aufklarer/Qwen3-ASR-0.6B-MLX-4bit",
         computeUnits: MLComputeUnits = .all,
+        cacheDir: URL? = nil,
+        offlineMode: Bool = false,
         progressHandler: ((Double, String) -> Void)? = nil
     ) async throws -> CoreMLASRModel {
         // Download encoder (0-30%)
         progressHandler?(0.0, "Loading CoreML encoder...")
         let enc = try await CoreMLASREncoder.fromPretrained(
             modelId: encoderModelId,
-            computeUnits: computeUnits
+            computeUnits: computeUnits,
+            cacheDir: cacheDir,
+            offlineMode: offlineMode
         ) { p, msg in
             progressHandler?(p * 0.3, msg)
         }
@@ -44,18 +48,21 @@ public class CoreMLASRModel {
         progressHandler?(0.3, "Loading CoreML decoder...")
         let dec = try await CoreMLTextDecoder.fromPretrained(
             modelId: decoderModelId,
-            computeUnits: computeUnits
+            computeUnits: computeUnits,
+            cacheDir: cacheDir,
+            offlineMode: offlineMode
         ) { p, msg in
             progressHandler?(0.3 + p * 0.5, msg)
         }
 
         // Download tokenizer (80-90%)
         progressHandler?(0.8, "Loading tokenizer...")
-        let tokenizerDir = try HuggingFaceDownloader.getCacheDirectory(for: tokenizerModelId)
+        let tokenizerDir = try cacheDir ?? HuggingFaceDownloader.getCacheDirectory(for: tokenizerModelId)
         try await HuggingFaceDownloader.downloadWeights(
             modelId: tokenizerModelId,
             to: tokenizerDir,
-            additionalFiles: ["vocab.json", "merges.txt", "tokenizer_config.json"]
+            additionalFiles: ["vocab.json", "merges.txt", "tokenizer_config.json"],
+            offlineMode: offlineMode
         )
 
         let model = CoreMLASRModel(encoder: enc, decoder: dec)

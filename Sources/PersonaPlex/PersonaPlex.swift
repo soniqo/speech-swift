@@ -1561,11 +1561,13 @@ public final class PersonaPlexModel: Module {
 
     public static func fromPretrained(
         modelId: String = defaultModelId,
+        cacheDir: URL? = nil,
+        offlineMode: Bool = false,
         progressHandler: ((Double, String) -> Void)? = nil
     ) async throws -> PersonaPlexModel {
         // Download weights first to get config
         progressHandler?(0.05, "Downloading PersonaPlex weights...")
-        let modelDir = try HuggingFaceDownloader.getCacheDirectory(for: modelId)
+        let modelDir = try cacheDir ?? HuggingFaceDownloader.getCacheDirectory(for: modelId)
 
         let weightFiles = [
             "temporal.safetensors",
@@ -1580,7 +1582,8 @@ public final class PersonaPlexModel: Module {
         try await HuggingFaceDownloader.downloadWeights(
             modelId: modelId,
             to: modelDir,
-            additionalFiles: weightFiles
+            additionalFiles: weightFiles,
+            offlineMode: offlineMode
         ) { progress in
             progressHandler?(0.05 + progress * 0.5, "Downloading...")
         }

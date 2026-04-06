@@ -94,9 +94,11 @@ public final class Qwen35MLXChat: @unchecked Sendable {
     public static func fromPretrained(
         modelId: String = defaultModelId,
         quantization: Quantization = .int4,
+        cacheDir: URL? = nil,
+        offlineMode: Bool = false,
         progressHandler: ((Double, String) -> Void)? = nil
     ) async throws -> Qwen35MLXChat {
-        let cacheDir = try HuggingFaceDownloader.getCacheDirectory(for: modelId)
+        let cacheDir = try cacheDir ?? HuggingFaceDownloader.getCacheDirectory(for: modelId)
         let variant = quantization.rawValue
 
         // Download model files from variant subdirectory (int4/ or int8/)
@@ -110,6 +112,7 @@ public final class Qwen35MLXChat: @unchecked Sendable {
                 "\(variant)/tokenizer.json",
                 "\(variant)/tokenizer_config.json",
             ],
+            offlineMode: offlineMode,
             progressHandler: { progress in
                 progressHandler?(progress * 0.5, "Downloading...")
             }

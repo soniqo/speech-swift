@@ -30,9 +30,11 @@ public final class CamPlusPlusSpeaker {
     /// Downloads the CoreML model on first use, caches locally.
     public static func fromPretrained(
         modelId: String = CamPlusPlusSpeaker.defaultModelId,
+        cacheDir: URL? = nil,
+        offlineMode: Bool = false,
         progressHandler: ((Double, String) -> Void)? = nil
     ) async throws -> CamPlusPlusSpeaker {
-        let cacheDir = try HuggingFaceDownloader.getCacheDirectory(for: modelId)
+        let cacheDir = try cacheDir ?? HuggingFaceDownloader.getCacheDirectory(for: modelId)
 
         let modelURL = cacheDir.appendingPathComponent("CamPlusPlus.mlmodelc", isDirectory: true)
         if !FileManager.default.fileExists(atPath: modelURL.path) {
@@ -41,6 +43,7 @@ public final class CamPlusPlusSpeaker {
                 modelId: modelId,
                 to: cacheDir,
                 additionalFiles: ["CamPlusPlus.mlmodelc/**"],
+                offlineMode: offlineMode,
                 progressHandler: { progress in
                     progressHandler?(progress * 0.8, "Downloading CAM++ speaker model...")
                 }

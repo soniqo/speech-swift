@@ -249,11 +249,13 @@ public extension Qwen3ForcedAligner {
     /// Load forced aligner model from HuggingFace hub
     static func fromPretrained(
         modelId: String = "aufklarer/Qwen3-ForcedAligner-0.6B-4bit",
+        cacheDir: URL? = nil,
+        offlineMode: Bool = false,
         progressHandler: ((Double, String) -> Void)? = nil
     ) async throws -> Qwen3ForcedAligner {
         progressHandler?(0.0, "Downloading model...")
 
-        let cacheDir = try HuggingFaceDownloader.getCacheDirectory(for: modelId)
+        let cacheDir = try cacheDir ?? HuggingFaceDownloader.getCacheDirectory(for: modelId)
 
         // Download weights and tokenizer files
         try await HuggingFaceDownloader.downloadWeights(
@@ -261,6 +263,7 @@ public extension Qwen3ForcedAligner {
             to: cacheDir,
             additionalFiles: ["vocab.json", "merges.txt", "tokenizer_config.json",
                               "quantize_config.json"],
+            offlineMode: offlineMode,
             progressHandler: { progress in
                 progressHandler?(progress * 0.8, "Downloading weights...")
             }

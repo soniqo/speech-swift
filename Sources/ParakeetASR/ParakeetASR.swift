@@ -177,6 +177,8 @@ public class ParakeetASRModel {
     /// - Returns: Initialized model ready for transcription
     public static func fromPretrained(
         modelId: String? = nil,
+        cacheDir: URL? = nil,
+        offlineMode: Bool = false,
         progressHandler: ((Double, String) -> Void)? = nil
     ) async throws -> ParakeetASRModel {
         let effectiveModelId: String
@@ -193,9 +195,9 @@ public class ParakeetASRModel {
         AudioLog.modelLoading.info("Loading Parakeet model: \(effectiveModelId)")
 
         // Step 1: Get/create cache directory
-        let cacheDir: URL
+        let resolvedCacheDir: URL
         do {
-            cacheDir = try HuggingFaceDownloader.getCacheDirectory(for: effectiveModelId)
+            resolvedCacheDir = try cacheDir ?? HuggingFaceDownloader.getCacheDirectory(for: effectiveModelId)
         } catch {
             throw AudioModelError.modelLoadFailed(
                 modelId: effectiveModelId, reason: "Failed to resolve cache directory", underlying: error)
@@ -206,14 +208,15 @@ public class ParakeetASRModel {
         do {
             try await HuggingFaceDownloader.downloadWeights(
                 modelId: effectiveModelId,
-                to: cacheDir,
+                to: resolvedCacheDir,
                 additionalFiles: [
                     "encoder.mlmodelc/**",
                     "decoder.mlmodelc/**",
                     "joint.mlmodelc/**",
                     "vocab.json",
                     "config.json",
-                ]
+                ],
+                offlineMode: offlineMode
             ) { fraction in
                 progressHandler?(fraction * 0.7, "Downloading model...")
             }
@@ -225,7 +228,7 @@ public class ParakeetASRModel {
         // Step 3: Load config
         progressHandler?(0.70, "Loading configuration...")
         let config: ParakeetConfig
-        let configURL = cacheDir.appendingPathComponent("config.json")
+        let configURL = resolvedCacheDir.appendingPathComponent("config.json")
         if FileManager.default.fileExists(atPath: configURL.path) {
             let data = try Data(contentsOf: configURL)
             config = try JSONDecoder().decode(ParakeetConfig.self, from: data)
@@ -237,7 +240,7 @@ public class ParakeetASRModel {
 
         // Step 4: Load vocabulary
         progressHandler?(0.75, "Loading vocabulary...")
-        let vocabURL = cacheDir.appendingPathComponent("vocab.json")
+        let vocabURL = resolvedCacheDir.appendingPathComponent("vocab.json")
         let vocabulary: ParakeetVocabulary
         do {
             vocabulary = try ParakeetVocabulary.load(from: vocabURL)
@@ -252,13 +255,13 @@ public class ParakeetASRModel {
         // Use cpuAndGPU for encoder — ANE compilation fails on some devices
         // (iPhone 17 Pro "Unknown aneSubType") causing memory spike + fallback anyway
         let encoder = try loadCoreMLModel(
-            name: "encoder", from: cacheDir, computeUnits: .cpuAndGPU)
+            name: "encoder", from: resolvedCacheDir, computeUnits: .cpuAndGPU)
         progressHandler?(0.90, "Loading decoder...")
         let decoder = try loadCoreMLModel(
-            name: "decoder", from: cacheDir, computeUnits: .cpuAndGPU)
+            name: "decoder", from: resolvedCacheDir, computeUnits: .cpuAndGPU)
         progressHandler?(0.95, "Loading joint network...")
         let joint = try loadCoreMLModel(
-            name: "joint", from: cacheDir, computeUnits: .cpuAndGPU)
+            name: "joint", from: resolvedCacheDir, computeUnits: .cpuAndGPU)
 
         progressHandler?(1.0, "Model loaded")
         AudioLog.modelLoading.info("Parakeet model loaded successfully")

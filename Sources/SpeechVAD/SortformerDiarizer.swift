@@ -64,16 +64,19 @@ public final class SortformerDiarizer {
     /// - Returns: ready-to-use diarizer
     public static func fromPretrained(
         modelId: String = defaultModelId,
+        cacheDir: URL? = nil,
+        offlineMode: Bool = false,
         progressHandler: ((Double, String) -> Void)? = nil
     ) async throws -> SortformerDiarizer {
         progressHandler?(0.0, "Downloading Sortformer model...")
 
-        let cacheDir = try HuggingFaceDownloader.getCacheDirectory(for: modelId)
+        let cacheDir = try cacheDir ?? HuggingFaceDownloader.getCacheDirectory(for: modelId)
 
         try await HuggingFaceDownloader.downloadWeights(
             modelId: modelId,
             to: cacheDir,
             additionalFiles: ["Sortformer.mlmodelc/**", "config.json"],
+            offlineMode: offlineMode,
             progressHandler: { progress in
                 progressHandler?(progress * 0.8, "Downloading Sortformer model...")
             }

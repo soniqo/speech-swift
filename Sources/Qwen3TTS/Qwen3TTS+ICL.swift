@@ -15,12 +15,14 @@ extension Qwen3TTSModel {
     /// the same safetensors file (encoder.* prefixes).
     public static func fromPretrainedWithEncoder(
         modelId: String = "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-4bit",
+        cacheDir: URL? = nil,
+        offlineMode: Bool = false,
         progressHandler: ((Double, String) -> Void)? = nil
     ) async throws -> (Qwen3TTSModel, SpeechTokenizerEncoder) {
         let tts = try await Qwen3TTSModel.fromPretrained(
-            modelId: modelId, progressHandler: progressHandler)
+            modelId: modelId, cacheDir: cacheDir, offlineMode: offlineMode, progressHandler: progressHandler)
 
-        let weightsDir = try HuggingFaceDownloader.getCacheDirectory(for: modelId)
+        let weightsDir = try cacheDir ?? HuggingFaceDownloader.getCacheDirectory(for: modelId)
 
         // Build encoder with same config as decoder
         let encoderConfig = tts.config.speechTokenizerDecoder

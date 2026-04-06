@@ -71,9 +71,11 @@ public final class Qwen35CoreMLChat: @unchecked Sendable {
         modelId: String = defaultModelId,
         quantization: Quantization = .int8,
         computeUnits: MLComputeUnits = .cpuAndNeuralEngine,
+        cacheDir: URL? = nil,
+        offlineMode: Bool = false,
         progressHandler: ((Double, String) -> Void)? = nil
     ) async throws -> Qwen35CoreMLChat {
-        let cacheDir = try HuggingFaceDownloader.getCacheDirectory(for: modelId)
+        let cacheDir = try cacheDir ?? HuggingFaceDownloader.getCacheDirectory(for: modelId)
         let variant = quantization.rawValue
 
         progressHandler?(0.05, "Downloading \(variant) model...")
@@ -86,6 +88,7 @@ public final class Qwen35CoreMLChat: @unchecked Sendable {
                 "\(variant)/**/*.bin",
                 "\(variant)/**/Manifest.json",
             ],
+            offlineMode: offlineMode,
             progressHandler: { p in progressHandler?(p * 0.5, "Downloading...") }
         )
 
