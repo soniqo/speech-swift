@@ -124,7 +124,7 @@ public class StreamingSession {
 
         sampleBuffer.append(contentsOf: samples)
 
-        let samplesPerChunk = config.streaming.melFrames * config.hopLength
+        let samplesPerChunk = (config.streaming.melFrames - 1) * config.hopLength
         var results: [ParakeetStreamingASRModel.PartialTranscript] = []
 
         while sampleBuffer.count >= samplesPerChunk {
@@ -147,7 +147,7 @@ public class StreamingSession {
         // Process remaining buffered samples
         if !sampleBuffer.isEmpty && !eouDetected {
             // Pad to full chunk size
-            let samplesPerChunk = config.streaming.melFrames * config.hopLength
+            let samplesPerChunk = (config.streaming.melFrames - 1) * config.hopLength
             let padded = sampleBuffer + [Float](repeating: 0, count: max(0, samplesPerChunk - sampleBuffer.count))
             sampleBuffer.removeAll()
             if let partial = try processChunk(Array(padded.prefix(samplesPerChunk))) {
