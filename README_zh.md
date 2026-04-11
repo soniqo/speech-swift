@@ -39,6 +39,66 @@
 - **2026 年 2 月 23 日** — [NVIDIA PersonaPlex 7B 在 Apple Silicon 上运行——基于 MLX 的原生 Swift 全双工语音到语音](https://blog.ivan.digital/nvidia-personaplex-7b-on-apple-silicon-full-duplex-speech-to-speech-in-native-swift-with-mlx-0aa5276f2e23)
 - **2026 年 2 月 12 日** — [Qwen3-ASR Swift：面向 Apple Silicon 的端侧 ASR + TTS——架构与基准测试](https://blog.ivan.digital/qwen3-asr-swift-on-device-asr-tts-for-apple-silicon-architecture-and-benchmarks-27cbf1e4463f)
 
+## 快速开始
+
+将依赖添加到你的 `Package.swift`：
+
+```swift
+.package(url: "https://github.com/soniqo/speech-swift", from: "0.0.8")
+```
+
+只引入你需要的模块——每个模型都是独立的 SPM 库：
+
+```swift
+.product(name: "ParakeetStreamingASR", package: "speech-swift"),
+.product(name: "SpeechUI",             package: "speech-swift"),  // 可选的 SwiftUI 视图
+```
+
+**3 行代码转写音频缓冲区：**
+
+```swift
+import ParakeetStreamingASR
+
+let model = try await ParakeetStreamingASRModel.fromPretrained()
+let text = try model.transcribeAudio(audioSamples, sampleRate: 16000)
+```
+
+**带部分结果的实时流式转写：**
+
+```swift
+for await partial in model.transcribeStream(audio: samples, sampleRate: 16000) {
+    print(partial.isFinal ? "FINAL: \(partial.text)" : "... \(partial.text)")
+}
+```
+
+**约 10 行写出 SwiftUI 听写视图：**
+
+```swift
+import SwiftUI
+import ParakeetStreamingASR
+import SpeechUI
+
+@MainActor
+struct DictateView: View {
+    @State private var store = TranscriptionStore()
+
+    var body: some View {
+        TranscriptionView(finals: store.finalLines, currentPartial: store.currentPartial)
+            .task {
+                let model = try? await ParakeetStreamingASRModel.fromPretrained()
+                guard let model else { return }
+                for await p in model.transcribeStream(audio: samples, sampleRate: 16000) {
+                    store.apply(text: p.text, isFinal: p.isFinal)
+                }
+            }
+    }
+}
+```
+
+`SpeechUI` 还提供 `WaveformView` 和 `MicLevelView` 用于音频可视化。这些视图与任何特定的 ASR 后端解耦——只需传入普通的 Swift 值，就能与你选择的模型搭配使用。
+
+可用的 SPM 产品：`Qwen3ASR`、`Qwen3TTS`、`Qwen3TTSCoreML`、`ParakeetASR`、`ParakeetStreamingASR`、`KokoroTTS`、`CosyVoiceTTS`、`PersonaPlex`、`SpeechVAD`、`SpeechEnhancement`、`Qwen3Chat`、`SpeechCore`、`SpeechUI`、`AudioCommon`。
+
 ## 模型
 
 | 模型 | 任务 | 流式 | 语言 | 规格 |

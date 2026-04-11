@@ -39,6 +39,66 @@ Mac과 iOS를 위한 온디바이스 음성 인식, 합성 및 이해. Apple Sil
 - **2026년 2월 23일** — [Apple Silicon에서 NVIDIA PersonaPlex 7B — MLX 기반 네이티브 Swift로 전이중 음성-음성 변환](https://blog.ivan.digital/nvidia-personaplex-7b-on-apple-silicon-full-duplex-speech-to-speech-in-native-swift-with-mlx-0aa5276f2e23)
 - **2026년 2월 12일** — [Qwen3-ASR Swift: Apple Silicon용 온디바이스 ASR + TTS — 아키텍처 및 벤치마크](https://blog.ivan.digital/qwen3-asr-swift-on-device-asr-tts-for-apple-silicon-architecture-and-benchmarks-27cbf1e4463f)
 
+## 빠른 시작
+
+`Package.swift`에 패키지를 추가하세요:
+
+```swift
+.package(url: "https://github.com/soniqo/speech-swift", from: "0.0.8")
+```
+
+필요한 모듈만 임포트하세요 — 모든 모델이 각자의 SPM 라이브러리입니다:
+
+```swift
+.product(name: "ParakeetStreamingASR", package: "speech-swift"),
+.product(name: "SpeechUI",             package: "speech-swift"),  // 선택적 SwiftUI 뷰
+```
+
+**3줄로 오디오 버퍼 전사하기:**
+
+```swift
+import ParakeetStreamingASR
+
+let model = try await ParakeetStreamingASRModel.fromPretrained()
+let text = try model.transcribeAudio(audioSamples, sampleRate: 16000)
+```
+
+**부분 결과가 포함된 라이브 스트리밍:**
+
+```swift
+for await partial in model.transcribeStream(audio: samples, sampleRate: 16000) {
+    print(partial.isFinal ? "FINAL: \(partial.text)" : "... \(partial.text)")
+}
+```
+
+**약 10줄짜리 SwiftUI 받아쓰기 뷰:**
+
+```swift
+import SwiftUI
+import ParakeetStreamingASR
+import SpeechUI
+
+@MainActor
+struct DictateView: View {
+    @State private var store = TranscriptionStore()
+
+    var body: some View {
+        TranscriptionView(finals: store.finalLines, currentPartial: store.currentPartial)
+            .task {
+                let model = try? await ParakeetStreamingASRModel.fromPretrained()
+                guard let model else { return }
+                for await p in model.transcribeStream(audio: samples, sampleRate: 16000) {
+                    store.apply(text: p.text, isFinal: p.isFinal)
+                }
+            }
+    }
+}
+```
+
+`SpeechUI`는 오디오 시각화를 위한 `WaveformView`와 `MicLevelView`도 제공합니다. 뷰들은 특정 ASR 백엔드에 의존하지 않으며 — 간단한 Swift 값을 넘겨 원하는 모델과 함께 사용할 수 있습니다.
+
+사용 가능한 SPM 제품: `Qwen3ASR`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `KokoroTTS`, `CosyVoiceTTS`, `PersonaPlex`, `SpeechVAD`, `SpeechEnhancement`, `Qwen3Chat`, `SpeechCore`, `SpeechUI`, `AudioCommon`.
+
 ## 모델
 
 | 모델 | 태스크 | 스트리밍 | 언어 | 크기 |

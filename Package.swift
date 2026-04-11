@@ -60,6 +60,10 @@ let package = Package(
             name: "Qwen3Chat",
             targets: ["Qwen3Chat"]
         ),
+        .library(
+            name: "SpeechUI",
+            targets: ["SpeechUI"]
+        ),
         .executable(
             name: "audio",
             targets: ["AudioCLI"]
@@ -196,6 +200,10 @@ let package = Package(
                 .product(name: "MLXNN", package: "mlx-swift"),
                 .product(name: "MLXFast", package: "mlx-swift"),
             ]
+        ),
+        .target(
+            name: "SpeechUI",
+            dependencies: []
         ),
         .target(
             name: "AudioCLILib",
@@ -336,6 +344,10 @@ let package = Package(
                 "KokoroTTS",
                 "ParakeetASR"
             ]
+        ),
+        .testTarget(
+            name: "SpeechUITests",
+            dependencies: ["SpeechUI"]
         )
     ]
 )

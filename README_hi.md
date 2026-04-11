@@ -39,6 +39,66 @@ Mac और iOS के लिए ऑन-डिवाइस स्पीच रि
 - **23 Feb 2026** — [NVIDIA PersonaPlex 7B on Apple Silicon — Full-Duplex Speech-to-Speech in Native Swift with MLX](https://blog.ivan.digital/nvidia-personaplex-7b-on-apple-silicon-full-duplex-speech-to-speech-in-native-swift-with-mlx-0aa5276f2e23)
 - **12 Feb 2026** — [Qwen3-ASR Swift: On-Device ASR + TTS for Apple Silicon — Architecture and Benchmarks](https://blog.ivan.digital/qwen3-asr-swift-on-device-asr-tts-for-apple-silicon-architecture-and-benchmarks-27cbf1e4463f)
 
+## त्वरित प्रारंभ
+
+अपने `Package.swift` में पैकेज जोड़ें:
+
+```swift
+.package(url: "https://github.com/soniqo/speech-swift", from: "0.0.8")
+```
+
+केवल वही मॉड्यूल इम्पोर्ट करें जिनकी आपको ज़रूरत है — प्रत्येक मॉडल अपनी अलग SPM लाइब्रेरी है:
+
+```swift
+.product(name: "ParakeetStreamingASR", package: "speech-swift"),
+.product(name: "SpeechUI",             package: "speech-swift"),  // वैकल्पिक SwiftUI व्यू
+```
+
+**3 लाइनों में ऑडियो बफ़र को ट्रांसक्राइब करें:**
+
+```swift
+import ParakeetStreamingASR
+
+let model = try await ParakeetStreamingASRModel.fromPretrained()
+let text = try model.transcribeAudio(audioSamples, sampleRate: 16000)
+```
+
+**आंशिक परिणामों के साथ लाइव स्ट्रीमिंग:**
+
+```swift
+for await partial in model.transcribeStream(audio: samples, sampleRate: 16000) {
+    print(partial.isFinal ? "FINAL: \(partial.text)" : "... \(partial.text)")
+}
+```
+
+**~10 लाइनों में SwiftUI डिक्टेशन व्यू:**
+
+```swift
+import SwiftUI
+import ParakeetStreamingASR
+import SpeechUI
+
+@MainActor
+struct DictateView: View {
+    @State private var store = TranscriptionStore()
+
+    var body: some View {
+        TranscriptionView(finals: store.finalLines, currentPartial: store.currentPartial)
+            .task {
+                let model = try? await ParakeetStreamingASRModel.fromPretrained()
+                guard let model else { return }
+                for await p in model.transcribeStream(audio: samples, sampleRate: 16000) {
+                    store.apply(text: p.text, isFinal: p.isFinal)
+                }
+            }
+    }
+}
+```
+
+`SpeechUI` ऑडियो विज़ुअलाइज़ेशन के लिए `WaveformView` और `MicLevelView` भी प्रदान करता है। ये व्यू किसी विशेष ASR बैकएंड से डिकपल्ड हैं — इन्हें साधारण Swift मान दें और अपनी पसंद का मॉडल इस्तेमाल करें।
+
+उपलब्ध SPM प्रोडक्ट्स: `Qwen3ASR`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `KokoroTTS`, `CosyVoiceTTS`, `PersonaPlex`, `SpeechVAD`, `SpeechEnhancement`, `Qwen3Chat`, `SpeechCore`, `SpeechUI`, `AudioCommon`।
+
 ## मॉडल
 
 | Model | Task | Streaming | Languages | Sizes |
