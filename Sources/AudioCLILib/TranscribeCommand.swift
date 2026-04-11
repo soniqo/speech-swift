@@ -23,6 +23,9 @@ public struct TranscribeCommand: ParsableCommand {
     @Option(name: .long, help: "Language hint (optional)")
     public var language: String?
 
+    @Option(name: .long, help: "Context string to bias recognition (e.g., 'Project: Foo, participants: Alice, Bob'). Improves proper-noun accuracy.")
+    public var context: String?
+
     @Flag(name: .long, help: "Enable streaming transcription with VAD")
     public var stream: Bool = false
 
@@ -75,7 +78,7 @@ public struct TranscribeCommand: ParsableCommand {
 
             print("Transcribing...")
             let startTime = CFAbsoluteTimeGetCurrent()
-            let result = asrModel.transcribe(audio: audio, sampleRate: 24000, language: language)
+            let result = asrModel.transcribe(audio: audio, sampleRate: 24000, language: language, context: context)
             let elapsed = CFAbsoluteTimeGetCurrent() - startTime
             let duration = Float(audio.count) / 24000.0
             let rtf = elapsed / Double(duration)
@@ -102,7 +105,8 @@ public struct TranscribeCommand: ParsableCommand {
             let config = StreamingASRConfig(
                 maxSegmentDuration: maxSegment,
                 language: language,
-                emitPartialResults: partial
+                emitPartialResults: partial,
+                context: context
             )
 
             print("Streaming transcription (VAD + ASR)...")
