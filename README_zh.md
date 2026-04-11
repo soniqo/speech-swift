@@ -95,7 +95,7 @@ struct DictateView: View {
 }
 ```
 
-`SpeechUI` 刻意保持最小化——只有 `TranscriptionView` 和 `TranscriptionStore` 适配器。语音平台优先：它覆盖了流式 ASR 中容易写错的概念（最终结果 vs 部分结果），不涉及通用的音频可视化或播放（这些请直接使用 AVFoundation）。
+`SpeechUI` 只包含 `TranscriptionView`（最终结果 + 部分结果）和 `TranscriptionStore`（流式 ASR 适配器）。音频可视化和播放请使用 AVFoundation。
 
 可用的 SPM 产品：`Qwen3ASR`、`Qwen3TTS`、`Qwen3TTSCoreML`、`ParakeetASR`、`ParakeetStreamingASR`、`KokoroTTS`、`CosyVoiceTTS`、`PersonaPlex`、`SpeechVAD`、`SpeechEnhancement`、`Qwen3Chat`、`SpeechCore`、`SpeechUI`、`AudioCommon`。
 

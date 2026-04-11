@@ -95,7 +95,7 @@ struct DictateView: View {
 }
 ```
 
-`SpeechUI` जान-बूझकर न्यूनतम है — केवल `TranscriptionView` और `TranscriptionStore` एडाप्टर। स्पीच प्लेटफ़ॉर्म पहले: यह स्ट्रीमिंग ASR की उस अवधारणा (फ़ाइनल बनाम पार्शियल) को कवर करता है जिसे ग़लत करना आसान है, और जेनरिक ऑडियो विज़ुअलाइज़ेशन या प्लेबैक से बाहर रहता है (उसके लिए सीधे AVFoundation का उपयोग करें)।
+`SpeechUI` में केवल `TranscriptionView` (फ़ाइनल + पार्शियल) और `TranscriptionStore` (स्ट्रीमिंग ASR एडाप्टर) शामिल हैं। ऑडियो विज़ुअलाइज़ेशन और प्लेबैक के लिए AVFoundation का उपयोग करें।
 
 उपलब्ध SPM प्रोडक्ट्स: `Qwen3ASR`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `KokoroTTS`, `CosyVoiceTTS`, `PersonaPlex`, `SpeechVAD`, `SpeechEnhancement`, `Qwen3Chat`, `SpeechCore`, `SpeechUI`, `AudioCommon`।
 

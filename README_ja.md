@@ -95,7 +95,7 @@ struct DictateView: View {
 }
 ```
 
-`SpeechUI` は意図的にミニマルです — `TranscriptionView` と `TranscriptionStore` アダプターのみ。スピーチプラットフォームを第一に：間違えやすいストリーミングASRの概念（確定 vs 部分）をカバーし、汎用的な音声の可視化や再生には踏み込みません（それらは AVFoundation を直接お使いください）。
+`SpeechUI` には `TranscriptionView`（確定 + 部分）と `TranscriptionStore`（ストリーミングASRアダプター）のみが含まれます。音声の可視化や再生には AVFoundation をお使いください。
 
 利用可能なSPM製品： `Qwen3ASR`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `KokoroTTS`, `CosyVoiceTTS`, `PersonaPlex`, `SpeechVAD`, `SpeechEnhancement`, `Qwen3Chat`, `SpeechCore`, `SpeechUI`, `AudioCommon`。
 
