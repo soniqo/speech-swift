@@ -208,10 +208,9 @@ final class DownloadSecurityTests: XCTestCase {
         let legacyKey = modelId.replacingOccurrences(of: "/", with: "_")
         XCTAssertEqual(key, legacyKey, "New sanitized key should match legacy format for standard model IDs")
 
-        // Check the cached directory actually exists if model was downloaded
-        let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("qwen3-asr")
-            .appendingPathComponent(key)
+        // Resolve the actual cache directory via the downloader (handles both
+        // legacy flat layout and the current Hub-style nested layout).
+        let cacheDir = try HuggingFaceDownloader.getCacheDirectory(for: modelId)
         if FileManager.default.fileExists(atPath: cacheDir.path) {
             // Verify expected files are present
             let vocabPath = cacheDir.appendingPathComponent("vocab.json")
@@ -222,9 +221,11 @@ final class DownloadSecurityTests: XCTestCase {
             try tokenizer.load(from: vocabPath)
             XCTAssertEqual(tokenizer.getTokenId(for: "<|im_start|>"), 151644)
 
-            // Verify file validation passes on real cached files
+            // Verify file validation passes on real cached files. Skip hidden
+            // entries like HuggingFace Hub's `.cache/` metadata directory —
+            // those are local bookkeeping, not downloaded artifacts.
             let contents = try FileManager.default.contentsOfDirectory(at: cacheDir, includingPropertiesForKeys: nil)
-            for file in contents {
+            for file in contents where !file.lastPathComponent.hasPrefix(".") {
                 let name = file.lastPathComponent
                 XCTAssertNoThrow(try Qwen3ASRModel.validatedRemoteFileName(name),
                     "Cached file '\(name)' should pass validation")

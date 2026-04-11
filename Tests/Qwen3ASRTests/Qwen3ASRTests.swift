@@ -198,10 +198,7 @@ final class Qwen3ASRTests: XCTestCase {
     // MARK: - Tokenizer Tests
 
     func testTokenizerLoadsVocab() throws {
-        let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("qwen3-asr")
-            .appendingPathComponent("aufklarer_Qwen3-ASR-0.6B-MLX-4bit")
-
+        let cacheDir = try HuggingFaceDownloader.getCacheDirectory(for: "aufklarer/Qwen3-ASR-0.6B-MLX-4bit")
         let vocabPath = cacheDir.appendingPathComponent("vocab.json")
 
         guard FileManager.default.fileExists(atPath: vocabPath.path) else {
@@ -218,10 +215,7 @@ final class Qwen3ASRTests: XCTestCase {
     }
 
     func testTokenizerLoadsAddedTokens() throws {
-        let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("qwen3-asr")
-            .appendingPathComponent("aufklarer_Qwen3-ASR-0.6B-MLX-4bit")
-
+        let cacheDir = try HuggingFaceDownloader.getCacheDirectory(for: "aufklarer/Qwen3-ASR-0.6B-MLX-4bit")
         let vocabPath = cacheDir.appendingPathComponent("vocab.json")
 
         guard FileManager.default.fileExists(atPath: vocabPath.path) else {
@@ -242,10 +236,7 @@ final class Qwen3ASRTests: XCTestCase {
     }
 
     func testTokenizerDecodeWithASRMarker() throws {
-        let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("qwen3-asr")
-            .appendingPathComponent("aufklarer_Qwen3-ASR-0.6B-MLX-4bit")
-
+        let cacheDir = try HuggingFaceDownloader.getCacheDirectory(for: "aufklarer/Qwen3-ASR-0.6B-MLX-4bit")
         let vocabPath = cacheDir.appendingPathComponent("vocab.json")
 
         guard FileManager.default.fileExists(atPath: vocabPath.path) else {
@@ -460,10 +451,7 @@ final class Qwen3ASRTests: XCTestCase {
     }
 
     func testTokenizerSkipsSpecialTokensWithPipes() throws {
-        let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("qwen3-asr")
-            .appendingPathComponent("aufklarer_Qwen3-ASR-0.6B-MLX-4bit")
-
+        let cacheDir = try HuggingFaceDownloader.getCacheDirectory(for: "aufklarer/Qwen3-ASR-0.6B-MLX-4bit")
         let vocabPath = cacheDir.appendingPathComponent("vocab.json")
 
         guard FileManager.default.fileExists(atPath: vocabPath.path) else {
