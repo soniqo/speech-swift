@@ -239,7 +239,11 @@ public final class SpeechEnhancer {
             to: cacheDir,
             additionalFiles: [
                 "no_weights.safetensors",  // suppress default *.safetensors glob
-                "DeepFilterNet3.mlpackage/**",
+                // Pre-compiled CoreML — shipped by aufklarer/DeepFilterNet3-CoreML
+                // alongside the legacy .mlpackage. On-device compileModel() is
+                // known to drift per runtime (Mac vs simulator vs iPhone), so
+                // the goal is to never reach that code path for new installs.
+                "DeepFilterNet3.mlmodelc/**",
                 "auxiliary.npz",
             ],
             offlineMode: offlineMode,

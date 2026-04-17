@@ -79,14 +79,17 @@ public final class Qwen35CoreMLChat: @unchecked Sendable {
         let variant = quantization.rawValue
 
         progressHandler?(0.05, "Downloading \(variant) model...")
+        // Fetch the pre-compiled ``.mlmodelc`` bundle only. On-device
+        // ``MLModel.compileModel`` drifts per runtime, and the legacy
+        // ``.mlpackage`` internals (``*.mlmodel`` / ``Manifest.json``) would
+        // force that code path. Users with a stale ``.mlpackage`` cache
+        // transparently re-download because ``.mlmodelc`` is missing.
         try await HuggingFaceDownloader.downloadWeights(
             modelId: modelId,
             to: cacheDir,
             additionalFiles: [
                 "\(variant)/*.json",
-                "\(variant)/**/*.mlmodel",
-                "\(variant)/**/*.bin",
-                "\(variant)/**/Manifest.json",
+                "\(variant)/**/*.mlmodelc/**",
             ],
             offlineMode: offlineMode,
             progressHandler: { p in progressHandler?(p * 0.5, "Downloading...") }
@@ -164,25 +167,16 @@ public final class Qwen35CoreMLChat: @unchecked Sendable {
         named name: String, from dir: URL, computeUnits: MLComputeUnits
     ) async throws -> MLModel {
         let compiledURL = dir.appendingPathComponent("\(name).mlmodelc")
-        let packageURL = dir.appendingPathComponent("\(name).mlpackage")
-
-        let modelURL: URL
-        if FileManager.default.fileExists(atPath: compiledURL.path) {
-            modelURL = compiledURL
-        } else if FileManager.default.fileExists(atPath: packageURL.path) {
-            // Resolve symlinks before compiling — MLModel.compileModel
-            // can fail on Hub-style symlinked .mlpackage directories
-            let resolved = packageURL.resolvingSymlinksInPath()
-            os_log(.info, log: log, "Compiling %{public}@.mlpackage from %{public}@", name, resolved.path)
-            modelURL = try await MLModel.compileModel(at: resolved)
-        } else {
-            os_log(.error, log: log, "Model not found: %{public}@.mlpackage in %{public}@", name, dir.path)
+        guard FileManager.default.fileExists(atPath: compiledURL.path) else {
+            os_log(.error, log: log,
+                   "Model not found: %{public}@.mlmodelc in %{public}@",
+                   name, dir.path)
             throw ChatModelError.modelNotFound(dir)
         }
 
         let mlConfig = MLModelConfiguration()
         mlConfig.computeUnits = computeUnits
-        return try await MLModel.load(contentsOf: modelURL, configuration: mlConfig)
+        return try await MLModel.load(contentsOf: compiledURL, configuration: mlConfig)
     }
 
     // MARK: - Generation

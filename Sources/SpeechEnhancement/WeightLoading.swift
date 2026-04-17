@@ -4,17 +4,25 @@ import AudioCommon
 
 /// Weight loading for DeepFilterNet3 Core ML model.
 ///
-/// Loads the .mlpackage model and auxiliary signal processing data (ERB filterbank,
-/// Vorbis window, normalization states) from an npz file.
+/// Loads the pre-compiled ``.mlmodelc`` model and auxiliary signal processing
+/// data (ERB filterbank, Vorbis window, normalization states) from an npz file.
 enum DeepFilterNet3WeightLoader {
 
     /// Load Core ML model and auxiliary data.
     ///
+    /// Only the pre-compiled ``DeepFilterNet3.mlmodelc`` is supported — on-device
+    /// ``MLModel.compileModel`` from ``.mlpackage`` is known to drift per
+    /// runtime (Mac vs simulator vs iPhone). Users upgrading with a stale
+    /// ``.mlpackage``-only cache trigger a transparent re-download of the
+    /// compiled bundle because ``.mlmodelc`` is missing and the Hub fetch
+    /// glob targets it.
+    ///
     /// - Parameters:
-    ///   - directory: Directory containing DeepFilterNet3.mlpackage and auxiliary.npz
+    ///   - directory: Directory containing DeepFilterNet3.mlmodelc and
+    ///     auxiliary.npz
     /// - Returns: `(network, auxiliaryData)`
     static func load(from directory: URL) throws -> (DeepFilterNet3Network, AuxiliaryData) {
-        let modelURL = directory.appendingPathComponent("DeepFilterNet3.mlpackage")
+        let modelURL = directory.appendingPathComponent("DeepFilterNet3.mlmodelc")
         let auxURL = directory.appendingPathComponent("auxiliary.npz")
 
         guard FileManager.default.fileExists(atPath: modelURL.path) else {

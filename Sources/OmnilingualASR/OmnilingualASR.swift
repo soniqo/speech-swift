@@ -84,7 +84,9 @@ public class OmnilingualASRModel {
                 additionalFiles: [
                     "config.json",
                     "tokenizer.model",
-                    "omnilingual-ctc-300m-int8.mlpackage/**",
+                    // Pre-compiled CoreML — on-device compileModel() drifts per
+                    // runtime, so we ship .mlmodelc and skip that code path.
+                    "omnilingual-ctc-300m-int8.mlmodelc/**",
                 ],
                 offlineMode: offlineMode
             ) { fraction in
@@ -130,14 +132,16 @@ public class OmnilingualASRModel {
     }
 
     private static func loadCoreMLModel(from directory: URL) throws -> MLModel {
-        // The published repos use the .mlpackage layout. Prefer the compiled
-        // .mlmodelc if it exists (first-run cached), otherwise compile on the fly.
-        let packageURL = directory.appendingPathComponent(
-            "omnilingual-ctc-300m-int8.mlpackage", isDirectory: true)
-        guard FileManager.default.fileExists(atPath: packageURL.path) else {
+        // The aufklarer repo ships pre-compiled ``.mlmodelc``; the legacy
+        // ``.mlpackage`` is gone from the download glob (see ``fromPretrained``)
+        // so on-device ``MLModel.compileModel`` never runs — it drifts per
+        // runtime and was the cause of iOS-simulator regressions.
+        let compiledURL = directory.appendingPathComponent(
+            "omnilingual-ctc-300m-int8.mlmodelc", isDirectory: true)
+        guard FileManager.default.fileExists(atPath: compiledURL.path) else {
             throw AudioModelError.modelLoadFailed(
                 modelId: "omnilingual-ctc-300m",
-                reason: "mlpackage not found at \(packageURL.path)",
+                reason: "mlmodelc not found at \(compiledURL.path)",
                 underlying: nil)
         }
 
@@ -147,7 +151,6 @@ public class OmnilingualASRModel {
         configuration.computeUnits = .cpuAndGPU
 
         do {
-            let compiledURL = try MLModel.compileModel(at: packageURL)
             return try MLModel(contentsOf: compiledURL, configuration: configuration)
         } catch {
             throw AudioModelError.modelLoadFailed(

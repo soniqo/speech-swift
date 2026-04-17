@@ -10,20 +10,16 @@ class DeepFilterNet3Network {
 
     private let model: MLModel
 
-    /// Load a compiled Core ML model from a .mlpackage or .mlmodelc directory.
+    /// Load a pre-compiled Core ML model from a ``.mlmodelc`` directory.
+    ///
+    /// On-device ``MLModel.compileModel`` drifts per runtime (Mac vs
+    /// simulator vs iPhone), so we require a pre-compiled bundle. The
+    /// publishing pipeline (``speech-models/models/deepfilternet``) ships
+    /// only ``.mlmodelc`` for this reason.
     init(modelURL: URL, computeUnits: MLComputeUnits = .all) throws {
         let config = MLModelConfiguration()
         config.computeUnits = computeUnits
-
-        // Check for .mlmodelc (compiled) first, then compile from .mlpackage
-        let compiledURL: URL
-        if modelURL.pathExtension == "mlmodelc" {
-            compiledURL = modelURL
-        } else {
-            compiledURL = try MLModel.compileModel(at: modelURL)
-        }
-
-        self.model = try MLModel(contentsOf: compiledURL, configuration: config)
+        self.model = try MLModel(contentsOf: modelURL, configuration: config)
     }
 
     /// Run inference.

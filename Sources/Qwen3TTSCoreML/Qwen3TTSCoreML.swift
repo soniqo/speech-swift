@@ -69,17 +69,12 @@ public final class Qwen3TTSCoreMLModel {
 
         progressHandler?(0.7, "Loading models...")
 
-        // Load 6 models
+        // Load 6 models. The HuggingFace repo ships only ``.mlmodelc`` — on-device
+        // ``MLModel.compileModel`` is known to drift per runtime (Mac vs
+        // simulator vs iPhone) so we never run it here.
         func loadML(_ name: String, _ cfg: MLModelConfiguration = defaultConfig) throws -> MLModel {
-            // Try pre-compiled .mlmodelc first
             let compiledURL = resolvedCacheDir.appendingPathComponent("\(name).mlmodelc", isDirectory: true)
-            if FileManager.default.fileExists(atPath: compiledURL.path) {
-                return try MLModel(contentsOf: compiledURL, configuration: cfg)
-            }
-            // Compile from .mlpackage at runtime
-            let pkgURL = resolvedCacheDir.appendingPathComponent("\(name).mlpackage", isDirectory: true)
-            let compiled = try MLModel.compileModel(at: pkgURL)
-            return try MLModel(contentsOf: compiled, configuration: cfg)
+            return try MLModel(contentsOf: compiledURL, configuration: cfg)
         }
 
         model.textProjector = TextProjectorModel(model: try loadML("TextProjector", cpuConfig))

@@ -7,8 +7,10 @@ final class E2EQwen35CoreMLChatTests: XCTestCase {
 
     func testLocalModelGeneration() async throws {
         let localDir = URL(fileURLWithPath: "/tmp/Qwen3.5-CoreML-INT8")
-        guard FileManager.default.fileExists(atPath: localDir.appendingPathComponent("decoder.mlpackage").path) else {
-            print("No CoreML model at \(localDir.path), skipping")
+        // After the .mlpackage -> .mlmodelc migration, runtime loading only
+        // accepts the compiled bundle. Skip if the local cache predates that.
+        guard FileManager.default.fileExists(atPath: localDir.appendingPathComponent("decoder.mlmodelc").path) else {
+            print("No compiled CoreML model at \(localDir.path)/decoder.mlmodelc, skipping")
             return
         }
 
@@ -29,8 +31,8 @@ final class E2EQwen35CoreMLChatTests: XCTestCase {
 
     func testNoMetaCommentary() async throws {
         let localDir = URL(fileURLWithPath: "/tmp/Qwen3.5-CoreML-INT8")
-        guard FileManager.default.fileExists(atPath: localDir.appendingPathComponent("decoder.mlpackage").path) else {
-            print("No CoreML model, skipping")
+        guard FileManager.default.fileExists(atPath: localDir.appendingPathComponent("decoder.mlmodelc").path) else {
+            print("No compiled CoreML model, skipping")
             return
         }
 
@@ -48,5 +50,27 @@ final class E2EQwen35CoreMLChatTests: XCTestCase {
         print("CoreML response: '\(response.trimmingCharacters(in: .whitespacesAndNewlines))'")
         XCTAssertFalse(lower.contains("the user"), "No meta-commentary")
         XCTAssertTrue(lower.contains("paris"), "Should mention Paris")
+    }
+
+    /// Downloads the pre-compiled `.mlmodelc` bundle from HuggingFace and
+    /// runs one generation. Verifies the post-migration download glob
+    /// (`*.mlmodelc/**` only) actually resolves at runtime on the default
+    /// modelId. Gated on env to avoid multi-GB downloads on every test run.
+    func testHubFromPretrained() async throws {
+        guard ProcessInfo.processInfo.environment["RUN_HUB_E2E"] == "1" else {
+            throw XCTSkip("Set RUN_HUB_E2E=1 to exercise the HuggingFace download path")
+        }
+
+        let model = try await Qwen35CoreMLChat.fromPretrained(
+            computeUnits: .cpuAndGPU
+        )
+
+        let response = try model.generate(
+            messages: [ChatMessage(role: .user, content: "Reply with just the digit 7.")],
+            sampling: ChatSamplingConfig(temperature: 0.1, topK: 5, maxTokens: 10)
+        )
+        let trimmed = response.trimmingCharacters(in: .whitespacesAndNewlines)
+        print("Hub fromPretrained response: '\(trimmed)'")
+        XCTAssertFalse(trimmed.isEmpty, "Should produce non-empty response")
     }
 }

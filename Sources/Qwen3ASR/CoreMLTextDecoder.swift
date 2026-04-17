@@ -63,7 +63,7 @@ public class CoreMLTextDecoder {
             hiddenSize = json["hidden_size"] as? Int ?? 1024
         }
 
-        // Try compiled first, then mlpackage
+        // Only pre-compiled ``.mlmodelc`` is supported (see ``findModel``).
         let embURL = findModel(named: "embedding", in: directory)
         let decURL = findModel(named: "decoder", in: directory)
 
@@ -294,13 +294,12 @@ public class CoreMLTextDecoder {
     // MARK: - Helpers
 
     private static func findModel(named name: String, in directory: URL) -> URL? {
+        // Only pre-compiled ``.mlmodelc`` is supported — on-device
+        // ``MLModel.compileModel`` drifts per runtime, and the published
+        // ``aufklarer/Qwen3-ASR-CoreML`` repo ships compiled bundles only.
         let compiled = directory.appendingPathComponent("\(name).mlmodelc", isDirectory: true)
         if FileManager.default.fileExists(atPath: compiled.path) {
             return compiled
-        }
-        let pkg = directory.appendingPathComponent("\(name).mlpackage", isDirectory: true)
-        if FileManager.default.fileExists(atPath: pkg.path) {
-            return pkg
         }
         return nil
     }
