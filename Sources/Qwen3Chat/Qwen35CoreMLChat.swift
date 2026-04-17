@@ -89,7 +89,8 @@ public final class Qwen35CoreMLChat: @unchecked Sendable {
             to: cacheDir,
             additionalFiles: [
                 "\(variant)/*.json",
-                "\(variant)/**/*.mlmodelc/**",
+                "\(variant)/embedding.mlmodelc/**",
+                "\(variant)/decoder.mlmodelc/**",
             ],
             offlineMode: offlineMode,
             progressHandler: { p in progressHandler?(p * 0.5, "Downloading...") }
