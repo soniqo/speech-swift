@@ -70,12 +70,14 @@ jobs:
 
       - name: Set up scratch tap
         # brew audit/style refuse to operate on a loose file path; they
-        # insist the formula live in a tap. Create a scratch tap, symlink
-        # our formula into it, and run the checks there.
+        # insist the formula live in a tap. Create a scratch tap and
+        # copy the formula into it (symlinks get resolved back to the
+        # workspace path during audit parsing, which brew rejects as
+        # "formula not in a tap").
         run: |
           TAP_DIR="$(brew --repository)/Library/Taps/speech-swift-ci/homebrew-local"
           mkdir -p "$TAP_DIR/Formula"
-          ln -sf "$GITHUB_WORKSPACE/Formula/speech.rb" "$TAP_DIR/Formula/speech.rb"
+          cp "$GITHUB_WORKSPACE/Formula/speech.rb" "$TAP_DIR/Formula/speech.rb"
           echo "TAP_DIR=$TAP_DIR" >> "$GITHUB_ENV"
 
       - name: brew style
