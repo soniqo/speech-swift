@@ -35,6 +35,38 @@ Converts raw audio to a mel spectrogram `[128, T]` using Accelerate framework.
 - **Prefill** (seqLen > 1): all prompt tokens in one forward pass
 - **Decode** (seqLen = 1): SDPA uses optimized T_q=1 Metal kernel
 
+## Decoder Options
+
+`transcribe(audio:sampleRate:options:)` accepts a `Qwen3DecodingOptions`
+struct that exposes the HuggingFace-style decoding knobs:
+
+| Field | Default | Notes |
+|---|---|---|
+| `maxTokens` | `448` | Cap on decoder output per chunk. |
+| `language` | `nil` | Hint; `nil` → auto-detect. |
+| `context` | `nil` | Prefix prepended to the decoder prompt. |
+| `repetitionPenalty` | `1.0` | HF divisor; `1.1`–`1.3` typical. Positive logits divide, negative logits multiply — matches the HF sign-aware branch so the penalty always reduces the probability of the already-generated token. |
+| `noRepeatNgramSize` | `0` | Masks tokens that would form a repeated n-gram of this size. `0` disables. |
+| `temperature` | `0.0` | `0` = greedy (argmax). `> 0` = sample via Gumbel-max (`argmax(logits/T + Gumbel(0,1)) ~ softmax(logits/T)`). |
+
+All defaults preserve the legacy greedy path byte-for-byte via a fast-path
+that bypasses logit manipulation when `repetitionPenalty == 1.0 &&
+noRepeatNgramSize == 0 && temperature == 0`.
+
+The canonical defence against "percent percent percent..." loops on silence
+or ambiguous audio is `repetitionPenalty = 1.15`:
+
+```swift
+let text = model.transcribe(
+    audio: samples,
+    sampleRate: 16000,
+    options: Qwen3DecodingOptions(repetitionPenalty: 1.15)
+)
+```
+
+The legacy overload `transcribe(audio:sampleRate:language:maxTokens:context:)`
+remains available and forwards into the new path with default options.
+
 ## Performance
 
 | Model | Framework | RTF | 10s audio processed in |

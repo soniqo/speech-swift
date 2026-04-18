@@ -315,8 +315,6 @@ public final class WakeWordDetector {
                 modelId: name, reason: "CoreML model not found at \(url.path)"
             )
         }
-        let mlConfig = MLModelConfiguration()
-        mlConfig.computeUnits = units
-        return try MLModel(contentsOf: url, configuration: mlConfig)
+        return try CoreMLLoader.load(url: url, computeUnits: units, name: "kws-\(name)")
     }
 }

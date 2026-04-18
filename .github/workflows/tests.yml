@@ -61,3 +61,30 @@ jobs:
             echo "Building $demo..."
             (cd "$demo" && swift build --disable-sandbox) || exit 1
           done
+
+  homebrew-lint:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up scratch tap
+        # brew audit/style refuse to operate on a loose file path; they
+        # insist the formula live in a tap. Create a scratch tap and
+        # copy the formula into it (symlinks get resolved back to the
+        # workspace path during audit parsing, which brew rejects as
+        # "formula not in a tap").
+        run: |
+          TAP_DIR="$(brew --repository)/Library/Taps/speech-swift-ci/homebrew-local"
+          mkdir -p "$TAP_DIR/Formula"
+          cp "$GITHUB_WORKSPACE/Formula/speech.rb" "$TAP_DIR/Formula/speech.rb"
+          echo "TAP_DIR=$TAP_DIR" >> "$GITHUB_ENV"
+
+      - name: brew style
+        run: brew style speech-swift-ci/local/speech
+
+      - name: brew audit (lint only — offline, no URL fetch)
+        # --strict catches the nits brew's maintainers flag for tap formulae;
+        # --new-formula would gate on extra Homebrew-core requirements that
+        # don't apply to our tap, so we skip it.
+        run: brew audit --strict --tap=speech-swift-ci/local speech
