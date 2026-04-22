@@ -1,6 +1,7 @@
 import XCTest
 @testable import NemotronStreamingASR
 @testable import AudioCommon
+@testable import KokoroTTS
 import CoreML
 
 final class NemotronStreamingConfigTests: XCTestCase {
@@ -147,5 +148,33 @@ final class E2ENemotronStreamingASRTests: XCTestCase {
         m.unload()
         XCTAssertFalse(m.isLoaded)
         XCTAssertEqual(m.memoryFootprint, 0)
+    }
+
+    /// Synthesize a known phrase with Kokoro and transcribe it through Nemotron.
+    /// Kokoro produces 24 kHz audio; Nemotron resamples internally to 16 kHz.
+    ///
+    /// The threshold is 3/5 content words rather than full-string match: TTS→ASR
+    /// chains routinely introduce leading-breath artifacts (e.g. "The" heard as
+    /// "But a") and cache-aware streaming can clip a few hundred ms at the tail.
+    /// Three-of-five content-word recovery is a strong end-to-end signal without
+    /// being brittle to acoustic noise from the synthesizer.
+    func testTTSRoundTrip() async throws {
+        let nemotron = try model
+        let tts = try await KokoroTTSModel.fromPretrained()
+
+        let phrase = "The quick brown fox jumps over the lazy dog"
+        let audio24k = try tts.synthesize(text: phrase, voice: "af_heart")
+        XCTAssertGreaterThan(audio24k.count, 24000, "TTS should produce at least 1s of audio")
+
+        let transcript = try nemotron.transcribeAudio(audio24k, sampleRate: 24000)
+        print("Round-trip input:  \"\(phrase)\"")
+        print("Round-trip output: \"\(transcript)\"")
+
+        let normalized = transcript.lowercased()
+        let expected = ["quick", "brown", "fox", "jumps", "over"]
+        let matched = expected.filter { normalized.contains($0) }
+        XCTAssertGreaterThanOrEqual(matched.count, 3,
+            "Round-trip transcript should recover at least 3/\(expected.count) content words. " +
+            "Matched: \(matched). Transcript: \"\(transcript)\"")
     }
 }
