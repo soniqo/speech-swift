@@ -100,6 +100,29 @@ final class ForcedAlignerTests: XCTestCase {
         XCTAssertFalse(words.contains(" "))
     }
 
+    // MARK: - Out-of-scope languages (documents current behavior)
+
+    /// Thai has no word-level whitespace and is not in the Qwen3
+    /// forced-aligner supported language set. The default whitespace +
+    /// Han-only path collapses the whole string to a single token. This
+    /// test documents that behavior so future contributors understand the
+    /// limitation rather than treating it as a bug.
+    func testTextPreprocessingThaiCollapses() {
+        let words = TextPreprocessor.splitIntoWords("สวัสดีครับวันนี้อากาศดี", language: "thai")
+        XCTAssertEqual(words.count, 1,
+            "Thai is not a supported language; expect single-token collapse. Got: \(words)")
+    }
+
+    /// Same for German — works like English. Compound words stay as one
+    /// orthographic token (e.g. "Donaudampfschifffahrtsgesellschaft"),
+    /// matching what the model was trained on.
+    func testTextPreprocessingGerman() {
+        let words = TextPreprocessor.splitIntoWords(
+            "Guten Morgen, Donaudampfschifffahrtsgesellschaft!",
+            language: "german")
+        XCTAssertEqual(words, ["Guten", "Morgen", "Donaudampfschifffahrtsgesellschaft"])
+    }
+
     func testTimestampCorrectionAlreadyMonotonic() {
         let input = [1, 3, 5, 7, 9, 11]
         let corrected = TimestampCorrection.enforceMonotonicity(input)

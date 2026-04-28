@@ -14,21 +14,17 @@ public struct SlottedText: Sendable {
 
 /// Language-specific text preprocessing for forced alignment.
 ///
-/// Mirrors the upstream reference `Qwen3ForceAlignProcessor.encode_timestamp`
-/// from `QwenLM/Qwen3-ASR/qwen_asr/inference/qwen3_forced_aligner.py`:
+/// Three paths:
+/// - Japanese → morpheme-level segmentation
+/// - Korean   → word-level segmentation
+/// - Other    → whitespace split + per-Han-ideograph break
 ///
-/// ```python
-/// if language == "japanese": tokenize_japanese(text)   # nagisa morphemes
-/// elif language == "korean": tokenize_korean(text)     # soynlp LTokenizer
-/// else:                      tokenize_space_lang(text) # whitespace + per-Han break
-/// ```
-///
-/// Universal `clean_token` strips anything that isn't a Unicode Letter / Number
-/// (or an ASCII apostrophe). `is_cjk_char` is Han-ideographs **only** —
-/// hiragana, katakana, and Hangul are NOT split per character because the
-/// model was trained to emit `<timestamp>` slots between morphemes for those
-/// scripts (Japanese via nagisa, Korean via soynlp), not between every kana
-/// or jamo.
+/// Tokens are filtered to keep only Unicode Letters / Numbers and the ASCII
+/// apostrophe — punctuation, symbols, and marks are stripped before
+/// timestamp slots are inserted. Han-ideograph splitting is restricted to
+/// CJK Unified + Extensions A–E + Compatibility; hiragana, katakana, and
+/// Hangul are NOT split per character (the model emits timestamp slots
+/// between morphemes for those scripts, not between every kana or jamo).
 public enum TextPreprocessor {
 
     /// Split text into words and insert timestamp slots for alignment.
@@ -83,25 +79,18 @@ public enum TextPreprocessor {
         return tokenizeSpaceLang(text)
     }
 
-    // MARK: - Japanese (nagisa-equivalent via Apple NLTokenizer)
+    // MARK: - Japanese
 
-    /// Morpheme-level segmentation, matching upstream `tokenize_japanese`
-    /// (which uses `nagisa.tagging`). Apple's `NLTokenizer(.word)` for
-    /// Japanese performs morphological word segmentation backed by the
-    /// platform's built-in Japanese tokenizer (similar accuracy to MeCab
-    /// IPADic), producing morphemes like `["今日", "は", "いい", "天気",
-    /// "です", "ね"]` — comparable granularity to nagisa.
+    /// Morpheme-level segmentation via Apple's `NLTokenizer`. Produces
+    /// tokens like `["今日", "は", "いい", "天気", "です", "ね"]`.
     static func tokenizeJapanese(_ text: String) -> [String] {
         return nlTokenize(text, language: .japanese)
     }
 
-    // MARK: - Korean (soynlp-equivalent via Apple NLTokenizer)
+    // MARK: - Korean
 
-    /// Morpheme-ish segmentation, matching upstream `tokenize_korean`
-    /// (`soynlp.LTokenizer`). NLTokenizer for Korean splits on word
-    /// boundaries; this produces coarser granularity than soynlp's L-part
-    /// extraction but is the closest natively-available segmenter and avoids
-    /// the per-jamo character split that would be wrong here.
+    /// Word-level segmentation via Apple's `NLTokenizer`. Avoids the
+    /// per-jamo character split that would be wrong for Korean.
     static func tokenizeKorean(_ text: String) -> [String] {
         return nlTokenize(text, language: .korean)
     }
@@ -122,11 +111,15 @@ public enum TextPreprocessor {
     // MARK: - Default path (whitespace + per-Han break)
 
     /// Whitespace split, then per-Han-ideograph break inside each segment.
-    /// Matches upstream `tokenize_space_lang` + `split_segment_with_chinese`.
     /// Used for **everything** except Japanese and Korean — including
     /// English, Chinese, European languages, Hindi, Arabic, etc. Chinese
     /// works because most Chinese text has no whitespace, so each ideograph
     /// becomes its own token via the per-Han break.
+    ///
+    /// Note: scripts without word-level whitespace (e.g. Thai, Lao, Khmer,
+    /// Burmese) collapse to a single token here. The Qwen3 forced aligner
+    /// model does not officially support those languages, so this matches
+    /// the supported feature set.
     static func tokenizeSpaceLang(_ text: String) -> [String] {
         var tokens: [String] = []
         for raw in text.split(whereSeparator: \.isWhitespace) {
@@ -139,7 +132,6 @@ public enum TextPreprocessor {
 
     /// Inside a non-empty whitespace-bounded segment, peel each Han ideograph
     /// out as its own token while leaving non-Han runs grouped.
-    /// Mirrors upstream `split_segment_with_chinese`.
     private static func splitSegmentWithChinese(_ seg: String) -> [String] {
         var tokens: [String] = []
         var buf = ""
@@ -158,8 +150,8 @@ public enum TextPreprocessor {
     // MARK: - Cleaning + classification
 
     /// Keep only Unicode Letters (`L*`), Numbers (`N*`), and ASCII apostrophe.
-    /// Mirrors upstream `is_kept_char` + `clean_token`. Strips punctuation
-    /// (e.g. the full-width period `。`), symbols, separators, and marks.
+    /// Strips punctuation (e.g. the full-width period `。`), symbols,
+    /// separators, and marks.
     static func cleanToken(_ token: String) -> String {
         var out = ""
         for scalar in token.unicodeScalars {
@@ -183,10 +175,10 @@ public enum TextPreprocessor {
         }
     }
 
-    /// Han ideograph ranges only — matches upstream `is_cjk_char` exactly.
-    /// Notably **excludes** hiragana (0x3040–0x309F), katakana (0x30A0–0x30FF),
-    /// and Hangul syllables (0xAC00–0xD7AF), which are handled by the
-    /// language-specific tokenizers (Japanese / Korean) instead.
+    /// Han ideograph ranges only. Notably **excludes** hiragana
+    /// (0x3040–0x309F), katakana (0x30A0–0x30FF), and Hangul syllables
+    /// (0xAC00–0xD7AF), which are handled by the language-specific
+    /// tokenizers (Japanese / Korean) instead.
     static func isHanIdeograph(_ scalar: Unicode.Scalar) -> Bool {
         let v = scalar.value
         if v >= 0x4E00 && v <= 0x9FFF   { return true }  // CJK Unified
