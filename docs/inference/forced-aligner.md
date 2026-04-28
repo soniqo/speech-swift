@@ -63,19 +63,53 @@ Same as ASR: mel spectrogram → chunked Conv2D → transformer → projector.
 
 ### 2. Text Preprocessing (TextPreprocessing.swift)
 
-Text is split into words (language-specific) and `<timestamp>` tokens inserted:
+The Swift preprocessor matches the upstream reference dispatch in `QwenLM/Qwen3-ASR/qwen_asr/inference/qwen3_forced_aligner.py` (`Qwen3ForceAlignProcessor.encode_timestamp`):
 
-**English:** Split on whitespace
+| Language | Upstream | Swift port |
+|---|---|---|
+| `japanese` | `nagisa.tagging` (BiLSTM-CRF morphemes) | `NLTokenizer(unit: .word, language: .japanese)` |
+| `korean` | `soynlp.LTokenizer` | `NLTokenizer(unit: .word, language: .korean)` |
+| Everything else | `tokenize_space_lang` | whitespace split + per-Han break |
+
+Plus a universal `clean_token` filter that keeps only Unicode Letters (`L*`), Numbers (`N*`), and ASCII apostrophe — punctuation, symbols, and marks are stripped before the timestamp slots are inserted. `is_cjk_char` covers **Han ideographs only** (CJK Unified `0x4E00–0x9FFF`, Extensions A–E, Compatibility `0xF900–0xFAFF`); hiragana, katakana, and Hangul are deliberately excluded — those are handled by the language-specific morphological tokenizers.
+
+**English / European / Hindi / Arabic / etc. (default path):**
 ```
 "Can you guarantee" → ["Can", "you", "guarantee"]
+"Hello, world!"     → ["Hello", "world"]    # punctuation stripped
+"don't stop"        → ["don't", "stop"]     # apostrophe kept
 ```
 
-**CJK:** Character-level splitting
+**Chinese (default path, no whitespace → per-Han split):**
 ```
-"你好世界" → ["你", "好", "世", "界"]
+"你好世界"           → ["你", "好", "世", "界"]
+"Hello你好world"     → ["Hello", "你", "好", "world"]
 ```
 
-Each word gets `<timestamp>` pairs:
+**Japanese (NLTokenizer, morpheme-level):**
+```
+"今日はいい天気ですね"     → ["今日", "は", "いい", "天気", "です", "ね"]
+"コンピュータ"             → ["コンピュータ"]   # 1 token, NOT 6 per-char
+"こんにちは"               → ["こんにちは"]     # 1 token, NOT 5
+"iPhoneを使います"         → ["iPhone", "を", "使い", "ます"]
+```
+
+**Korean (NLTokenizer, word-level):**
+```
+"안녕하세요 반갑습니다" → ["안녕하세요", "반갑습니다"]   # 2 word tokens, NOT 11 per-syllable
+```
+
+#### NLTokenizer vs upstream nagisa / soynlp — known divergences
+
+We intentionally avoid bundling MeCab + IPADic (~50 MB) or porting nagisa's BiLSTM model. Apple's `NLTokenizer` ships with the OS, requires zero extra binary size, and produces morpheme-level Japanese / word-level Korean output that is granular-equivalent to nagisa / soynlp on common text. The model treats these tokens as atomic units between which it places `<timestamp>` slots, so morpheme **count** and **rough boundaries** matter much more than exact morpheme identity — small boundary differences (e.g. `使い + ます` vs `使う + ます`) are absorbed by the same `<timestamp>` placement.
+
+Observed divergences vs upstream Python:
+- Japanese: NLTokenizer occasionally splits alphanumeric runs that nagisa keeps together (e.g. `"5G"` → `"5", "G"` instead of `"5G"`). Affects word **count** but not alignment quality — the model still produces correct timestamp boundaries.
+- Korean: NLTokenizer is coarser than soynlp's L-part extraction. Hangul-only sentences will see slightly different word counts. Acceptable in practice — no per-syllable explosion, which is what the model is sensitive to.
+
+For applications requiring bit-exact upstream parity (e.g. medical / legal Japanese transcription), port `nagisa` to MLX as a tiny companion model (~3 MB) in a follow-up; everything else can stay on `NLTokenizer`.
+
+Each token gets `<timestamp>` pairs:
 ```
 <ts>Can<ts> <ts>you<ts> <ts>guarantee<ts>
 ```
