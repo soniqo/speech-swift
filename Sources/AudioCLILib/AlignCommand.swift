@@ -24,6 +24,9 @@ public struct AlignCommand: ParsableCommand {
     @Option(name: .long, help: "Language hint (optional)")
     public var language: String?
 
+    @Option(name: .long, help: "Max ASR decoder tokens when transcribing (≈ 250 tokens/min)")
+    public var maxTokens: Int = 4096
+
     public init() {}
 
     public func run() throws {
@@ -46,7 +49,11 @@ public struct AlignCommand: ParsableCommand {
                     modelId: modelId, progressHandler: reportProgress)
 
                 print("Transcribing...")
-                textToAlign = asrModel.transcribe(audio: audio, sampleRate: 24000, language: language)
+                textToAlign = asrModel.transcribe(
+                    audio: audio,
+                    sampleRate: 24000,
+                    language: language,
+                    maxTokens: maxTokens)
                 print("Transcription: \(textToAlign!)")
             }
 
