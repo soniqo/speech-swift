@@ -63,19 +63,48 @@ Same as ASR: mel spectrogram → chunked Conv2D → transformer → projector.
 
 ### 2. Text Preprocessing (TextPreprocessing.swift)
 
-Text is split into words (language-specific) and `<timestamp>` tokens inserted:
+Language dispatch:
 
-**English:** Split on whitespace
+| Language | Tokenizer |
+|---|---|
+| Japanese | `NLTokenizer(.japanese)` — morpheme-level |
+| Korean | `NLTokenizer(.korean)` — word-level |
+| Thai / Lao / Khmer / Burmese / Tibetan | `NLTokenizer(<lang>)` — native segmentation for scripts without word-level whitespace |
+| Everything else | whitespace split + per-Han ideograph break |
+
+A universal token filter keeps Unicode Letters (`L*`), Numbers (`N*`), combining Marks (`Mn`/`Mc`/`Me`), and the ASCII apostrophe — punctuation, symbols, and separators are stripped. Combining marks must be preserved so scripts like Devanagari, Thai, Bengali, and Tibetan keep their vowel and tone marks intact (e.g. `नमस्ते`, `สวัสดี`). The Han-ideograph break covers CJK Unified `0x4E00–0x9FFF`, Extensions A–E, and Compatibility `0xF900–0xFAFF`; hiragana, katakana, and Hangul are deliberately **not** broken per character — those scripts are handled by the language-specific tokenizers.
+
+**English / European / Hindi / Arabic / etc. (default path):**
 ```
 "Can you guarantee" → ["Can", "you", "guarantee"]
+"Hello, world!"     → ["Hello", "world"]    # punctuation stripped
+"don't stop"        → ["don't", "stop"]     # apostrophe kept
 ```
 
-**CJK:** Character-level splitting
+**Chinese (default path, no whitespace → per-Han split):**
 ```
-"你好世界" → ["你", "好", "世", "界"]
+"你好世界"           → ["你", "好", "世", "界"]
+"Hello你好world"     → ["Hello", "你", "好", "world"]
 ```
 
-Each word gets `<timestamp>` pairs:
+**Japanese (NLTokenizer, morpheme-level):**
+```
+"今日はいい天気ですね"     → ["今日", "は", "いい", "天気", "です", "ね"]
+"コンピュータ"             → ["コンピュータ"]   # 1 token, NOT 6 per-char
+"こんにちは"               → ["こんにちは"]     # 1 token, NOT 5
+"iPhoneを使います"         → ["iPhone", "を", "使い", "ます"]
+```
+
+**Korean (NLTokenizer, word-level):**
+```
+"안녕하세요 반갑습니다" → ["안녕하세요", "반갑습니다"]   # 2 word tokens, NOT 11 per-syllable
+```
+
+#### Why NLTokenizer
+
+`NLTokenizer` is built into the OS — zero extra binary size, on-device, and produces morpheme-level Japanese and word-level Korean output suitable for the aligner. The model's timestamp head only cares about morpheme **boundaries**, not exact morpheme identity, so small differences (e.g. NLTokenizer splits `"5G"` → `"5", "G"`) don't affect timestamp quality.
+
+Each token gets `<timestamp>` pairs:
 ```
 <ts>Can<ts> <ts>you<ts> <ts>guarantee<ts>
 ```

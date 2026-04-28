@@ -9,28 +9,156 @@ final class ForcedAlignerTests: XCTestCase {
 
     // MARK: - Unit Tests (no model download)
 
+    // MARK: - Default path (matches upstream `tokenize_space_lang`)
+
     func testTextPreprocessingEnglish() {
-        // Test the word splitting logic
         let words = TextPreprocessor.splitIntoWords("Hello world test", language: "English")
         XCTAssertEqual(words, ["Hello", "world", "test"])
     }
 
-    func testTextPreprocessingCJK() {
+    /// Pure Chinese has no whitespace → each Han ideograph becomes its own
+    /// token via `split_segment_with_chinese`.
+    func testTextPreprocessingChinese() {
         let words = TextPreprocessor.splitIntoWords("你好世界", language: "Chinese")
-        XCTAssertEqual(words.count, 4)
-        XCTAssertEqual(words[0], "你")
-        XCTAssertEqual(words[1], "好")
-        XCTAssertEqual(words[2], "世")
-        XCTAssertEqual(words[3], "界")
+        XCTAssertEqual(words, ["你", "好", "世", "界"])
     }
 
-    func testTextPreprocessingMixedCJK() {
+    /// Han ideographs peel out of Latin-bordered text but Latin runs stay
+    /// grouped. Matches upstream behavior exactly.
+    func testTextPreprocessingMixedHanLatin() {
         let words = TextPreprocessor.splitIntoWords("Hello你好world", language: "Chinese")
-        XCTAssertEqual(words.count, 4)
-        XCTAssertEqual(words[0], "Hello")
-        XCTAssertEqual(words[1], "你")
-        XCTAssertEqual(words[2], "好")
-        XCTAssertEqual(words[3], "world")
+        XCTAssertEqual(words, ["Hello", "你", "好", "world"])
+    }
+
+    /// Punctuation is stripped by `clean_token` (only Unicode L*/N* + `'` are
+    /// kept). The full-width period `。` must NOT appear as a token.
+    func testTextPreprocessingPunctuationStripped() {
+        let words = TextPreprocessor.splitIntoWords("Hello, world!", language: "English")
+        XCTAssertEqual(words, ["Hello", "world"])
+    }
+
+    func testTextPreprocessingApostropheKept() {
+        let words = TextPreprocessor.splitIntoWords("don't stop", language: "English")
+        XCTAssertEqual(words, ["don't", "stop"])
+    }
+
+    // MARK: - Japanese (NLTokenizer morpheme-level, matches upstream nagisa)
+
+    /// Japanese must NOT split per kana. Upstream uses nagisa morphemes;
+    /// we use Apple's NLTokenizer for equivalent granularity.
+    /// "おはようございます。今日はいい天気ですね。" should produce a small
+    /// number of morphemes (≈6–10), not 21 per-character tokens.
+    func testTextPreprocessingJapaneseMorpheme() {
+        let words = TextPreprocessor.splitIntoWords(
+            "おはようございます。今日はいい天気ですね。",
+            language: "japanese")
+        XCTAssertGreaterThan(words.count, 1, "Should produce multiple morphemes")
+        XCTAssertLessThan(words.count, 15,
+            "Japanese should be morpheme-level (~6–10), not per-char (21). Got \(words.count): \(words)")
+        // Punctuation must be stripped.
+        XCTAssertFalse(words.contains("。"), "Full-width period should be cleaned")
+    }
+
+    /// Pure katakana word should be a single morpheme, not 6 per-char tokens.
+    func testTextPreprocessingKatakanaSingleWord() {
+        let words = TextPreprocessor.splitIntoWords("コンピュータ", language: "ja")
+        XCTAssertEqual(words, ["コンピュータ"],
+            "Katakana word should NOT split per character — got \(words)")
+    }
+
+    /// Pure hiragana greeting should not split per kana.
+    func testTextPreprocessingHiraganaGreeting() {
+        let words = TextPreprocessor.splitIntoWords("こんにちは", language: "ja")
+        XCTAssertEqual(words.count, 1,
+            "Hiragana greeting should be one morpheme, got \(words)")
+    }
+
+    /// Mixed Japanese + Latin: Latin words stay intact, JP segmented by
+    /// NLTokenizer. Punctuation stripped.
+    func testTextPreprocessingJapaneseWithLatin() {
+        let words = TextPreprocessor.splitIntoWords(
+            "iPhoneを使います。",
+            language: "japanese")
+        XCTAssertTrue(words.contains("iPhone"),
+            "Latin run should stay grouped, got: \(words)")
+        XCTAssertFalse(words.contains("。"))
+        // Should be morpheme-level, not per-kana — at most ~5 tokens.
+        XCTAssertLessThan(words.count, 7,
+            "Japanese+Latin should be morpheme-level, got \(words.count): \(words)")
+    }
+
+    // MARK: - Korean (NLTokenizer, matches upstream soynlp)
+
+    /// Korean must NOT split per Hangul syllable. Upstream uses soynlp
+    /// LTokenizer; we use Apple's NLTokenizer for native word segmentation.
+    func testTextPreprocessingKorean() {
+        let words = TextPreprocessor.splitIntoWords("안녕하세요 반갑습니다", language: "korean")
+        XCTAssertGreaterThan(words.count, 0)
+        // Must NOT be 11 per-syllable tokens.
+        XCTAssertLessThan(words.count, 6,
+            "Korean should be word/morpheme level, not per-syllable. Got \(words.count): \(words)")
+        XCTAssertFalse(words.contains(" "))
+    }
+
+    // MARK: - Asian scripts without word-level whitespace
+    // (NLTokenizer handles these natively — no extra dependency.)
+
+    /// Thai must NOT collapse to one token. NLTokenizer for Thai produces
+    /// reasonable word-level segmentation (no whitespace in source text).
+    func testTextPreprocessingThai() {
+        let words = TextPreprocessor.splitIntoWords(
+            "สวัสดีครับวันนี้อากาศดี", language: "thai")
+        XCTAssertGreaterThan(words.count, 2,
+            "Thai should segment into multiple words. Got \(words.count): \(words)")
+        XCTAssertTrue(words.contains("สวัสดี") || words.contains("วันนี้"),
+            "Expected common Thai word in output, got: \(words)")
+    }
+
+    func testTextPreprocessingLao() {
+        let words = TextPreprocessor.splitIntoWords("ສະບາຍດີຕອນເຊົ້າ", language: "lo")
+        XCTAssertGreaterThan(words.count, 1, "Lao should segment, got: \(words)")
+    }
+
+    func testTextPreprocessingKhmer() {
+        let words = TextPreprocessor.splitIntoWords("សួស្ដីពេលព្រឹក", language: "km")
+        XCTAssertGreaterThan(words.count, 1, "Khmer should segment, got: \(words)")
+    }
+
+    func testTextPreprocessingBurmese() {
+        let words = TextPreprocessor.splitIntoWords("မင်္ဂလာပါမနက်ဖြန်", language: "burmese")
+        XCTAssertGreaterThan(words.count, 1, "Burmese should segment, got: \(words)")
+    }
+
+    func testTextPreprocessingTibetan() {
+        let words = TextPreprocessor.splitIntoWords("བཀྲ་ཤིས་བདེ་ལེགས།", language: "tibetan")
+        XCTAssertGreaterThan(words.count, 1, "Tibetan should segment, got: \(words)")
+    }
+
+    /// Hindi (Devanagari) uses whitespace between words but each word
+    /// contains combining vowel marks (matras like `ि`, `ी`, `े`, `ो`).
+    /// Marks must be preserved — otherwise "नमस्ते" mangles to "नमसत".
+    func testTextPreprocessingHindiMarksPreserved() {
+        let words = TextPreprocessor.splitIntoWords("नमस्ते दोस्त", language: "hindi")
+        XCTAssertEqual(words.count, 2)
+        XCTAssertEqual(words[0], "नमस्ते", "Devanagari combining marks must survive cleanToken")
+        XCTAssertEqual(words[1], "दोस्त")
+    }
+
+    /// Bengali likewise uses combining marks and whitespace.
+    func testTextPreprocessingBengaliMarksPreserved() {
+        let words = TextPreprocessor.splitIntoWords("নমস্কার বন্ধু", language: "bengali")
+        XCTAssertEqual(words.count, 2)
+        XCTAssertEqual(words[0], "নমস্কার")
+    }
+
+    /// Same for German — works like English. Compound words stay as one
+    /// orthographic token (e.g. "Donaudampfschifffahrtsgesellschaft"),
+    /// matching what the model was trained on.
+    func testTextPreprocessingGerman() {
+        let words = TextPreprocessor.splitIntoWords(
+            "Guten Morgen, Donaudampfschifffahrtsgesellschaft!",
+            language: "german")
+        XCTAssertEqual(words, ["Guten", "Morgen", "Donaudampfschifffahrtsgesellschaft"])
     }
 
     func testTimestampCorrectionAlreadyMonotonic() {
