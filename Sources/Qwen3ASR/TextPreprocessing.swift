@@ -8,8 +8,18 @@ public struct SlottedText: Sendable {
     public let tokenIds: [Int]
     /// Indices within tokenIds that are timestamp tokens
     public let timestampPositions: [Int]
-    /// The original words (one per timestamp pair)
+    /// Surface forms of the words (one per timestamp pair). Adjacent
+    /// punctuation is preserved here so callers can reconstruct sentences;
+    /// the model itself only sees the punctuation-stripped form.
     public let words: [String]
+}
+
+/// Surface + cleaned form of a single word emitted by tokenization.
+/// `surface` keeps adjacent punctuation; `cleaned` is what the model tokenizer
+/// sees (letters, numbers, and combining marks only).
+struct WordPair: Sendable {
+    var surface: String
+    let cleaned: String
 }
 
 /// Language-specific text preprocessing for forced alignment.
@@ -25,6 +35,10 @@ public struct SlottedText: Sendable {
 /// CJK Unified + Extensions A–E + Compatibility; hiragana, katakana, and
 /// Hangul are NOT split per character (the model emits timestamp slots
 /// between morphemes for those scripts, not between every kana or jamo).
+///
+/// Punctuation that surrounds a word (commas, periods, brackets, CJK
+/// `，。！？` etc.) is preserved on the `surface` form so subtitle / SRT
+/// pipelines can still split on sentence boundaries after alignment.
 public enum TextPreprocessor {
 
     /// Split text into words and insert timestamp slots for alignment.
@@ -36,16 +50,23 @@ public enum TextPreprocessor {
         tokenizer: Qwen3Tokenizer,
         language: String = "English"
     ) -> SlottedText {
-        let words = splitIntoWords(text, language: language)
+        let pairs = splitIntoWordPairs(text, language: language)
         let tsId = Qwen3ASRTokens.timestampTokenId
 
         var tokenIds: [Int] = []
         var timestampPositions: [Int] = []
         var validWords: [String] = []
 
-        for word in words {
-            let wordTokens = tokenizer.encode(word)
-            guard !wordTokens.isEmpty else { continue }
+        for pair in pairs {
+            let wordTokens = tokenizer.encode(pair.cleaned)
+            guard !wordTokens.isEmpty else {
+                // Cleaned form unencodable: attach surface to previous word
+                // so we don't drop punctuation that anchored to it.
+                if !validWords.isEmpty {
+                    validWords[validWords.count - 1] += pair.surface
+                }
+                continue
+            }
 
             timestampPositions.append(tokenIds.count)
             tokenIds.append(tsId)
@@ -55,7 +76,7 @@ public enum TextPreprocessor {
             timestampPositions.append(tokenIds.count)
             tokenIds.append(tsId)
 
-            validWords.append(word)
+            validWords.append(pair.surface)
         }
 
         return SlottedText(
@@ -66,22 +87,30 @@ public enum TextPreprocessor {
     }
 
     /// Split text into words using the language-appropriate strategy.
+    /// Returned strings are the cleaned (punctuation-stripped) forms,
+    /// intended for callers that don't care about surface preservation.
     static func splitIntoWords(_ text: String, language: String) -> [String] {
+        return splitIntoWordPairs(text, language: language).map { $0.cleaned }
+    }
+
+    /// Split text into (surface, cleaned) pairs. Surface keeps adjacent
+    /// punctuation; cleaned is what the model tokenizer sees.
+    static func splitIntoWordPairs(_ text: String, language: String) -> [WordPair] {
         let lang = language.lowercased()
 
         if lang.contains("japanese") || lang == "ja" {
-            return tokenizeJapanese(text)
+            return nlTokenizePairs(text, language: .japanese)
         }
         if lang.contains("korean") || lang == "ko" {
-            return tokenizeKorean(text)
+            return nlTokenizePairs(text, language: .korean)
         }
         // Scripts without word-level whitespace where Apple's NLTokenizer
         // provides native segmentation. Without these dispatches the
         // default whitespace path collapses each sentence to one token.
         if let nlLang = nlLanguageForUnspaced(lang) {
-            return nlTokenize(text, language: nlLang)
+            return nlTokenizePairs(text, language: nlLang)
         }
-        return tokenizeSpaceLang(text)
+        return tokenizeSpaceLangPairs(text)
     }
 
     private static func nlLanguageForUnspaced(_ lang: String) -> NLLanguage? {
@@ -93,33 +122,42 @@ public enum TextPreprocessor {
         return nil
     }
 
-    // MARK: - Japanese
+    // MARK: - Japanese / Korean / unspaced scripts
 
-    /// Morpheme-level segmentation via Apple's `NLTokenizer`. Produces
-    /// tokens like `["今日", "は", "いい", "天気", "です", "ね"]`.
-    static func tokenizeJapanese(_ text: String) -> [String] {
-        return nlTokenize(text, language: .japanese)
-    }
-
-    // MARK: - Korean
-
-    /// Word-level segmentation via Apple's `NLTokenizer`. Avoids the
-    /// per-jamo character split that would be wrong for Korean.
-    static func tokenizeKorean(_ text: String) -> [String] {
-        return nlTokenize(text, language: .korean)
-    }
-
-    private static func nlTokenize(_ text: String, language: NLLanguage) -> [String] {
+    /// Apple's `NLTokenizer` reports word ranges (without surrounding
+    /// punctuation). We attach trailing non-letter, non-whitespace
+    /// characters between consecutive word ranges to the preceding word's
+    /// surface so commas, full-width periods, etc. ride along.
+    private static func nlTokenizePairs(_ text: String, language: NLLanguage) -> [WordPair] {
         let tokenizer = NLTokenizer(unit: .word)
         tokenizer.setLanguage(language)
         tokenizer.string = text
-        var tokens: [String] = []
+
+        var ranges: [Range<String.Index>] = []
         tokenizer.enumerateTokens(in: text.startIndex..<text.endIndex) { range, _ in
-            let cleaned = cleanToken(String(text[range]))
-            if !cleaned.isEmpty { tokens.append(cleaned) }
+            ranges.append(range)
             return true
         }
-        return tokens
+
+        var pairs: [WordPair] = []
+        for (i, range) in ranges.enumerated() {
+            let cleaned = cleanToken(String(text[range]))
+            guard !cleaned.isEmpty else { continue }
+            var surface = String(text[range])
+
+            let nextStart = i + 1 < ranges.count ? ranges[i + 1].lowerBound : text.endIndex
+            var idx = range.upperBound
+            while idx < nextStart {
+                let ch = text[idx]
+                if ch.isWhitespace { break }
+                let allPunct = String(ch).unicodeScalars.allSatisfy { !isKeptScalar($0) }
+                if !allPunct { break }
+                surface.append(ch)
+                idx = text.index(after: idx)
+            }
+            pairs.append(WordPair(surface: surface, cleaned: cleaned))
+        }
+        return pairs
     }
 
     // MARK: - Default path (whitespace + per-Han break)
@@ -130,31 +168,94 @@ public enum TextPreprocessor {
     /// Indonesian, etc. Chinese works because most Chinese text has no
     /// whitespace, so each ideograph becomes its own token via the per-Han
     /// break inside the (single) whitespace-bounded segment.
-    static func tokenizeSpaceLang(_ text: String) -> [String] {
-        var tokens: [String] = []
+    static func tokenizeSpaceLangPairs(_ text: String) -> [WordPair] {
+        var pairs: [WordPair] = []
         for raw in text.split(whereSeparator: \.isWhitespace) {
-            let cleaned = cleanToken(String(raw))
-            guard !cleaned.isEmpty else { continue }
-            tokens.append(contentsOf: splitSegmentWithChinese(cleaned))
+            let segment = String(raw)
+            let segPairs = pairsForSegment(segment)
+            // Reattach a leading whitespace separator to the first new pair
+            // so the surface reads naturally when concatenated. We don't
+            // actually reinsert spaces — callers can join with spaces — but
+            // we do rejoin punctuation that ended up segment-leading with
+            // no anchor word (rare, e.g. a stray "—") to the previous word.
+            if segPairs.isEmpty {
+                if !pairs.isEmpty {
+                    pairs[pairs.count - 1].surface += segment
+                }
+                continue
+            }
+            pairs.append(contentsOf: segPairs)
         }
-        return tokens
+        return pairs
     }
 
-    /// Inside a non-empty whitespace-bounded segment, peel each Han ideograph
-    /// out as its own token while leaving non-Han runs grouped.
-    private static func splitSegmentWithChinese(_ seg: String) -> [String] {
-        var tokens: [String] = []
-        var buf = ""
+    /// Convert one whitespace-bounded segment to (surface, cleaned) pairs.
+    /// For non-Han segments: a single pair with surface = segment, cleaned
+    /// = letters/numbers only. For segments containing Han ideographs:
+    /// each Han is its own pair; consecutive non-Han runs become their own
+    /// pair if they contain any letter/number, or attach to the
+    /// neighbouring pair's surface if they are pure punctuation/symbols.
+    private static func pairsForSegment(_ seg: String) -> [WordPair] {
+        let hasHan = seg.unicodeScalars.contains(where: isHanIdeograph)
+        if !hasHan {
+            let cleaned = cleanToken(seg)
+            if cleaned.isEmpty { return [] }
+            return [WordPair(surface: seg, cleaned: cleaned)]
+        }
+        var pairs: [WordPair] = []
+        var nonHanBuf = ""
+
+        func flushNonHan(beforeHan: Bool) {
+            guard !nonHanBuf.isEmpty else { return }
+            let cleaned = cleanToken(nonHanBuf)
+            if cleaned.isEmpty {
+                // Pure punctuation: attach to the previous pair's trailing
+                // surface. If we're at the start with no previous pair,
+                // leave the buffer for the upcoming Han to absorb.
+                if !pairs.isEmpty {
+                    pairs[pairs.count - 1].surface += nonHanBuf
+                    nonHanBuf = ""
+                } else if !beforeHan {
+                    // Trailing pure-punct with no anchor at all — drop.
+                    nonHanBuf = ""
+                }
+                return
+            }
+            pairs.append(WordPair(surface: nonHanBuf, cleaned: cleaned))
+            nonHanBuf = ""
+        }
+
         for scalar in seg.unicodeScalars {
             if isHanIdeograph(scalar) {
-                if !buf.isEmpty { tokens.append(buf); buf = "" }
-                tokens.append(String(scalar))
+                flushNonHan(beforeHan: true)
+                let han = String(scalar)
+                if !nonHanBuf.isEmpty {
+                    // Leading pure-punct waiting for a Han anchor.
+                    pairs.append(WordPair(surface: nonHanBuf + han, cleaned: han))
+                    nonHanBuf = ""
+                } else {
+                    pairs.append(WordPair(surface: han, cleaned: han))
+                }
             } else {
-                buf.append(Character(scalar))
+                nonHanBuf.append(Character(scalar))
             }
         }
-        if !buf.isEmpty { tokens.append(buf) }
-        return tokens
+        flushNonHan(beforeHan: false)
+        return pairs
+    }
+
+    // MARK: - Legacy entry points (kept for tests / external callers)
+
+    static func tokenizeJapanese(_ text: String) -> [String] {
+        return nlTokenizePairs(text, language: .japanese).map { $0.cleaned }
+    }
+
+    static func tokenizeKorean(_ text: String) -> [String] {
+        return nlTokenizePairs(text, language: .korean).map { $0.cleaned }
+    }
+
+    static func tokenizeSpaceLang(_ text: String) -> [String] {
+        return tokenizeSpaceLangPairs(text).map { $0.cleaned }
     }
 
     // MARK: - Cleaning + classification
