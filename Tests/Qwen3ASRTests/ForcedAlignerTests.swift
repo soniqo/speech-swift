@@ -161,6 +161,55 @@ final class ForcedAlignerTests: XCTestCase {
         XCTAssertEqual(words, ["Guten", "Morgen", "Donaudampfschifffahrtsgesellschaft"])
     }
 
+    // MARK: - Surface-form preservation (punctuation rides with words)
+
+    /// English commas, periods, exclamation marks attach to the preceding
+    /// word's surface so subtitle / SRT pipelines can split on punctuation.
+    /// The cleaned form (what the model sees) is unchanged.
+    func testSurfacePreservesEnglishPunctuation() {
+        let pairs = TextPreprocessor.splitIntoWordPairs(
+            "Hello, world! How are you?", language: "English")
+        XCTAssertEqual(pairs.map { $0.surface }, ["Hello,", "world!", "How", "are", "you?"])
+        XCTAssertEqual(pairs.map { $0.cleaned }, ["Hello", "world", "How", "are", "you"])
+    }
+
+    /// Apostrophe is kept in BOTH surface and cleaned forms (it's part of
+    /// the word, not punctuation that surrounds it). Trailing period still
+    /// rides with the last word's surface.
+    func testSurfacePreservesApostropheAndTrailingPeriod() {
+        let pairs = TextPreprocessor.splitIntoWordPairs(
+            "you're great.", language: "English")
+        XCTAssertEqual(pairs.map { $0.surface }, ["you're", "great."])
+        XCTAssertEqual(pairs.map { $0.cleaned }, ["you're", "great"])
+    }
+
+    /// Leading punctuation (opening quotes, em-dashes) attaches to the
+    /// FOLLOWING word's surface.
+    func testSurfacePreservesLeadingPunctuation() {
+        let pairs = TextPreprocessor.splitIntoWordPairs(
+            "\"Hello\" she said.", language: "English")
+        XCTAssertEqual(pairs.map { $0.surface }, ["\"Hello\"", "she", "said."])
+        XCTAssertEqual(pairs.map { $0.cleaned }, ["Hello", "she", "said"])
+    }
+
+    /// Full-width CJK punctuation (`，` `。`) attaches to the preceding Han
+    /// ideograph's surface. Each Han stays its own pair.
+    func testSurfacePreservesCJKPunctuation() {
+        let pairs = TextPreprocessor.splitIntoWordPairs(
+            "你好，世界。", language: "Chinese")
+        XCTAssertEqual(pairs.map { $0.surface }, ["你", "好，", "世", "界。"])
+        XCTAssertEqual(pairs.map { $0.cleaned }, ["你", "好", "世", "界"])
+    }
+
+    /// Mixed Han + Latin with ASCII punctuation: the comma attaches to the
+    /// preceding Latin run, the period attaches to the trailing Latin run.
+    func testSurfacePreservesMixedHanLatinPunctuation() {
+        let pairs = TextPreprocessor.splitIntoWordPairs(
+            "Hello, 你好world.", language: "Chinese")
+        XCTAssertEqual(pairs.map { $0.surface }, ["Hello,", "你", "好", "world."])
+        XCTAssertEqual(pairs.map { $0.cleaned }, ["Hello", "你", "好", "world"])
+    }
+
     func testTimestampCorrectionAlreadyMonotonic() {
         let input = [1, 3, 5, 7, 9, 11]
         let corrected = TimestampCorrection.enforceMonotonicity(input)
