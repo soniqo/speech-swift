@@ -59,11 +59,21 @@ public final class CosyVoiceTTSModel {
         offlineMode: Bool = false,
         progressHandler: ((Double, String) -> Void)? = nil
     ) async throws -> CosyVoiceTTSModel {
-        let config = CosyVoiceConfig.default
-        let model = CosyVoiceTTSModel(config: config)
+        var config = CosyVoiceConfig.default
 
         // Get cache directory
         let cacheDir = try cacheDir ?? HuggingFaceDownloader.getCacheDirectory(for: modelId)
+
+        // momoclaw patch: aufklarer-style config.json carries `quantization.bits`
+        // (and optional `quantization.llm_bits` / `flow_bits`) so a higher-precision
+        // local re-quant (e.g. an 8-bit LLM) loads with matching unpacking.
+        // Falling back to default 4 if unreadable preserves the original behaviour
+        // for the stock aufklarer model on first download.
+        if let cfg = readQuantizationOverrides(from: cacheDir.appendingPathComponent("config.json")) {
+            if let llmBits = cfg.llmBits { config.llm.bits = llmBits }
+            if let flowBits = cfg.flowBits { config.flow.dit.bits = flowBits }
+        }
+        let model = CosyVoiceTTSModel(config: config)
 
         // Download if needed (check both weights and tokenizer)
         let needsWeights = !HuggingFaceDownloader.weightsExist(in: cacheDir)
@@ -287,4 +297,31 @@ public final class CosyVoiceTTSModel {
         // Concatenate: [instruction_tokens, <|endofprompt|>, text_tokens]
         return instructionTokens + [Self.endOfPromptToken] + textTokens
     }
+}
+
+// momoclaw patch: lightweight reader for the quantization block in
+// `config.json`. We only care about the bit-widths because everything
+// else in the on-disk config matches `CosyVoiceConfig.default`. Returning
+// nil silently keeps the original (4-bit) default loading path working.
+struct CosyVoiceQuantOverrides {
+    let bits: Int?
+    let llmBits: Int?
+    let flowBits: Int?
+}
+
+func readQuantizationOverrides(from url: URL) -> CosyVoiceQuantOverrides? {
+    guard let data = try? Data(contentsOf: url),
+          let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let q = root["quantization"] as? [String: Any] else {
+        return nil
+    }
+    func intOrNil(_ key: String) -> Int? {
+        if let v = q[key] as? Int { return v }
+        if let v = q[key] as? NSNumber { return v.intValue }
+        return nil
+    }
+    let bits = intOrNil("bits")
+    let llm = intOrNil("llm_bits") ?? bits
+    let flow = intOrNil("flow_bits") ?? bits
+    return CosyVoiceQuantOverrides(bits: bits, llmBits: llm, flowBits: flow)
 }
