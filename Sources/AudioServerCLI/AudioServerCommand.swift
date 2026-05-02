@@ -18,8 +18,19 @@ struct AudioServerCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Load all models on startup (slower start, faster first request)")
     var preload: Bool = false
 
+    /// momoclaw fork extension (Commit B): pin a non-default CosyVoice3 HF
+    /// model id (or local cache directory under ~/Library/Caches/qwen3-speech/models/).
+    /// Default keeps upstream behaviour (aufklarer/CosyVoice3-0.5B-MLX-4bit on
+    /// first /speak request).
+    @Option(name: .long,
+            help: "CosyVoice3 model id (e.g. momoclaw/CosyVoice3-0.5B-MLX-8bit-full)")
+    var cosyvoiceModelId: String?
+
     func run() async throws {
-        let server = AudioServer(host: host, port: port)
+        let server = AudioServer(host: host,
+                                 port: port,
+                                 preload: preload,
+                                 cosyvoiceModelId: cosyvoiceModelId)
 
         if preload {
             print("Preloading models...")

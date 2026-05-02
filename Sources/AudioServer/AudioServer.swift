@@ -23,6 +23,19 @@ public struct AudioServer {
         self.port = port
     }
 
+    /// momoclaw fork extension: lets the CLI pin a non-default CosyVoice3
+    /// model id (e.g. our locally re-quantized 8-bit bundle). Nil keeps
+    /// upstream behaviour (loads aufklarer/CosyVoice3-0.5B-MLX-4bit on first
+    /// /speak request). See momoclaw doc Commit B for the contract.
+    public init(host: String = "127.0.0.1",
+                port: Int = 8080,
+                preload: Bool = false,
+                cosyvoiceModelId: String?) {
+        self.state = ModelState(cosyvoiceModelId: cosyvoiceModelId)
+        self.host = host
+        self.port = port
+    }
+
     public func run() async throws {
         let router = buildRouter()
         let state = self.state
@@ -187,6 +200,16 @@ final class ModelState: @unchecked Sendable {
     private var enhancer: SpeechEnhancer?
     var spmDecoder: SentencePieceDecoder?
 
+    /// momoclaw fork: optional override for the CosyVoice3 HF model id used
+    /// by `loadCosyVoice()`. nil = upstream behaviour
+    /// (aufklarer/CosyVoice3-0.5B-MLX-4bit). Threaded in from
+    /// `audio-server --cosyvoice-model-id` (Commit B).
+    let cosyvoiceModelId: String?
+
+    init(cosyvoiceModelId: String? = nil) {
+        self.cosyvoiceModelId = cosyvoiceModelId
+    }
+
     func loadASR() async throws -> Qwen3ASRModel {
         if let m = asr { return m }
         print("[server] Loading Qwen3-ASR...")
@@ -205,6 +228,13 @@ final class ModelState: @unchecked Sendable {
 
     func loadCosyVoice() async throws -> CosyVoiceTTSModel {
         if let m = cosyvoice { return m }
+        if let id = cosyvoiceModelId {
+            print("[server] Loading CosyVoice from \(id)...")
+            let m = try await CosyVoiceTTSModel.fromPretrained(
+                modelId: id, progressHandler: logProgress)
+            cosyvoice = m
+            return m
+        }
         print("[server] Loading CosyVoice...")
         let m = try await CosyVoiceTTSModel.fromPretrained(progressHandler: logProgress)
         cosyvoice = m
