@@ -251,7 +251,7 @@ let package = Package(
                 "AudioCommon",
             ],
             resources: [
-                .copy("Resources"),
+                .process("Resources"),
             ]
         ),
         .target(
