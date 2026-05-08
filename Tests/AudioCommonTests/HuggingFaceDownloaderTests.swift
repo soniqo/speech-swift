@@ -101,6 +101,133 @@ final class HuggingFaceDownloaderTests: XCTestCase {
         XCTAssertFalse(HuggingFaceDownloader.weightsExist(in: tmpDir))
     }
 
+    // MARK: - weightsExist — Apple CoreML bundle layouts
+
+    /// CoreML-only repositories (e.g. `aufklarer/WeSpeaker-ResNet34-LM-CoreML`)
+    /// ship a `.mlmodelc/` directory and no `.safetensors` files. The
+    /// pre-fix `weightsExist` returned false for this layout, causing
+    /// every `offlineMode: true` load to fall through to `hub.snapshot()`
+    /// — which in turn issued an HTTP HEAD to huggingface.co even when
+    /// every byte of the model was on disk.
+    func testWeightsExistReturnsTrueForMlmodelcDirectory() throws {
+        let tmpDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("weights_mlmodelc_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+
+        XCTAssertFalse(HuggingFaceDownloader.weightsExist(in: tmpDir))
+
+        let mlmodelc = tmpDir.appendingPathComponent("wespeaker.mlmodelc", isDirectory: true)
+        try FileManager.default.createDirectory(at: mlmodelc, withIntermediateDirectories: true)
+
+        XCTAssertTrue(HuggingFaceDownloader.weightsExist(in: tmpDir),
+            "Directories ending in .mlmodelc must satisfy weightsExist — that's the cached-CoreML layout HF ships")
+    }
+
+    /// Multi-component CoreML models (e.g. Parakeet's encoder + decoder + joint)
+    /// ship multiple `.mlmodelc/` directories under the same repo. The
+    /// existence check fires on any one of them.
+    func testWeightsExistReturnsTrueForMultipleMlmodelcDirs() throws {
+        let tmpDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("weights_multi_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+
+        for name in ["encoder.mlmodelc", "decoder.mlmodelc", "joint.mlmodelc"] {
+            try FileManager.default.createDirectory(
+                at: tmpDir.appendingPathComponent(name, isDirectory: true),
+                withIntermediateDirectories: true
+            )
+        }
+
+        XCTAssertTrue(HuggingFaceDownloader.weightsExist(in: tmpDir))
+    }
+
+    /// `.mlpackage/` is the uncompiled CoreML container. Less common
+    /// in HF caches but recognised for symmetry.
+    func testWeightsExistReturnsTrueForMlpackageDirectory() throws {
+        let tmpDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("weights_mlpackage_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+
+        let mlpackage = tmpDir.appendingPathComponent("model.mlpackage", isDirectory: true)
+        try FileManager.default.createDirectory(at: mlpackage, withIntermediateDirectories: true)
+
+        XCTAssertTrue(HuggingFaceDownloader.weightsExist(in: tmpDir))
+    }
+
+    /// Mixed-layout repos that ship both `.safetensors` and `.mlmodelc/`
+    /// (rare but possible) must continue to satisfy `weightsExist`.
+    /// Pins that the broadened recogniser doesn't accidentally introduce
+    /// a regression on the canonical safetensors path.
+    func testWeightsExistReturnsTrueForMixedSafetensorsAndMlmodelc() throws {
+        let tmpDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("weights_mixed_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+
+        try Data([0x00]).write(to: tmpDir.appendingPathComponent("model.safetensors"))
+        try FileManager.default.createDirectory(
+            at: tmpDir.appendingPathComponent("encoder.mlmodelc", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+
+        XCTAssertTrue(HuggingFaceDownloader.weightsExist(in: tmpDir))
+    }
+
+    /// A directory containing only unrelated files (`config.json`,
+    /// `.cache/`, `tokenizer.json`) must NOT satisfy `weightsExist`.
+    /// Preserves the "incomplete cache → fall through to download"
+    /// semantics that downstream consumers rely on.
+    func testWeightsExistReturnsFalseForDirectoryWithoutWeightFiles() throws {
+        let tmpDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("weights_unrelated_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+
+        try Data("{}".utf8).write(to: tmpDir.appendingPathComponent("config.json"))
+        try Data("{}".utf8).write(to: tmpDir.appendingPathComponent("tokenizer.json"))
+        try FileManager.default.createDirectory(
+            at: tmpDir.appendingPathComponent(".cache", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+
+        XCTAssertFalse(HuggingFaceDownloader.weightsExist(in: tmpDir),
+            "Unrelated files (config, tokenizer, .cache) must NOT satisfy weightsExist — preserves 'incomplete cache → download' semantics")
+    }
+
+    // MARK: - offlineMode integration with CoreML caches
+
+    /// The behavioural counterpart to `testOfflineModeSkipsDownloadWhenWeightsExist`
+    /// — verifies that `downloadWeights(offlineMode: true)` short-circuits
+    /// (no network) when ONLY `.mlmodelc/` directories are present, without
+    /// any `.safetensors` files. This is the field-reported scenario that
+    /// motivated the patch.
+    func testOfflineModeSkipsDownloadWhenMlmodelcExists() async throws {
+        let tmpDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("offline_mlmodelc_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+
+        // Populate cache with the WeSpeaker-style single-mlmodelc layout
+        // (no safetensors). Pre-fix, this would NOT short-circuit.
+        let mlmodelc = tmpDir.appendingPathComponent("wespeaker.mlmodelc", isDirectory: true)
+        try FileManager.default.createDirectory(at: mlmodelc, withIntermediateDirectories: true)
+
+        var progressReported = false
+        try await HuggingFaceDownloader.downloadWeights(
+            modelId: "fake/coreml-only-model",
+            to: tmpDir,
+            offlineMode: true,
+            progressHandler: { progress in
+                if progress >= 1.0 { progressReported = true }
+            }
+        )
+        XCTAssertTrue(progressReported,
+            "offlineMode: true must short-circuit (no network) when only .mlmodelc/ caches are present — same contract as for .safetensors")
+    }
+
     // MARK: - cacheDir (custom cache directory)
 
     func testCustomCacheDirSkipsDefaultResolution() async throws {
