@@ -135,14 +135,22 @@ public extension HibikiTranslateModel {
             )
 
             // Sample text token (with optional repetition penalty).
+            // Setting HIBIKI_GREEDY=1 forces argmax for both text and audio
+            // (deterministic, useful for debugging quality).
+            let greedy = ProcessInfo.processInfo.environment["HIBIKI_GREEDY"] != nil
             let textHistory = Array(allTextTokens.suffix(cfg.sampling.repetitionWindow))
-            let textToken = sampleTextWithPenalty(
-                logits: textLogits.squeezed(axis: 1),
-                temperature: cfg.sampling.textTemp,
-                topK: cfg.sampling.textTopK,
-                pastTokens: textHistory,
-                penalty: cfg.sampling.textRepetitionPenalty
-            )
+            let textToken: MLXArray
+            if greedy {
+                textToken = argMax(textLogits.squeezed(axis: 1), axis: -1).asType(.int32)
+            } else {
+                textToken = sampleTextWithPenalty(
+                    logits: textLogits.squeezed(axis: 1),
+                    temperature: cfg.sampling.textTemp,
+                    topK: cfg.sampling.textTopK,
+                    pastTokens: textHistory,
+                    penalty: cfg.sampling.textRepetitionPenalty
+                )
+            }
             eval(textToken)
             let textVal = textToken[0].item(Int32.self)
             tokenCache[0][step] = textVal
@@ -153,6 +161,9 @@ public extension HibikiTranslateModel {
                 temporalHidden: hidden,
                 textToken: textToken
             ) { logits, cbIdx in
+                if greedy {
+                    return argMax(logits, axis: -1).asType(.int32)
+                }
                 let history = Array(perCodebookHistory[cbIdx].suffix(cfg.sampling.repetitionWindow))
                 return sampleTopKWithPenalty(
                     logits: logits,
