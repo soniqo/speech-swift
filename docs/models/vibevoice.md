@@ -4,10 +4,10 @@ VibeVoice is a long-form, multi-speaker text-to-speech model from Microsoft. It
 targets podcast / audiobook / dialogue synthesis — not short one-shot
 utterances. Two variants are supported:
 
-| Variant | Params | Focus | Context |
-|---|---|---|---|
-| **Realtime-0.5B** | ~500M | Low-latency streaming | ~8K tokens |
-| **1.5B long-form** | ~1.5B + diffusion | Up to 90 min / 4 speakers / single pass | 64K tokens |
+| Variant | Params | Focus | Context | Languages |
+|---|---|---|---|---|
+| **Realtime-0.5B** | ~500M | Low-latency streaming | ~8K tokens | **English only** |
+| **1.5B long-form** | ~1.5B + diffusion | Up to 90 min / 4 speakers / single pass | 64K tokens | **English + Chinese** |
 
 **The two variants have different architectures**, so they have separate
 Swift classes:
@@ -20,8 +20,37 @@ Swift classes:
   `<speech output>` + `<speech_start>`), LM-head token sampling branched
   on `<speech_diffusion>` / `<speech_end>` / text tokens
 
-Both train on English + Chinese only. Non-EN/ZH input produces unintelligible
-audio per Microsoft's model card.
+### Language support
+
+Microsoft's model cards are explicit:
+
+- **Realtime-0.5B is English only.** Other languages "may produce
+  unpredictable results"; the upstream demo ships nine non-EN voice prompts
+  (de/fr/it/jp/kr/nl/pl/pt/in) labeled "exploratory" — quality is not
+  guaranteed.
+- **1.5B long-form supports English and Chinese (zh).** Other languages
+  generate plausible-sounding audio that does not faithfully reproduce the
+  input text and should be considered experimental.
+
+The CLI surfaces this in the `audio vibevoice --help` discussion section.
+
+### Voice-cache provenance
+
+Realtime-0.5B is **distributed inference-only** — its checkpoint contains
+the LM, TTS LM, connector, decoder, and EOS classifier, but no acoustic
+encoder weights. Calling `audio vibevoice-encode-voice` against this model
+will fail fast with a pointer to the only real workflow it can recommend:
+
+> Use 1.5B end-to-end via `audio vibevoice ... --long-form --reference-audio
+> <wav> --reference-transcript "..."`. The 1.5B checkpoint *does* ship the
+> encoder, so it can clone arbitrary voices from raw audio in one shot.
+> (The encoding is inlined; there is no separate "encode-voice" step on the
+> 1.5B path.)
+
+To synthesize with the smaller Realtime-0.5B path against a specific
+speaker, the only supported source is one of Microsoft's [pre-built
+`.pt` voice caches](https://github.com/microsoft/VibeVoice/tree/main/demo/voices/streaming_model),
+flattened into the `.safetensors` layout this loader expects.
 
 - **License**: MIT
 - **Output**: 24 kHz mono Float32 PCM
@@ -171,10 +200,9 @@ Internally `generate(...)`:
 | `microsoft/VibeVoice-1.5B` | BF16 | ~3 GB |
 | `aufklarer/VibeVoice-1.5B-MLX-INT4` | Qwen2 INT4 | ~1 GB |
 
-Quantization is produced by `models/vibevoice/export/convert.py` in
-`soniqo/speech-models` and uses MLX group-wise affine quantization (32-group,
-INT4/INT8). Embeddings, norms, acoustic-tokenizer convs, and the EOS
-classifier are kept in their source dtype.
+Quantization uses MLX group-wise affine quantization (32-group, INT4/INT8).
+Embeddings, norms, acoustic-tokenizer convs, and the EOS classifier are
+kept in their source dtype.
 
 ## Source files
 

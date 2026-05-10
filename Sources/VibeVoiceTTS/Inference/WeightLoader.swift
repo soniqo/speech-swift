@@ -467,6 +467,16 @@ public func loadVibeVoiceStreamModel(from directory: URL) throws -> VibeVoiceStr
     let hasEos = mappedWeights.keys.contains { $0.hasPrefix("tts_eos_classifier.") }
     model.hasEosClassifier = hasEos
 
+    // Realtime-0.5B bundles do NOT ship the acoustic encoder — the model is
+    // distributed as inference-only (decoder + LM + connector). Without
+    // encoder weights, our `Qwen2`-style module init leaves them at random
+    // PyTorch-style Kaiming values, which silently produces garbage acoustic
+    // latents when callers later invoke `encodeVoice`. Track presence here so
+    // `encodeVoice` can fail fast with a useful message instead of returning
+    // a cache that drives the EOS classifier into a low-confidence babble.
+    let hasAcousticEncoder = mappedWeights.keys.contains { $0.hasPrefix("acoustic_tokenizer.encoder.") }
+    model.hasAcousticEncoder = hasAcousticEncoder
+
     if let manifest = quantManifest {
         VibeVoiceQuantizer.applyQuantization(
             to: model,
