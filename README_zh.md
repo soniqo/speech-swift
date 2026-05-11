@@ -139,11 +139,11 @@ brew install speech
 然后：
 
 ```bash
-audio transcribe recording.wav
-audio speak "Hello world"
-audio translate "Hello, how are you?" --to es
-audio respond --input question.wav --transcript
-audio-server --port 8080            # 本地 HTTP / WebSocket 服务器（OpenAI 兼容 /v1/realtime）
+speech transcribe recording.wav
+speech speak "Hello world"
+speech translate "Hello, how are you?" --to es
+speech respond --input question.wav --transcript
+speech-server --port 8080            # 本地 HTTP / WebSocket 服务器（OpenAI 兼容 /v1/realtime）
 ```
 
 **[完整 CLI 参考 →](https://soniqo.audio/zh/cli)**
@@ -331,7 +331,7 @@ pipeline.pushAudio(micSamples)
 ### HTTP API 服务器
 
 ```bash
-audio-server --port 8080
+speech-server --port 8080
 ```
 
 通过 HTTP REST + WebSocket 接口暴露每个模型，包括一个兼容 OpenAI Realtime API 的 WebSocket 接口 `/v1/realtime`。详见 [`Sources/AudioServer/`](Sources/AudioServer/)。

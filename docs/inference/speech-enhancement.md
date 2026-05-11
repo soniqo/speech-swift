@@ -38,8 +38,8 @@ Core ML GRU cost scales ~O(n²) due to sequential hidden state processing. Short
 ## CLI
 
 ```bash
-swift run audio denoise noisy.wav
-swift run audio denoise noisy.wav --output clean.wav
+swift run speech denoise noisy.wav
+swift run speech denoise noisy.wav --output clean.wav
 ```
 
 ## Conversion

@@ -19,7 +19,7 @@ Run benchmarks using the release build. Build first with `/build`.
 
 ```bash
 module="$ARGUMENTS"
-cli=".build/release/audio"
+cli=".build/release/speech"
 
 case "$module" in
   asr)

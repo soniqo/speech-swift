@@ -10,7 +10,7 @@ public struct VibeVoiceEncodeCommand: ParsableCommand {
         discussion: """
         Encodes the reference audio through VibeVoice's acoustic tokenizer and
         runs both the text and audio through the TTS LM to produce a
-        precomputed .safetensors voice cache that `audio vibevoice ...
+        precomputed .safetensors voice cache that `speech vibevoice ...
         --voice-cache <out>` can load.
 
         IMPORTANT — checkpoint availability:
@@ -18,7 +18,7 @@ public struct VibeVoiceEncodeCommand: ParsableCommand {
         and does not ship the acoustic encoder, so this command currently
         fails fast and points at the only real workflow speech-swift can
         run end-to-end on its own: clone an arbitrary speaker from raw
-        audio via `audio vibevoice ... --long-form --reference-audio <wav>
+        audio via `speech vibevoice ... --long-form --reference-audio <wav>
         --reference-transcript "..."`. That path runs the full
         VibeVoice-1.5B pipeline (which does ship the encoder) and inlines
         the encoding on every synthesis call.

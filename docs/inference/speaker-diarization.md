@@ -12,8 +12,8 @@ Speaker diarization identifies **who spoke when** in an audio recording. Two eng
 ### Engine Selection
 
 ```bash
-audio diarize meeting.wav                    # Pyannote (default)
-audio diarize meeting.wav --engine sortformer  # Sortformer (CoreML)
+speech diarize meeting.wav                    # Pyannote (default)
+speech diarize meeting.wav --engine sortformer  # Sortformer (CoreML)
 ```
 
 ### Sortformer (End-to-End, CoreML)
@@ -188,23 +188,23 @@ let result = diarizer.diarize(audio: samples, sampleRate: 16000) { progress, sta
 
 ```bash
 # Pyannote diarization (default)
-audio diarize meeting.wav
+speech diarize meeting.wav
 
 # Sortformer diarization (CoreML, Neural Engine)
-audio diarize meeting.wav --engine sortformer
+speech diarize meeting.wav --engine sortformer
 
 # CoreML embeddings (Neural Engine, pyannote only)
-audio diarize meeting.wav --embedding-engine coreml
+speech diarize meeting.wav --embedding-engine coreml
 
 # JSON output
-audio diarize meeting.wav --json
+speech diarize meeting.wav --json
 
 # Speaker extraction (pyannote only)
-audio diarize meeting.wav --target-speaker enrollment.wav
+speech diarize meeting.wav --target-speaker enrollment.wav
 
 # Embed a speaker's voice
-audio embed-speaker enrollment.wav
-audio embed-speaker enrollment.wav --engine coreml --json
+speech embed-speaker enrollment.wav
+speech embed-speaker enrollment.wav --engine coreml --json
 ```
 
 ## Model Weights
@@ -257,8 +257,8 @@ Sources/SpeechVAD/
 └── SpeechVAD+Protocols.swift          Protocol conformances
 
 Sources/AudioCommon/Protocols.swift    DiarizedSegment, SpeakerEmbeddingModel, SpeakerDiarizationModel
-Sources/AudioCLILib/DiarizeCommand.swift       `audio diarize` (--engine, --embedding-engine)
-Sources/AudioCLILib/EmbedSpeakerCommand.swift  `audio embed-speaker` (--engine)
+Sources/AudioCLILib/DiarizeCommand.swift       `speech diarize` (--engine, --embedding-engine)
+Sources/AudioCLILib/EmbedSpeakerCommand.swift  `speech embed-speaker` (--engine)
 scripts/convert_wespeaker.py                    MLX weight conversion
 scripts/convert_wespeaker_coreml.py             CoreML weight conversion
 ```

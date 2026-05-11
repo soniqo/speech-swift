@@ -149,7 +149,7 @@ The classify head addresses 400 s in principle (5000 classes × 80 ms), but the 
 
 For audio under the 240 s bypass threshold this is a one-pass passthrough into `align()`. For longer audio the cost is one extra `align` pass per chunk; in practice the second chunk is short so the overhead is small (≤ ~0.5 s wall-clock on the 306 s TED-Ed test clip).
 
-The CLI (`audio align`) calls `alignLong` automatically and prints a one-line message when chunking kicks in:
+The CLI (`speech align`) calls `alignLong` automatically and prints a one-line message when chunking kicks in:
 
 ```
 Audio 306.2s saturated after word 690 (272.6s); chunking remaining 33.6s (pass 2)
@@ -198,14 +198,14 @@ Variant is auto-detected from `quantize_config.json` in the model directory. The
 
 ```bash
 # Align with provided text
-audio align audio.wav --text "Can you guarantee that the replacement part will be shipped tomorrow?"
+speech align audio.wav --text "Can you guarantee that the replacement part will be shipped tomorrow?"
 
 # Transcribe first, then align
-audio align audio.wav
+speech align audio.wav
 
 # Custom aligner model (8-bit or bf16)
-audio align audio.wav --aligner-model aufklarer/Qwen3-ForcedAligner-0.6B-8bit
-audio align audio.wav --aligner-model aufklarer/Qwen3-ForcedAligner-0.6B-bf16
+speech align audio.wav --aligner-model aufklarer/Qwen3-ForcedAligner-0.6B-8bit
+speech align audio.wav --aligner-model aufklarer/Qwen3-ForcedAligner-0.6B-bf16
 ```
 
 Output format:

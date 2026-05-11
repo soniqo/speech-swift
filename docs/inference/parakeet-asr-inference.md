@@ -54,10 +54,10 @@ let _ = try model.transcribe(audio: silentBuffer, sampleRate: 16000)
 
 ```bash
 # Transcribe with Parakeet
-.build/release/audio transcribe --engine parakeet recording.wav
+.build/release/speech transcribe --engine parakeet recording.wav
 
 # Default engine (Qwen3-ASR)
-.build/release/audio transcribe recording.wav
+.build/release/speech transcribe recording.wav
 ```
 
 ## Performance (M2 Max)

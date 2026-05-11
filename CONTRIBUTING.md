@@ -137,8 +137,8 @@ Tagged releases go through `.github/workflows/release.yml`:
 1. Land your changes on `main` via PR.
 2. Run `gh release create vX.Y.Z --target main --title vX.Y.Z --notes "..."`.
 3. The release workflow:
-   - Builds `audio` + `audio-server` in release mode.
-   - Tars both plus `mlx.metallib` into `audio-macos-arm64.tar.gz`.
+   - Builds `speech` + `speech-server` in release mode (and the deprecated `audio` + `audio-server` aliases).
+   - Tars all four binaries plus `mlx.metallib` into `speech-macos-arm64.tar.gz`.
    - Uploads the tarball as a release asset.
    - Auto-bumps `Formula/speech.rb`'s `url` and `sha256` and commits
      the bump back to `main`.

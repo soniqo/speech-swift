@@ -221,7 +221,7 @@ Reference audio (24kHz)
 ```
 
 ```bash
-.build/release/audio speak "Hello world" --voice-sample reference.wav --output cloned.wav
+.build/release/speech speak "Hello world" --voice-sample reference.wav --output cloned.wav
 ```
 
 ### ICL Mode
@@ -331,5 +331,5 @@ let audio = try model.synthesize(text: "Hello world", language: "english")
 ### CLI
 
 ```bash
-audio speak "Hello world" --engine coreml --output hello.wav
+speech speak "Hello world" --engine coreml --output hello.wav
 ```

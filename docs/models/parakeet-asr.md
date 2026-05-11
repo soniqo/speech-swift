@@ -60,11 +60,11 @@ Mel preprocessing (pre-emphasis, STFT, mel filterbank, normalization) is done in
 
 ```bash
 # Transcribe with Parakeet (CoreML, fast on Neural Engine)
-audio transcribe --engine parakeet audio.wav
+speech transcribe --engine parakeet audio.wav
 
 # Transcribe with Qwen3 (MLX, default)
-audio transcribe audio.wav
-audio transcribe --engine qwen3 audio.wav
+speech transcribe audio.wav
+speech transcribe --engine qwen3 audio.wav
 ```
 
 ## Performance

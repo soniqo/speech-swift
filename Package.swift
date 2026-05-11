@@ -89,6 +89,15 @@ let package = Package(
             targets: ["SpeechWakeWord"]
         ),
         .executable(
+            name: "speech",
+            targets: ["AudioCLI"]
+        ),
+        .executable(
+            name: "speech-server",
+            targets: ["AudioServerCLI"]
+        ),
+        // Deprecated aliases — kept for one release cycle. Will be removed in a future version.
+        .executable(
             name: "audio",
             targets: ["AudioCLI"]
         ),

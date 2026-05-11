@@ -83,7 +83,7 @@ Unlike Parakeet-EOU, Nemotron **does not** emit an explicit EOU token. Two optio
 ## CLI
 
 ```bash
-audio transcribe recording.wav --engine nemotron           # batch transcription
-audio transcribe recording.wav --engine nemotron --stream  # streaming (prints final)
-audio transcribe recording.wav --engine nemotron --stream --partial  # prints partials too
+speech transcribe recording.wav --engine nemotron           # batch transcription
+speech transcribe recording.wav --engine nemotron --stream  # streaming (prints final)
+speech transcribe recording.wav --engine nemotron --stream --partial  # prints partials too
 ```

@@ -9,14 +9,23 @@ class Speech < Formula
   depends_on :macos
 
   def install
-    libexec.install "audio", "audio-server", "mlx.metallib"
-    libexec.install "Qwen3Speech_KokoroTTS.bundle"
-    bin.write_exec_script libexec/"audio"
-    bin.write_exec_script libexec/"audio-server"
+    # `speech`/`speech-server` are canonical; `audio`/`audio-server` are
+    # deprecated aliases retained for one release cycle. Older release tarballs
+    # only carry the `audio` names, so install whichever is present.
+    %w[speech speech-server audio audio-server mlx.metallib].each do |f|
+      libexec.install f if File.exist?(f)
+    end
+    libexec.install "Qwen3Speech_KokoroTTS.bundle" if File.exist?("Qwen3Speech_KokoroTTS.bundle")
+
+    %w[speech speech-server audio audio-server].each do |name|
+      bin.write_exec_script libexec/name if (libexec/name).exist?
+    end
   end
 
   test do
-    assert_match "AI speech models", shell_output("#{bin}/audio --help")
-    assert_match "HTTP API server", shell_output("#{bin}/audio-server --help")
+    primary = (bin/"speech").exist? ? "speech" : "audio"
+    server  = (bin/"speech-server").exist? ? "speech-server" : "audio-server"
+    assert_match "AI speech models", shell_output("#{bin}/#{primary} --help")
+    assert_match "HTTP API server", shell_output("#{bin}/#{server} --help")
   end
 end

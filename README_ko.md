@@ -139,11 +139,11 @@ brew install speech
 그런 다음:
 
 ```bash
-audio transcribe recording.wav
-audio speak "Hello world"
-audio translate "Hello, how are you?" --to es
-audio respond --input question.wav --transcript
-audio-server --port 8080            # 로컬 HTTP / WebSocket 서버 (OpenAI 호환 /v1/realtime)
+speech transcribe recording.wav
+speech speak "Hello world"
+speech translate "Hello, how are you?" --to es
+speech respond --input question.wav --transcript
+speech-server --port 8080            # 로컬 HTTP / WebSocket 서버 (OpenAI 호환 /v1/realtime)
 ```
 
 **[전체 CLI 레퍼런스 →](https://soniqo.audio/ko/cli)**
@@ -331,7 +331,7 @@ pipeline.pushAudio(micSamples)
 ### HTTP API 서버
 
 ```bash
-audio-server --port 8080
+speech-server --port 8080
 ```
 
 HTTP REST + WebSocket 엔드포인트로 모든 모델을 공개합니다. OpenAI Realtime API 호환 WebSocket `/v1/realtime`도 포함됩니다. [`Sources/AudioServer/`](Sources/AudioServer/)를 참조하세요.

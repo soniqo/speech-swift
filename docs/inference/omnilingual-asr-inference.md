@@ -50,14 +50,14 @@ is no fixed-window CoreML graph to pad to. Quantisation is mlx-swift
 
 ```bash
 # CoreML (default)
-audio transcribe recording.wav --engine omnilingual                     # 10 s window
-audio transcribe recording.wav --engine omnilingual --window 5            # 5 s window
+speech transcribe recording.wav --engine omnilingual                     # 10 s window
+speech transcribe recording.wav --engine omnilingual --window 5            # 5 s window
 
 # MLX
-audio transcribe recording.wav --engine omnilingual --backend mlx                            # 300M @ 4-bit
-audio transcribe recording.wav --engine omnilingual --backend mlx --variant 1B               # 1B @ 4-bit
-audio transcribe recording.wav --engine omnilingual --backend mlx --variant 3B --bits 8      # 3B @ 8-bit
-audio transcribe recording.wav --engine omnilingual --backend mlx --variant 7B               # 7B @ 4-bit
+speech transcribe recording.wav --engine omnilingual --backend mlx                            # 300M @ 4-bit
+speech transcribe recording.wav --engine omnilingual --backend mlx --variant 1B               # 1B @ 4-bit
+speech transcribe recording.wav --engine omnilingual --backend mlx --variant 3B --bits 8      # 3B @ 8-bit
+speech transcribe recording.wav --engine omnilingual --backend mlx --variant 7B               # 7B @ 4-bit
 ```
 
 ## Pipeline

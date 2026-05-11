@@ -78,11 +78,11 @@ The relative position bias is computed only on layer 0 (with the correct `offset
 ## CLI
 
 ```bash
-audio translate "Hello" --to es
-audio translate "Bonjour" --to en --quantization int8
-audio translate --to fr --json   # JSON output with timing metrics
-audio transcribe meeting.wav | audio translate --to es   # pipe from ASR
-audio translate "Hello world" --to es --stream            # incremental output
+speech translate "Hello" --to es
+speech translate "Bonjour" --to en --quantization int8
+speech translate --to fr --json   # JSON output with timing metrics
+speech transcribe meeting.wav | speech translate --to es   # pipe from ASR
+speech translate "Hello world" --to es --stream            # incremental output
 ```
 
 ## Performance characteristics

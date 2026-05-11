@@ -8,7 +8,7 @@ public struct TranslateCommand: ParsableCommand {
         abstract: "Translate text into a target language using MADLAD-400 (MLX, Apple Silicon)"
     )
 
-    @Argument(help: "Text to translate. Omit to read from stdin (e.g. `audio transcribe x.wav | audio translate --to es`).")
+    @Argument(help: "Text to translate. Omit to read from stdin (e.g. `speech transcribe x.wav | speech translate --to es`).")
     public var text: String?
 
     @Option(name: [.short, .long], help: "Target language code (ISO 639-1, e.g. es, zh, fr, ja, de).")

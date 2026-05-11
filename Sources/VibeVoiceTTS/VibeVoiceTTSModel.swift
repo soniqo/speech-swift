@@ -202,7 +202,7 @@ public final class VibeVoiceTTSModel {
                 "acoustic encoder not present in this checkpoint — Microsoft's "
                 + "VibeVoice-Realtime-0.5B is distributed inference-only and does "
                 + "not include encoder weights. To clone an arbitrary speaker from "
-                + "raw audio, use VibeVoice-1.5B end-to-end via `audio vibevoice ... "
+                + "raw audio, use VibeVoice-1.5B end-to-end via `speech vibevoice ... "
                 + "--long-form --reference-audio <wav> --reference-transcript \"...\"` "
                 + "— the 1.5B path ships the encoder and inlines the encoding on each "
                 + "synthesis call, so no precomputed voice cache is needed."

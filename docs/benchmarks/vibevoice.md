@@ -18,7 +18,7 @@
 - **CFG scale**: 1.3 (Realtime), 1.5 (long-form)
 - **Prompt**: 200-word English paragraph (≈ 90 s target audio)
 
-Measurement via `audio vibevoice --verbose` which reports duration, elapsed time, and RTF (real-time factor).
+Measurement via `speech vibevoice --verbose` which reports duration, elapsed time, and RTF (real-time factor).
 
 ## Measured
 
@@ -76,7 +76,7 @@ acoustic confusion (predictable for a coined word).
 make build
 
 # Run with verbose timing
-.build/release/audio vibevoice \
+.build/release/speech vibevoice \
   "Text of roughly 200 words here ..." \
   --voice-cache /path/to/en-Mike_man.safetensors \
   --steps 20 \

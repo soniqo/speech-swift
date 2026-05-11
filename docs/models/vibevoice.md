@@ -32,16 +32,16 @@ Microsoft's model cards are explicit:
   generate plausible-sounding audio that does not faithfully reproduce the
   input text and should be considered experimental.
 
-The CLI surfaces this in the `audio vibevoice --help` discussion section.
+The CLI surfaces this in the `speech vibevoice --help` discussion section.
 
 ### Voice-cache provenance
 
 Realtime-0.5B is **distributed inference-only** — its checkpoint contains
 the LM, TTS LM, connector, decoder, and EOS classifier, but no acoustic
-encoder weights. Calling `audio vibevoice-encode-voice` against this model
+encoder weights. Calling `speech vibevoice-encode-voice` against this model
 will fail fast with a pointer to the only real workflow it can recommend:
 
-> Use 1.5B end-to-end via `audio vibevoice ... --long-form --reference-audio
+> Use 1.5B end-to-end via `speech vibevoice ... --long-form --reference-audio
 > <wav> --reference-transcript "..."`. The 1.5B checkpoint *does* ship the
 > encoder, so it can clone arbitrary voices from raw audio in one shot.
 > (The encoding is inlined; there is no separate "encode-voice" step on the
@@ -144,7 +144,7 @@ reference audio + transcript via `VibeVoiceTTSModel.encodeAndSaveVoice(...)`
 or the CLI:
 
 ```bash
-audio vibevoice-encode-voice reference.wav "exact transcript" \
+speech vibevoice-encode-voice reference.wav "exact transcript" \
     --output voices/my-voice.safetensors
 ```
 

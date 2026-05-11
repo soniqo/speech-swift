@@ -139,11 +139,11 @@ brew install speech
 Depois:
 
 ```bash
-audio transcribe recording.wav
-audio speak "Hello world"
-audio translate "Hello, how are you?" --to es
-audio respond --input question.wav --transcript
-audio-server --port 8080            # servidor HTTP / WebSocket local (OpenAI-compatible /v1/realtime)
+speech transcribe recording.wav
+speech speak "Hello world"
+speech translate "Hello, how are you?" --to es
+speech respond --input question.wav --transcript
+speech-server --port 8080            # servidor HTTP / WebSocket local (OpenAI-compatible /v1/realtime)
 ```
 
 **[Referencia completa do CLI →](https://soniqo.audio/pt/cli)**
@@ -331,7 +331,7 @@ pipeline.pushAudio(micSamples)
 ### Servidor HTTP API
 
 ```bash
-audio-server --port 8080
+speech-server --port 8080
 ```
 
 Expoe cada modelo via endpoints HTTP REST + WebSocket, incluindo um WebSocket compativel com OpenAI Realtime API em `/v1/realtime`. Veja [`Sources/AudioServer/`](Sources/AudioServer/).
