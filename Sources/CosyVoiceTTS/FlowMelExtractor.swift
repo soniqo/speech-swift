@@ -167,6 +167,10 @@ final class FlowMelExtractor {
         var splitReal = [Float](repeating: 0, count: halfPadded)
         var splitImag = [Float](repeating: 0, count: halfPadded)
         var paddedFrame = [Float](repeating: 0, count: paddedFFT)
+        // Matcha uses MAGNITUDE — `torch.sqrt(spec.pow(2).sum(-1) + 1e-9)` — not
+        // power. Using power here would square the dynamic range before the log
+        // and break the flow's cond conditioning (cond values land in a totally
+        // different scale than what the model was trained on).
         var magnitude = [Float](repeating: 0, count: nFrames * nBins)
 
         for frame in 0..<nFrames {
@@ -188,10 +192,16 @@ final class FlowMelExtractor {
                 }
             }
             let base = frame * nBins
-            magnitude[base] = splitReal[0] * splitReal[0]
-            magnitude[base + halfPadded] = splitImag[0] * splitImag[0]
+            // DC: |real| (Nyquist packed in imagp[0]; both are purely real).
+            // Matcha's `sqrt(pow²+ε)` is equivalent to `sqrt(re²+im²+ε)`.
+            let epsMag: Float = sqrt(1e-9)
+            magnitude[base] = sqrt(splitReal[0] * splitReal[0] + 1e-9)
+            magnitude[base + halfPadded] = sqrt(splitImag[0] * splitImag[0] + 1e-9)
+            _ = epsMag
             for k in 1..<halfPadded {
-                magnitude[base + k] = splitReal[k] * splitReal[k] + splitImag[k] * splitImag[k]
+                let re = splitReal[k]
+                let im = splitImag[k]
+                magnitude[base + k] = sqrt(re * re + im * im + 1e-9)
             }
         }
 
