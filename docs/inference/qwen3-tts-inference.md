@@ -2,6 +2,8 @@
 
 > Reference for Swift MLX port. Based on [Qwen3-TTS-12Hz-0.6B](https://arxiv.org/abs/2601.15621). Speech tokenizer decoder based on [Mimi](https://arxiv.org/abs/2410.00037) (Kyutai).
 
+For the tokenizer-free 48 kHz multilingual backend, see [VoxCPM2](voxcpm2-inference.md).
+
 ## Overview
 
 ```

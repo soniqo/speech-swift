@@ -1,22 +1,22 @@
 import Foundation
 import AVFoundation
 import ArgumentParser
-import MLXRandom
+import MLX
 import Qwen3TTS
 import CosyVoiceTTS
-import Qwen3TTSCoreML
+import VoxCPM2TTS
 import AudioCommon
 
 public struct SpeakCommand: ParsableCommand {
     public static let configuration = CommandConfiguration(
         commandName: "speak",
-        abstract: "Text-to-speech synthesis (Qwen3-TTS or CosyVoice)"
+        abstract: "Text-to-speech synthesis (Qwen3-TTS, CosyVoice, or VoxCPM2). For CoreML, use the `qwen3-tts-coreml` subcommand."
     )
 
     @Argument(help: "Text to synthesize (omit when using --list-speakers or --batch-file)")
     public var text: String?
 
-    @Option(name: .long, help: "TTS engine: qwen3 (default), cosyvoice, or coreml")
+    @Option(name: .long, help: "TTS engine: qwen3 (default), cosyvoice, or voxcpm2")
     public var engine: String = "qwen3"
 
     @Option(name: .shortAndLong, help: "Output WAV file path")
@@ -39,7 +39,7 @@ public struct SpeakCommand: ParsableCommand {
     @Option(name: .long, help: "[qwen3] Style instruction (requires CustomVoice model)")
     public var instruct: String?
 
-    @Option(name: .long, help: "Reference audio file for voice cloning (qwen3 Base or cosyvoice)")
+    @Option(name: .long, help: "Reference audio file for voice cloning (qwen3 Base, cosyvoice, or voxcpm2)")
     public var voiceSample: String?
 
     @Option(name: .long, help: "[qwen3] Model variant: base (default), base-8bit, 1.7b, 1.7b-8bit, customVoice, or full HF model ID. Note: --speaker requires customVoice.")
@@ -86,7 +86,7 @@ public struct SpeakCommand: ParsableCommand {
     @Option(name: .long, help: "[cosyvoice] Crossfade between turns in seconds (default 0)")
     public var crossfade: Float = 0.0
 
-    @Option(name: .long, help: "[cosyvoice] MLXRandom seed applied before each synthesis call. Fixes the flow-matching noise + Gumbel sampling + HiFiGAN init phase, so repeated calls with the same speaker embedding produce near-identical prosody and timbre across sections. Useful for long-form narration cut into chunks.")
+    @Option(name: .long, help: "[cosyvoice] MLX seed applied before each synthesis call. Fixes the flow-matching noise + Gumbel sampling + HiFiGAN init phase, so repeated calls with the same speaker embedding produce near-identical prosody and timbre across sections. Useful for long-form narration cut into chunks.")
     public var seed: UInt64?
 
     @Option(name: .long, help: "[cosyvoice] Path to speech_tokenizer.safetensors (S3-Tokenizer-v3). When supplied, --voice-sample is upgraded from spk-only cloning (cos~0.83 cap) to upstream zero-shot conditioning with prompt_token + prompt_feat (preserves identity through emotion changes). Auto-detected in the bundle's cache dir if omitted.")
@@ -97,6 +97,41 @@ public struct SpeakCommand: ParsableCommand {
 
     @Option(name: .long, help: "[cosyvoice] Reference transcript: the text content of --voice-sample. Required for proper zero-shot voice cloning — without it the LLM has acoustic context but no idea what was said in the reference, and emits content-incorrect speech in the right voice.")
     public var cosyReferenceTranscript: String?
+
+    // MARK: - VoxCPM2-specific options
+
+    @Option(name: .long, help: "[voxcpm2] Quantization variant: bf16 (default), int8, int4. Resolves to aufklarer/VoxCPM2-MLX-<variant>.")
+    public var voxcpm2Variant: String = "bf16"
+
+    @Option(name: .long, help: "[voxcpm2] Style instruction")
+    public var voxcpm2Instruct: String?
+
+    @Option(name: .long, help: "[voxcpm2] Reference audio file for voice cloning")
+    public var voxcpm2RefAudio: String?
+
+    @Option(name: .long, help: "[voxcpm2] Prompt text for continuation")
+    public var voxcpm2PromptText: String?
+
+    @Option(name: .long, help: "[voxcpm2] Prompt audio file for continuation")
+    public var voxcpm2PromptAudio: String?
+
+    @Option(name: .long, help: "[voxcpm2] Classifier-free guidance scale (default 2.0)")
+    public var voxcpm2CfgValue: Float = 2.0
+
+    @Option(name: .long, help: "[voxcpm2] Diffusion timesteps per patch")
+    public var voxcpm2Timesteps: Int = 10
+
+    @Option(name: .long, help: "[voxcpm2] Maximum generated patches")
+    public var voxcpm2MaxTokens: Int = 2000
+
+    @Option(name: .long, help: "[voxcpm2] Minimum generated patches before early stop")
+    public var voxcpm2MinTokens: Int = 2
+
+    @Option(name: .long, help: "[voxcpm2] Streaming prefix patches retained for continuation")
+    public var voxcpm2StreamingPrefixLen: Int = 4
+
+    @Option(name: .long, help: "[voxcpm2] Warmup patches to skip before emitting audio")
+    public var voxcpm2WarmupPatches: Int = 0
 
     @Flag(name: .long, help: "Show detailed timing info")
     public var verbose: Bool = false
@@ -111,20 +146,29 @@ public struct SpeakCommand: ParsableCommand {
 
     public func validate() throws {
         let eng = engine.lowercased()
-        guard eng == "qwen3" || eng == "cosyvoice" || eng == "coreml" else {
-            throw ValidationError("--engine must be 'qwen3', 'cosyvoice', or 'coreml'")
+        guard eng == "qwen3" || eng == "cosyvoice" || eng == "voxcpm2" else {
+            throw ValidationError("--engine must be 'qwen3', 'cosyvoice', or 'voxcpm2'. For CoreML, use the `qwen3-tts-coreml` subcommand.")
         }
         if text == nil && batchFile == nil && !listSpeakers {
             throw ValidationError("Either a text argument, --batch-file, or --list-speakers must be provided")
         }
+        if eng == "voxcpm2" {
+            if batchFile != nil || listSpeakers {
+                throw ValidationError("--engine voxcpm2 only supports a single text input")
+            }
+            if (voxcpm2PromptAudio == nil) != (voxcpm2PromptText == nil) {
+                throw ValidationError("--voxcpm2-prompt-audio and --voxcpm2-prompt-text must be provided together")
+            }
+        }
     }
 
     public func run() throws {
-        if engine.lowercased() == "cosyvoice" {
+        switch engine.lowercased() {
+        case "cosyvoice":
             try runCosyVoice()
-        } else if engine.lowercased() == "coreml" {
-            try runCoreML()
-        } else {
+        case "voxcpm2":
+            try runVoxCPM2()
+        default:
             try runQwen3()
         }
     }
@@ -351,49 +395,106 @@ public struct SpeakCommand: ParsableCommand {
         }
     }
 
-    // MARK: - CoreML engine
+    // MARK: - VoxCPM2 engine
 
-    private func runCoreML() throws {
-        guard let text else {
-            throw ValidationError("Text is required for CoreML TTS")
+    private func resolvedVoxCPM2ModelId() throws -> String {
+        switch voxcpm2Variant.lowercased() {
+        case "bf16":
+            return "aufklarer/VoxCPM2-MLX-bf16"
+        case "int8":
+            return "aufklarer/VoxCPM2-MLX-int8"
+        case "int4":
+            return "aufklarer/VoxCPM2-MLX-int4"
+        default:
+            throw ValidationError("--voxcpm2-variant must be bf16, int8, or int4 (got '\(voxcpm2Variant)')")
         }
+    }
+
+    private func runVoxCPM2() throws {
         try runAsync {
-            // If modelId looks like a local path, use it directly
-            let localDir: String? = self.modelId.hasPrefix("/") ? self.modelId : nil
-            let model = try await Qwen3TTSCoreMLModel.fromPretrained(
-                localPath: localDir
-            ) { progress, status in
-                print("\r  [\(Int(progress * 100))%] \(status)", terminator: "")
-                fflush(stdout)
+            let runOnCPU = ProcessInfo.processInfo.environment["VOXCPM2_FORCE_CPU"] == "1"
+            let body: () async throws -> Void = {
+                guard let inputText = text else {
+                    print("Error: text argument is required for VoxCPM2")
+                    throw ExitCode(1)
+                }
+
+                let resolvedId = try resolvedVoxCPM2ModelId()
+                print("Loading VoxCPM2 model (\(resolvedId))...")
+                let model = try await VoxCPM2TTSModel.fromPretrained(
+                    modelId: resolvedId,
+                    progressHandler: reportProgress
+                )
+
+                if let s = seed {
+                    MLX.seed(s)
+                    print("  Seed: \(s) (deterministic flow + LM + vocoder sampling)")
+                }
+
+                let referenceAudio: [Float]?
+                if let refPath = voxcpm2RefAudio {
+                    let refURL = URL(fileURLWithPath: refPath)
+                    referenceAudio = try AudioFileLoader.load(url: refURL, targetSampleRate: 16000)
+                    print("  Reference audio: \(referenceAudio?.count ?? 0) samples")
+                } else if let fallbackVoiceSample = voiceSample {
+                    let refURL = URL(fileURLWithPath: fallbackVoiceSample)
+                    referenceAudio = try AudioFileLoader.load(url: refURL, targetSampleRate: 16000)
+                    print("  Reference audio: \(referenceAudio?.count ?? 0) samples")
+                } else {
+                    referenceAudio = nil
+                }
+
+                let promptAudio: [Float]?
+                if let promptPath = voxcpm2PromptAudio {
+                    let promptURL = URL(fileURLWithPath: promptPath)
+                    promptAudio = try AudioFileLoader.load(url: promptURL, targetSampleRate: 16000)
+                    print("  Prompt audio: \(promptAudio?.count ?? 0) samples")
+                } else {
+                    promptAudio = nil
+                }
+
+                print("Synthesizing with VoxCPM2 (language: \(effectiveLanguage))...")
+                let audio = try await model.generateVoxCPM2(
+                    text: inputText,
+                    language: effectiveLanguage,
+                    maxTokens: voxcpm2MaxTokens,
+                    minTokens: voxcpm2MinTokens,
+                    refAudio: referenceAudio,
+                    promptText: voxcpm2PromptText,
+                    promptAudio: promptAudio,
+                    inferenceTimesteps: voxcpm2Timesteps,
+                    cfgValue: voxcpm2CfgValue,
+                    streamingPrefixLen: voxcpm2StreamingPrefixLen,
+                    warmupPatches: voxcpm2WarmupPatches,
+                    instruct: voxcpm2Instruct
+                )
+
+                guard !audio.isEmpty else {
+                    print("Error: No audio generated")
+                    throw ExitCode(1)
+                }
+
+                let sampleRate = model.sampleRate
+                let outputURL = URL(fileURLWithPath: output)
+                if !play {
+                    try WAVWriter.write(samples: audio, sampleRate: sampleRate, to: outputURL)
+                    print("Saved \(audio.count) samples (\(formatDuration(audio.count, sampleRate: sampleRate))s) to \(output)")
+                } else {
+                    playAudio(samples: audio, sampleRate: sampleRate)
+                }
+
+                model.unload()
             }
-            print()
 
-            let lang = self.language ?? "english"
-            // CoreML backend needs higher temperature (0.8) — low temp is degenerate
-            let coremlTemp: Float = self.temperature == 0.3 ? 0.8 : self.temperature
-            print("Synthesizing with CoreML engine (language: \(lang))...")
-            let start = CFAbsoluteTimeGetCurrent()
-            let audio = try model.synthesize(
-                text: text, language: lang,
-                temperature: coremlTemp, topK: Int(self.topK),
-                maxTokens: self.maxTokens)
-            let elapsed = CFAbsoluteTimeGetCurrent() - start
-            let duration = Double(audio.count) / 24000.0
-
-            print(String(format: "  Generated %.2fs audio in %.1fs (RTF: %.2f)",
-                         duration, elapsed, elapsed / max(duration, 0.01)))
-
-            let outputURL = URL(fileURLWithPath: self.output)
-            try WAVWriter.write(samples: audio, sampleRate: 24000, to: outputURL)
-            print("  Saved: \(outputURL.path)")
-
-            if self.play {
-                let player = try AVAudioPlayer(contentsOf: outputURL)
-                player.play()
-                while player.isPlaying { Thread.sleep(forTimeInterval: 0.1) }
+            if runOnCPU {
+                try await Device.withDefaultDevice(.cpu) {
+                    try await Stream.withNewDefaultStream(device: .cpu) {
+                        try await body()
+                    }
+                }
+            } else {
+                try await body()
             }
-
-            model.unload()
         }
     }
 
@@ -518,7 +619,7 @@ public struct SpeakCommand: ParsableCommand {
             // narration cut into per-section chunks where per-call diffusion
             // variance otherwise drifts the voice between sections.
             if let s = seed {
-                MLXRandom.seed(s)
+                MLX.seed(s)
                 print("  Seed: \(s) (deterministic flow + LLM + vocoder sampling)")
             }
 

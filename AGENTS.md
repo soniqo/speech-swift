@@ -63,6 +63,7 @@ Project skills in `.claude/skills/`:
 - `Sources/OmnilingualASR/` — Speech-to-text (Meta wav2vec2 CTC, 1,672 languages, CoreML 300M + MLX 300M/1B/3B/7B)
 - `Sources/Qwen3TTS/` — Text-to-speech (Qwen3-TTS)
 - `Sources/CosyVoiceTTS/` — Text-to-speech (CosyVoice3, streaming)
+- `Sources/VoxCPM2TTS/` — Text-to-speech (VoxCPM2, MLX, 48 kHz, voice cloning + voice design)
 - `Sources/KokoroTTS/` — Text-to-speech (Kokoro-82M, CoreML, iOS-ready)
 - `Sources/Qwen3TTSCoreML/` — Text-to-speech (Qwen3-TTS 0.6B, CoreML, 6-model pipeline)
 - `Sources/PersonaPlex/` — Speech-to-speech (PersonaPlex 7B, full-duplex)
@@ -125,7 +126,8 @@ The `speech` binary is the main entry point (`audio` is a deprecated alias that 
 
 ```bash
 .build/release/speech transcribe recording.wav          # ASR
-.build/release/speech speak "Hello" --output hi.wav     # TTS
+.build/release/speech speak "Hello" --output hi.wav     # TTS (Qwen3-TTS default)
+.build/release/speech speak "Hello" --engine voxcpm2 --voxcpm2-variant int8 -o hi.wav  # VoxCPM2 (48 kHz)
 .build/release/speech respond --input q.wav             # Speech-to-speech
 .build/release/speech diarize meeting.wav               # Speaker diarization (pyannote)
 .build/release/speech diarize meeting.wav --engine sortformer  # Sortformer (CoreML, end-to-end)
@@ -149,6 +151,7 @@ docs/
     asr-model.md                Qwen3-ASR architecture
     tts-model.md                Qwen3-TTS architecture
     cosyvoice-tts.md            CosyVoice3 architecture
+    voxcpm2-tts.md              VoxCPM2 architecture (48 kHz, voice cloning + voice design)
     kokoro-tts.md               Kokoro-82M architecture
     parakeet-asr.md             Parakeet TDT architecture
     personaplex.md              PersonaPlex architecture
@@ -157,6 +160,7 @@ docs/
     qwen3-asr-inference.md      Qwen3-ASR inference pipeline
     parakeet-asr-inference.md   Parakeet TDT inference (CoreML)
     qwen3-tts-inference.md      TTS inference pipeline
+    voxcpm2-inference.md        VoxCPM2 inference (48 kHz, --voxcpm2-variant bf16/int8/int4)
     forced-aligner.md           Forced alignment pipeline
     silero-vad.md               Silero VAD streaming
     fireredvad.md               FireRedVAD inference + tuning results

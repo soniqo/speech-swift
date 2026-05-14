@@ -2,6 +2,8 @@
 
 > Reference for Swift MLX port. Based on [Qwen3-TTS-12Hz-0.6B](https://arxiv.org/abs/2601.15621). Speech tokenizer decoder based on [Mimi](https://arxiv.org/abs/2410.00037) (Kyutai).
 
+For the separate 48 kHz MiniCPM-4-based multilingual stack, see [VoxCPM2](voxcpm2-tts.md).
+
 ## Overview
 
 Qwen3-TTS has four components: a Talker (main LM), Code Predictor (residual codebooks), Speech Tokenizer (neural audio codec), and Speaker Encoder (voice cloning). The Swift port implements the Talker, Code Predictor, Speech Tokenizer Decoder, and Speaker Encoder. The Speech Tokenizer Encoder (for ICL voice cloning) is not yet ported.

@@ -115,7 +115,7 @@ The Swift layer bridges the C++ pipeline engine with Swift model implementations
 | Bridge | Purpose |
 |--------|---------|
 | `STTBridge` | Wraps Qwen3-ASR or Parakeet for speech-to-text |
-| `TTSBridge` | Wraps Qwen3-TTS, CosyVoice, or Kokoro for text-to-speech |
+| `TTSBridge` | Wraps Qwen3-TTS, CosyVoice, VoxCPM2, or Kokoro for text-to-speech |
 | `VADBridge` | Wraps Silero VAD for voice activity detection |
 | `LLMBridge` | Wraps Qwen3-Chat or external LLM for response generation |
 | `EventBridge` | Receives C++ events and dispatches to Swift handlers |

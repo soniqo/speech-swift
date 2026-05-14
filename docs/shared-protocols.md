@@ -24,7 +24,8 @@ The `AudioCommon` module defines shared protocols that provide model-agnostic in
    ┌────┴────┐        ┌─────┴─────┐       ┌─────┴─────┐       ┌─────┴─────┐
    │Qwen3TTS │        │  Qwen3ASR │       │PersonaPlex │       │ SpeechVAD │
    │CosyVoice│        │ParakeetASR│       └───────────┘       └───────────┘
-   │Kokoro   │        │ForcedAlign│
+   │VoxCPM2  │        │ForcedAlign│
+   │Kokoro   │
    └─────────┘        └───────────┘
 ```
 
@@ -42,7 +43,7 @@ public protocol SpeechGenerationModel: AnyObject {
 }
 ```
 
-**Conforming types:** `Qwen3TTSModel`, `CosyVoiceTTSModel`, `KokoroTTSModel`
+**Conforming types:** `Qwen3TTSModel`, `CosyVoiceTTSModel`, `VoxCPM2TTSModel`, `KokoroTTSModel`
 
 ### SpeechRecognitionModel (STT)
 
@@ -324,9 +325,11 @@ func synthesizeAny(
 // Works with any TTS model:
 let qwen = try await Qwen3TTSModel.fromPretrained()
 let cosy = try await CosyVoiceTTSModel.fromPretrained()
+let vox = try await VoxCPM2TTSModel.fromPretrained()
 
 let audio1 = try await synthesizeAny(qwen, text: "Hello")
 let audio2 = try await synthesizeAny(cosy, text: "Hello")
+let audio3 = try await synthesizeAny(vox, text: "Hello")
 ```
 
 ### Generic Streaming
@@ -343,7 +346,7 @@ func streamAny(
 ### Existential Collections
 
 ```swift
-let ttsModels: [any SpeechGenerationModel] = [qwen, cosy]
+let ttsModels: [any SpeechGenerationModel] = [qwen, cosy, vox]
 
 for model in ttsModels {
     let audio = try await model.generate(text: "Hello", language: "english")
@@ -399,6 +402,12 @@ Sources/
 │   ├── CosyVoiceTTS.swift     CosyVoiceTTSModel: SpeechGenerationModel
 │   └── CosyVoiceTTS+Protocols.swift
 │
+├── VoxCPM2TTS/                Text-to-speech (MiniCPM-4 + LocEnc + LocDiT + AudioVAE V2)
+│   ├── VoxCPM2TTS.swift       VoxCPM2TTSModel: SpeechGenerationModel
+│   ├── MiniCPM4.swift         MiniCPM-4 backbone, LocEnc, LocDiT, UnifiedCFM
+│   ├── AudioVAE.swift         AudioVAE V2 encode/decode
+│   └── Configuration.swift    ModelArgs / config decoding for VoxCPM2 snapshots
+│
 ├── PersonaPlex/               Speech-to-speech (Temporal + Depformer + Mimi)
 │   ├── PersonaPlex.swift      PersonaPlexModel: SpeechToSpeechModel
 │   └── PersonaPlex+Protocols.swift
@@ -428,6 +437,7 @@ Sources/
 AudioCommon  ← Qwen3ASR         ─┐
              ← Qwen3TTS         │
              ← CosyVoiceTTS     │
+             ← VoxCPM2TTS       │
              ← KokoroTTS        ├── AudioCLILib ── AudioCLI (executable)
              ← ParakeetASR      │
              ← ParakeetStreamingASR │
@@ -436,8 +446,8 @@ AudioCommon  ← Qwen3ASR         ─┐
              ← SpeechVAD       ─┘
              ← SpeechCore (CSpeechCore xcframework + AudioCommon)
 
-MLXCommon  ← Qwen3ASR, Qwen3TTS, Qwen3Chat, CosyVoiceTTS, PersonaPlex,
-              SpeechVAD, OmnilingualASR (MLX backend)
+MLXCommon  ← Qwen3ASR, Qwen3TTS, Qwen3Chat, CosyVoiceTTS, VoxCPM2TTS,
+              PersonaPlex, SpeechVAD, OmnilingualASR (MLX backend)
 ```
 
 Each model target depends only on `AudioCommon` and MLX. No cross-dependencies between model targets. `SpeechCore` depends on `AudioCommon` for protocols and the `CSpeechCore` binary target for the C++ pipeline engine.
@@ -450,6 +460,7 @@ All model classes are **not thread-safe** by design. ML inference is inherently 
 - `Qwen3ASRModel`, `StreamingASR`
 - `Qwen3TTSModel`
 - `CosyVoiceTTSModel`
+- `VoxCPM2TTSModel`
 - `PersonaPlexModel`
 - `OmnilingualASRModel` (CoreML), `OmnilingualASRMLXModel` (MLX)
 - `ParakeetASRModel`, `ParakeetStreamingASRModel`, `NemotronStreamingASRModel`

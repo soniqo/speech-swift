@@ -247,7 +247,7 @@ PlayerNode is gap-prone for streaming TTS because each buffer must be scheduled 
 
 ### Resampling
 
-TTS models generate audio at 24kHz (Qwen3-TTS, CosyVoice, Kokoro). The audio engine typically runs at 48kHz (macOS default hardware sample rate). An `AVAudioConverter` handles on-the-fly upsampling from 24kHz to 48kHz when writing into the ring buffer:
+Most TTS models generate audio at 24kHz (Qwen3-TTS, CosyVoice, Kokoro). VoxCPM2 generates audio at 48kHz directly. The audio engine typically runs at 48kHz (macOS default hardware sample rate). An `AVAudioConverter` handles on-the-fly upsampling from 24kHz to 48kHz when writing into the ring buffer:
 
 ```swift
 let converter = AVAudioConverter(from: ttsFormat, to: engineFormat)  // 24kHz → 48kHz

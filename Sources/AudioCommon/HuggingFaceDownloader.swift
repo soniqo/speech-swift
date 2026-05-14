@@ -133,6 +133,44 @@ public enum HuggingFaceDownloader {
         throw DownloadError.failedToDownload("\(modelId): \(lastError?.localizedDescription ?? "unknown")")
     }
 
+    /// Download an explicit list of files from HuggingFace without adding any
+    /// implicit weight globs. This is useful for overlaying tokenizer or config
+    /// assets from a second repository on top of an existing cache.
+    public static func downloadFiles(
+        modelId: String,
+        to directory: URL,
+        files: [String],
+        offlineMode: Bool = false,
+        progressHandler: ((Double) -> Void)? = nil
+    ) async throws {
+        if files.isEmpty {
+            progressHandler?(1.0)
+            return
+        }
+
+        let hub = makeHubApi(for: modelId, repoDir: directory, offlineMode: offlineMode)
+        let repo = Hub.Repo(id: modelId)
+
+        let globs = files.map { $0 }
+        let maxRetries = 3
+        var lastError: Error?
+        for attempt in 1...maxRetries {
+            do {
+                try await hub.snapshot(from: repo, matching: globs) { progress in
+                    progressHandler?(progress.fractionCompleted)
+                }
+                return
+            } catch {
+                lastError = error
+                if attempt < maxRetries {
+                    let delay = attempt == 1 ? 5 : 15
+                    try await Task.sleep(for: .seconds(delay))
+                }
+            }
+        }
+        throw DownloadError.failedToDownload("\(modelId): \(lastError?.localizedDescription ?? "unknown")")
+    }
+
     // MARK: - Security Helpers (kept for backward compat + security tests)
 
     /// Convert an arbitrary modelId into a single, safe path component for on-disk caching.
