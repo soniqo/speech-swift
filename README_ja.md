@@ -8,6 +8,8 @@ Mac・iOS向けのオンデバイス音声認識・合成・理解。Apple Silic
 
 **[📚 ドキュメント →](https://soniqo.audio/ja)** · **[🤗 HuggingFaceモデル](https://huggingface.co/aufklarer)** · **[📝 ブログ](https://blog.ivan.digital)**
 
+**ユースケース：** [音声エージェント](https://soniqo.audio/ja/voice-agents) · [文字起こし](https://soniqo.audio/ja/transcription) · [音声合成](https://soniqo.audio/ja/speech-generation)
+
 - **[Qwen3-ASR](https://soniqo.audio/ja/guides/transcribe)** — 音声認識（自動音声認識、52言語、MLX + CoreML）
 - **[Parakeet TDT](https://soniqo.audio/ja/guides/parakeet)** — CoreMLによる音声認識（Neural Engine、NVIDIA FastConformer + TDTデコーダー、25言語）
 - **[Omnilingual ASR](https://soniqo.audio/ja/guides/omnilingual)** — 音声認識（Meta wav2vec2 + CTC、**1,672言語**、32文字体系、CoreML 300M + MLX 300M/1B/3B/7B）
@@ -309,7 +311,7 @@ let denoiser = try await DeepFilterNet3Model.fromPretrained()
 let clean = try denoiser.enhance(audio: noisySamples, sampleRate: 48000)
 ```
 
-### 音声パイプライン（ASR → LLM → TTS）— [完全ガイド →](https://soniqo.audio/ja/api)
+### 音声パイプライン（ASR → LLM → TTS）— [完全ガイド →](https://soniqo.audio/ja/voice-agents)
 
 ```swift
 import SpeechCore

@@ -8,6 +8,8 @@ Mac과 iOS를 위한 온디바이스 음성 인식, 합성 및 이해. Apple Sil
 
 **[📚 전체 문서 →](https://soniqo.audio/ko)** · **[🤗 HuggingFace 모델](https://huggingface.co/aufklarer)** · **[📝 블로그](https://blog.ivan.digital)**
 
+**사용 사례:** [음성 에이전트](https://soniqo.audio/ko/voice-agents) · [전사](https://soniqo.audio/ko/transcription) · [음성 합성](https://soniqo.audio/ko/speech-generation)
+
 - **[Qwen3-ASR](https://soniqo.audio/ko/guides/transcribe)** — 음성-텍스트 변환 (자동 음성 인식, 52개 언어, MLX + CoreML)
 - **[Parakeet TDT](https://soniqo.audio/ko/guides/parakeet)** — CoreML을 통한 음성-텍스트 변환 (Neural Engine, NVIDIA FastConformer + TDT 디코더, 25개 언어)
 - **[Omnilingual ASR](https://soniqo.audio/ko/guides/omnilingual)** — 음성-텍스트 변환 (Meta wav2vec2 + CTC, **1,672개 언어**, 32개 문자 체계, CoreML 300M + MLX 300M/1B/3B/7B)
@@ -309,7 +311,7 @@ let denoiser = try await DeepFilterNet3Model.fromPretrained()
 let clean = try denoiser.enhance(audio: noisySamples, sampleRate: 48000)
 ```
 
-### 음성 파이프라인 (ASR → LLM → TTS) — [전체 가이드 →](https://soniqo.audio/ko/api)
+### 음성 파이프라인 (ASR → LLM → TTS) — [전체 가이드 →](https://soniqo.audio/ko/voice-agents)
 
 ```swift
 import SpeechCore

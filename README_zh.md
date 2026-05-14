@@ -8,6 +8,8 @@
 
 **[📚 完整文档 →](https://soniqo.audio/zh)** · **[🤗 HuggingFace 模型](https://huggingface.co/aufklarer)** · **[📝 博客](https://blog.ivan.digital)**
 
+**使用场景：** [语音代理](https://soniqo.audio/zh/voice-agents) · [转录](https://soniqo.audio/zh/transcription) · [语音合成](https://soniqo.audio/zh/speech-generation)
+
 - **[Qwen3-ASR](https://soniqo.audio/zh/guides/transcribe)** — 语音转文字（自动语音识别，52 种语言，MLX + CoreML）
 - **[Parakeet TDT](https://soniqo.audio/zh/guides/parakeet)** — 通过 CoreML 进行语音转文字（神经引擎，NVIDIA FastConformer + TDT 解码器，25 种语言）
 - **[Omnilingual ASR](https://soniqo.audio/zh/guides/omnilingual)** — 语音转文字（Meta wav2vec2 + CTC，**1,672 种语言**，覆盖 32 种文字系统，CoreML 300M + MLX 300M/1B/3B/7B）
@@ -309,7 +311,7 @@ let denoiser = try await DeepFilterNet3Model.fromPretrained()
 let clean = try denoiser.enhance(audio: noisySamples, sampleRate: 48000)
 ```
 
-### 语音流水线（ASR → LLM → TTS） — [完整指南 →](https://soniqo.audio/zh/api)
+### 语音流水线（ASR → LLM → TTS） — [完整指南 →](https://soniqo.audio/zh/voice-agents)
 
 ```swift
 import SpeechCore

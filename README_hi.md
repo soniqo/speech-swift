@@ -8,6 +8,8 @@ Mac और iOS के लिए ऑन-डिवाइस स्पीच रि
 
 **[📚 पूर्ण डॉक्यूमेंटेशन →](https://soniqo.audio/hi)** · **[🤗 HuggingFace मॉडल](https://huggingface.co/aufklarer)** · **[📝 ब्लॉग](https://blog.ivan.digital)**
 
+**यूज़-केस:** [वॉइस एजेंट](https://soniqo.audio/hi/voice-agents) · [ट्रांसक्रिप्शन](https://soniqo.audio/hi/transcription) · [स्पीच जनरेशन](https://soniqo.audio/hi/speech-generation)
+
 - **[Qwen3-ASR](https://soniqo.audio/hi/guides/transcribe)** — स्पीच-टू-टेक्स्ट (ऑटोमैटिक स्पीच रिकग्निशन, 52 भाषाएँ, MLX + CoreML)
 - **[Parakeet TDT](https://soniqo.audio/hi/guides/parakeet)** — CoreML के माध्यम से स्पीच-टू-टेक्स्ट (Neural Engine, NVIDIA FastConformer + TDT decoder, 25 भाषाएँ)
 - **[Omnilingual ASR](https://soniqo.audio/hi/guides/omnilingual)** — स्पीच-टू-टेक्स्ट (Meta wav2vec2 + CTC, **1,672 भाषाएँ** 32 लिपियों में, CoreML 300M + MLX 300M/1B/3B/7B)
@@ -309,7 +311,7 @@ let denoiser = try await DeepFilterNet3Model.fromPretrained()
 let clean = try denoiser.enhance(audio: noisySamples, sampleRate: 48000)
 ```
 
-### वॉयस पाइपलाइन (ASR → LLM → TTS) — [पूर्ण गाइड →](https://soniqo.audio/hi/api)
+### वॉयस पाइपलाइन (ASR → LLM → TTS) — [पूर्ण गाइड →](https://soniqo.audio/hi/voice-agents)
 
 ```swift
 import SpeechCore

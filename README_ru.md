@@ -8,6 +8,8 @@
 
 **[📚 Полная документация →](https://soniqo.audio/ru)** · **[🤗 Модели на HuggingFace](https://huggingface.co/aufklarer)** · **[📝 Блог](https://blog.ivan.digital)**
 
+**Сценарии:** [Голосовые агенты](https://soniqo.audio/ru/voice-agents) · [Транскрипция](https://soniqo.audio/ru/transcription) · [Синтез речи](https://soniqo.audio/ru/speech-generation)
+
 - **[Qwen3-ASR](https://soniqo.audio/ru/guides/transcribe)** — Распознавание речи (автоматическое распознавание речи, 52 языка, MLX + CoreML)
 - **[Parakeet TDT](https://soniqo.audio/ru/guides/parakeet)** — Распознавание речи через CoreML (Neural Engine, NVIDIA FastConformer + TDT-декодер, 25 языков)
 - **[Omnilingual ASR](https://soniqo.audio/ru/guides/omnilingual)** — Распознавание речи (Meta wav2vec2 + CTC, **1 672 языка** в 32 письменностях, CoreML 300M + MLX 300M/1B/3B/7B)
@@ -309,7 +311,7 @@ let denoiser = try await DeepFilterNet3Model.fromPretrained()
 let clean = try denoiser.enhance(audio: noisySamples, sampleRate: 48000)
 ```
 
-### Голосовой пайплайн (ASR → LLM → TTS) — [полное руководство →](https://soniqo.audio/ru/api)
+### Голосовой пайплайн (ASR → LLM → TTS) — [полное руководство →](https://soniqo.audio/ru/voice-agents)
 
 ```swift
 import SpeechCore

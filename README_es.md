@@ -8,6 +8,8 @@ Reconocimiento, síntesis y comprensión de voz en el dispositivo para Mac e iOS
 
 **[📚 Documentación completa →](https://soniqo.audio/es)** · **[🤗 Modelos en HuggingFace](https://huggingface.co/aufklarer)** · **[📝 Blog](https://blog.ivan.digital)** · **[💬 Discord](https://discord.gg/TnCryqEMgu)**
 
+**Casos de uso:** [Agentes de voz](https://soniqo.audio/es/voice-agents) · [Transcripción](https://soniqo.audio/es/transcription) · [Síntesis de voz](https://soniqo.audio/es/speech-generation)
+
 - **[Qwen3-ASR](https://soniqo.audio/es/guides/transcribe)** — Voz a texto (reconocimiento automático del habla, 52 idiomas, MLX + CoreML)
 - **[Parakeet TDT](https://soniqo.audio/es/guides/parakeet)** — Voz a texto vía CoreML (Neural Engine, NVIDIA FastConformer + decodificador TDT, 25 idiomas)
 - **[Omnilingual ASR](https://soniqo.audio/es/guides/omnilingual)** — Voz a texto (Meta wav2vec2 + CTC, **1.672 idiomas** en 32 escrituras, CoreML 300M + MLX 300M/1B/3B/7B)
@@ -309,7 +311,7 @@ let denoiser = try await DeepFilterNet3Model.fromPretrained()
 let clean = try denoiser.enhance(audio: noisySamples, sampleRate: 48000)
 ```
 
-### Pipeline de voz (ASR → LLM → TTS) — [guía completa →](https://soniqo.audio/es/api)
+### Pipeline de voz (ASR → LLM → TTS) — [guía completa →](https://soniqo.audio/es/voice-agents)
 
 ```swift
 import SpeechCore
