@@ -8,6 +8,13 @@ Mac・iOS向けのオンデバイス音声認識・合成・理解。Apple Silic
 
 **[📚 ドキュメント →](https://soniqo.audio/ja)** · **[🤗 HuggingFaceモデル](https://huggingface.co/aufklarer)** · **[📝 ブログ](https://blog.ivan.digital)**
 
+<p align="center">
+  <a href="https://youtu.be/x9zgcaW0gUk">
+    <img src="https://img.youtube.com/vi/x9zgcaW0gUk/maxresdefault.jpg" width="640" alt="MacBook で動くローカル音声 AI ―― 4 分間のオープンソースライブラリツアー">
+  </a>
+</p>
+<p align="center"><em>MacBook で動くローカル音声 AI ―― 4 分間のオープンソースライブラリツアー</em></p>
+
 **ユースケース：** [音声エージェント](https://soniqo.audio/ja/voice-agents) · [文字起こし](https://soniqo.audio/ja/transcription) · [音声合成](https://soniqo.audio/ja/speech-generation)
 
 - **[Qwen3-ASR](https://soniqo.audio/ja/guides/transcribe)** — 音声認識（自動音声認識、52言語、MLX + CoreML）

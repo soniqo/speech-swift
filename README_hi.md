@@ -8,6 +8,13 @@ Mac और iOS के लिए ऑन-डिवाइस स्पीच रि
 
 **[📚 पूर्ण डॉक्यूमेंटेशन →](https://soniqo.audio/hi)** · **[🤗 HuggingFace मॉडल](https://huggingface.co/aufklarer)** · **[📝 ब्लॉग](https://blog.ivan.digital)**
 
+<p align="center">
+  <a href="https://youtu.be/x9zgcaW0gUk">
+    <img src="https://img.youtube.com/vi/x9zgcaW0gUk/maxresdefault.jpg" width="640" alt="MacBook पर लोकल स्पीच AI — चार मिनट का ओपन-सोर्स लाइब्रेरी टूर">
+  </a>
+</p>
+<p align="center"><em>MacBook पर लोकल स्पीच AI — चार मिनट का ओपन-सोर्स लाइब्रेरी टूर</em></p>
+
 **यूज़-केस:** [वॉइस एजेंट](https://soniqo.audio/hi/voice-agents) · [ट्रांसक्रिप्शन](https://soniqo.audio/hi/transcription) · [स्पीच जनरेशन](https://soniqo.audio/hi/speech-generation)
 
 - **[Qwen3-ASR](https://soniqo.audio/hi/guides/transcribe)** — स्पीच-टू-टेक्स्ट (ऑटोमैटिक स्पीच रिकग्निशन, 52 भाषाएँ, MLX + CoreML)

@@ -8,6 +8,13 @@ Reconocimiento, síntesis y comprensión de voz en el dispositivo para Mac e iOS
 
 **[📚 Documentación completa →](https://soniqo.audio/es)** · **[🤗 Modelos en HuggingFace](https://huggingface.co/aufklarer)** · **[📝 Blog](https://blog.ivan.digital)** · **[💬 Discord](https://discord.gg/TnCryqEMgu)**
 
+<p align="center">
+  <a href="https://youtu.be/x9zgcaW0gUk">
+    <img src="https://img.youtube.com/vi/x9zgcaW0gUk/maxresdefault.jpg" width="640" alt="IA de voz local en un MacBook — un recorrido de cuatro minutos por la biblioteca open source">
+  </a>
+</p>
+<p align="center"><em>IA de voz local en un MacBook — un recorrido de cuatro minutos por la biblioteca open source</em></p>
+
 **Casos de uso:** [Agentes de voz](https://soniqo.audio/es/voice-agents) · [Transcripción](https://soniqo.audio/es/transcription) · [Síntesis de voz](https://soniqo.audio/es/speech-generation)
 
 - **[Qwen3-ASR](https://soniqo.audio/es/guides/transcribe)** — Voz a texto (reconocimiento automático del habla, 52 idiomas, MLX + CoreML)
