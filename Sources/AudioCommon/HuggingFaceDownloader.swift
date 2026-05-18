@@ -51,46 +51,18 @@ public enum HuggingFaceDownloader {
 
     // MARK: - Weight Existence Check
 
-    /// File-extension stems recognised as cached model weights.
-    ///
-    /// - `safetensors`: canonical Hugging Face safetensors layout
-    ///   (sharded or single-file).
-    /// - `mlmodelc`: Apple CoreML compiled-model bundle (a directory
-    ///   ending in `.mlmodelc`). CoreML-only Hugging Face repositories
-    ///   ship one or more of these and no `.safetensors` files.
-    /// - `mlpackage`: Apple CoreML uncompiled package (a directory
-    ///   ending in `.mlpackage`). Less common in HF caches but
-    ///   recognised for symmetry.
+    /// Extensions recognised as cached model weights: the canonical
+    /// HF `.safetensors` layout plus Apple CoreML bundle directories
+    /// (`.mlmodelc`, `.mlpackage`) shipped by CoreML-only repos.
     public static let weightFileExtensions: Set<String> = [
         "safetensors", "mlmodelc", "mlpackage"
     ]
 
     /// Returns `true` when `directory` contains at least one entry
-    /// whose extension matches `weightFileExtensions`.
-    ///
-    /// Used by `downloadWeights` to short-circuit network requests
-    /// when `offlineMode: true` is set. Recognising both the safetensors
-    /// layout AND the Apple CoreML bundle layouts (`.mlmodelc/`,
-    /// `.mlpackage/`) is necessary because CoreML-only repositories
-    /// (e.g. `aufklarer/Parakeet-TDT-v3-CoreML-INT8`,
-    /// `aufklarer/WeSpeaker-ResNet34-LM-CoreML`,
-    /// `aufklarer/Sortformer-Diarization-CoreML`) ship their compiled
-    /// models as `.mlmodelc/` directories and contain zero
-    /// `.safetensors` files.
-    ///
-    /// Without recognising the CoreML extensions, `offlineMode: true`
-    /// always falls through to `hub.snapshot()`, which issues an HTTP
-    /// HEAD to `https://huggingface.co/api/models/<repo>/revision/main`
-    /// even when every byte of the model is already on disk. On
-    /// enterprise-managed networks where outbound traffic from
-    /// development-signed binaries is filtered by EDR (CrowdStrike
-    /// Falcon, Cisco AnyConnect with strict outbound policies, …),
-    /// that fetch is dropped or causes the calling process to be
-    /// SIGKILLed before any `catch` block can run. Field-confirmed
-    /// 2026-05-08 via macOS unified-log capture; downstream apps
-    /// have been working around this with a 0-byte `.safetensors`
-    /// marker file dropped into the cache directory after extracting
-    /// CoreML weights.
+    /// whose extension matches `weightFileExtensions`. Used by
+    /// `downloadWeights` to short-circuit network requests when
+    /// `offlineMode: true` is set on caches that contain only CoreML
+    /// bundles and no `.safetensors` files.
     public static func weightsExist(in directory: URL) -> Bool {
         let fm = FileManager.default
         guard fm.fileExists(atPath: directory.path) else { return false }
