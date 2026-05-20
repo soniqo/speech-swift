@@ -125,12 +125,15 @@ public final class SourceSeparator {
         var results: [SeparationTarget: [[Float]]] = [:]
 
         if wiener && targetMags.count > 1 {
-            // Multichannel Wiener EM in MLX. Reference Swift implementation
-            // (WienerFilter) is retained for the equivalence unit test.
+            // Multichannel Wiener EM + inverse STFT, both on the GPU. Wiener
+            // returns MLXArrays of shape [J, T, F]; we stack L/R into a
+            // channel axis, run a single batched inverseMLX over [J, 2, T, F],
+            // and only convert to [[Float]] at the very end. This removes the
+            // per-(t, f) scalar-write loop that used to bridge the two stages.
             let wienerStart = CFAbsoluteTimeGetCurrent()
             let allLeftMags = targetMags.map(\.left)
             let allRightMags = targetMags.map(\.right)
-            let refined = WienerFilterMLX.apply(
+            let refined = WienerFilterMLX.applyMLX(
                 targetMagsL: allLeftMags,
                 targetMagsR: allRightMags,
                 mixRealL: leftReal, mixImagL: leftImag,
@@ -139,9 +142,17 @@ public final class SourceSeparator {
             metrics.wienerSec = CFAbsoluteTimeGetCurrent() - wienerStart
 
             let istftStart = CFAbsoluteTimeGetCurrent()
+            // Stack [J, T, F] L and R along a new channel axis → [J, 2, T, F].
+            let realJC = stacked([refined.realL, refined.realR], axis: 1)
+            let imagJC = stacked([refined.imagL, refined.imagR], axis: 1)
+            let audioJC = stft.inverseMLX(real: realJC, imag: imagJC, length: length)
+            // Single sync + readback: [J, 2, length] → flat [J*2*length]
+            eval(audioJC)
+            let flat = audioJC.asArray(Float.self)
             for (i, entry) in targetMags.enumerated() {
-                let leftStem = stft.inverse(real: refined[i].realL, imag: refined[i].imagL, length: length)
-                let rightStem = stft.inverse(real: refined[i].realR, imag: refined[i].imagR, length: length)
+                let base = i * 2 * length
+                let leftStem = Array(flat[base ..< base + length])
+                let rightStem = Array(flat[base + length ..< base + 2 * length])
                 results[entry.target] = [leftStem, rightStem]
             }
             metrics.inverseStftSec = CFAbsoluteTimeGetCurrent() - istftStart

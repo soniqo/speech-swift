@@ -152,6 +152,56 @@ final class LSTMCellTests: XCTestCase {
 
 // MARK: - E2E Tests (require model download)
 
+final class STFTInverseMLXTests: XCTestCase {
+
+    /// MLX iSTFT must match the Swift/vDSP iSTFT within a loose tolerance
+    /// (FP reduction order differs across the overlap-add).
+    func testInverseMLXMatchesSwift() {
+        let stft = STFTProcessor(nFFT: 4096, nHop: 1024)
+        // 0.5s of mono audio at 44.1k → enough frames to exercise overlap-add.
+        let n = 22050
+        var rng = SystemRandomNumberGenerator()
+        var audio = [Float](repeating: 0, count: n)
+        for i in 0..<n {
+            audio[i] = Float.random(in: -1...1, using: &rng) * 0.5
+        }
+
+        // Forward STFT to get a realistic complex spectrum.
+        let (real, imag) = stft.forward(audio)
+        let T = real.count
+        let F = real[0].count
+
+        let swiftOut = stft.inverse(real: real, imag: imag, length: n)
+
+        // Build [T, F] MLXArrays from the same spectra.
+        var realFlat = [Float](repeating: 0, count: T * F)
+        var imagFlat = [Float](repeating: 0, count: T * F)
+        for t in 0..<T {
+            for f in 0..<F {
+                realFlat[t * F + f] = real[t][f]
+                imagFlat[t * F + f] = imag[t][f]
+            }
+        }
+        let realMLX = MLXArray(realFlat, [T, F])
+        let imagMLX = MLXArray(imagFlat, [T, F])
+
+        let mlxOut = stft.inverseMLX(real: realMLX, imag: imagMLX, length: n)
+        eval(mlxOut)
+        let mlxArr = mlxOut.asArray(Float.self)
+
+        XCTAssertEqual(swiftOut.count, mlxArr.count)
+        var maxDiff: Float = 0
+        for i in 0..<n {
+            let d = abs(swiftOut[i] - mlxArr[i])
+            if d > maxDiff { maxDiff = d }
+        }
+        // 1e-3 absolute — both paths are doing the same math but with
+        // different reduction order (vDSP per-frame vs MLX batched OLA).
+        XCTAssertLessThan(maxDiff, 1e-3,
+            "max abs diff between Swift and MLX iSTFT: \(maxDiff)")
+    }
+}
+
 final class WienerFilterMLXTests: XCTestCase {
 
     /// MLX Wiener must match the Swift reference within FP-reordering noise on

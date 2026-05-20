@@ -12,7 +12,79 @@ import MLX
 /// API matches `WienerFilter.apply` so the two can be swapped behind a flag.
 struct WienerFilterMLX {
 
-    /// Apply windowed multichannel Wiener EM filtering on the GPU.
+    /// MLX-native result of Wiener filtering. Shapes are `[J, T, F]` so the
+    /// downstream iSTFT path can run on the GPU without any CPU round-trip.
+    struct ResultMLX {
+        let realL: MLXArray   // [J, T, F]
+        let imagL: MLXArray
+        let realR: MLXArray
+        let imagR: MLXArray
+    }
+
+    /// MLX-native Wiener — returns the refined complex spectrum per source as
+    /// MLXArrays so callers can keep the data on the GPU through the iSTFT.
+    static func applyMLX(
+        targetMagsL: [[[Float]]],
+        targetMagsR: [[[Float]]],
+        mixRealL: [[Float]],
+        mixImagL: [[Float]],
+        mixRealR: [[Float]],
+        mixImagR: [[Float]],
+        iterations: Int = 1,
+        windowLen: Int = 300
+    ) -> ResultMLX {
+        let nSources = targetMagsL.count
+        let T = targetMagsL[0].count
+        let nBins = targetMagsL[0][0].count
+
+        let tgtL = MLXArray(flatten3(targetMagsL), [nSources, T, nBins])
+        let tgtR = MLXArray(flatten3(targetMagsR), [nSources, T, nBins])
+        let mxRL = MLXArray(flatten2(mixRealL), [T, nBins])
+        let mxIL = MLXArray(flatten2(mixImagL), [T, nBins])
+        let mxRR = MLXArray(flatten2(mixRealR), [T, nBins])
+        let mxIR = MLXArray(flatten2(mixImagR), [T, nBins])
+
+        // Per-window EM. Each window writes into a slice of the per-source
+        // output tensors; final result is [J, T, F].
+        var perWindowRL: [MLXArray] = []
+        var perWindowIL: [MLXArray] = []
+        var perWindowRR: [MLXArray] = []
+        var perWindowIR: [MLXArray] = []
+
+        var pos = 0
+        while pos < T {
+            let end = min(T, pos + windowLen)
+            let wT = end - pos
+
+            let tL = tgtL[0..., pos..<end, 0...]
+            let tR = tgtR[0..., pos..<end, 0...]
+            let mRL = mxRL[pos..<end, 0...]
+            let mIL = mxIL[pos..<end, 0...]
+            let mRR = mxRR[pos..<end, 0...]
+            let mIR = mxIR[pos..<end, 0...]
+
+            let refined = emWienerWindow(
+                tgtL: tL, tgtR: tR,
+                mxRL: mRL, mxIL: mIL, mxRR: mRR, mxIR: mIR,
+                wT: wT, nBins: nBins, nSources: nSources, iterations: iterations)
+            perWindowRL.append(refined.rL)
+            perWindowIL.append(refined.iL)
+            perWindowRR.append(refined.rR)
+            perWindowIR.append(refined.iR)
+            pos = end
+        }
+
+        // Concatenate windows along time axis. No eval here — leave the
+        // graph lazy so the caller can fuse the iSTFT into the same dispatch.
+        return ResultMLX(
+            realL: concatenated(perWindowRL, axis: 1),
+            imagL: concatenated(perWindowIL, axis: 1),
+            realR: concatenated(perWindowRR, axis: 1),
+            imagR: concatenated(perWindowIR, axis: 1))
+    }
+
+    /// Apply windowed multichannel Wiener EM filtering. `[[Float]]` API
+    /// retained for the equivalence unit test and legacy callers.
     static func apply(
         targetMagsL: [[[Float]]],
         targetMagsR: [[[Float]]],
@@ -23,76 +95,39 @@ struct WienerFilterMLX {
         iterations: Int = 1,
         windowLen: Int = 300
     ) -> [(realL: [[Float]], imagL: [[Float]], realR: [[Float]], imagR: [[Float]])] {
+        let result = applyMLX(
+            targetMagsL: targetMagsL, targetMagsR: targetMagsR,
+            mixRealL: mixRealL, mixImagL: mixImagL,
+            mixRealR: mixRealR, mixImagR: mixImagR,
+            iterations: iterations, windowLen: windowLen)
+
+        eval(result.realL, result.imagL, result.realR, result.imagR)
         let nSources = targetMagsL.count
         let T = targetMagsL[0].count
         let nBins = targetMagsL[0][0].count
 
-        // Flatten the per-source [[Float]] targets into one [J, T, F] MLXArray.
-        // The mix (single source) goes into [T, F] arrays for real/imag/L/R.
-        let tgtL = MLXArray(flatten3(targetMagsL), [nSources, T, nBins])
-        let tgtR = MLXArray(flatten3(targetMagsR), [nSources, T, nBins])
-        let mxRL = MLXArray(flatten2(mixRealL), [T, nBins])
-        let mxIL = MLXArray(flatten2(mixImagL), [T, nBins])
-        let mxRR = MLXArray(flatten2(mixRealR), [T, nBins])
-        let mxIR = MLXArray(flatten2(mixImagR), [T, nBins])
+        let rLFlat = result.realL.asArray(Float.self)
+        let iLFlat = result.imagL.asArray(Float.self)
+        let rRFlat = result.realR.asArray(Float.self)
+        let iRFlat = result.imagR.asArray(Float.self)
 
-        // Allocate per-source output buffers (filled after the batched eval).
-        var outRL = Array(repeating: [[Float]](repeating: [Float](repeating: 0, count: nBins), count: T), count: nSources)
-        var outIL = outRL, outRR = outRL, outIR = outRL
-
-        // Build the per-window EM graph for every window without forcing eval.
-        // Single eval at the end lets MLX pipeline kernel dispatches across
-        // windows rather than serialising on each per-window sync.
-        var windows: [(pos: Int, wT: Int, refined: WindowResult)] = []
-        var pos = 0
-        while pos < T {
-            let end = min(T, pos + windowLen)
-            let wT = end - pos
-
-            let tL = tgtL[0..., pos..<end, 0...]    // [J, wT, F]
-            let tR = tgtR[0..., pos..<end, 0...]
-            let mRL = mxRL[pos..<end, 0...]          // [wT, F]
-            let mIL = mxIL[pos..<end, 0...]
-            let mRR = mxRR[pos..<end, 0...]
-            let mIR = mxIR[pos..<end, 0...]
-
-            let refined = emWienerWindow(
-                tgtL: tL, tgtR: tR,
-                mxRL: mRL, mxIL: mIL, mxRR: mRR, mxIR: mIR,
-                wT: wT, nBins: nBins, nSources: nSources, iterations: iterations)
-            windows.append((pos, wT, refined))
-            pos = end
-        }
-
-        var pending: [MLXArray] = []
-        pending.reserveCapacity(windows.count * 4)
-        for w in windows {
-            pending.append(w.refined.rL)
-            pending.append(w.refined.iL)
-            pending.append(w.refined.rR)
-            pending.append(w.refined.iR)
-        }
-        eval(pending)
-
-        for w in windows {
-            let rLFlat = w.refined.rL.asArray(Float.self)
-            let iLFlat = w.refined.iL.asArray(Float.self)
-            let rRFlat = w.refined.rR.asArray(Float.self)
-            let iRFlat = w.refined.iR.asArray(Float.self)
-            for j in 0..<nSources {
-                for t in 0..<w.wT {
-                    let srcBase = (j * w.wT + t) * nBins
-                    for f in 0..<nBins {
-                        outRL[j][w.pos + t][f] = rLFlat[srcBase + f]
-                        outIL[j][w.pos + t][f] = iLFlat[srcBase + f]
-                        outRR[j][w.pos + t][f] = rRFlat[srcBase + f]
-                        outIR[j][w.pos + t][f] = iRFlat[srcBase + f]
-                    }
+        var out: [(realL: [[Float]], imagL: [[Float]], realR: [[Float]], imagR: [[Float]])] = []
+        out.reserveCapacity(nSources)
+        for j in 0..<nSources {
+            var rL = [[Float]](repeating: [Float](repeating: 0, count: nBins), count: T)
+            var iL = rL, rR = rL, iR = rL
+            for t in 0..<T {
+                let base = (j * T + t) * nBins
+                for f in 0..<nBins {
+                    rL[t][f] = rLFlat[base + f]
+                    iL[t][f] = iLFlat[base + f]
+                    rR[t][f] = rRFlat[base + f]
+                    iR[t][f] = iRFlat[base + f]
                 }
             }
+            out.append((rL, iL, rR, iR))
         }
-
-        return (0..<nSources).map { j in (outRL[j], outIL[j], outRR[j], outIR[j]) }
+        return out
     }
 
     // MARK: - Single-window EM in MLX
