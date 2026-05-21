@@ -65,6 +65,10 @@ let package = Package(
             targets: ["MAGNeTMusicGen"]
         ),
         .library(
+            name: "FlashSR",
+            targets: ["FlashSR"]
+        ),
+        .library(
             name: "OmnilingualASR",
             targets: ["OmnilingualASR"]
         ),
@@ -265,6 +269,17 @@ let package = Package(
             ]
         ),
         .target(
+            name: "FlashSR",
+            dependencies: [
+                "AudioCommon",
+                "MLXCommon",
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXNN", package: "mlx-swift"),
+                .product(name: "MLXFast", package: "mlx-swift"),
+                .product(name: "MLXRandom", package: "mlx-swift"),
+            ]
+        ),
+        .target(
             name: "OmnilingualASR",
             dependencies: [
                 "AudioCommon",
@@ -343,6 +358,7 @@ let package = Package(
                 "VibeVoiceTTS",
                 "VoxCPM2TTS",
                 "MAGNeTMusicGen",
+                "FlashSR",
                 "MADLADTranslation",
                 "SpeechWakeWord",
                 "AudioCommon",
@@ -496,6 +512,14 @@ let package = Package(
             name: "MAGNeTMusicGenTests",
             dependencies: [
                 "MAGNeTMusicGen",
+                "AudioCommon",
+                .product(name: "MLX", package: "mlx-swift")
+            ]
+        ),
+        .testTarget(
+            name: "FlashSRTests",
+            dependencies: [
+                "FlashSR",
                 "AudioCommon",
                 .product(name: "MLX", package: "mlx-swift")
             ]
