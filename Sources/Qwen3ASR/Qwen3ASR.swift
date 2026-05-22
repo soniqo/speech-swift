@@ -563,8 +563,10 @@ public enum ASRModelSize {
     public func textConfig(bits: Int) -> TextDecoderConfig {
         switch (self, bits) {
         case (.small, 8): return .small8bit
+        case (.small, 5): return .small5bit
         case (.small, _): return .small
         case (.large, 8): return .large8bit
+        case (.large, 5): return .large5bit
         case (.large, _): return .large
         }
     }
@@ -591,6 +593,9 @@ public enum ASRModelSize {
         let lower = modelId.lowercased()
         if lower.contains("8bit") || lower.contains("8-bit") {
             return 8
+        }
+        if lower.contains("5bit") || lower.contains("5-bit") {
+            return 5
         }
         if lower.contains("4bit") || lower.contains("4-bit") {
             return 4

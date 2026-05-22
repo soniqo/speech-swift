@@ -10,6 +10,7 @@ import AudioCommon
 /// Forced aligner model variant
 public enum ForcedAlignerVariant: String, CaseIterable, Sendable {
     case mlx4bit = "aufklarer/Qwen3-ForcedAligner-0.6B-4bit"
+    case mlx5bit = "aufklarer/Qwen3-ForcedAligner-0.6B-5bit"
     case mlx8bit = "aufklarer/Qwen3-ForcedAligner-0.6B-8bit"
     case bf16 = "aufklarer/Qwen3-ForcedAligner-0.6B-bf16"
 
@@ -20,6 +21,7 @@ public enum ForcedAlignerVariant: String, CaseIterable, Sendable {
         }
         if modelId.contains("bf16") || modelId.contains("float") { return .bf16 }
         if modelId.contains("8bit") { return .mlx8bit }
+        if modelId.contains("5bit") { return .mlx5bit }
         if modelId.contains("4bit") { return .mlx4bit }
         return nil
     }
@@ -29,6 +31,11 @@ public enum ForcedAlignerVariant: String, CaseIterable, Sendable {
         case .mlx4bit:
             var cfg = TextDecoderConfig.small
             cfg.bits = 4
+            cfg.groupSize = 64
+            return cfg
+        case .mlx5bit:
+            var cfg = TextDecoderConfig.small
+            cfg.bits = 5
             cfg.groupSize = 64
             return cfg
         case .mlx8bit:
@@ -475,6 +482,7 @@ public extension Qwen3ForcedAligner {
         switch bits {
         case 0: return .bf16
         case 4: return .mlx4bit
+        case 5: return .mlx5bit
         case 8: return .mlx8bit
         default: return nil
         }

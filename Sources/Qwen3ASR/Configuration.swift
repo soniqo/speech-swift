@@ -78,6 +78,13 @@ public struct TextDecoderConfig: Codable, Sendable {
         return config
     }
 
+    /// Config for Qwen3-ASR-0.6B decoder, 5-bit
+    public static var small5bit: TextDecoderConfig {
+        var config = small
+        config.bits = 5
+        return config
+    }
+
     /// Config for Qwen3-ASR-0.6B decoder, 8-bit
     public static var small8bit: TextDecoderConfig {
         var config = small
@@ -96,6 +103,13 @@ public struct TextDecoderConfig: Codable, Sendable {
         config.intermediateSize = 6144
         config.groupSize = 64
         config.bits = 4
+        return config
+    }
+
+    /// Config for Qwen3-ASR-1.7B decoder, 5-bit
+    public static var large5bit: TextDecoderConfig {
+        var config = large
+        config.bits = 5
         return config
     }
 
