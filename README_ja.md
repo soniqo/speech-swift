@@ -32,7 +32,7 @@ Mac・iOS向けのオンデバイス音声認識・合成・理解。Apple Silic
 - **[VoxCPM2](https://soniqo.audio/ja/speech-generation)** — 48 kHz スタジオ品質の TTS。音声クローンと指示ベースのボイスデザインに対応（2B、MLX bf16/int8/int4、30言語）
 - **[Kokoro TTS](https://soniqo.audio/ja/guides/kokoro)** — オンデバイスTTS（82M、CoreML/Neural Engine、54ボイス、iOS対応、10言語）
 - **[VibeVoice TTS](https://soniqo.audio/ja/guides/vibevoice)** — 長尺・マルチスピーカーTTS（Microsoft VibeVoice Realtime-0.5B + 1.5B、MLX、最長90分のポッドキャスト／オーディオブック生成、EN/ZH）
-- **[Magpie TTS](https://soniqo.audio/ja/guides/magpie)** — 多言語 TTS（NVIDIA Magpie-TTS Multilingual 357M、MLX INT4 247 MB / INT8 411 MB、9 言語、5 つの組み込みスピーカー、ストリーミング）
+- **[Magpie TTS](https://soniqo.audio/ja/guides/magpie)** — 多言語 TTS（NVIDIA Magpie-TTS Multilingual 357M、MLX INT4 247 MB / INT8 411 MB または CoreML INT8 342 MB、9 言語、5 つの組み込みスピーカー、MLX でストリーミング）
 - **[Qwen3.5-Chat](https://soniqo.audio/ja/guides/chat)** — オンデバイスLLMチャット（0.8B、MLX INT4 + CoreML INT8、DeltaNetハイブリッド、ストリーミングトークン）
 - **[MADLAD-400](https://soniqo.audio/ja/guides/translate)** — 400+言語間の多対多翻訳（3B、MLX INT4 + INT8、T5 v1.1、Apache 2.0）
 - **[PersonaPlex](https://soniqo.audio/ja/guides/respond)** — 全二重音声間会話（7B、音声入力 → 音声出力、18種類のボイスプリセット）
@@ -113,7 +113,7 @@ struct DictateView: View {
 
 `SpeechUI` には `TranscriptionView`（確定 + 部分）と `TranscriptionStore`（ストリーミングASRアダプター）のみが含まれます。音声の可視化や再生には AVFoundation をお使いください。
 
-利用可能なSPMプロダクト：`Qwen3ASR`、`Qwen3TTS`、`Qwen3TTSCoreML`、`ParakeetASR`、`ParakeetStreamingASR`、`NemotronStreamingASR`、`OmnilingualASR`、`KokoroTTS`、`VibeVoiceTTS`、`CosyVoiceTTS`、`VoxCPM2TTS`、`MagpieTTS`、`MAGNeTMusicGen`、`FlashSR`、`PersonaPlex`、`SpeechVAD`、`SpeechEnhancement`、`SourceSeparation`、`Qwen3Chat`、`SpeechCore`、`SpeechUI`、`AudioCommon`。
+利用可能なSPMプロダクト：`Qwen3ASR`、`Qwen3TTS`、`Qwen3TTSCoreML`、`ParakeetASR`、`ParakeetStreamingASR`、`NemotronStreamingASR`、`OmnilingualASR`、`KokoroTTS`、`VibeVoiceTTS`、`CosyVoiceTTS`、`VoxCPM2TTS`、`MagpieTTS`、`MagpieTTSCoreML`、`MAGNeTMusicGen`、`FlashSR`、`PersonaPlex`、`SpeechVAD`、`SpeechEnhancement`、`SourceSeparation`、`Qwen3Chat`、`SpeechCore`、`SpeechUI`、`AudioCommon`。
 
 ## モデル
 
@@ -133,7 +133,7 @@ struct DictateView: View {
 | [Kokoro-82M](https://soniqo.audio/ja/guides/kokoro) | テキスト → 音声 | CoreML (ANE) | 82M | 10 |
 | [VibeVoice Realtime-0.5B](https://soniqo.audio/ja/guides/vibevoice) | テキスト → 音声（長尺・マルチスピーカー） | MLX | 0.5B | EN/ZH |
 | [VibeVoice 1.5B](https://soniqo.audio/ja/guides/vibevoice) | テキスト → 音声（最長90分のポッドキャスト） | MLX | 1.5B | EN/ZH |
-| [Magpie-TTS Multilingual](https://soniqo.audio/ja/guides/magpie) | テキスト → 音声（5 つの組み込みスピーカー、ストリーミング） | MLX | 357M (INT4/INT8) | 9 |
+| [Magpie-TTS Multilingual](https://soniqo.audio/ja/guides/magpie) | テキスト → 音声（5 つの組み込みスピーカー、ストリーミング） | MLX / CoreML | 357M (MLX INT4/INT8, CoreML INT8) | 9（CoreML は日本語を除く） |
 | [Qwen3.5-Chat](https://soniqo.audio/ja/guides/chat) | テキスト → テキスト（LLM） | MLX、CoreML | 0.8B | 多言語 |
 | [MADLAD-400](https://soniqo.audio/ja/guides/translate) | テキスト → テキスト（翻訳） | MLX | 3B | **400+** |
 | [PersonaPlex](https://soniqo.audio/ja/guides/respond) | 音声 → 音声 | MLX | 7B | EN |
@@ -189,7 +189,8 @@ import CosyVoiceTTS         // 音声クローン付き音声合成
 import VoxCPM2TTS           // 48 kHz TTS、音声クローン + ボイスデザイン (2B)
 import KokoroTTS            // 音声合成 (iOS対応)
 import VibeVoiceTTS         // 長尺・マルチスピーカーTTS（EN/ZH）
-import MagpieTTS            // 多言語 TTS（NVIDIA Magpie 357M、9 言語）
+import MagpieTTS            // 多言語 TTS（NVIDIA Magpie 357M、MLX、9 言語）
+import MagpieTTSCoreML      // Magpie CoreML バックエンド(CoreML + MLX のハイブリッド、8 言語)
 import Qwen3Chat            // オンデバイスLLMチャット
 import MADLADTranslation    // 400+ 言語間の多対多翻訳
 import PersonaPlex          // 全二重音声間変換

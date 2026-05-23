@@ -32,7 +32,7 @@
 - **[VoxCPM2](https://soniqo.audio/zh/speech-generation)** — 48 kHz 录音棚级 TTS，支持声音克隆与基于指令的声音设计（2B，MLX bf16/int8/int4，30 种语言）
 - **[Kokoro TTS](https://soniqo.audio/zh/guides/kokoro)** — 端侧 TTS（82M，CoreML/神经引擎，54 种音色，iOS 就绪，10 种语言）
 - **[VibeVoice TTS](https://soniqo.audio/zh/guides/vibevoice)** — 长篇 / 多说话人 TTS（Microsoft VibeVoice Realtime-0.5B + 1.5B，MLX，可合成最长 90 分钟的播客 / 有声书，英语 / 中文）
-- **[Magpie TTS](https://soniqo.audio/zh/guides/magpie)** — 多语言 TTS（NVIDIA Magpie-TTS Multilingual 357M，MLX INT4 247 MB / INT8 411 MB，9 种语言，5 位预设说话人，流式）
+- **[Magpie TTS](https://soniqo.audio/zh/guides/magpie)** — 多语言 TTS（NVIDIA Magpie-TTS Multilingual 357M，MLX INT4 247 MB / INT8 411 MB 或 CoreML INT8 342 MB，9 种语言，5 位预设说话人，MLX 端流式）
 - **[Qwen3.5-Chat](https://soniqo.audio/zh/guides/chat)** — 端侧 LLM 对话（0.8B，MLX INT4 + CoreML INT8，DeltaNet 混合架构，流式 token）
 - **[MADLAD-400](https://soniqo.audio/zh/guides/translate)** — 400+ 语言间的多对多翻译（3B，MLX INT4 + INT8，T5 v1.1，Apache 2.0）
 - **[PersonaPlex](https://soniqo.audio/zh/guides/respond)** — 全双工语音到语音（7B，音频输入 → 音频输出，18 种预设音色）
@@ -113,7 +113,7 @@ struct DictateView: View {
 
 `SpeechUI` 只提供 `TranscriptionView`（最终结果 + 部分结果）与 `TranscriptionStore`（流式 ASR 适配器）。音频可视化和播放请使用 AVFoundation。
 
-可用的 SPM products：`Qwen3ASR`、`Qwen3TTS`、`Qwen3TTSCoreML`、`ParakeetASR`、`ParakeetStreamingASR`、`NemotronStreamingASR`、`OmnilingualASR`、`KokoroTTS`、`VibeVoiceTTS`、`CosyVoiceTTS`、`VoxCPM2TTS`、`MagpieTTS`、`MAGNeTMusicGen`、`FlashSR`、`PersonaPlex`、`SpeechVAD`、`SpeechEnhancement`、`SourceSeparation`、`Qwen3Chat`、`SpeechCore`、`SpeechUI`、`AudioCommon`。
+可用的 SPM products：`Qwen3ASR`、`Qwen3TTS`、`Qwen3TTSCoreML`、`ParakeetASR`、`ParakeetStreamingASR`、`NemotronStreamingASR`、`OmnilingualASR`、`KokoroTTS`、`VibeVoiceTTS`、`CosyVoiceTTS`、`VoxCPM2TTS`、`MagpieTTS`、`MagpieTTSCoreML`、`MAGNeTMusicGen`、`FlashSR`、`PersonaPlex`、`SpeechVAD`、`SpeechEnhancement`、`SourceSeparation`、`Qwen3Chat`、`SpeechCore`、`SpeechUI`、`AudioCommon`。
 
 ## 模型
 
@@ -133,7 +133,7 @@ struct DictateView: View {
 | [Kokoro-82M](https://soniqo.audio/zh/guides/kokoro) | 文本 → 语音 | CoreML (ANE) | 82M | 10 |
 | [VibeVoice Realtime-0.5B](https://soniqo.audio/zh/guides/vibevoice) | 文本 → 语音（长篇、多说话人） | MLX | 0.5B | EN/ZH |
 | [VibeVoice 1.5B](https://soniqo.audio/zh/guides/vibevoice) | 文本 → 语音（最长 90 分钟播客） | MLX | 1.5B | EN/ZH |
-| [Magpie-TTS Multilingual](https://soniqo.audio/zh/guides/magpie) | 文本 → 语音（5 位预设说话人，流式） | MLX | 357M (INT4/INT8) | 9 |
+| [Magpie-TTS Multilingual](https://soniqo.audio/zh/guides/magpie) | 文本 → 语音（5 位预设说话人，流式） | MLX / CoreML | 357M (MLX INT4/INT8, CoreML INT8) | 9（CoreML 不含日语） |
 | [Qwen3.5-Chat](https://soniqo.audio/zh/guides/chat) | 文本 → 文本（LLM） | MLX、CoreML | 0.8B | 多语言 |
 | [MADLAD-400](https://soniqo.audio/zh/guides/translate) | 文本 → 文本（翻译） | MLX | 3B | **400+** |
 | [PersonaPlex](https://soniqo.audio/zh/guides/respond) | 语音 → 语音 | MLX | 7B | EN |
@@ -189,7 +189,8 @@ import CosyVoiceTTS         // 带声音克隆的文本转语音
 import VoxCPM2TTS           // 48 kHz TTS，声音克隆 + 声音设计 (2B)
 import KokoroTTS            // 文本转语音 (iOS 就绪)
 import VibeVoiceTTS         // 长篇 / 多说话人 TTS（英语 / 中文）
-import MagpieTTS            // 多语言 TTS（NVIDIA Magpie 357M，9 种语言）
+import MagpieTTS            // 多语言 TTS（NVIDIA Magpie 357M，MLX，9 种语言）
+import MagpieTTSCoreML      // Magpie CoreML 后端（CoreML + MLX 混合，8 种语言）
 import Qwen3Chat            // 端侧 LLM 对话
 import MADLADTranslation    // 400+ 语言间的多对多翻译
 import PersonaPlex          // 全双工语音到语音

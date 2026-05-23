@@ -32,7 +32,7 @@ Reconocimiento, síntesis y comprensión de voz en el dispositivo para Mac e iOS
 - **[VoxCPM2](https://soniqo.audio/es/speech-generation)** — TTS de calidad de estudio a 48 kHz con clonación de voz y diseño de voz por instrucciones (2B, MLX bf16/int8/int4, 30 idiomas)
 - **[Kokoro TTS](https://soniqo.audio/es/guides/kokoro)** — TTS en el dispositivo (82M, CoreML/Neural Engine, 54 voces, listo para iOS, 10 idiomas)
 - **[VibeVoice TTS](https://soniqo.audio/es/guides/vibevoice)** — TTS de formato largo / múltiples hablantes (Microsoft VibeVoice Realtime-0.5B + 1.5B, MLX, síntesis de podcast/audiolibro de hasta 90 min, EN/ZH)
-- **[Magpie TTS](https://soniqo.audio/es/guides/magpie)** — TTS multilingüe (NVIDIA Magpie-TTS Multilingual 357M, MLX INT4 247 MB / INT8 411 MB, 9 idiomas, 5 hablantes preconfigurados, streaming)
+- **[Magpie TTS](https://soniqo.audio/es/guides/magpie)** — TTS multilingüe (NVIDIA Magpie-TTS Multilingual 357M, MLX INT4 247 MB / INT8 411 MB o CoreML INT8 342 MB, 9 idiomas, 5 hablantes preconfigurados, streaming en MLX)
 - **[Qwen3.5-Chat](https://soniqo.audio/es/guides/chat)** — Chat LLM en el dispositivo (0.8B, MLX INT4 + CoreML INT8, DeltaNet híbrido, tokens en streaming)
 - **[MADLAD-400](https://soniqo.audio/es/guides/translate)** — Traducción multidireccional entre 400+ idiomas (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
 - **[PersonaPlex](https://soniqo.audio/es/guides/respond)** — Voz a voz full-duplex (7B, audio de entrada → audio de salida, 18 presets de voz)
@@ -113,7 +113,7 @@ struct DictateView: View {
 
 `SpeechUI` solo incluye `TranscriptionView` (finales + parciales) y `TranscriptionStore` (adaptador de ASR en streaming). Usa AVFoundation para la visualización y reproducción de audio.
 
-Productos SPM disponibles: `Qwen3ASR`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `KokoroTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `MagpieTTS`, `MAGNeTMusicGen`, `FlashSR`, `PersonaPlex`, `SpeechVAD`, `SpeechEnhancement`, `SourceSeparation`, `Qwen3Chat`, `SpeechCore`, `SpeechUI`, `AudioCommon`.
+Productos SPM disponibles: `Qwen3ASR`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `KokoroTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `MagpieTTS`, `MagpieTTSCoreML`, `MAGNeTMusicGen`, `FlashSR`, `PersonaPlex`, `SpeechVAD`, `SpeechEnhancement`, `SourceSeparation`, `Qwen3Chat`, `SpeechCore`, `SpeechUI`, `AudioCommon`.
 
 ## Modelos
 
@@ -133,7 +133,7 @@ Vista compacta a continuación. **[Catálogo completo de modelos con tamaños, c
 | [Kokoro-82M](https://soniqo.audio/es/guides/kokoro) | Texto → Voz | CoreML (ANE) | 82M | 10 |
 | [VibeVoice Realtime-0.5B](https://soniqo.audio/es/guides/vibevoice) | Texto → Voz (formato largo, múltiples hablantes) | MLX | 0.5B | EN/ZH |
 | [VibeVoice 1.5B](https://soniqo.audio/es/guides/vibevoice) | Texto → Voz (podcast de hasta 90 min) | MLX | 1.5B | EN/ZH |
-| [Magpie-TTS Multilingual](https://soniqo.audio/es/guides/magpie) | Texto → Voz (5 hablantes preconfigurados, streaming) | MLX | 357M (INT4/INT8) | 9 |
+| [Magpie-TTS Multilingual](https://soniqo.audio/es/guides/magpie) | Texto → Voz (5 hablantes preconfigurados, streaming) | MLX / CoreML | 357M (MLX INT4/INT8, CoreML INT8) | 9 (CoreML excluye JA) |
 | [Qwen3.5-Chat](https://soniqo.audio/es/guides/chat) | Texto → Texto (LLM) | MLX, CoreML | 0.8B | Multi |
 | [MADLAD-400](https://soniqo.audio/es/guides/translate) | Texto → Texto (Traducción) | MLX | 3B | **400+** |
 | [PersonaPlex](https://soniqo.audio/es/guides/respond) | Voz → Voz | MLX | 7B | EN |
@@ -189,7 +189,8 @@ import CosyVoiceTTS         // Síntesis de voz con clonación
 import VoxCPM2TTS           // TTS a 48 kHz, clonación de voz + diseño de voz (2B)
 import KokoroTTS            // Síntesis de voz (listo para iOS)
 import VibeVoiceTTS         // TTS de formato largo / múltiples hablantes (EN/ZH)
-import MagpieTTS            // TTS multilingüe (NVIDIA Magpie 357M, 9 idiomas)
+import MagpieTTS            // TTS multilingüe (NVIDIA Magpie 357M, MLX, 9 idiomas)
+import MagpieTTSCoreML      // Backend CoreML de Magpie (híbrido CoreML + MLX, 8 idiomas)
 import Qwen3Chat            // Chat LLM en el dispositivo
 import MADLADTranslation    // Traducción multidireccional entre 400+ idiomas
 import PersonaPlex          // Voz a voz full-duplex
