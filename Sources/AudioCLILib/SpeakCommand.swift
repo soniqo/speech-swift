@@ -6,6 +6,7 @@ import Qwen3TTS
 import CosyVoiceTTS
 import VoxCPM2TTS
 import MagpieTTS
+import MagpieTTSCoreML
 import AudioCommon
 
 public struct SpeakCommand: ParsableCommand {
@@ -17,7 +18,7 @@ public struct SpeakCommand: ParsableCommand {
     @Argument(help: "Text to synthesize (omit when using --list-speakers or --batch-file)")
     public var text: String?
 
-    @Option(name: .long, help: "TTS engine: qwen3 (default), cosyvoice, voxcpm2, or magpie")
+    @Option(name: .long, help: "TTS engine: qwen3 (default), cosyvoice, voxcpm2, magpie, or magpie-coreml")
     public var engine: String = "qwen3"
 
     @Option(name: .shortAndLong, help: "Output WAV file path")
@@ -157,6 +158,9 @@ public struct SpeakCommand: ParsableCommand {
     @Flag(name: .long, help: "[magpie] Treat --text input as pre-phonemised IPA (skip text normalisation)")
     public var magpiePrephonemized: Bool = false
 
+    @Option(name: .long, help: "[magpie-coreml] Classifier-free guidance scale. 1.0 (default) disables CFG; 2.5 matches the upstream reference but doubles wall time.")
+    public var magpieCoremlCfg: Float = 1.0
+
     @Flag(name: .long, help: "Show detailed timing info")
     public var verbose: Bool = false
 
@@ -170,8 +174,9 @@ public struct SpeakCommand: ParsableCommand {
 
     public func validate() throws {
         let eng = engine.lowercased()
-        guard eng == "qwen3" || eng == "cosyvoice" || eng == "voxcpm2" || eng == "magpie" else {
-            throw ValidationError("--engine must be 'qwen3', 'cosyvoice', 'voxcpm2', or 'magpie'. For CoreML, use the `qwen3-tts-coreml` subcommand.")
+        guard eng == "qwen3" || eng == "cosyvoice" || eng == "voxcpm2"
+                || eng == "magpie" || eng == "magpie-coreml" else {
+            throw ValidationError("--engine must be 'qwen3', 'cosyvoice', 'voxcpm2', 'magpie', or 'magpie-coreml'. For Qwen3-TTS CoreML, use the `qwen3-tts-coreml` subcommand.")
         }
         if text == nil && batchFile == nil && !listSpeakers {
             throw ValidationError("Either a text argument, --batch-file, or --list-speakers must be provided")
@@ -184,9 +189,9 @@ public struct SpeakCommand: ParsableCommand {
                 throw ValidationError("--voxcpm2-prompt-audio and --voxcpm2-prompt-text must be provided together")
             }
         }
-        if eng == "magpie" {
+        if eng == "magpie" || eng == "magpie-coreml" {
             if batchFile != nil {
-                throw ValidationError("--engine magpie does not support --batch-file (single utterance only)")
+                throw ValidationError("--engine \(eng) does not support --batch-file (single utterance only)")
             }
             if MagpieSpeaker(named: magpieSpeaker) == nil {
                 throw ValidationError("--magpie-speaker must be one of sofia, aria, jason, leo, john (got '\(magpieSpeaker)')")
@@ -194,26 +199,43 @@ public struct SpeakCommand: ParsableCommand {
             guard magpieVariant.lowercased() == "int4" || magpieVariant.lowercased() == "int8" else {
                 throw ValidationError("--magpie-variant must be int4 or int8 (got '\(magpieVariant)')")
             }
+            if eng == "magpie-coreml" {
+                // The CoreML bundle is window-limited to 256 codec frames;
+                // streaming isn't supported (upstream codec is exported as a
+                // fixed-window batch decoder, overlap streaming yields
+                // <15 dB SNR — verified by the FluidInference team).
+                if stream {
+                    throw ValidationError(
+                        "--engine magpie-coreml does not support --stream. " +
+                        "The bundled NanoCodec is a fixed-window batch decoder " +
+                        "(max ~11.9 s). Use --engine magpie for streaming output.")
+                }
+                if magpieMaxFrames > 256 {
+                    // Silently OK to keep going, but warn so users see the cap.
+                    FileHandle.standardError.write(Data(
+                        "[magpie-coreml] --magpie-max-frames \(magpieMaxFrames) clamped to 256 (codec window limit).\n".utf8))
+                }
+            }
             // Magpie has 5 baked speakers and no zero-shot speaker
             // conditioning in the model — reject voice-cloning / speaker
             // flags borrowed from the other engines so users don't think
             // the cloning silently worked.
             if voiceSample != nil {
                 throw ValidationError(
-                    "--engine magpie does not support --voice-sample. " +
+                    "--engine \(eng) does not support --voice-sample. " +
                     "Magpie has 5 baked speakers and no zero-shot cloning. " +
                     "Use --magpie-speaker {sofia|aria|jason|leo|john} instead, " +
                     "or use --engine qwen3 / cosyvoice / voxcpm2 for cloning.")
             }
             if speaker != nil {
                 throw ValidationError(
-                    "--engine magpie does not support --speaker " +
+                    "--engine \(eng) does not support --speaker " +
                     "(that's a qwen3 CustomVoice flag). " +
                     "Use --magpie-speaker {sofia|aria|jason|leo|john}.")
             }
             if instruct != nil {
                 throw ValidationError(
-                    "--engine magpie does not support --instruct " +
+                    "--engine \(eng) does not support --instruct " +
                     "(style/instruction control is not in the Magpie model).")
             }
             if listSpeakers {
@@ -244,6 +266,8 @@ public struct SpeakCommand: ParsableCommand {
             try runVoxCPM2()
         case "magpie":
             try runMagpie()
+        case "magpie-coreml":
+            try runMagpieCoreML()
         default:
             try runQwen3()
         }
@@ -310,6 +334,76 @@ public struct SpeakCommand: ParsableCommand {
                     prephonemized: magpiePrephonemized, params: params)
                 try writeOrPlay(samples: audio, sampleRate: MagpieTTS.sampleRate, t0: t0)
             }
+        }
+    }
+
+    // MARK: - Magpie CoreML engine
+
+    /// CoreML variant of `--engine magpie`. Same 5 baked speakers, no
+    /// streaming, no Japanese (CoreML bundle hasn't shipped JA tokenizer
+    /// assets yet). When `--language ja` is requested with this engine, we
+    /// transparently route to the MLX backend and log a stderr note so the
+    /// user sees the fallback.
+    private func runMagpieCoreML() throws {
+        try runAsync {
+            guard let inputText = text else {
+                print("Error: text argument is required for Magpie")
+                throw ExitCode(1)
+            }
+            guard let coreSpeaker = MagpieCoreMLSpeaker(named: magpieSpeaker) else {
+                print("Error: invalid Magpie speaker '\(magpieSpeaker)'")
+                throw ExitCode(1)
+            }
+            let mlxLang: MagpieLanguage =
+                MagpieLanguage(code: effectiveLanguage) ?? .english
+
+            // Japanese: CoreML bundle has no JA tokenizer/G2P assets.
+            // Fall back to the MLX backend transparently.
+            if mlxLang == .japanese {
+                FileHandle.standardError.write(Data(
+                    "[magpie-coreml] --language ja not supported by the CoreML bundle; using MLX backend.\n".utf8))
+                let variant: MagpieTTSVariant =
+                    (magpieVariant.lowercased() == "int8") ? .int8 : .int4
+                let model = try await MagpieTTS.fromPretrained(
+                    variant: variant,
+                    progressHandler: { reportProgress($0, "Downloading MLX fallback") })
+                let params = MagpieTTSParams(
+                    temperature: magpieTemperature,
+                    topK: magpieTopK,
+                    maxSteps: magpieMaxFrames,
+                    minFrames: magpieMinFrames,
+                    seed: seed)
+                let t0 = CFAbsoluteTimeGetCurrent()
+                let audio = try model.synthesize(
+                    text: inputText, speaker: coreSpeaker.mlxSpeaker, language: .japanese,
+                    prephonemized: magpiePrephonemized, params: params)
+                try writeOrPlay(samples: audio, sampleRate: MagpieTTS.sampleRate, t0: t0)
+                return
+            }
+
+            guard let coreLang = MagpieCoreMLLanguage(mlx: mlxLang) else {
+                // Should be unreachable since JA is the only excluded case.
+                throw ExitCode(1)
+            }
+
+            print("Loading Magpie-TTS CoreML (\(MagpieCoreMLConstants.huggingFaceRepo))...")
+            let model = try await MagpieTTSCoreML.fromPretrained(
+                progressHandler: { reportProgress($0, "Downloading") })
+
+            let params = MagpieCoreMLParams(
+                temperature: magpieTemperature,
+                topK: magpieTopK,
+                maxSteps: magpieMaxFrames,  // clamped to 256 inside MagpieCoreMLParams
+                minFrames: magpieMinFrames,
+                cfgScale: magpieCoremlCfg,
+                seed: seed)
+
+            print("Synthesizing with Magpie CoreML (\(coreLang.mlx.displayName), speaker \(coreSpeaker.displayName))...")
+            let t0 = CFAbsoluteTimeGetCurrent()
+            let audio = try model.synthesize(
+                text: inputText, speaker: coreSpeaker, language: coreLang,
+                prephonemized: magpiePrephonemized, params: params)
+            try writeOrPlay(samples: audio, sampleRate: MagpieTTSCoreML.sampleRate, t0: t0)
         }
     }
 
