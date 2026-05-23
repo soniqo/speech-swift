@@ -306,6 +306,8 @@ let package = Package(
             dependencies: [
                 "AudioCommon",
                 "MagpieTTS",
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXRandom", package: "mlx-swift"),
             ]
         ),
         .target(

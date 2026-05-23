@@ -309,7 +309,11 @@ public final class MagpieTTS {
     // MARK: - LocalTransformer per-frame sampling
 
     /// Sample the 8 codebooks for one frame autoregressively.
-    private func sampleLocalTransformer(hLast: MLXArray,
+    /// Public so the CoreML backend (which runs the big models on
+    /// CoreML/ANE but borrows the MLX-loaded LocalTransformer for
+    /// per-frame sampling) can drive sampling from a CoreML-produced
+    /// `h_last` without re-implementing the LT in pure Swift.
+    public func sampleLocalTransformer(hLast: MLXArray,
                                         forbidEos: Bool,
                                         temperature: Float,
                                         topK: Int) -> [Int32] {

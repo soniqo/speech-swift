@@ -158,9 +158,6 @@ public struct SpeakCommand: ParsableCommand {
     @Flag(name: .long, help: "[magpie] Treat --text input as pre-phonemised IPA (skip text normalisation)")
     public var magpiePrephonemized: Bool = false
 
-    @Option(name: .long, help: "[magpie-coreml] Classifier-free guidance scale. 1.0 (default) disables CFG; 2.5 matches the upstream reference but doubles wall time.")
-    public var magpieCoremlCfg: Float = 1.0
-
     @Flag(name: .long, help: "Show detailed timing info")
     public var verbose: Bool = false
 
@@ -200,20 +197,15 @@ public struct SpeakCommand: ParsableCommand {
                 throw ValidationError("--magpie-variant must be int4 or int8 (got '\(magpieVariant)')")
             }
             if eng == "magpie-coreml" {
-                // The CoreML bundle is window-limited to 256 codec frames;
-                // streaming isn't supported (upstream codec is exported as a
-                // fixed-window batch decoder, overlap streaming yields
-                // <15 dB SNR — verified by the FluidInference team).
+                // The bundled NanoCodec is traced at a fixed 64-frame
+                // window. We chunk internally, so long sequences work
+                // fine, but we still don't expose streaming yet —
+                // emitting after every 64-frame chunk would mean ~3 s
+                // first-packet latency which defeats the purpose.
                 if stream {
                     throw ValidationError(
                         "--engine magpie-coreml does not support --stream. " +
-                        "The bundled NanoCodec is a fixed-window batch decoder " +
-                        "(max ~11.9 s). Use --engine magpie for streaming output.")
-                }
-                if magpieMaxFrames > 256 {
-                    // Silently OK to keep going, but warn so users see the cap.
-                    FileHandle.standardError.write(Data(
-                        "[magpie-coreml] --magpie-max-frames \(magpieMaxFrames) clamped to 256 (codec window limit).\n".utf8))
+                        "Use --engine magpie for streaming output.")
                 }
             }
             // Magpie has 5 baked speakers and no zero-shot speaker
@@ -393,9 +385,8 @@ public struct SpeakCommand: ParsableCommand {
             let params = MagpieCoreMLParams(
                 temperature: magpieTemperature,
                 topK: magpieTopK,
-                maxSteps: magpieMaxFrames,  // clamped to 256 inside MagpieCoreMLParams
+                maxSteps: magpieMaxFrames,
                 minFrames: magpieMinFrames,
-                cfgScale: magpieCoremlCfg,
                 seed: seed)
 
             print("Synthesizing with Magpie CoreML (\(coreLang.mlx.displayName), speaker \(coreSpeaker.displayName))...")
