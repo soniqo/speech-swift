@@ -5,18 +5,19 @@ import MLX
 import Qwen3TTS
 import CosyVoiceTTS
 import VoxCPM2TTS
+import MagpieTTS
 import AudioCommon
 
 public struct SpeakCommand: ParsableCommand {
     public static let configuration = CommandConfiguration(
         commandName: "speak",
-        abstract: "Text-to-speech synthesis (Qwen3-TTS, CosyVoice, or VoxCPM2). For CoreML, use the `qwen3-tts-coreml` subcommand."
+        abstract: "Text-to-speech synthesis (Qwen3-TTS, CosyVoice, VoxCPM2, or Magpie). For CoreML, use the `qwen3-tts-coreml` subcommand."
     )
 
     @Argument(help: "Text to synthesize (omit when using --list-speakers or --batch-file)")
     public var text: String?
 
-    @Option(name: .long, help: "TTS engine: qwen3 (default), cosyvoice, or voxcpm2")
+    @Option(name: .long, help: "TTS engine: qwen3 (default), cosyvoice, voxcpm2, or magpie")
     public var engine: String = "qwen3"
 
     @Option(name: .shortAndLong, help: "Output WAV file path")
@@ -133,6 +134,29 @@ public struct SpeakCommand: ParsableCommand {
     @Option(name: .long, help: "[voxcpm2] Warmup patches to skip before emitting audio")
     public var voxcpm2WarmupPatches: Int = 0
 
+    // MARK: - Magpie-specific options
+
+    @Option(name: .long, help: "[magpie] Quantization variant: int4 (default) or int8. Resolves to aufklarer/Magpie-TTS-Multilingual-357M-MLX-<variant>.")
+    public var magpieVariant: String = "int4"
+
+    @Option(name: .long, help: "[magpie] Baked speaker: sofia (default), aria, jason, leo, john. No voice cloning.")
+    public var magpieSpeaker: String = "sofia"
+
+    @Option(name: .long, help: "[magpie] Sampling temperature (default 0.6)")
+    public var magpieTemperature: Float = 0.6
+
+    @Option(name: .long, help: "[magpie] Top-k sampling (default 80)")
+    public var magpieTopK: Int = 80
+
+    @Option(name: .long, help: "[magpie] Maximum codec frames (500 ≈ 23s)")
+    public var magpieMaxFrames: Int = 500
+
+    @Option(name: .long, help: "[magpie] Minimum frames before EOS (default 4)")
+    public var magpieMinFrames: Int = 4
+
+    @Flag(name: .long, help: "[magpie] Treat --text input as pre-phonemised IPA (skip text normalisation)")
+    public var magpiePrephonemized: Bool = false
+
     @Flag(name: .long, help: "Show detailed timing info")
     public var verbose: Bool = false
 
@@ -146,8 +170,8 @@ public struct SpeakCommand: ParsableCommand {
 
     public func validate() throws {
         let eng = engine.lowercased()
-        guard eng == "qwen3" || eng == "cosyvoice" || eng == "voxcpm2" else {
-            throw ValidationError("--engine must be 'qwen3', 'cosyvoice', or 'voxcpm2'. For CoreML, use the `qwen3-tts-coreml` subcommand.")
+        guard eng == "qwen3" || eng == "cosyvoice" || eng == "voxcpm2" || eng == "magpie" else {
+            throw ValidationError("--engine must be 'qwen3', 'cosyvoice', 'voxcpm2', or 'magpie'. For CoreML, use the `qwen3-tts-coreml` subcommand.")
         }
         if text == nil && batchFile == nil && !listSpeakers {
             throw ValidationError("Either a text argument, --batch-file, or --list-speakers must be provided")
@@ -160,6 +184,17 @@ public struct SpeakCommand: ParsableCommand {
                 throw ValidationError("--voxcpm2-prompt-audio and --voxcpm2-prompt-text must be provided together")
             }
         }
+        if eng == "magpie" {
+            if batchFile != nil {
+                throw ValidationError("--engine magpie does not support --batch-file (single utterance only)")
+            }
+            if MagpieSpeaker(named: magpieSpeaker) == nil {
+                throw ValidationError("--magpie-speaker must be one of sofia, aria, jason, leo, john (got '\(magpieSpeaker)')")
+            }
+            guard magpieVariant.lowercased() == "int4" || magpieVariant.lowercased() == "int8" else {
+                throw ValidationError("--magpie-variant must be int4 or int8 (got '\(magpieVariant)')")
+            }
+        }
     }
 
     public func run() throws {
@@ -168,8 +203,94 @@ public struct SpeakCommand: ParsableCommand {
             try runCosyVoice()
         case "voxcpm2":
             try runVoxCPM2()
+        case "magpie":
+            try runMagpie()
         default:
             try runQwen3()
+        }
+    }
+
+    // MARK: - Magpie engine
+
+    private func runMagpie() throws {
+        try runAsync {
+            guard let inputText = text else {
+                print("Error: text argument is required for Magpie")
+                throw ExitCode(1)
+            }
+            guard let speaker = MagpieSpeaker(named: magpieSpeaker) else {
+                print("Error: invalid Magpie speaker '\(magpieSpeaker)'")
+                throw ExitCode(1)
+            }
+            let variant: MagpieTTSVariant =
+                (magpieVariant.lowercased() == "int8") ? .int8 : .int4
+            let language: MagpieLanguage =
+                MagpieLanguage(code: effectiveLanguage) ?? .english
+
+            print("Loading Magpie-TTS (\(variant.huggingFaceRepoId))...")
+            let model = try await MagpieTTS.fromPretrained(
+                variant: variant,
+                progressHandler: { reportProgress($0, "Downloading") })
+
+            let params = MagpieTTSParams(
+                temperature: magpieTemperature,
+                topK: magpieTopK,
+                maxSteps: magpieMaxFrames,
+                minFrames: magpieMinFrames,
+                seed: seed)
+
+            print("Synthesizing with Magpie (\(language.displayName), speaker \(speaker.displayName))...")
+            let t0 = CFAbsoluteTimeGetCurrent()
+
+            if stream {
+                var collected: [Float] = []
+                var chunkCount = 0
+                var firstPacketLatency: Double?
+                let audioStream = model.synthesizeStream(
+                    text: inputText, speaker: speaker, language: language,
+                    prephonemized: magpiePrephonemized, params: params)
+                for try await chunk in audioStream {
+                    if firstPacketLatency == nil {
+                        firstPacketLatency = CFAbsoluteTimeGetCurrent() - t0
+                    }
+                    chunkCount += 1
+                    collected.append(contentsOf: chunk.samples)
+                    if verbose {
+                        let ms = (chunk.elapsedTime ?? 0) * 1000
+                        print("  chunk \(chunkCount): \(chunk.samples.count) samples @ \(Int(ms))ms")
+                    }
+                    if chunk.isFinal { break }
+                }
+                if let l = firstPacketLatency {
+                    print(String(format: "  First-packet latency: %.0f ms", l * 1000))
+                }
+                try writeOrPlay(samples: collected, sampleRate: MagpieTTS.sampleRate, t0: t0)
+            } else {
+                let audio = try model.synthesize(
+                    text: inputText, speaker: speaker, language: language,
+                    prephonemized: magpiePrephonemized, params: params)
+                try writeOrPlay(samples: audio, sampleRate: MagpieTTS.sampleRate, t0: t0)
+            }
+        }
+    }
+
+    /// Shared "save or play" tail used by Magpie. The other engines have
+    /// bespoke logic; Magpie's output is always 22.05 kHz mono PCM.
+    private func writeOrPlay(samples: [Float], sampleRate: Int, t0: CFAbsoluteTime) throws {
+        guard !samples.isEmpty else {
+            print("Error: no audio generated")
+            throw ExitCode(1)
+        }
+        let elapsed = CFAbsoluteTimeGetCurrent() - t0
+        let secs = Double(samples.count) / Double(sampleRate)
+        print(String(format: "  %.2fs audio in %.2fs (RTF %.2f)",
+                     secs, elapsed, elapsed / secs))
+        if play {
+            playAudio(samples: samples, sampleRate: sampleRate)
+        } else {
+            let outputURL = URL(fileURLWithPath: output)
+            try WAVWriter.write(samples: samples, sampleRate: sampleRate, to: outputURL)
+            print("Saved \(samples.count) samples (\(formatDuration(samples.count, sampleRate: sampleRate))s) to \(output)")
         }
     }
 

@@ -153,6 +153,7 @@ docs/
     tts-model.md                Qwen3-TTS architecture
     cosyvoice-tts.md            CosyVoice3 architecture
     voxcpm2-tts.md              VoxCPM2 architecture (48 kHz, voice cloning + voice design)
+    magpie-tts.md               Magpie-TTS Multilingual architecture (4-bundle MLX, 8 codebooks, NanoCodec)
     magnet-music-gen.md         MAGNeT music generation (T5 + EnCodec, masked parallel decoding)
     kokoro-tts.md               Kokoro-82M architecture
     parakeet-asr.md             Parakeet TDT architecture
@@ -163,6 +164,7 @@ docs/
     parakeet-asr-inference.md   Parakeet TDT inference (CoreML)
     qwen3-tts-inference.md      TTS inference pipeline
     voxcpm2-inference.md        VoxCPM2 inference (48 kHz, --voxcpm2-variant bf16/int8/int4)
+    magpie-tts.md               Magpie-TTS Multilingual inference (CLI flags, languages, performance)
     magnet-music-gen.md         MAGNeT music generation CLI + tuning
     forced-aligner.md           Forced alignment pipeline
     silero-vad.md               Silero VAD streaming

@@ -32,6 +32,7 @@ Reconhecimento, sintese e compreensao de fala no dispositivo para Mac e iOS. Exe
 - **[VoxCPM2](https://soniqo.audio/pt/speech-generation)** — TTS de qualidade de estudio a 48 kHz com clonagem de voz e design de voz baseado em instrucoes (2B, MLX bf16/int8/int4, 30 idiomas)
 - **[Kokoro TTS](https://soniqo.audio/pt/guides/kokoro)** — TTS no dispositivo (82M, CoreML/Neural Engine, 54 vozes, pronto para iOS, 10 idiomas)
 - **[VibeVoice TTS](https://soniqo.audio/pt/guides/vibevoice)** — TTS de formato longo / multi-alto-falante (Microsoft VibeVoice Realtime-0.5B + 1.5B, MLX, sintese de podcast/audiolivro de ate 90 min, EN/ZH)
+- **[Magpie TTS](https://soniqo.audio/pt/guides/magpie)** — TTS multilíngue (NVIDIA Magpie-TTS Multilingual 357M, MLX INT4 247 MB / INT8 411 MB, 9 idiomas, 5 oradores predefinidos, streaming)
 - **[Qwen3.5-Chat](https://soniqo.audio/pt/guides/chat)** — Chat LLM no dispositivo (0.8B, MLX INT4 + CoreML INT8, DeltaNet hibrido, tokens em streaming)
 - **[MADLAD-400](https://soniqo.audio/pt/guides/translate)** — Tradução multidirecional entre 400+ idiomas (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
 - **[PersonaPlex](https://soniqo.audio/pt/guides/respond)** — Fala-a-fala full-duplex (7B, audio de entrada → audio de saida, 18 presets de voz)
@@ -112,7 +113,7 @@ struct DictateView: View {
 
 `SpeechUI` inclui apenas `TranscriptionView` (finais + parciais) e `TranscriptionStore` (adaptador de ASR em streaming). Use AVFoundation para visualizacao e reproducao de audio.
 
-Produtos SPM disponiveis: `Qwen3ASR`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `KokoroTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `MAGNeTMusicGen`, `FlashSR`, `PersonaPlex`, `SpeechVAD`, `SpeechEnhancement`, `SourceSeparation`, `Qwen3Chat`, `SpeechCore`, `SpeechUI`, `AudioCommon`.
+Produtos SPM disponiveis: `Qwen3ASR`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `KokoroTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `MagpieTTS`, `MAGNeTMusicGen`, `FlashSR`, `PersonaPlex`, `SpeechVAD`, `SpeechEnhancement`, `SourceSeparation`, `Qwen3Chat`, `SpeechCore`, `SpeechUI`, `AudioCommon`.
 
 ## Modelos
 
@@ -132,6 +133,7 @@ Vista compacta abaixo. **[Catalogo completo de modelos com tamanhos, quantizacoe
 | [Kokoro-82M](https://soniqo.audio/pt/guides/kokoro) | Texto → Fala | CoreML (ANE) | 82M | 10 |
 | [VibeVoice Realtime-0.5B](https://soniqo.audio/pt/guides/vibevoice) | Texto → Fala (formato longo, multi-alto-falante) | MLX | 0.5B | EN/ZH |
 | [VibeVoice 1.5B](https://soniqo.audio/pt/guides/vibevoice) | Texto → Fala (podcast de ate 90 min) | MLX | 1.5B | EN/ZH |
+| [Magpie-TTS Multilingual](https://soniqo.audio/pt/guides/magpie) | Texto → Fala (5 oradores predefinidos, streaming) | MLX | 357M (INT4/INT8) | 9 |
 | [Qwen3.5-Chat](https://soniqo.audio/pt/guides/chat) | Texto → Texto (LLM) | MLX, CoreML | 0.8B | Multi |
 | [MADLAD-400](https://soniqo.audio/pt/guides/translate) | Texto → Texto (Tradução) | MLX | 3B | **400+** |
 | [PersonaPlex](https://soniqo.audio/pt/guides/respond) | Fala → Fala | MLX | 7B | EN |
@@ -187,6 +189,7 @@ import CosyVoiceTTS         // Sintese de fala com clonagem
 import VoxCPM2TTS           // TTS de 48 kHz, clonagem de voz + design de voz (2B)
 import KokoroTTS            // Sintese de fala (pronto para iOS)
 import VibeVoiceTTS         // TTS de formato longo / multi-alto-falante (EN/ZH)
+import MagpieTTS            // TTS multilíngue (NVIDIA Magpie 357M, 9 idiomas)
 import Qwen3Chat            // Chat LLM no dispositivo
 import MADLADTranslation    // Tradução multidirecional entre 400+ idiomas
 import PersonaPlex          // Fala-a-fala full-duplex
