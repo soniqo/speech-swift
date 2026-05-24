@@ -31,6 +31,13 @@ public enum MagpieCoreMLConstants {
     public static let audioEosId: Int32 = 2_017
     public static let forbiddenAudioIds: [Int32] = [2_016, 2_018, 2_019, 2_020, 2_021, 2_022, 2_023]
 
+    /// 1-layer LocalTransformer (NeMo's codebook sampling head). d=256,
+    /// FFN=1024, 1 attention head; positional embedding slots for the 8
+    /// codebooks + spare BOS slots.
+    public static let localTransformerDim: Int = 256
+    public static let localTransformerFfnDim: Int = 1_024
+    public static let localTransformerMaxPositions: Int = 10
+
     /// FSQ inverse: each codebook value `i ∈ [0, 2016)` decodes to 4
     /// dequant scalars via `(i // base[j]) % level[j]`, mapped to
     /// `(d_j - L_j/2) / (L_j/2)`. 8 codebooks × 4 scalars = 32 latent dims.

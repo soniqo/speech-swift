@@ -12,17 +12,14 @@ import MagpieTTS
 ///   3. `decoder_prefill.mlmodelc` selects the baked speaker by index,
 ///      seeds the 12-layer self-attention KV cache (110 + 1 BOS = 111
 ///      positions), and emits the precomputed cross-attention K/V.
-///   4. AR loop: the MLX-loaded LocalTransformer samples the 8 codebook
-///      tokens per frame from `decoder_step`'s `h_last`. We ignore the
-///      CoreML graph's parallel-head logits — the LT is what NeMo
-///      trains as the real sampling head and parallel-head sampling
-///      produces noticeably worse codebook coherence. Sampled codes are
-///      averaged through the audio embedding tables (also MLX-loaded)
-///      to build the next `audio_emb` input.
-///   5. ``MagpieCoreMLFSQ.decodeWindow`` turns the `(T, 8)` code matrix
-///      into `(1, 32, T)` FSQ-inverse latents, then
-///      `nanocodec_decoder.mlmodelc` produces 22.05 kHz mono PCM in
-///      64-frame chunks.
+///   4. AR loop: ``MagpieCoreMLLocalTransformer`` (pure-Swift Accelerate)
+///      samples the 8 codebook tokens per frame from `decoder_step`'s
+///      `h_last`. Audio embeddings are averaged in Swift to build the
+///      next `audio_emb` input. **No MLX dispatch per frame** — MLX is
+///      only used once at init to snapshot the LT weights + audio
+///      embedding tables out of the MLX MagpieTTS module.
+///   5. `nanocodec_decoder.mlmodelc` decodes the (T, 8) code matrix in
+///      64-frame windows to 22.05 kHz mono PCM.
 ///
 /// Streaming is **not** supported because the codec is traced at a fixed
 /// 64-frame window. ``synthesize(...)`` returns the complete waveform.
@@ -32,16 +29,12 @@ public final class MagpieTTSCoreML {
     public let decoder: MagpieCoreMLDecoder
     public let nanoCodec: MagpieCoreMLNanoCodec
 
-    /// MLX MagpieTTS instance, lazy-loaded on first synthesis. Source of:
-    ///   * the 8 audio embedding tables (averaged per frame for `audio_emb`),
-    ///   * the 1-layer LocalTransformer + sampling head (refines
-    ///     `decoder_step`'s `h_last` into the next frame's 8 codebooks).
-    /// Adding this MLX dependency at runtime is the trade-off until we
-    /// ship LT + audio-embedding `.npy` files inside the CoreML bundle
-    /// and replace the LT with a pure-Swift implementation.
-    private let mlxHelper: MagpieMLXHelper
-    private let audioEmbedSource: AudioEmbedSource
-    private let localSampler: MagpieMLXLocalSampler
+    /// Pure-Swift LocalTransformer + sampler. Weights were extracted from
+    /// the MLX MagpieTTS module once at ``fromPretrained`` time.
+    public let localTransformer: MagpieCoreMLLocalTransformer
+    /// 8 × `[2024 * 768]` Float32 — averaged per frame for the next
+    /// `audio_emb` input. Extracted from the MLX bundle alongside LT.
+    public let audioEmbeddings: [[Float]]
 
     private let tokenizerDir: URL
     private var tokenizers: [MagpieCoreMLLanguage: MagpieTokenizer] = [:]
@@ -52,16 +45,14 @@ public final class MagpieTTSCoreML {
     public init(textEncoder: MagpieCoreMLTextEncoder,
                 decoder: MagpieCoreMLDecoder,
                 nanoCodec: MagpieCoreMLNanoCodec,
-                mlxHelper: MagpieMLXHelper,
-                audioEmbedSource: AudioEmbedSource,
-                localSampler: MagpieMLXLocalSampler,
+                localTransformer: MagpieCoreMLLocalTransformer,
+                audioEmbeddings: [[Float]],
                 tokenizerDir: URL) {
         self.textEncoder = textEncoder
         self.decoder = decoder
         self.nanoCodec = nanoCodec
-        self.mlxHelper = mlxHelper
-        self.audioEmbedSource = audioEmbedSource
-        self.localSampler = localSampler
+        self.localTransformer = localTransformer
+        self.audioEmbeddings = audioEmbeddings
         self.tokenizerDir = tokenizerDir
     }
 
@@ -77,12 +68,16 @@ public final class MagpieTTSCoreML {
             prefillURL: paths.decoderPrefillCompiled,
             stepURL: paths.decoderStepCompiled)
         let codec = try MagpieCoreMLNanoCodec(url: paths.nanocodecCompiled)
-        let helper = MagpieMLXHelper()
+        // One-time MLX load to snapshot LT + audio embedding weights.
+        // The MLX model goes out of scope after this; per-frame inference
+        // doesn't touch MLX again.
+        let mlxModel = try await MagpieTTS.fromPretrained(variant: .int4)
+        let (ltWeights, audioEmbeds) = try MagpieCoreMLWeightExtractor.extract(from: mlxModel)
+        let lt = MagpieCoreMLLocalTransformer(weights: ltWeights)
         return MagpieTTSCoreML(
             textEncoder: te, decoder: dec, nanoCodec: codec,
-            mlxHelper: helper,
-            audioEmbedSource: MagpieMLXAudioEmbedSource(helper: helper),
-            localSampler: MagpieMLXLocalSampler(helper: helper),
+            localTransformer: lt,
+            audioEmbeddings: audioEmbeds,
             tokenizerDir: paths.mlxTokenizerDir)
     }
 
@@ -117,16 +112,16 @@ public final class MagpieTTSCoreML {
             encoderOutput: encOut.encoderOutput,
             encoderMask: encOut.encoderMask)
 
-        // Seed MLX's RNG when requested so LT sampling is reproducible
-        // (mirrors what MagpieTTS does for its own AR loop).
-        if let seed = params.seed { MagpieMLXSeed.seed(seed) }
+        var rng: any RandomNumberGenerator =
+            params.seed.map { SeededRng(seed: $0) as any RandomNumberGenerator }
+                ?? SystemRandomNumberGenerator()
 
         var saK = prefill.saK
         var saV = prefill.saV
         let xaK = prefill.xaK
         let xaV = prefill.xaV
         var position = prefill.initialPosition
-        var audioEmb = try audioEmbedSource.averageBosEmbedding()
+        var audioEmb = averageBosEmbedding()
         var frames: [[Int32]] = []
         let stepCap = min(params.maxSteps, MagpieCoreMLConstants.maxARSteps)
 
@@ -139,37 +134,176 @@ public final class MagpieTTSCoreML {
             saK = stepOut.saK
             saV = stepOut.saV
             position += 1
-            // Use the MLX-loaded LocalTransformer for per-frame sampling.
-            // We ignore the parallel head logits the CoreML graph also
-            // emits — parallel head sampling produces noticeably worse
-            // codebook coherence (the LT is what's trained as the real
-            // sampling head).
             let hLastFlat = MagpieCoreMLBridge.toFloat32(stepOut.hLast)
-            let codes = try localSampler.sample(
+            let codes = sampleFromLocalTransformer(
                 hLastFlat: hLastFlat,
                 forbidEos: step < params.minFrames,
-                temperature: params.temperature, topK: params.topK)
+                temperature: params.temperature, topK: params.topK,
+                rng: &rng)
             if step >= params.minFrames, codes.contains(MagpieCoreMLConstants.audioEosId) {
                 break
             }
             frames.append(codes)
-            audioEmb = try audioEmbedSource.averageEmbedding(codes: codes)
+            audioEmb = averageEmbedding(codes: codes)
         }
         if frames.isEmpty { return [] }
         return try nanoCodec.decode(codes: frames)
     }
+
+    // MARK: - LT sampling + audio_emb averaging
+
+    /// AR-loop bootstrap frame: average of the 8 codebooks' BOS rows.
+    private func averageBosEmbedding() -> [Float] {
+        let codes = [Int32](repeating: MagpieCoreMLConstants.audioBosId,
+                            count: MagpieCoreMLConstants.numCodebooks)
+        return averageEmbedding(codes: codes)
+    }
+
+    /// Mirror of NeMo's `Decoder.embed_audio_frame`: per-codebook embedding
+    /// lookup, sum across codebooks, divide by K.
+    private func averageEmbedding(codes: [Int32]) -> [Float] {
+        let D = MagpieCoreMLConstants.dModel
+        let K = MagpieCoreMLConstants.numCodebooks
+        var out = [Float](repeating: 0, count: D)
+        for k in 0..<K {
+            let row = Int(codes[k]) * D
+            let table = audioEmbeddings[k]
+            // Manual unroll over the row — 768 muls + 768 adds. Profiling
+            // showed vDSP_vadd's setup cost dominates at this size.
+            for d in 0..<D { out[d] += table[row + d] }
+        }
+        let inv = 1.0 / Float(K)
+        for d in 0..<D { out[d] *= inv }
+        return out
+    }
+
+    /// Drive the Accelerate LocalTransformer for one frame: 8 codebooks
+    /// sampled sequentially with top-k + Gumbel-max.
+    private func sampleFromLocalTransformer(
+        hLastFlat: [Float],
+        forbidEos: Bool,
+        temperature: Float,
+        topK: Int,
+        rng: inout any RandomNumberGenerator
+    ) -> [Int32] {
+        let K = MagpieCoreMLConstants.numCodebooks
+        let D = MagpieCoreMLConstants.dModel
+        let LD = MagpieCoreMLConstants.localTransformerDim
+        precondition(hLastFlat.count == D)
+
+        // Initial LT input = inProj(h_last).
+        var seq = localTransformer.projectInput(hidden: hLastFlat)
+        var length = 1
+
+        var codes = [Int32](repeating: 0, count: K)
+        let forbidden = forbiddenTokens(eosMasked: forbidEos)
+
+        for cb in 0..<K {
+            let out = localTransformer.forward(sequence: seq, length: length)
+            let lastOff = (length - 1) * LD
+            let lastHidden = Array(out[lastOff..<(lastOff + LD)])
+            var logits = localTransformer.codebookLogits(
+                lastHidden: lastHidden, codebook: cb)
+            for tok in forbidden where Int(tok) < logits.count {
+                logits[Int(tok)] = -.infinity
+            }
+            let sampled = sampleTopK(
+                logits: logits, temperature: temperature, topK: topK, rng: &rng)
+            codes[cb] = Int32(sampled)
+
+            if cb < K - 1 {
+                // Embed the sampled token → project → append to LT input
+                // sequence for the next codebook step.
+                let row = Int(sampled) * D
+                let table = audioEmbeddings[cb]
+                let hiddenSlice = Array(table[row..<(row + D)])
+                let nextInput = localTransformer.projectInput(hidden: hiddenSlice)
+                seq.append(contentsOf: nextInput)
+                length += 1
+            }
+        }
+        return codes
+    }
+
+    private func forbiddenTokens(eosMasked: Bool) -> [Int32] {
+        if eosMasked {
+            return [MagpieCoreMLConstants.audioEosId]
+                + MagpieCoreMLConstants.forbiddenAudioIds
+        } else {
+            return MagpieCoreMLConstants.forbiddenAudioIds
+        }
+    }
+
+    private func sampleTopK(
+        logits raw: [Float], temperature: Float, topK: Int,
+        rng: inout any RandomNumberGenerator
+    ) -> Int {
+        if temperature <= 1e-3 {
+            return raw.indices.max(by: { raw[$0] < raw[$1] }) ?? 0
+        }
+        var logits = raw
+        if topK > 0 && topK < logits.count {
+            let threshold = topKThreshold(values: logits, k: topK)
+            for i in 0..<logits.count where logits[i] < threshold {
+                logits[i] = -.infinity
+            }
+        }
+        let t = max(temperature, 1e-8)
+        var bestVal: Float = -.infinity
+        var bestIdx = 0
+        for i in 0..<logits.count {
+            if !logits[i].isFinite { continue }
+            let u = Float(Double.random(in: Double(Float.ulpOfOne)..<1, using: &rng))
+            let g = -log(-log(u))
+            let s = logits[i] / t + g
+            if s > bestVal { bestVal = s; bestIdx = i }
+        }
+        return bestIdx
+    }
+
+    private func topKThreshold(values: [Float], k: Int) -> Float {
+        var heap = [Float](repeating: 0, count: k)
+        for i in 0..<k {
+            heap[i] = values[i]
+            var j = i
+            while j > 0 {
+                let parent = (j - 1) >> 1
+                if heap[j] < heap[parent] {
+                    heap.swapAt(j, parent)
+                    j = parent
+                } else { break }
+            }
+        }
+        for i in k..<values.count {
+            let v = values[i]
+            if v <= heap[0] { continue }
+            heap[0] = v
+            var j = 0
+            while true {
+                let left = 2 * j + 1
+                let right = left + 1
+                var smallest = j
+                if left < k && heap[left] < heap[smallest] { smallest = left }
+                if right < k && heap[right] < heap[smallest] { smallest = right }
+                if smallest == j { break }
+                heap.swapAt(j, smallest)
+                j = smallest
+            }
+        }
+        return heap[0]
+    }
 }
 
-// MARK: - Audio embedding source
-
-/// Per-frame `audio_emb` builder. The CoreML decoder's input expects a
-/// `(1, 1, 768)` audio embedding which Magpie computes as the average of
-/// the previous frame's 8 sampled codebook tokens projected through the
-/// per-codebook embedding tables (`embed_audio_frame` in NeMo).
-public protocol AudioEmbedSource {
-    /// `[768]` for the AR-loop bootstrap frame (codebook BOS).
-    func averageBosEmbedding() throws -> [Float]
-    /// `[768]` — average of the 8 codebooks' embeddings for the given
-    /// sampled codes.
-    func averageEmbedding(codes: [Int32]) throws -> [Float]
+/// Splitmix64 — small, well-distributed, reproducible. Used when callers
+/// pass `--seed N`.
+private struct SeededRng: RandomNumberGenerator {
+    private var state: UInt64
+    init(seed: UInt64) { self.state = seed }
+    mutating func next() -> UInt64 {
+        state &+= 0x9E37_79B9_7F4A_7C15
+        var z = state
+        z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
+        z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
+        return z ^ (z >> 31)
+    }
 }
