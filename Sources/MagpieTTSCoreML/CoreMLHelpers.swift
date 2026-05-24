@@ -9,14 +9,13 @@ import Foundation
 enum MagpieCoreMLBridge {
 
     /// What kind of model we're loading — drives the compute-unit
-    /// choice. ANE is dramatically faster for the autoregressive
-    /// transformer decoder but introduces audible high-frequency
-    /// artifacts when used for the nano-codec (HiFi-GAN-style
-    /// vocoder; very sensitive to BF16 precision because it writes
-    /// the audio waveform directly).
+    /// choice. Kept as an explicit hint even though both decoder and
+    /// codec now run cleanly on ANE: the override env vars
+    /// (`MAGPIE_COREML_COMPUTE_DECODER` / `_CODEC`) target each kind
+    /// independently for benchmarking.
     enum Kind {
-        case decoder        // text_encoder, decoder_prefill, decoder_step — ANE win, sampling absorbs BF16 drift
-        case codec          // nanocodec_decoder — GPU for clean audio
+        case decoder        // text_encoder, decoder_prefill, decoder_step
+        case codec          // nanocodec_decoder (HiFi-GAN vocoder)
     }
 
     static func loadCompiled(at url: URL, label: String, kind: Kind) throws -> MLModel {
@@ -24,38 +23,35 @@ enum MagpieCoreMLBridge {
             throw MagpieCoreMLError.missingFile(url.lastPathComponent)
         }
         let config = MLModelConfiguration()
-        // Per-kind defaults:
+        // All four .mlmodelc bundles default to `.cpuAndNeuralEngine`:
         //
-        // - **Decoder/encoder graphs**: `.cpuAndNeuralEngine`. ANE is
-        //   ~7x faster than ANE+GPU+CPU mix (`.all`). Per-frame
-        //   decoder_step drops from ~15 ms to ~2 ms. The BF16
-        //   precision drift on attention scores is absorbed into
-        //   Gumbel noise by the default stochastic sampler. With
-        //   greedy (`--magpie-temperature 0`), tiny drift can flip
-        //   the argmax and the AR loop diverges — opt out via
-        //   `MAGPIE_COREML_COMPUTE_DECODER=all` (or cpuAndGPU) if
-        //   you need greedy.
+        // - **Decoder/encoder graphs**: ANE is ~7× faster than the
+        //   ANE+GPU+CPU mix (`.all`). Per-frame decoder_step drops
+        //   from ~15 ms to ~2 ms. The BF16 precision drift on
+        //   attention scores is absorbed into Gumbel noise by the
+        //   default stochastic sampler. With greedy
+        //   (`--magpie-temperature 0`), tiny drift can flip the
+        //   argmax and the AR loop diverges — opt out via
+        //   `MAGPIE_COREML_COMPUTE_DECODER=all` if you need greedy.
         //
-        // - **Codec**: `.cpuAndGPU`. The nanocodec is a HiFi-GAN
-        //   vocoder that synthesises the audio waveform directly;
-        //   running its conv stack on ANE's BF16 produces audible
-        //   high-frequency hiss/buzz. GPU FP16 is clean and the
-        //   codec runs once per utterance, so the speed cost is
-        //   minimal (~100 ms total vs ~50 ms on ANE). Opt back into
-        //   ANE via `MAGPIE_COREML_COMPUTE_CODEC=ane`.
+        // - **Codec**: the nanocodec is a HiFi-GAN vocoder; the
+        //   PRIOR FP16 export produced audible high-frequency hiss
+        //   on ANE. The current bundle ships an ANE-friendly
+        //   re-export (Kokoro recipe: `ct.convert(...,
+        //   compute_units=CPU_AND_NE, compute_precision=FLOAT32)`)
+        //   that lowers cleanly to ANE with the same audio quality
+        //   as the GPU path. Force GPU instead via
+        //   `MAGPIE_COREML_COMPUTE_CODEC=cpuAndGPU` if regressions
+        //   surface on a future macOS.
         let env = ProcessInfo.processInfo.environment
         let envKey = kind == .decoder ? "MAGPIE_COREML_COMPUTE_DECODER" : "MAGPIE_COREML_COMPUTE_CODEC"
-        // Backwards-compat: `MAGPIE_COREML_COMPUTE` overrides both.
+        // Backwards-compat: `MAGPIE_COREML_COMPUTE` overrides both kinds.
         let chosen = env[envKey] ?? env["MAGPIE_COREML_COMPUTE"]
         switch chosen {
         case "all":             config.computeUnits = .all
         case "cpuAndGPU":       config.computeUnits = .cpuAndGPU
         case "cpuOnly":         config.computeUnits = .cpuOnly
-        case "ane":             config.computeUnits = .cpuAndNeuralEngine
-        case nil:
-            config.computeUnits = (kind == .decoder)
-                ? .cpuAndNeuralEngine
-                : .cpuAndGPU
+        case "ane", nil:        config.computeUnits = .cpuAndNeuralEngine
         default:                config.computeUnits = .all
         }
         do {
