@@ -27,12 +27,24 @@ public final class MagpieTTSCoreML {
 
     public let textEncoder: MagpieCoreMLTextEncoder
     public let decoder: MagpieCoreMLDecoder
+    /// Stateful KV cache variant of decoder_step. Cache lives as
+    /// CoreML state (fp16, ANE-resident) instead of being passed as
+    /// inputs+outputs each step — saves ~85 MB of per-step IO transfer.
+    /// Default path; set ``useStatefulDecoder = false`` to bisect
+    /// against the cache-as-IO model.
+    public let statefulDecoder: MagpieCoreMLStatefulDecoderStep
     /// 64-frame batch codec, used by ``synthesize(...)``. One call per
     /// ~3 s of audio; lowest dispatch overhead per second of audio.
     public let nanoCodec: MagpieCoreMLNanoCodec
     /// 8-frame streaming codec, used by ``synthesizeStream(...)``. Higher
     /// per-frame overhead but ~370 ms first-packet latency.
     public let nanoCodecStreaming: MagpieCoreMLNanoCodec
+
+    /// Toggle between the two `decoder_step` variants. Reads
+    /// `MAGPIE_COREML_STATEFUL=0` to opt OUT (bisecting / A/B). Default
+    /// uses the stateful path.
+    public var useStatefulDecoder: Bool =
+        ProcessInfo.processInfo.environment["MAGPIE_COREML_STATEFUL"] != "0"
 
     /// Pure-Swift LocalTransformer + sampler. Weights were extracted from
     /// the MLX MagpieTTS module once at ``fromPretrained`` time.
@@ -49,6 +61,7 @@ public final class MagpieTTSCoreML {
 
     public init(textEncoder: MagpieCoreMLTextEncoder,
                 decoder: MagpieCoreMLDecoder,
+                statefulDecoder: MagpieCoreMLStatefulDecoderStep,
                 nanoCodec: MagpieCoreMLNanoCodec,
                 nanoCodecStreaming: MagpieCoreMLNanoCodec,
                 localTransformer: MagpieCoreMLLocalTransformer,
@@ -56,6 +69,7 @@ public final class MagpieTTSCoreML {
                 tokenizerDir: URL) {
         self.textEncoder = textEncoder
         self.decoder = decoder
+        self.statefulDecoder = statefulDecoder
         self.nanoCodec = nanoCodec
         self.nanoCodecStreaming = nanoCodecStreaming
         self.localTransformer = localTransformer
@@ -91,6 +105,11 @@ public final class MagpieTTSCoreML {
             prefillURL: paths.decoderPrefillCompiled,
             stepURL: paths.decoderStepCompiled)
         tick("load decoder pre+step", tDec)
+
+        let tStateful = CFAbsoluteTimeGetCurrent()
+        let statefulDec = try MagpieCoreMLStatefulDecoderStep(
+            url: paths.decoderStepStatefulCompiled)
+        tick("load decoder stateful", tStateful)
 
         let tCodec = CFAbsoluteTimeGetCurrent()
         let codec = try MagpieCoreMLNanoCodec(
@@ -135,7 +154,7 @@ public final class MagpieTTSCoreML {
         // repeatedly should call `model.decoder.prewarm()` explicitly
         // after `fromPretrained`.
         return MagpieTTSCoreML(
-            textEncoder: te, decoder: dec,
+            textEncoder: te, decoder: dec, statefulDecoder: statefulDec,
             nanoCodec: codec, nanoCodecStreaming: codecStream,
             localTransformer: lt,
             audioEmbeddings: audioEmbeds,
@@ -177,6 +196,11 @@ public final class MagpieTTSCoreML {
             params.seed.map { SeededRng(seed: $0) as any RandomNumberGenerator }
                 ?? SystemRandomNumberGenerator()
 
+        if useStatefulDecoder {
+            try statefulDecoder.resetState(
+                prefillSaK: prefill.saK, prefillSaV: prefill.saV)
+        }
+
         var saK = prefill.saK
         var saV = prefill.saV
         let xaK = prefill.xaK
@@ -193,17 +217,28 @@ public final class MagpieTTSCoreML {
 
         for step in 0..<stepCap {
             let t0 = debug ? CFAbsoluteTimeGetCurrent() : 0
-            let stepOut = try decoder.step(
-                audioEmbedding: audioEmb, position: position,
-                encoderOutput: encOut.encoderOutput,
-                encoderMask: encOut.encoderMask,
-                saK: saK, saV: saV, xaK: xaK, xaV: xaV)
+            let hLastArr: MLMultiArray
+            if useStatefulDecoder {
+                let (_, h) = try statefulDecoder.step(
+                    audioEmbedding: audioEmb, position: position,
+                    encoderOutput: encOut.encoderOutput,
+                    encoderMask: encOut.encoderMask,
+                    xaK: xaK, xaV: xaV)
+                hLastArr = h
+            } else {
+                let stepOut = try decoder.step(
+                    audioEmbedding: audioEmb, position: position,
+                    encoderOutput: encOut.encoderOutput,
+                    encoderMask: encOut.encoderMask,
+                    saK: saK, saV: saV, xaK: xaK, xaV: xaV)
+                saK = stepOut.saK
+                saV = stepOut.saV
+                hLastArr = stepOut.hLast
+            }
             if debug { totalStep += CFAbsoluteTimeGetCurrent() - t0 }
-            saK = stepOut.saK
-            saV = stepOut.saV
             position += 1
             let t1 = debug ? CFAbsoluteTimeGetCurrent() : 0
-            let hLastFlat = MagpieCoreMLBridge.toFloat32(stepOut.hLast)
+            let hLastFlat = MagpieCoreMLBridge.toFloat32(hLastArr)
             let codes = sampleFromLocalTransformer(
                 hLastFlat: hLastFlat,
                 forbidEos: step < params.minFrames,
@@ -222,8 +257,8 @@ public final class MagpieTTSCoreML {
         let audio = try nanoCodec.decode(codes: frames)
         if debug {
             let codecTime = CFAbsoluteTimeGetCurrent() - tCodec0
-            let n = frames.count
-            print("[MAGPIE-COREML-PROFILE] \(n) frames")
+            let n = max(frames.count, 1)
+            print("[MAGPIE-COREML-PROFILE] \(frames.count) frames  (decoder=\(useStatefulDecoder ? "stateful" : "cache-IO"))")
             print(String(format: "  decoder_step: %6.0f ms total  %5.2f ms/frame", totalStep * 1000, totalStep * 1000 / Double(n)))
             print(String(format: "  LT+sample:    %6.0f ms total  %5.2f ms/frame", totalSample * 1000, totalSample * 1000 / Double(n)))
             print(String(format: "  audio_emb:    %6.0f ms total  %5.2f ms/frame", totalEmbed * 1000, totalEmbed * 1000 / Double(n)))
