@@ -29,11 +29,14 @@ jobs:
           cp .build/release/speech .build/release/speech-server dist/
           cp .build/release/audio .build/release/audio-server dist/
           cp .build/release/mlx.metallib dist/
-          # KokoroTTS loads fr/pt/hi pronunciation dicts via Bundle.module,
-          # which hard-crashes if the resource bundle isn't beside the binary (#212).
-          cp -R .build/release/Qwen3Speech_KokoroTTS.bundle dist/
+          # Copy every SPM-generated resource bundle next to the binary.
+          # KokoroTTS needs its own bundle for fr/pt/hi pronunciation dicts (#212);
+          # MAGNeT/VoxCPM2/etc. need swift-transformers_Hub.bundle for tokenizer
+          # downloads, and MagpieTTS ships baked speaker tables in its own bundle.
+          # Globbing keeps future modules from silently shipping broken.
+          cp -R .build/release/*.bundle dist/
           cd dist
-          tar czf speech-macos-arm64.tar.gz speech speech-server audio audio-server mlx.metallib Qwen3Speech_KokoroTTS.bundle
+          tar czf speech-macos-arm64.tar.gz speech speech-server audio audio-server mlx.metallib *.bundle
 
       - name: Upload release asset
         uses: softprops/action-gh-release@v2
