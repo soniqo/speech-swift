@@ -56,14 +56,21 @@ public final class Qwen3TTSCoreMLModel {
             ) { progress in progressHandler?(progress * 0.7, "Downloading model...") }
         }
 
-        // Embedders on CPU (FP32 precision for accumulation, matching TTSKit)
-        // CodeDecoder/MCD/SD on default (let CoreML decide CPU/GPU/ANE)
+        // Embedders on CPU (FP32 precision for accumulation, matching TTSKit).
         let cpuConfig = MLModelConfiguration()
         cpuConfig.computeUnits = .cpuOnly
 
-        // With MLState, KV cache stays on ANE — use all compute units
+        // CodeDecoder/MultiCodeDecoder on CPU+GPU. They are stateful
+        // transformers and the MLState KV cache stays put across calls.
         let defaultConfig = MLModelConfiguration()
         defaultConfig.computeUnits = .cpuAndGPU
+
+        // SpeechDecoder pinned to ANE. The vocoder is a single forward pass
+        // on a fixed 125-frame input — runs ~5x faster on ANE than on GPU
+        // (local A/B at 12.5s vs 75s for the same 10s clip) without any
+        // audible quality regression.
+        let sdConfig = MLModelConfiguration()
+        sdConfig.computeUnits = .cpuAndNeuralEngine
 
         let model = Qwen3TTSCoreMLModel()
 
@@ -82,7 +89,7 @@ public final class Qwen3TTSCoreMLModel {
         model.multiCodeEmbedder = MultiCodeEmbedderModel(model: try loadML("MultiCodeEmbedder", cpuConfig))
         model.codeDecoder = TalkerGenerator(model: try loadML("CodeDecoder"))
         model.multiCodeDecoder = MultiCodeDecoderCoreML(model: try loadML("MultiCodeDecoder"))
-        model.speechDecoder = SpeechDecoderCoreML(model: try loadML("SpeechDecoder"))
+        model.speechDecoder = SpeechDecoderCoreML(model: try loadML("SpeechDecoder", sdConfig))
 
         progressHandler?(0.9, "Loading embeddings...")
 
