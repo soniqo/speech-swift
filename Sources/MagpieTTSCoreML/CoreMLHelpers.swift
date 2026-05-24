@@ -13,7 +13,28 @@ enum MagpieCoreMLBridge {
             throw MagpieCoreMLError.missingFile(url.lastPathComponent)
         }
         let config = MLModelConfiguration()
-        config.computeUnits = .all
+        // `.cpuAndNeuralEngine` by default — ANE is 7x faster than
+        // ANE+GPU+CPU mix (`.all`) and even beats MLX (RTF 0.14 vs
+        // 0.27). Per-frame steady-state drops from ~15 ms to ~2 ms.
+        //
+        // **Important caveat**: ANE runs internal BF16 (vs FP16 on
+        // GPU), which adds tiny precision drift to the attention
+        // scores. With greedy sampling (`temperature=0`) this drift
+        // can flip the argmax and the AR loop diverges (ASR drops to
+        // just "Hello." for the first word). Stochastic sampling
+        // (the default temperature=0.6 + top-k=80) absorbs the drift
+        // into Gumbel noise so the output is statistically equivalent
+        // to the GPU/CPU path. The CLI default is stochastic, so this
+        // works out of the box.
+        //
+        // Override with `MAGPIE_COREML_COMPUTE=all|cpuAndGPU|cpuOnly`
+        // for bisecting or to force greedy-safe output.
+        switch ProcessInfo.processInfo.environment["MAGPIE_COREML_COMPUTE"] {
+        case "all":         config.computeUnits = .all
+        case "cpuAndGPU":   config.computeUnits = .cpuAndGPU
+        case "cpuOnly":     config.computeUnits = .cpuOnly
+        default:            config.computeUnits = .cpuAndNeuralEngine
+        }
         do {
             return try MLModel(contentsOf: url, configuration: config)
         } catch {

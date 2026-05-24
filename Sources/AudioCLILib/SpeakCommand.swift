@@ -380,6 +380,16 @@ public struct SpeakCommand: ParsableCommand {
                 minFrames: magpieMinFrames,
                 seed: seed)
 
+            // Greedy sampling on ANE produces broken audio (BF16
+            // precision drift flips argmax). Warn so the user knows
+            // why they should let sampling stay default.
+            if magpieTemperature <= 1e-3
+                && ProcessInfo.processInfo.environment["MAGPIE_COREML_COMPUTE"] == nil {
+                FileHandle.standardError.write(Data(
+                    "[magpie-coreml] --magpie-temperature 0 (greedy) is unreliable on ANE due to BF16 precision drift. Falling back to .all compute units for this run; set MAGPIE_COREML_COMPUTE=ane to force ANE anyway, or omit --magpie-temperature for the default stochastic sampling (the recommended path — ANE-fast and quality-correct).\n".utf8))
+                setenv("MAGPIE_COREML_COMPUTE", "all", 1)
+            }
+
             print("Synthesizing with Magpie CoreML (\(coreLang.mlx.displayName), speaker \(coreSpeaker.displayName))...")
             let t0 = CFAbsoluteTimeGetCurrent()
             if stream {
