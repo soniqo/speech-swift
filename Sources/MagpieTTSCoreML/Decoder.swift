@@ -91,8 +91,8 @@ public final class MagpieCoreMLDecoder {
 
     public init(prefillURL: URL, stepURL: URL,
                 numLayers: Int = MagpieCoreMLConstants.numDecoderLayers) throws {
-        self.prefill = try MagpieCoreMLBridge.loadCompiled(at: prefillURL, label: "decoder_prefill")
-        self.step = try MagpieCoreMLBridge.loadCompiled(at: stepURL, label: "decoder_step")
+        self.prefill = try MagpieCoreMLBridge.loadCompiled(at: prefillURL, label: "decoder_prefill", kind: .decoder)
+        self.step = try MagpieCoreMLBridge.loadCompiled(at: stepURL, label: "decoder_step", kind: .decoder)
         self.numLayers = numLayers
         try allocOutputBackings()
     }

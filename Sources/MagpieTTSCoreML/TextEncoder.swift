@@ -21,7 +21,7 @@ public final class MagpieCoreMLTextEncoder {
     private let model: MLModel
 
     public init(url: URL) throws {
-        self.model = try MagpieCoreMLBridge.loadCompiled(at: url, label: "text_encoder")
+        self.model = try MagpieCoreMLBridge.loadCompiled(at: url, label: "text_encoder", kind: .decoder)
     }
 
     public func encode(tokens ids: [Int32]) throws -> Output {

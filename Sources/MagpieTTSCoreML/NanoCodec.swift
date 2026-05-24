@@ -16,7 +16,7 @@ public final class MagpieCoreMLNanoCodec {
     public let windowFrames: Int
 
     public init(url: URL, windowFrames: Int = MagpieCoreMLConstants.nanocodecBatchFrames) throws {
-        self.model = try MagpieCoreMLBridge.loadCompiled(at: url, label: "nanocodec_decoder")
+        self.model = try MagpieCoreMLBridge.loadCompiled(at: url, label: "nanocodec_decoder", kind: .codec)
         self.windowFrames = windowFrames
     }
 

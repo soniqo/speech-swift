@@ -26,7 +26,7 @@ public final class MagpieCoreMLStatefulDecoderStep {
 
     public init(url: URL,
                 numLayers: Int = MagpieCoreMLConstants.numDecoderLayers) throws {
-        self.model = try MagpieCoreMLBridge.loadCompiled(at: url, label: "decoder_step_stateful")
+        self.model = try MagpieCoreMLBridge.loadCompiled(at: url, label: "decoder_step_stateful", kind: .decoder)
         self.numLayers = numLayers
         self.saStateShape = [
             1,

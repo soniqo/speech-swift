@@ -8,32 +8,55 @@ import Foundation
 /// bundle would.
 enum MagpieCoreMLBridge {
 
-    static func loadCompiled(at url: URL, label: String) throws -> MLModel {
+    /// What kind of model we're loading — drives the compute-unit
+    /// choice. ANE is dramatically faster for the autoregressive
+    /// transformer decoder but introduces audible high-frequency
+    /// artifacts when used for the nano-codec (HiFi-GAN-style
+    /// vocoder; very sensitive to BF16 precision because it writes
+    /// the audio waveform directly).
+    enum Kind {
+        case decoder        // text_encoder, decoder_prefill, decoder_step — ANE win, sampling absorbs BF16 drift
+        case codec          // nanocodec_decoder — GPU for clean audio
+    }
+
+    static func loadCompiled(at url: URL, label: String, kind: Kind) throws -> MLModel {
         guard FileManager.default.fileExists(atPath: url.path) else {
             throw MagpieCoreMLError.missingFile(url.lastPathComponent)
         }
         let config = MLModelConfiguration()
-        // `.cpuAndNeuralEngine` by default — ANE is 7x faster than
-        // ANE+GPU+CPU mix (`.all`) and even beats MLX (RTF 0.14 vs
-        // 0.27). Per-frame steady-state drops from ~15 ms to ~2 ms.
+        // Per-kind defaults:
         //
-        // **Important caveat**: ANE runs internal BF16 (vs FP16 on
-        // GPU), which adds tiny precision drift to the attention
-        // scores. With greedy sampling (`temperature=0`) this drift
-        // can flip the argmax and the AR loop diverges (ASR drops to
-        // just "Hello." for the first word). Stochastic sampling
-        // (the default temperature=0.6 + top-k=80) absorbs the drift
-        // into Gumbel noise so the output is statistically equivalent
-        // to the GPU/CPU path. The CLI default is stochastic, so this
-        // works out of the box.
+        // - **Decoder/encoder graphs**: `.cpuAndNeuralEngine`. ANE is
+        //   ~7x faster than ANE+GPU+CPU mix (`.all`). Per-frame
+        //   decoder_step drops from ~15 ms to ~2 ms. The BF16
+        //   precision drift on attention scores is absorbed into
+        //   Gumbel noise by the default stochastic sampler. With
+        //   greedy (`--magpie-temperature 0`), tiny drift can flip
+        //   the argmax and the AR loop diverges — opt out via
+        //   `MAGPIE_COREML_COMPUTE_DECODER=all` (or cpuAndGPU) if
+        //   you need greedy.
         //
-        // Override with `MAGPIE_COREML_COMPUTE=all|cpuAndGPU|cpuOnly`
-        // for bisecting or to force greedy-safe output.
-        switch ProcessInfo.processInfo.environment["MAGPIE_COREML_COMPUTE"] {
-        case "all":         config.computeUnits = .all
-        case "cpuAndGPU":   config.computeUnits = .cpuAndGPU
-        case "cpuOnly":     config.computeUnits = .cpuOnly
-        default:            config.computeUnits = .cpuAndNeuralEngine
+        // - **Codec**: `.cpuAndGPU`. The nanocodec is a HiFi-GAN
+        //   vocoder that synthesises the audio waveform directly;
+        //   running its conv stack on ANE's BF16 produces audible
+        //   high-frequency hiss/buzz. GPU FP16 is clean and the
+        //   codec runs once per utterance, so the speed cost is
+        //   minimal (~100 ms total vs ~50 ms on ANE). Opt back into
+        //   ANE via `MAGPIE_COREML_COMPUTE_CODEC=ane`.
+        let env = ProcessInfo.processInfo.environment
+        let envKey = kind == .decoder ? "MAGPIE_COREML_COMPUTE_DECODER" : "MAGPIE_COREML_COMPUTE_CODEC"
+        // Backwards-compat: `MAGPIE_COREML_COMPUTE` overrides both.
+        let chosen = env[envKey] ?? env["MAGPIE_COREML_COMPUTE"]
+        switch chosen {
+        case "all":             config.computeUnits = .all
+        case "cpuAndGPU":       config.computeUnits = .cpuAndGPU
+        case "cpuOnly":         config.computeUnits = .cpuOnly
+        case "ane":             config.computeUnits = .cpuAndNeuralEngine
+        case nil:
+            config.computeUnits = (kind == .decoder)
+                ? .cpuAndNeuralEngine
+                : .cpuAndGPU
+        default:                config.computeUnits = .all
         }
         do {
             return try MLModel(contentsOf: url, configuration: config)
