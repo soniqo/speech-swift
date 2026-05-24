@@ -47,12 +47,41 @@ public final class MagpieCoreMLDecoder {
     private let step: MLModel
     private let numLayers: Int
 
+    /// Back-buffers for `MLPredictionOptions.outputBackings`. We pre-
+    /// allocate one set of MLMultiArrays matching every `sa_k_out_*` /
+    /// `sa_v_out_*` output the decoder_step model writes, and tell
+    /// CoreML to write into THOSE buffers instead of allocating fresh
+    /// fp32 outputs on every step. For a 12-layer × 600-pos × 12-heads ×
+    /// 64-dim × fp32 KV cache, that's 24 × 1.76 MB = ~42 MB of allocation
+    /// per step that CoreML would otherwise pay (Magpie has fp32 IO at
+    /// the boundaries, unlike FluidInference's fp16-IO bundle). Across a
+    /// 200-frame synthesis that's ~8.4 GB of fresh allocator pressure.
+    ///
+    /// The buffers are ping-ponged: after each prediction we swap the
+    /// back-buffers (just-written outputs) with the front-buffers
+    /// (current cache state) so the next step's `sa_k_in_*` inputs are
+    /// the same MLMultiArrays we just received the outputs into.
+    private var saKBack: [MLMultiArray] = []
+    private var saVBack: [MLMultiArray] = []
+
+    /// Same idea for `logits` and `h_last` — modest savings but free.
+    private var logitsBack: MLMultiArray?
+    private var hLastBack: MLMultiArray?
+
+    /// Set to `false` if our model doesn't accept output backings (some
+    /// trace configurations don't carry explicit MultiArray shape/dtype
+    /// constraints on outputs). The rejection is a static property of
+    /// the model, so once we see it we permanently skip the fast path
+    /// instead of throwing 500 times per utterance.
+    private var useOutputBackings: Bool = true
+
     /// Internal counters for `MAGPIE_COREML_PROFILE_STEP=1` debug mode.
     /// Splits step() wall time into IO setup (build MLMultiArrays +
     /// FeatureProvider) vs the actual `prediction(from:)` call.
     public static var setupAccum: Double = 0
     public static var predAccum: Double = 0
     public static var extractAccum: Double = 0
+    private static var warnedAboutSilentBackingIgnore = false
 
     public static func resetStepProfile() {
         setupAccum = 0
@@ -65,6 +94,31 @@ public final class MagpieCoreMLDecoder {
         self.prefill = try MagpieCoreMLBridge.loadCompiled(at: prefillURL, label: "decoder_prefill")
         self.step = try MagpieCoreMLBridge.loadCompiled(at: stepURL, label: "decoder_step")
         self.numLayers = numLayers
+        try allocOutputBackings()
+    }
+
+    /// Allocate the output back-buffers once at init. Same shapes as the
+    /// step model's outputs (fp32 throughout for our bundle).
+    private func allocOutputBackings() throws {
+        let saShape: [NSNumber] = [
+            1,
+            NSNumber(value: MagpieCoreMLConstants.saCacheLength),
+            NSNumber(value: MagpieCoreMLConstants.saSelfHeads),
+            NSNumber(value: MagpieCoreMLConstants.saHeadDim),
+        ]
+        let D = MagpieCoreMLConstants.dModel
+        let K = MagpieCoreMLConstants.numCodebooks
+        let V = MagpieCoreMLConstants.numCodesPerCodebook
+        for _ in 0..<numLayers {
+            saKBack.append(try MLMultiArray(shape: saShape, dataType: .float32))
+            saVBack.append(try MLMultiArray(shape: saShape, dataType: .float32))
+        }
+        logitsBack = try MLMultiArray(
+            shape: [1, 1, NSNumber(value: K), NSNumber(value: V)],
+            dataType: .float32)
+        hLastBack = try MLMultiArray(
+            shape: [1, 1, NSNumber(value: D)],
+            dataType: .float32)
     }
 
     /// One-shot ANE warm-up. Run a dummy prediction on each model with
@@ -252,14 +306,63 @@ public final class MagpieCoreMLDecoder {
         if debug { Self.setupAccum += CFAbsoluteTimeGetCurrent() - tSetup }
 
         let tPred = debug ? CFAbsoluteTimeGetCurrent() : 0
-        let pred: MLFeatureProvider
-        do {
-            pred = try step.prediction(from: features)
-        } catch {
-            throw MagpieCoreMLError.inferenceFailed(
-                stage: "decoder_step", underlying: String(describing: error))
+        // Fast path: pre-allocated output backings. CoreML writes directly
+        // into our back-buffers, avoiding ~42 MB of fresh fp32 allocation
+        // per step. We then ping-pong (swap front/back) so next call's
+        // sa_k_in_* inputs are this call's freshly-written outputs.
+        var pred: MLFeatureProvider!
+        var fastPathSucceeded = false
+        if useOutputBackings {
+            let predOpts = MLPredictionOptions()
+            var backings: [String: Any] = [:]
+            for layer in 0..<numLayers {
+                backings["sa_k_out_\(layer)"] = saKBack[layer]
+                backings["sa_v_out_\(layer)"] = saVBack[layer]
+            }
+            if let lb = logitsBack { backings["logits"] = lb }
+            if let hb = hLastBack  { backings["h_last"] = hb }
+            predOpts.outputBackings = backings
+            do {
+                pred = try step.prediction(from: features, options: predOpts)
+                fastPathSucceeded = true
+                // Verify the fast path is actually engaged: when CoreML
+                // honors outputBackings, the returned output MultiArray
+                // dataPointer for, say, h_last should equal our back-buffer
+                // pointer. If they differ, CoreML silently allocated fresh
+                // outputs (likely because the model wasn't exported with
+                // strict output type constraints) — surface that so we
+                // know the optimization is dead code, not silently
+                // helping.
+                if let hBack = hLastBack,
+                   let hOut = pred.featureValue(for: "h_last")?.multiArrayValue,
+                   hOut.dataPointer != hBack.dataPointer,
+                   ProcessInfo.processInfo.environment["MAGPIE_COREML_PROFILE"] == "1",
+                   !Self.warnedAboutSilentBackingIgnore {
+                    Self.warnedAboutSilentBackingIgnore = true
+                    FileHandle.standardError.write(Data(
+                        "[magpie-coreml] outputBackings accepted but CoreML still allocated fresh outputs — model isn't exported with strict output type constraints; the optimization is a no-op for this bundle\n".utf8))
+                }
+            } catch {
+                // Model exported without explicit output shape constraints
+                // — latch the flag off so we don't throw 500 times.
+                useOutputBackings = false
+                if ProcessInfo.processInfo.environment["MAGPIE_COREML_PROFILE_STEP"] == "1"
+                    || ProcessInfo.processInfo.environment["MAGPIE_COREML_PROFILE"] == "1" {
+                    FileHandle.standardError.write(Data(
+                        "[magpie-coreml] outputBackings rejected: \(error.localizedDescription); falling back to fresh-alloc path\n".utf8))
+                }
+            }
+        }
+        if !fastPathSucceeded {
+            do {
+                pred = try step.prediction(from: features)
+            } catch {
+                throw MagpieCoreMLError.inferenceFailed(
+                    stage: "decoder_step", underlying: String(describing: error))
+            }
         }
         if debug { Self.predAccum += CFAbsoluteTimeGetCurrent() - tPred }
+
         guard let logits = pred.featureValue(for: "logits")?.multiArrayValue,
               let hLast  = pred.featureValue(for: "h_last")?.multiArrayValue else {
             throw MagpieCoreMLError.inferenceFailed(
@@ -283,6 +386,20 @@ public final class MagpieCoreMLDecoder {
         }
         let logitsFlat = MagpieCoreMLBridge.toFloat32(logits)
         if debug { Self.extractAccum += CFAbsoluteTimeGetCurrent() - tExtract }
+
+        // Ping-pong: now that this step's outputs are in saKBack/saVBack
+        // (via outputBackings), the orchestrator will pass those same
+        // arrays back as next step's sa_k_in/sa_v_in. We need fresh
+        // back-buffers for the next round — swap our internal saKBack
+        // pointers with the OLD inputs (the saK/saV we received), which
+        // are no longer needed. Cheap pointer swap, no copy.
+        if fastPathSucceeded {
+            for layer in 0..<numLayers {
+                saKBack[layer] = saK[layer]
+                saVBack[layer] = saV[layer]
+            }
+        }
+
         return StepOutput(
             logitsFlat: logitsFlat,
             hLast: hLast, saK: newK, saV: newV)
