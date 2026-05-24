@@ -54,6 +54,103 @@ public final class MagpieCoreMLDecoder {
         self.numLayers = numLayers
     }
 
+    /// One-shot ANE warm-up. Run a dummy prediction on each model with
+    /// zero-valued inputs so the first real call doesn't pay the
+    /// JIT/binding cost (measured ~140 ms/frame for the first 1–3 steps
+    /// vs ~16 ms steady-state on M4 Pro). Output is discarded.
+    public func prewarm() {
+        do { _ = try prewarmPrefill() } catch { /* swallow — not fatal */ }
+        do { _ = try prewarmStep() } catch { /* swallow */ }
+    }
+
+    private func prewarmPrefill() throws {
+        let zerosEnc = [Float](
+            repeating: 0,
+            count: MagpieCoreMLConstants.maxTextTokens * MagpieCoreMLConstants.dModel)
+        let encOut = try MagpieCoreMLBridge.makeFp32(
+            zerosEnc,
+            shape: [1,
+                    NSNumber(value: MagpieCoreMLConstants.maxTextTokens),
+                    NSNumber(value: MagpieCoreMLConstants.dModel)],
+            label: "prewarm/encoder_output")
+        let zerosMask = [Float](repeating: 0, count: MagpieCoreMLConstants.maxTextTokens)
+        let mask = try MagpieCoreMLBridge.makeFp32(
+            zerosMask,
+            shape: [1, NSNumber(value: MagpieCoreMLConstants.maxTextTokens)],
+            label: "prewarm/encoder_mask")
+        let speaker = try MagpieCoreMLBridge.makeScalarInt32(
+            0, label: "prewarm/speaker_idx")
+        let features = try MLDictionaryFeatureProvider(dictionary: [
+            "encoder_mask":   MLFeatureValue(multiArray: mask),
+            "encoder_output": MLFeatureValue(multiArray: encOut),
+            "speaker_idx":    MLFeatureValue(multiArray: speaker),
+        ])
+        _ = try prefill.prediction(from: features)
+    }
+
+    private func prewarmStep() throws {
+        let D = MagpieCoreMLConstants.dModel
+        let audioEmb = try MagpieCoreMLBridge.makeFp32(
+            [Float](repeating: 0, count: D),
+            shape: [1, 1, NSNumber(value: D)],
+            label: "prewarm/audio_emb")
+        let encOut = try MagpieCoreMLBridge.makeFp32(
+            [Float](repeating: 0,
+                    count: MagpieCoreMLConstants.maxTextTokens * D),
+            shape: [1,
+                    NSNumber(value: MagpieCoreMLConstants.maxTextTokens),
+                    NSNumber(value: D)],
+            label: "prewarm/encoder_output")
+        let mask = try MagpieCoreMLBridge.makeFp32(
+            [Float](repeating: 0, count: MagpieCoreMLConstants.maxTextTokens),
+            shape: [1, NSNumber(value: MagpieCoreMLConstants.maxTextTokens)],
+            label: "prewarm/encoder_mask")
+        let position = try MagpieCoreMLBridge.makeScalarInt32(
+            Int32(MagpieCoreMLConstants.speakerContextLength + 1),
+            label: "prewarm/position")
+        var dict: [String: MLFeatureValue] = [
+            "audio_emb":      MLFeatureValue(multiArray: audioEmb),
+            "encoder_mask":   MLFeatureValue(multiArray: mask),
+            "encoder_output": MLFeatureValue(multiArray: encOut),
+            "position":       MLFeatureValue(multiArray: position),
+        ]
+        let saShape: [NSNumber] = [
+            1,
+            NSNumber(value: MagpieCoreMLConstants.saCacheLength),
+            NSNumber(value: MagpieCoreMLConstants.saSelfHeads),
+            NSNumber(value: MagpieCoreMLConstants.saHeadDim)]
+        let saZero = [Float](
+            repeating: 0,
+            count: MagpieCoreMLConstants.saCacheLength
+                 * MagpieCoreMLConstants.saSelfHeads
+                 * MagpieCoreMLConstants.saHeadDim)
+        let xaShape: [NSNumber] = [
+            1,
+            NSNumber(value: MagpieCoreMLConstants.xaContextLength),
+            1,
+            NSNumber(value: MagpieCoreMLConstants.xaInnerDim)]
+        let xaZero = [Float](
+            repeating: 0,
+            count: MagpieCoreMLConstants.xaContextLength
+                 * MagpieCoreMLConstants.xaInnerDim)
+        for layer in 0..<numLayers {
+            let kArr = try MagpieCoreMLBridge.makeFp32(saZero, shape: saShape,
+                                                       label: "prewarm/sa_k_\(layer)")
+            let vArr = try MagpieCoreMLBridge.makeFp32(saZero, shape: saShape,
+                                                       label: "prewarm/sa_v_\(layer)")
+            let xkArr = try MagpieCoreMLBridge.makeFp32(xaZero, shape: xaShape,
+                                                        label: "prewarm/xa_k_\(layer)")
+            let xvArr = try MagpieCoreMLBridge.makeFp32(xaZero, shape: xaShape,
+                                                        label: "prewarm/xa_v_\(layer)")
+            dict["sa_k_in_\(layer)"] = MLFeatureValue(multiArray: kArr)
+            dict["sa_v_in_\(layer)"] = MLFeatureValue(multiArray: vArr)
+            dict["xa_k_\(layer)"]    = MLFeatureValue(multiArray: xkArr)
+            dict["xa_v_\(layer)"]    = MLFeatureValue(multiArray: xvArr)
+        }
+        let features = try MLDictionaryFeatureProvider(dictionary: dict)
+        _ = try step.prediction(from: features)
+    }
+
     // MARK: - Prefill
 
     public func prefill(speakerIndex: Int,

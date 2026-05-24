@@ -44,7 +44,10 @@ public enum MagpieCoreMLDownloader {
         let repoId = MagpieCoreMLConstants.huggingFaceRepo
         let coreMLDir = try HuggingFaceDownloader.getCacheDirectory(for: repoId)
 
-        var allFiles: [String] = ["manifest.json"]
+        // Our bundle doesn't ship a manifest.json (FluidInference's did,
+        // ours doesn't), so the file list is just the inner contents of
+        // each compiled `.mlmodelc/` directory.
+        var allFiles: [String] = []
         for mdir in modelDirectories {
             allFiles.append("\(mdir)/coremldata.bin")
             allFiles.append("\(mdir)/model.mil")
@@ -52,25 +55,36 @@ public enum MagpieCoreMLDownloader {
             allFiles.append("\(mdir)/analytics/coremldata.bin")
         }
 
-        try await HuggingFaceDownloader.downloadWeights(
-            modelId: repoId,
-            to: coreMLDir,
-            additionalFiles: allFiles,
-            offlineMode: false,
-            progressHandler: progressHandler.map { p in
-                { progress in p(progress * 0.95) }
-            })
+        // Hot path: if every required file is already on disk, skip the
+        // 20× HEAD-request round-trip the HF downloader otherwise makes
+        // on every CLI invocation (measured 10+ s for this bundle on a
+        // residential connection). Cold path is unchanged.
+        let coreMLCached = filesPresent(in: coreMLDir, relativePaths: allFiles)
+        if !coreMLCached {
+            try await HuggingFaceDownloader.downloadWeights(
+                modelId: repoId,
+                to: coreMLDir,
+                additionalFiles: allFiles,
+                offlineMode: false,
+                progressHandler: progressHandler.map { p in
+                    { progress in p(progress * 0.95) }
+                })
+        }
 
         let mlxRepoId = "aufklarer/Magpie-TTS-Multilingual-357M-MLX-4bit"
         let mlxDir = try HuggingFaceDownloader.getCacheDirectory(for: mlxRepoId)
-        try await HuggingFaceDownloader.downloadWeights(
-            modelId: mlxRepoId,
-            to: mlxDir,
-            additionalFiles: mlxTokenizerFiles,
-            offlineMode: false,
-            progressHandler: progressHandler.map { p in
-                { progress in p(0.95 + progress * 0.05) }
-            })
+        let mlxCached = filesPresent(in: mlxDir, relativePaths: mlxTokenizerFiles)
+        if !mlxCached {
+            try await HuggingFaceDownloader.downloadWeights(
+                modelId: mlxRepoId,
+                to: mlxDir,
+                additionalFiles: mlxTokenizerFiles,
+                offlineMode: false,
+                progressHandler: progressHandler.map { p in
+                    { progress in p(0.95 + progress * 0.05) }
+                })
+        }
+        progressHandler?(1.0)
 
         return Paths(
             bundleRoot: coreMLDir,
@@ -79,5 +93,15 @@ public enum MagpieCoreMLDownloader {
             decoderStepCompiled: coreMLDir.appendingPathComponent("decoder_step.mlmodelc"),
             nanocodecCompiled: coreMLDir.appendingPathComponent("nanocodec_decoder.mlmodelc"),
             mlxTokenizerDir: mlxDir.appendingPathComponent("tokenizer"))
+    }
+
+    private static func filesPresent(in baseDir: URL, relativePaths: [String]) -> Bool {
+        for relPath in relativePaths {
+            let full = baseDir.appendingPathComponent(relPath)
+            if !FileManager.default.fileExists(atPath: full.path) {
+                return false
+            }
+        }
+        return true
     }
 }

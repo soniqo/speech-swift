@@ -61,19 +61,64 @@ public final class MagpieTTSCoreML {
     public static func fromPretrained(
         progressHandler: ((Double) -> Void)? = nil
     ) async throws -> MagpieTTSCoreML {
+        let debug = ProcessInfo.processInfo.environment["MAGPIE_COREML_PROFILE"] == "1"
+        func tick(_ label: String, _ t0: CFAbsoluteTime) {
+            if debug {
+                let ms = (CFAbsoluteTimeGetCurrent() - t0) * 1000
+                let padded = label.padding(toLength: 24, withPad: " ", startingAt: 0)
+                print("[LOAD] \(padded) \(String(format: "%6.0f", ms)) ms")
+            }
+        }
+
+        let tDownload = CFAbsoluteTimeGetCurrent()
         let paths = try await MagpieCoreMLDownloader.ensureDownloaded(
             progressHandler: progressHandler)
+        tick("ensureDownloaded", tDownload)
+
+        let tTE = CFAbsoluteTimeGetCurrent()
         let te = try MagpieCoreMLTextEncoder(url: paths.textEncoderCompiled)
+        tick("load text_encoder", tTE)
+
+        let tDec = CFAbsoluteTimeGetCurrent()
         let dec = try MagpieCoreMLDecoder(
             prefillURL: paths.decoderPrefillCompiled,
             stepURL: paths.decoderStepCompiled)
+        tick("load decoder pre+step", tDec)
+
+        let tCodec = CFAbsoluteTimeGetCurrent()
         let codec = try MagpieCoreMLNanoCodec(url: paths.nanocodecCompiled)
-        // One-time MLX load to snapshot LT + audio embedding weights.
-        // The MLX model goes out of scope after this; per-frame inference
-        // doesn't touch MLX again.
-        let mlxModel = try await MagpieTTS.fromPretrained(variant: .int4)
-        let (ltWeights, audioEmbeds) = try MagpieCoreMLWeightExtractor.extract(from: mlxModel)
+        tick("load nanocodec", tCodec)
+
+        let cacheURL = paths.bundleRoot.appendingPathComponent("extracted_weights.bin")
+        let ltWeights: MagpieCoreMLLocalTransformerWeights
+        let audioEmbeds: [[Float]]
+        let tCache = CFAbsoluteTimeGetCurrent()
+        if let cached = MagpieCoreMLWeightCache.load(from: cacheURL) {
+            ltWeights = cached.lt
+            audioEmbeds = cached.audioEmbeds
+            tick("load weight cache", tCache)
+        } else {
+            tick("cache MISS", tCache)
+            let tMLX = CFAbsoluteTimeGetCurrent()
+            let mlxModel = try await MagpieTTS.fromPretrained(variant: .int4)
+            tick("MLX MagpieTTS load", tMLX)
+            let tExtract = CFAbsoluteTimeGetCurrent()
+            (ltWeights, audioEmbeds) = try MagpieCoreMLWeightExtractor.extract(from: mlxModel)
+            tick("extract weights", tExtract)
+            let tSave = CFAbsoluteTimeGetCurrent()
+            try? MagpieCoreMLWeightCache.save(to: cacheURL,
+                                               lt: ltWeights,
+                                               audioEmbeds: audioEmbeds)
+            tick("save weight cache", tSave)
+        }
         let lt = MagpieCoreMLLocalTransformer(weights: ltWeights)
+        // Pre-warm is OFF by default. It pays the ANE JIT/binding cost at
+        // load time (~3.8 s) instead of during the first decoder_step
+        // call (~2 s spike on the first frame). For a CLI doing one
+        // synthesis per process the cost stays the same — slightly worse,
+        // even — so we skip it. Long-lived apps that synthesize
+        // repeatedly should call `model.decoder.prewarm()` explicitly
+        // after `fromPretrained`.
         return MagpieTTSCoreML(
             textEncoder: te, decoder: dec, nanoCodec: codec,
             localTransformer: lt,
@@ -125,29 +170,50 @@ public final class MagpieTTSCoreML {
         var frames: [[Int32]] = []
         let stepCap = min(params.maxSteps, MagpieCoreMLConstants.maxARSteps)
 
+        let debug = ProcessInfo.processInfo.environment["MAGPIE_COREML_PROFILE"] == "1"
+        var totalStep: Double = 0
+        var totalSample: Double = 0
+        var totalEmbed: Double = 0
+
         for step in 0..<stepCap {
+            let t0 = debug ? CFAbsoluteTimeGetCurrent() : 0
             let stepOut = try decoder.step(
                 audioEmbedding: audioEmb, position: position,
                 encoderOutput: encOut.encoderOutput,
                 encoderMask: encOut.encoderMask,
                 saK: saK, saV: saV, xaK: xaK, xaV: xaV)
+            if debug { totalStep += CFAbsoluteTimeGetCurrent() - t0 }
             saK = stepOut.saK
             saV = stepOut.saV
             position += 1
+            let t1 = debug ? CFAbsoluteTimeGetCurrent() : 0
             let hLastFlat = MagpieCoreMLBridge.toFloat32(stepOut.hLast)
             let codes = sampleFromLocalTransformer(
                 hLastFlat: hLastFlat,
                 forbidEos: step < params.minFrames,
                 temperature: params.temperature, topK: params.topK,
                 rng: &rng)
+            if debug { totalSample += CFAbsoluteTimeGetCurrent() - t1 }
             if step >= params.minFrames, codes.contains(MagpieCoreMLConstants.audioEosId) {
                 break
             }
             frames.append(codes)
+            let t2 = debug ? CFAbsoluteTimeGetCurrent() : 0
             audioEmb = averageEmbedding(codes: codes)
+            if debug { totalEmbed += CFAbsoluteTimeGetCurrent() - t2 }
         }
-        if frames.isEmpty { return [] }
-        return try nanoCodec.decode(codes: frames)
+        let tCodec0 = debug ? CFAbsoluteTimeGetCurrent() : 0
+        let audio = try nanoCodec.decode(codes: frames)
+        if debug {
+            let codecTime = CFAbsoluteTimeGetCurrent() - tCodec0
+            let n = frames.count
+            print("[MAGPIE-COREML-PROFILE] \(n) frames")
+            print(String(format: "  decoder_step: %6.0f ms total  %5.2f ms/frame", totalStep * 1000, totalStep * 1000 / Double(n)))
+            print(String(format: "  LT+sample:    %6.0f ms total  %5.2f ms/frame", totalSample * 1000, totalSample * 1000 / Double(n)))
+            print(String(format: "  audio_emb:    %6.0f ms total  %5.2f ms/frame", totalEmbed * 1000, totalEmbed * 1000 / Double(n)))
+            print(String(format: "  nanocodec:    %6.0f ms (one call)", codecTime * 1000))
+        }
+        return audio
     }
 
     // MARK: - LT sampling + audio_emb averaging
