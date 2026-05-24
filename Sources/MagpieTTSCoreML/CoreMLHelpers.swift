@@ -117,9 +117,6 @@ enum MagpieCoreMLBridge {
         case .double:
             let p = array.dataPointer.bindMemory(to: Double.self, capacity: count)
             for i in 0..<count { out[i] = Float(p[i]) }
-        case .int8:
-            let p = array.dataPointer.bindMemory(to: Int8.self, capacity: count)
-            for i in 0..<count { out[i] = Float(p[i]) }
         @unknown default:
             return out
         }
