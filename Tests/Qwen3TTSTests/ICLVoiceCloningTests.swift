@@ -83,6 +83,49 @@ final class ICLVoiceCloningTests: XCTestCase {
         let method = Qwen3TTSModel.fromPretrainedWithEncoder
         XCTAssertNotNil(method)
     }
+
+    // MARK: - Reference echo trim (unit tests, no model load)
+
+    func testTrimICLReferenceFromWaveform_sameSampleRate() {
+        // Reference is 1s at 24 kHz, waveform is 3s at 24 kHz.
+        // Expect: 2s of audio left after trim.
+        let ref = [Float](repeating: 0.5, count: 24000)
+        let wave = [Float](repeating: 1.0, count: 72000)
+        let trimmed = Qwen3TTSModel.trimICLReferenceFromWaveform(
+            wave, referenceAudio: ref, referenceSampleRate: 24000)
+        XCTAssertEqual(trimmed.count, 48000, "Should drop the first 24000 samples")
+        XCTAssertEqual(trimmed.first, 1.0, "Remaining samples should be from the original waveform tail")
+    }
+
+    func testTrimICLReferenceFromWaveform_resamplesReferenceDuration() {
+        // Reference is 22050 samples at 22050 Hz (= 1s). Waveform is 3s at 24 kHz.
+        // Expect: 24000 samples trimmed (1s at 24 kHz), 48000 left.
+        let ref = [Float](repeating: 0.5, count: 22050)
+        let wave = [Float](repeating: 1.0, count: 72000)
+        let trimmed = Qwen3TTSModel.trimICLReferenceFromWaveform(
+            wave, referenceAudio: ref, referenceSampleRate: 22050)
+        XCTAssertEqual(trimmed.count, 48000,
+            "Reference duration should be converted to 24 kHz before trimming")
+    }
+
+    func testTrimICLReferenceFromWaveform_skipsWhenReferenceLongerThanOutput() {
+        // Reference would consume the entire waveform — leave it alone rather than
+        // returning an empty buffer.
+        let ref = [Float](repeating: 0.5, count: 48000)
+        let wave = [Float](repeating: 1.0, count: 24000)
+        let trimmed = Qwen3TTSModel.trimICLReferenceFromWaveform(
+            wave, referenceAudio: ref, referenceSampleRate: 24000)
+        XCTAssertEqual(trimmed.count, wave.count,
+            "Should return the full waveform when refDuration >= waveform.count")
+    }
+
+    func testTrimICLReferenceFromWaveform_skipsOnEmptyReference() {
+        let wave = [Float](repeating: 1.0, count: 24000)
+        let trimmed = Qwen3TTSModel.trimICLReferenceFromWaveform(
+            wave, referenceAudio: [], referenceSampleRate: 24000)
+        XCTAssertEqual(trimmed.count, wave.count,
+            "Empty reference should pass the waveform through unchanged")
+    }
 }
 
 // MARK: - E2E Tests

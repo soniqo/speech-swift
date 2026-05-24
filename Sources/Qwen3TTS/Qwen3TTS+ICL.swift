@@ -38,6 +38,12 @@ extension Qwen3TTSModel {
     /// into codec tokens and prepends them with their transcript into the autoregressive
     /// context. This produces correct EOS and higher voice fidelity.
     ///
+    /// Because the model is conditioned on `[reference_text + target_text]` and trained to
+    /// produce codec for the entire text sequence, the raw decoded waveform contains a
+    /// regeneration of the reference audio followed by the target. By default this method
+    /// returns only the target portion; pass `trimReference: false` to receive the full
+    /// waveform (useful for debugging the model's reference reproduction).
+    ///
     /// - Parameters:
     ///   - text: Target text to synthesize
     ///   - referenceAudio: Raw PCM samples of the reference recording
@@ -46,6 +52,11 @@ extension Qwen3TTSModel {
     ///   - language: Language hint (e.g. "english", "german")
     ///   - sampling: Sampling config
     ///   - codecEncoder: SpeechTokenizerEncoder from fromPretrainedWithEncoder()
+    ///   - trimReference: When `true` (default), strip the reference-text portion from the
+    ///                    start of the output, returning only the target audio. The trim
+    ///                    point is estimated from the reference duration (codec runs at
+    ///                    12.5 fps, 1920 samples per frame at 24 kHz). Set `false` to
+    ///                    receive the raw decoded waveform.
     public func synthesizeWithVoiceCloneICL(
         text: String,
         referenceAudio: [Float],
@@ -53,7 +64,8 @@ extension Qwen3TTSModel {
         referenceText: String,
         language: String = "english",
         sampling: SamplingConfig = .default,
-        codecEncoder: SpeechTokenizerEncoder
+        codecEncoder: SpeechTokenizerEncoder,
+        trimReference: Bool = true
     ) -> [Float] {
         guard let tokenizer = tokenizer else {
             fatalError("Tokenizer not loaded")
@@ -64,7 +76,8 @@ extension Qwen3TTSModel {
                 text: text, referenceAudio: referenceAudio,
                 referenceSampleRate: referenceSampleRate,
                 referenceText: referenceText, language: "english",
-                sampling: sampling, codecEncoder: codecEncoder)
+                sampling: sampling, codecEncoder: codecEncoder,
+                trimReference: trimReference)
         }
 
         let t0 = CFAbsoluteTimeGetCurrent()
@@ -110,12 +123,19 @@ extension Qwen3TTSModel {
         eval(prefillEmbeds, trailingTextHidden, ttsPadEmbed)
         let t1 = CFAbsoluteTimeGetCurrent()
 
-        // Step 5: Autoregressive generation (reuse existing method)
+        // Step 5: Autoregressive generation. The Python mlx-audio reference
+        // auto-boosts repetition_penalty to >= 1.5 for ICL because the long
+        // reference prefill makes codec tokens prone to degenerate repetition
+        // (audible as buzzy/robotic artifacts) without it. Match that.
+        var iclSampling = sampling
+        if iclSampling.repetitionPenalty < 1.5 {
+            iclSampling.repetitionPenalty = 1.5
+        }
         let (allCodebooks, numFrames) = generateWithCodePredictor(
             prefillEmbeds: prefillEmbeds,
             trailingTextHidden: trailingTextHidden,
             ttsPadEmbed: ttsPadEmbed,
-            sampling: sampling)
+            sampling: iclSampling)
 
         eval(allCodebooks)
         let t2 = CFAbsoluteTimeGetCurrent()
@@ -131,7 +151,24 @@ extension Qwen3TTSModel {
         let waveform = codecDecoder.decode(codes: allCodebooks)
         let t3 = CFAbsoluteTimeGetCurrent()
 
-        let audioDur = Double(waveform.count) / 24000.0
+        // Step 7: Optionally trim the reference echo from the start of the waveform.
+        // The model is conditioned on [ref_text + target_text] and produces codec for both,
+        // so the raw decoded waveform begins with a regeneration of the reference.
+        let trimmedWaveform: [Float]
+        if trimReference {
+            let before = waveform.count
+            trimmedWaveform = Qwen3TTSModel.trimICLReferenceFromWaveform(
+                waveform, referenceAudio: referenceAudio,
+                referenceSampleRate: referenceSampleRate)
+            if trimmedWaveform.count < before {
+                let removed = before - trimmedWaveform.count
+                print("  ICL: trimmed \(removed) reference samples (~\(String(format: "%.2f", Double(removed)/24000.0))s) from output start")
+            }
+        } else {
+            trimmedWaveform = waveform
+        }
+
+        let audioDur = Double(trimmedWaveform.count) / 24000.0
         let encTime = String(format: "%.3f", t1-t0)
         let genTime = String(format: "%.3f", t2-t1)
         let msPerStep = String(format: "%.0f", (t2-t1)/Double(max(numFrames, 1))*1000)
@@ -141,7 +178,32 @@ extension Qwen3TTSModel {
         let rtf = String(format: "%.2f", (t3-t0)/max(audioDur, 0.001))
         print("  ICL timing: encode=\(encTime)s | generate=\(genTime)s (\(numFrames) steps, \(msPerStep)ms/step) | decode=\(decTime)s | total=\(totTime)s | audio=\(audDur)s | RTF=\(rtf)")
 
-        return waveform
+        return trimmedWaveform
+    }
+
+    // MARK: - Reference echo trim
+
+    /// Drop the first ~refDuration samples from an ICL-synthesized waveform.
+    ///
+    /// The Qwen3-TTS ICL path produces codec for `[reference_text + target_text]`, so the
+    /// raw output begins with the model's regeneration of the reference audio. This helper
+    /// removes that prefix, assuming the regeneration roughly matches the reference duration
+    /// at 24 kHz. The estimate is heuristic — the model may regenerate the reference at a
+    /// slightly different speech rate than the source — so a short tail can remain.
+    ///
+    /// Returns `waveform` unchanged if the computed trim would empty it.
+    static func trimICLReferenceFromWaveform(
+        _ waveform: [Float],
+        referenceAudio: [Float],
+        referenceSampleRate: Int
+    ) -> [Float] {
+        let refSampleCount24k: Int = referenceSampleRate == 24000
+            ? referenceAudio.count
+            : Int((Double(referenceAudio.count) / Double(referenceSampleRate)) * 24000.0)
+        guard refSampleCount24k > 0, refSampleCount24k < waveform.count else {
+            return waveform
+        }
+        return Array(waveform.dropFirst(refSampleCount24k))
     }
 
     // MARK: - ICL Prefill Construction
@@ -166,7 +228,11 @@ extension Qwen3TTSModel {
     ) -> (prefillEmbeds: MLXArray, trailingTextHidden: MLXArray, ttsPadEmbed: MLXArray) {
         let hiddenSize = config.talker.hiddenSize
 
-        // 1. Tokenize ref_text and target_text
+        // 1. Tokenize ref_text and target_text. The tokenizer reports
+        // `add_prefix_space: false`, so encoding raw text is equivalent to
+        // encoding the chat-template-wrapped string and slicing the template
+        // tokens off — verified by comparing token IDs against HF's Python
+        // tokenizer on the same inputs.
         let refTextTokens = tokenizer.encode(referenceText)
         let targetTextTokens = tokenizer.encode(targetText)
 
