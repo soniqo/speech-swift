@@ -123,12 +123,19 @@ extension Qwen3TTSModel {
         eval(prefillEmbeds, trailingTextHidden, ttsPadEmbed)
         let t1 = CFAbsoluteTimeGetCurrent()
 
-        // Step 5: Autoregressive generation (reuse existing method)
+        // Step 5: Autoregressive generation. The Python mlx-audio reference
+        // auto-boosts repetition_penalty to >= 1.5 for ICL because the long
+        // reference prefill makes codec tokens prone to degenerate repetition
+        // (audible as buzzy/robotic artifacts) without it. Match that.
+        var iclSampling = sampling
+        if iclSampling.repetitionPenalty < 1.5 {
+            iclSampling.repetitionPenalty = 1.5
+        }
         let (allCodebooks, numFrames) = generateWithCodePredictor(
             prefillEmbeds: prefillEmbeds,
             trailingTextHidden: trailingTextHidden,
             ttsPadEmbed: ttsPadEmbed,
-            sampling: sampling)
+            sampling: iclSampling)
 
         eval(allCodebooks)
         let t2 = CFAbsoluteTimeGetCurrent()
@@ -221,7 +228,11 @@ extension Qwen3TTSModel {
     ) -> (prefillEmbeds: MLXArray, trailingTextHidden: MLXArray, ttsPadEmbed: MLXArray) {
         let hiddenSize = config.talker.hiddenSize
 
-        // 1. Tokenize ref_text and target_text
+        // 1. Tokenize ref_text and target_text. The tokenizer reports
+        // `add_prefix_space: false`, so encoding raw text is equivalent to
+        // encoding the chat-template-wrapped string and slicing the template
+        // tokens off — verified by comparing token IDs against HF's Python
+        // tokenizer on the same inputs.
         let refTextTokens = tokenizer.encode(referenceText)
         let targetTextTokens = tokenizer.encode(targetText)
 
