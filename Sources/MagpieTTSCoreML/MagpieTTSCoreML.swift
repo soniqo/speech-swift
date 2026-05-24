@@ -228,6 +228,17 @@ public final class MagpieTTSCoreML {
             print(String(format: "  LT+sample:    %6.0f ms total  %5.2f ms/frame", totalSample * 1000, totalSample * 1000 / Double(n)))
             print(String(format: "  audio_emb:    %6.0f ms total  %5.2f ms/frame", totalEmbed * 1000, totalEmbed * 1000 / Double(n)))
             print(String(format: "  nanocodec:    %6.0f ms (one call)", codecTime * 1000))
+            if ProcessInfo.processInfo.environment["MAGPIE_COREML_PROFILE_STEP"] == "1" {
+                print(String(format: "  └─ step IO setup:  %6.0f ms  (%5.2f ms/frame)",
+                              MagpieCoreMLDecoder.setupAccum * 1000,
+                              MagpieCoreMLDecoder.setupAccum * 1000 / Double(n)))
+                print(String(format: "  └─ step predict:   %6.0f ms  (%5.2f ms/frame)",
+                              MagpieCoreMLDecoder.predAccum * 1000,
+                              MagpieCoreMLDecoder.predAccum * 1000 / Double(n)))
+                print(String(format: "  └─ step extract:   %6.0f ms  (%5.2f ms/frame)",
+                              MagpieCoreMLDecoder.extractAccum * 1000,
+                              MagpieCoreMLDecoder.extractAccum * 1000 / Double(n)))
+            }
         }
         return audio
     }

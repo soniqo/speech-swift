@@ -47,6 +47,19 @@ public final class MagpieCoreMLDecoder {
     private let step: MLModel
     private let numLayers: Int
 
+    /// Internal counters for `MAGPIE_COREML_PROFILE_STEP=1` debug mode.
+    /// Splits step() wall time into IO setup (build MLMultiArrays +
+    /// FeatureProvider) vs the actual `prediction(from:)` call.
+    public static var setupAccum: Double = 0
+    public static var predAccum: Double = 0
+    public static var extractAccum: Double = 0
+
+    public static func resetStepProfile() {
+        setupAccum = 0
+        predAccum = 0
+        extractAccum = 0
+    }
+
     public init(prefillURL: URL, stepURL: URL,
                 numLayers: Int = MagpieCoreMLConstants.numDecoderLayers) throws {
         self.prefill = try MagpieCoreMLBridge.loadCompiled(at: prefillURL, label: "decoder_prefill")
@@ -214,6 +227,9 @@ public final class MagpieCoreMLDecoder {
         precondition(saK.count == numLayers && saV.count == numLayers)
         precondition(xaK.count == numLayers && xaV.count == numLayers)
 
+        let debug = ProcessInfo.processInfo.environment["MAGPIE_COREML_PROFILE_STEP"] == "1"
+
+        let tSetup = debug ? CFAbsoluteTimeGetCurrent() : 0
         let audioArr = try MagpieCoreMLBridge.makeFp32(
             audioEmbedding, shape: [1, 1, NSNumber(value: D)],
             label: "decoder_step/audio_emb")
@@ -233,6 +249,9 @@ public final class MagpieCoreMLDecoder {
             dict["xa_v_\(layer)"]    = MLFeatureValue(multiArray: xaV[layer])
         }
         let features = try MLDictionaryFeatureProvider(dictionary: dict)
+        if debug { Self.setupAccum += CFAbsoluteTimeGetCurrent() - tSetup }
+
+        let tPred = debug ? CFAbsoluteTimeGetCurrent() : 0
         let pred: MLFeatureProvider
         do {
             pred = try step.prediction(from: features)
@@ -240,12 +259,14 @@ public final class MagpieCoreMLDecoder {
             throw MagpieCoreMLError.inferenceFailed(
                 stage: "decoder_step", underlying: String(describing: error))
         }
+        if debug { Self.predAccum += CFAbsoluteTimeGetCurrent() - tPred }
         guard let logits = pred.featureValue(for: "logits")?.multiArrayValue,
               let hLast  = pred.featureValue(for: "h_last")?.multiArrayValue else {
             throw MagpieCoreMLError.inferenceFailed(
                 stage: "decoder_step", underlying: "missing logits or h_last output")
         }
 
+        let tExtract = debug ? CFAbsoluteTimeGetCurrent() : 0
         var newK: [MLMultiArray] = []
         var newV: [MLMultiArray] = []
         newK.reserveCapacity(numLayers)
@@ -260,8 +281,10 @@ public final class MagpieCoreMLDecoder {
             newK.append(kArr)
             newV.append(vArr)
         }
+        let logitsFlat = MagpieCoreMLBridge.toFloat32(logits)
+        if debug { Self.extractAccum += CFAbsoluteTimeGetCurrent() - tExtract }
         return StepOutput(
-            logitsFlat: MagpieCoreMLBridge.toFloat32(logits),
+            logitsFlat: logitsFlat,
             hLast: hLast, saK: newK, saV: newV)
     }
 
