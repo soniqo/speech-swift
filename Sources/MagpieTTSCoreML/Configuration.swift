@@ -47,10 +47,21 @@ public enum MagpieCoreMLConstants {
     public static let fsqNumGroups: Int = 8
     public static let fsqLatentDim: Int = 32   // 4 × 8
 
-    /// Window the nano-codec consumes per call. The model was traced at 64
-    /// frames; output is `(1, 64 * 1024) = (1, 65536)` samples ≈ 2.97 s.
+    /// Batch nano-codec window: 64 frames per call, 65536 samples (~2.97 s).
+    /// Used for `synthesize()`.
+    public static let nanocodecBatchFrames: Int = 64
+    public static let nanocodecBatchSamples: Int = 65_536  // 64 * 1024
+
+    /// Streaming nano-codec window: 8 frames per call, 8192 samples (~371 ms).
+    /// Used for `synthesizeStream()` — first-packet latency drops from the
+    /// batch model's ~3 s window to ~370 ms once the AR loop has emitted
+    /// the first 8 frames.
+    public static let nanocodecStreamFrames: Int = 8
+    public static let nanocodecStreamSamples: Int = 8_192  // 8 * 1024
+
+    /// Default; kept for source compat (the orchestrator picks per call).
     public static let nanocodecFramesPerWindow: Int = 64
-    public static let nanocodecAudioPerWindow: Int = 65_536  // 64 * 1024
+    public static let nanocodecAudioPerWindow: Int = 65_536
 
     /// Hard upper bound on AR frames per utterance. Matches MLX defaults so
     /// callers don't see a difference in `--magpie-max-frames`.

@@ -27,7 +27,12 @@ public final class MagpieTTSCoreML {
 
     public let textEncoder: MagpieCoreMLTextEncoder
     public let decoder: MagpieCoreMLDecoder
+    /// 64-frame batch codec, used by ``synthesize(...)``. One call per
+    /// ~3 s of audio; lowest dispatch overhead per second of audio.
     public let nanoCodec: MagpieCoreMLNanoCodec
+    /// 8-frame streaming codec, used by ``synthesizeStream(...)``. Higher
+    /// per-frame overhead but ~370 ms first-packet latency.
+    public let nanoCodecStreaming: MagpieCoreMLNanoCodec
 
     /// Pure-Swift LocalTransformer + sampler. Weights were extracted from
     /// the MLX MagpieTTS module once at ``fromPretrained`` time.
@@ -45,12 +50,14 @@ public final class MagpieTTSCoreML {
     public init(textEncoder: MagpieCoreMLTextEncoder,
                 decoder: MagpieCoreMLDecoder,
                 nanoCodec: MagpieCoreMLNanoCodec,
+                nanoCodecStreaming: MagpieCoreMLNanoCodec,
                 localTransformer: MagpieCoreMLLocalTransformer,
                 audioEmbeddings: [[Float]],
                 tokenizerDir: URL) {
         self.textEncoder = textEncoder
         self.decoder = decoder
         self.nanoCodec = nanoCodec
+        self.nanoCodecStreaming = nanoCodecStreaming
         self.localTransformer = localTransformer
         self.audioEmbeddings = audioEmbeddings
         self.tokenizerDir = tokenizerDir
@@ -86,8 +93,16 @@ public final class MagpieTTSCoreML {
         tick("load decoder pre+step", tDec)
 
         let tCodec = CFAbsoluteTimeGetCurrent()
-        let codec = try MagpieCoreMLNanoCodec(url: paths.nanocodecCompiled)
+        let codec = try MagpieCoreMLNanoCodec(
+            url: paths.nanocodecCompiled,
+            windowFrames: MagpieCoreMLConstants.nanocodecBatchFrames)
         tick("load nanocodec", tCodec)
+
+        let tStreamCodec = CFAbsoluteTimeGetCurrent()
+        let codecStream = try MagpieCoreMLNanoCodec(
+            url: paths.nanocodecStreamingCompiled,
+            windowFrames: MagpieCoreMLConstants.nanocodecStreamFrames)
+        tick("load nanocodec stream", tStreamCodec)
 
         let cacheURL = paths.bundleRoot.appendingPathComponent("extracted_weights.bin")
         let ltWeights: MagpieCoreMLLocalTransformerWeights
@@ -120,7 +135,8 @@ public final class MagpieTTSCoreML {
         // repeatedly should call `model.decoder.prewarm()` explicitly
         // after `fromPretrained`.
         return MagpieTTSCoreML(
-            textEncoder: te, decoder: dec, nanoCodec: codec,
+            textEncoder: te, decoder: dec,
+            nanoCodec: codec, nanoCodecStreaming: codecStream,
             localTransformer: lt,
             audioEmbeddings: audioEmbeds,
             tokenizerDir: paths.mlxTokenizerDir)
@@ -214,6 +230,163 @@ public final class MagpieTTSCoreML {
             print(String(format: "  nanocodec:    %6.0f ms (one call)", codecTime * 1000))
         }
         return audio
+    }
+
+    // MARK: - Pre-warm (optional, recommended for streaming apps)
+
+    /// Pre-warm all CoreML models on the ANE so the first real synthesis
+    /// call doesn't pay the JIT/compile cost. Adds ~4–5 s to load time
+    /// but makes subsequent first-packet latency on streaming drop from
+    /// several seconds (cold compile) to ~100–200 ms (warm).
+    ///
+    /// Worth calling for:
+    /// - Streaming apps that synthesize repeatedly in one process
+    /// - Voice agents that need low first-packet latency on every turn
+    ///
+    /// **Not** worth calling for:
+    /// - One-shot CLI invocations (the pre-warm cost is paid every time;
+    ///   total wall time is the same or slightly worse)
+    public func prewarm() {
+        decoder.prewarm()
+        nanoCodec.prewarm()
+        nanoCodecStreaming.prewarm()
+    }
+
+    // MARK: - Streaming synthesis
+
+    /// Streaming variant of ``synthesize``. Emits an
+    /// ``AudioChunk`` every `framesPerChunk` codec frames (default 8 —
+    /// the streaming codec's window size). First-packet latency is
+    /// roughly `framesPerChunk × decoder_step_ms + one codec call`,
+    /// which on M4 Pro is ~150–250 ms after model load.
+    public func synthesizeStream(
+        text: String,
+        speaker: MagpieCoreMLSpeaker = .sofia,
+        language: MagpieCoreMLLanguage = .english,
+        prephonemized: Bool = false,
+        params: MagpieCoreMLParams = MagpieCoreMLParams(),
+        framesPerChunk: Int = MagpieCoreMLConstants.nanocodecStreamFrames
+    ) -> AsyncThrowingStream<AudioChunk, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task { [weak self] in
+                guard let self else {
+                    continuation.finish()
+                    return
+                }
+                do {
+                    try self.runStreaming(
+                        text: text, speaker: speaker, language: language,
+                        prephonemized: prephonemized, params: params,
+                        framesPerChunk: framesPerChunk,
+                        continuation: continuation)
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { @Sendable _ in task.cancel() }
+        }
+    }
+
+    private func runStreaming(
+        text: String,
+        speaker: MagpieCoreMLSpeaker,
+        language: MagpieCoreMLLanguage,
+        prephonemized: Bool,
+        params: MagpieCoreMLParams,
+        framesPerChunk: Int,
+        continuation: AsyncThrowingStream<AudioChunk, Error>.Continuation
+    ) throws {
+        let chunkSize = min(framesPerChunk, nanoCodecStreaming.windowFrames)
+        precondition(chunkSize > 0, "framesPerChunk must be > 0")
+        let tok = try tokenizer(for: language)
+        let ids = tok.tokenize(text, prephonemized: prephonemized)
+        if ids.isEmpty { return }
+        let encOut = try textEncoder.encode(tokens: ids.map(Int32.init))
+        let prefill = try decoder.prefill(
+            speakerIndex: speaker.rawValue,
+            encoderOutput: encOut.encoderOutput,
+            encoderMask: encOut.encoderMask)
+
+        var rng: any RandomNumberGenerator =
+            params.seed.map { SeededRng(seed: $0) as any RandomNumberGenerator }
+                ?? SystemRandomNumberGenerator()
+
+        var saK = prefill.saK
+        var saV = prefill.saV
+        let xaK = prefill.xaK
+        let xaV = prefill.xaV
+        var position = prefill.initialPosition
+        var audioEmb = averageBosEmbedding()
+        let stepCap = min(params.maxSteps, MagpieCoreMLConstants.maxARSteps)
+
+        let t0 = CFAbsoluteTimeGetCurrent()
+        var pendingFrames: [[Int32]] = []
+        pendingFrames.reserveCapacity(chunkSize)
+        var totalFrames = 0
+        var stoppedOnEos = false
+
+        for step in 0..<stepCap {
+            let stepOut = try decoder.step(
+                audioEmbedding: audioEmb, position: position,
+                encoderOutput: encOut.encoderOutput,
+                encoderMask: encOut.encoderMask,
+                saK: saK, saV: saV, xaK: xaK, xaV: xaV)
+            saK = stepOut.saK
+            saV = stepOut.saV
+            position += 1
+            let hLastFlat = MagpieCoreMLBridge.toFloat32(stepOut.hLast)
+            let codes = sampleFromLocalTransformer(
+                hLastFlat: hLastFlat,
+                forbidEos: step < params.minFrames,
+                temperature: params.temperature, topK: params.topK,
+                rng: &rng)
+            if step >= params.minFrames, codes.contains(MagpieCoreMLConstants.audioEosId) {
+                stoppedOnEos = true
+                break
+            }
+            pendingFrames.append(codes)
+            totalFrames += 1
+            audioEmb = averageEmbedding(codes: codes)
+
+            if pendingFrames.count >= chunkSize {
+                try emitChunk(&pendingFrames,
+                              continuation: continuation,
+                              t0: t0,
+                              totalFrames: totalFrames,
+                              isFinal: false)
+            }
+        }
+        // Final partial chunk if any.
+        if !pendingFrames.isEmpty {
+            try emitChunk(&pendingFrames,
+                          continuation: continuation,
+                          t0: t0,
+                          totalFrames: totalFrames,
+                          isFinal: true)
+        } else if stoppedOnEos || totalFrames > 0 {
+            continuation.yield(AudioChunk(
+                samples: [], sampleRate: Self.sampleRate,
+                frameIndex: totalFrames, isFinal: true,
+                elapsedTime: CFAbsoluteTimeGetCurrent() - t0))
+        }
+    }
+
+    private func emitChunk(
+        _ pending: inout [[Int32]],
+        continuation: AsyncThrowingStream<AudioChunk, Error>.Continuation,
+        t0: CFAbsoluteTime,
+        totalFrames: Int,
+        isFinal: Bool
+    ) throws {
+        let pcm = try nanoCodecStreaming.decodeWindow(frames: pending[...])
+        let validSamples = pending.count * MagpieCoreMLConstants.samplesPerFrame
+        let chunkSamples = Array(pcm.prefix(validSamples))
+        pending.removeAll(keepingCapacity: true)
+        continuation.yield(AudioChunk(
+            samples: chunkSamples, sampleRate: Self.sampleRate,
+            frameIndex: totalFrames, isFinal: isFinal,
+            elapsedTime: CFAbsoluteTimeGetCurrent() - t0))
     }
 
     // MARK: - LT sampling + audio_emb averaging

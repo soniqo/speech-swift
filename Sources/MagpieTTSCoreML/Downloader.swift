@@ -13,6 +13,7 @@ public enum MagpieCoreMLDownloader {
         public let decoderPrefillCompiled: URL
         public let decoderStepCompiled: URL
         public let nanocodecCompiled: URL
+        public let nanocodecStreamingCompiled: URL
         /// `tokenizer/` directory from the MLX bundle (shared 2360-token vocab JSONs).
         public let mlxTokenizerDir: URL
     }
@@ -21,7 +22,8 @@ public enum MagpieCoreMLDownloader {
         "text_encoder.mlmodelc",
         "decoder_prefill.mlmodelc",
         "decoder_step.mlmodelc",
-        "nanocodec_decoder.mlmodelc",
+        "nanocodec_decoder.mlmodelc",          // 64-frame batch codec
+        "nanocodec_decoder_streaming.mlmodelc", // 8-frame streaming codec
     ]
 
     /// MLX-bundle files we need for tokenization (the CoreML bundle ships
@@ -92,6 +94,7 @@ public enum MagpieCoreMLDownloader {
             decoderPrefillCompiled: coreMLDir.appendingPathComponent("decoder_prefill.mlmodelc"),
             decoderStepCompiled: coreMLDir.appendingPathComponent("decoder_step.mlmodelc"),
             nanocodecCompiled: coreMLDir.appendingPathComponent("nanocodec_decoder.mlmodelc"),
+            nanocodecStreamingCompiled: coreMLDir.appendingPathComponent("nanocodec_decoder_streaming.mlmodelc"),
             mlxTokenizerDir: mlxDir.appendingPathComponent("tokenizer"))
     }
 

@@ -36,32 +36,28 @@ public enum MagpieCoreMLFSQ {
         return out
     }
 
-    /// Convert a sequence of frames `[T][8]` to a `(1, 32, T)` row-major
-    /// Float32 buffer suitable for the nano-codec input. The model is
-    /// traced with `T = nanocodecFramesPerWindow = 64`; callers should
-    /// chunk longer sequences and concatenate the audio outputs.
+    /// Convert a sequence of frames `[T][8]` to a `(1, 32, windowFrames)`
+    /// row-major Float32 buffer suitable for the nano-codec input.
     ///
     /// - Important: the codec was traced in **NCL layout** (channels axis 1,
-    ///   time axis 2), so the returned buffer is `(1, 32, 64)` with values
+    ///   time axis 2), so the returned buffer is `(1, 32, W)` with values
     ///   indexed as `[1][channel][t]`. Each frame's 32-dim latent is
     ///   scattered across the channel axis at column `t`.
-    public static func decodeWindow(frames: ArraySlice<[Int32]>) -> [Float] {
-        let T = MagpieCoreMLConstants.nanocodecFramesPerWindow
+    /// - Parameter windowFrames: trace-time time-axis size (64 for the
+    ///   batch codec, 8 for the streaming codec).
+    public static func decodeWindow(frames: ArraySlice<[Int32]>,
+                                     windowFrames W: Int) -> [Float] {
         let C = MagpieCoreMLConstants.fsqLatentDim
-        var out = [Float](repeating: 0, count: C * T)
-        let count = min(frames.count, T)
+        var out = [Float](repeating: 0, count: C * W)
+        let count = min(frames.count, W)
         let base = frames.startIndex
         for tIdx in 0..<count {
             let frame = frames[base + tIdx]
             let latent = decodeFrame(codes: frame)
-            // Write latent column-major into the (C, T) buffer: out[c, t] = latent[c]
             for c in 0..<C {
-                out[c * T + tIdx] = latent[c]
+                out[c * W + tIdx] = latent[c]
             }
         }
-        // Remaining time steps (when frames.count < T) stay zero — the
-        // codec's causal HiFi-GAN will treat that as silence, and we trim
-        // the audio output to the actual count anyway.
         return out
     }
 }

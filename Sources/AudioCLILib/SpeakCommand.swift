@@ -196,18 +196,9 @@ public struct SpeakCommand: ParsableCommand {
             guard magpieVariant.lowercased() == "int4" || magpieVariant.lowercased() == "int8" else {
                 throw ValidationError("--magpie-variant must be int4 or int8 (got '\(magpieVariant)')")
             }
-            if eng == "magpie-coreml" {
-                // The bundled NanoCodec is traced at a fixed 64-frame
-                // window. We chunk internally, so long sequences work
-                // fine, but we still don't expose streaming yet —
-                // emitting after every 64-frame chunk would mean ~3 s
-                // first-packet latency which defeats the purpose.
-                if stream {
-                    throw ValidationError(
-                        "--engine magpie-coreml does not support --stream. " +
-                        "Use --engine magpie for streaming output.")
-                }
-            }
+            // magpie-coreml validation: nothing extra needed beyond the
+            // shared --magpie-* flag checks above. --stream is supported
+            // via the dedicated 8-frame streaming nanocodec model.
             // Magpie has 5 baked speakers and no zero-shot speaker
             // conditioning in the model — reject voice-cloning / speaker
             // flags borrowed from the other engines so users don't think
@@ -391,10 +382,35 @@ public struct SpeakCommand: ParsableCommand {
 
             print("Synthesizing with Magpie CoreML (\(coreLang.mlx.displayName), speaker \(coreSpeaker.displayName))...")
             let t0 = CFAbsoluteTimeGetCurrent()
-            let audio = try model.synthesize(
-                text: inputText, speaker: coreSpeaker, language: coreLang,
-                prephonemized: magpiePrephonemized, params: params)
-            try writeOrPlay(samples: audio, sampleRate: MagpieTTSCoreML.sampleRate, t0: t0)
+            if stream {
+                var collected: [Float] = []
+                var chunkCount = 0
+                var firstPacketLatency: Double?
+                let audioStream = model.synthesizeStream(
+                    text: inputText, speaker: coreSpeaker, language: coreLang,
+                    prephonemized: magpiePrephonemized, params: params)
+                for try await chunk in audioStream {
+                    if firstPacketLatency == nil && !chunk.samples.isEmpty {
+                        firstPacketLatency = CFAbsoluteTimeGetCurrent() - t0
+                    }
+                    chunkCount += 1
+                    collected.append(contentsOf: chunk.samples)
+                    if verbose {
+                        let ms = (chunk.elapsedTime ?? 0) * 1000
+                        print("  chunk \(chunkCount): \(chunk.samples.count) samples @ \(Int(ms))ms")
+                    }
+                    if chunk.isFinal { break }
+                }
+                if let l = firstPacketLatency {
+                    print(String(format: "  First-packet latency: %.0f ms", l * 1000))
+                }
+                try writeOrPlay(samples: collected, sampleRate: MagpieTTSCoreML.sampleRate, t0: t0)
+            } else {
+                let audio = try model.synthesize(
+                    text: inputText, speaker: coreSpeaker, language: coreLang,
+                    prephonemized: magpiePrephonemized, params: params)
+                try writeOrPlay(samples: audio, sampleRate: MagpieTTSCoreML.sampleRate, t0: t0)
+            }
         }
     }
 

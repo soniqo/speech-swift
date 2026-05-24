@@ -549,12 +549,12 @@ final class SpeakCommandTests: XCTestCase {
             ["speak", "hi", "--engine", "magpie-coreml", "--magpie-speaker", "aria"]))
     }
 
-    func testMagpieCoreMLRejectsStream() {
-        // Bundled NanoCodec is fixed-window; we error on --stream so users
-        // see the limitation immediately instead of getting a single chunk.
-        expectMagpieReject(
-            ["speak", "hi", "--engine", "magpie-coreml", "--stream"],
-            contains: "--stream")
+    func testMagpieCoreMLAcceptsStream() throws {
+        // Streaming is supported via the dedicated 8-frame nanocodec
+        // model. Validation must accept --stream now (used to be
+        // rejected when only the 64-frame batch codec shipped).
+        XCTAssertNoThrow(try AudioCLI.parseAsRoot(
+            ["speak", "hi", "--engine", "magpie-coreml", "--stream"]))
     }
 
     func testMagpieCoreMLRejectsVoiceCloningFlags() {
