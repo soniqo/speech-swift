@@ -145,25 +145,35 @@ speech speak "Hola mundo." --engine magpie-coreml --language es --magpie-speaker
 
 Caveats vs `--engine magpie`:
 
-- **Hybrid pipeline today.** The 1-layer LocalTransformer that NeMo
-  trains as the real sampling head, and the 8 audio embedding tables
-  averaged into `audio_emb` between AR steps, are not part of the
-  CoreML bundle. The CoreML backend lazy-loads the INT4 MLX bundle on
-  first synthesis and uses MLX for both pieces. ASR round-trip
-  matches the MLX backend's output bit-for-bit; the difference is
-  that this engine pulls in the MLX bundle too on first run. A pure
-  CoreML path (iOS-friendly) needs the bundle to also ship
-  `local_transformer/*.npy` + `audio_embedding_*.npy` and a Swift
-  reimplementation of the LT in Accelerate — tracked as a follow-up.
-- **No streaming.** `nanocodec_decoder.mlmodelc` is traced at a fixed
-  64-frame window. We chunk longer sequences internally, but
-  emitting at 64-frame boundaries would give ~3 s first-packet
-  latency. `--stream` is rejected with an actionable error pointing
-  at `--engine magpie`.
+- **Pure-Swift LocalTransformer.** The 1-layer LT and 8 audio embedding
+  tables are extracted from the MLX bundle once at `fromPretrained` and
+  cached to disk (`extracted_weights.bin`, ~70 MB). The first invocation
+  pays the MLX module load + extraction (~3–4 s); every subsequent
+  process load reads the cache directly in ~15 ms. The AR loop itself
+  runs pure CoreML + Accelerate — no MLX dispatch per frame. ASR
+  round-trip matches the MLX backend bit-for-bit.
+- **Streaming is supported.** The bundle ships two nanocodec variants:
+  `nanocodec_decoder.mlmodelc` (64-frame batch, used by
+  `synthesize()`) and `nanocodec_decoder_streaming.mlmodelc` (8-frame
+  window, used by `synthesizeStream()`). Per-chunk steady-state is
+  ~65 ms; first-packet latency is ~6 s cold (ANE compile dominates),
+  drops to ~150–250 ms after `model.prewarm()`. Call `prewarm()`
+  once at app start for low-latency streaming.
 - **No Japanese.** The CoreML bundle doesn't ship a JA tokenizer JSON
   (the model supports it; we just haven't exported the assets).
   `--language ja` with `--engine magpie-coreml` auto-routes to the
   MLX backend and logs a stderr note about the fallback.
+
+### Performance (M4 Pro, release build)
+
+| Mode | RTF | First-packet | Note |
+|---|---|---|---|
+| Batch (warm) | 0.87 IT / 0.99 EN | n/a | `synthesize()` |
+| Streaming (warm, after `prewarm()`) | ~1.26 | ~150–250 ms | `synthesizeStream()`, 8-frame chunks (~370 ms each) |
+| Streaming (cold, no prewarm) | ~1.26 | ~6 s | ANE compile pays once; not session-amortised |
+
+MLX backend remains the fastest path on macOS (RTF 0.23–0.26); the
+CoreML pipeline's main value is ANE residency for iOS deployment.
 
 Speaker ordering matches the bundle's `speaker_info.json`
 (`0=John, 1=Sofia, 2=Aria, 3=Jason, 4=Leo`), which is a different
