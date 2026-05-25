@@ -140,6 +140,48 @@ final class E2EOpenAITranscriptionsTests: XCTestCase {
         XCTAssertFalse(text.isEmpty, "Plain-text response should contain transcription")
     }
 
+    func testMultipartSRTResponse() async throws {
+        let audio = try testAudioData()
+        let boundary = "----TestBoundary\(UUID().uuidString)"
+        let body = multipartBody(
+            boundary: boundary,
+            file: audio,
+            fields: ["model": "whisper-1", "response_format": "srt"])
+        let (status, data, headers) = try await post(
+            path: "/v1/audio/transcriptions",
+            body: body,
+            contentType: "multipart/form-data; boundary=\(boundary)")
+        XCTAssertEqual(status, 200)
+        XCTAssertTrue((headers["content-type"] ?? "").contains("application/x-subrip"))
+        let text = String(data: data, encoding: .utf8) ?? ""
+        XCTAssertFalse(text.isEmpty, "SRT response should contain transcription")
+        // SRT cue format: "1\n00:00:00,000 --> HH:MM:SS,mmm\n<text>\n"
+        XCTAssertTrue(text.hasPrefix("1\n"), "SRT should start with cue index")
+        XCTAssertTrue(text.contains("-->"), "SRT should contain timestamp arrow")
+        XCTAssertTrue(text.contains(","), "SRT timestamps use comma as ms separator")
+    }
+
+    func testMultipartVTTResponse() async throws {
+        let audio = try testAudioData()
+        let boundary = "----TestBoundary\(UUID().uuidString)"
+        let body = multipartBody(
+            boundary: boundary,
+            file: audio,
+            fields: ["model": "whisper-1", "response_format": "vtt"])
+        let (status, data, headers) = try await post(
+            path: "/v1/audio/transcriptions",
+            body: body,
+            contentType: "multipart/form-data; boundary=\(boundary)")
+        XCTAssertEqual(status, 200)
+        XCTAssertTrue((headers["content-type"] ?? "").contains("text/vtt"))
+        let text = String(data: data, encoding: .utf8) ?? ""
+        XCTAssertFalse(text.isEmpty, "VTT response should contain transcription")
+        // WEBVTT header + cue: "WEBVTT\n\nHH:MM:SS.mmm --> HH:MM:SS.mmm\n<text>\n"
+        XCTAssertTrue(text.hasPrefix("WEBVTT"), "VTT must start with WEBVTT magic")
+        XCTAssertTrue(text.contains("-->"), "VTT should contain timestamp arrow")
+        XCTAssertTrue(text.contains("."), "VTT timestamps use dot as ms separator")
+    }
+
     func testMissingFileReturnsBadRequest() async throws {
         let boundary = "----TestBoundary\(UUID().uuidString)"
         // Send a multipart body that has only a `model` field, no `file`.
