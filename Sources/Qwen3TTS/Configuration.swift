@@ -16,11 +16,14 @@ public enum TTSModelSize {
     }
 
     /// Detect quantization bits from a HuggingFace model ID.
-    /// Returns 4 by default if not specified.
+    /// Returns 4 by default if not specified; 0 means no quantization (bf16/fp32 path).
     public static func detectBits(from modelId: String) -> Int {
         let lower = modelId.lowercased()
         if lower.contains("8bit") || lower.contains("8-bit") {
             return 8
+        }
+        if lower.contains("bf16") || lower.contains("fp16") || lower.contains("fp32") {
+            return 0
         }
         return 4
     }
@@ -75,6 +78,20 @@ public struct TalkerConfig: Codable, Sendable {
         config.bits = 8
         return config
     }
+
+    /// 0.6B, bf16 (no quantization).
+    public static var smallBf16: TalkerConfig {
+        var config = TalkerConfig()
+        config.bits = 0
+        return config
+    }
+
+    /// 1.7B, bf16 (no quantization).
+    public static var largeBf16: TalkerConfig {
+        var config = large4bit
+        config.bits = 0
+        return config
+    }
 }
 
 // MARK: - Code Predictor Config
@@ -119,6 +136,20 @@ public struct CodePredictorConfig: Codable, Sendable {
     public static var large8bit: CodePredictorConfig {
         var config = large4bit
         config.bits = 8
+        return config
+    }
+
+    /// 0.6B, bf16 (no quantization).
+    public static var smallBf16: CodePredictorConfig {
+        var config = CodePredictorConfig()
+        config.bits = 0
+        return config
+    }
+
+    /// 1.7B, bf16 (no quantization).
+    public static var largeBf16: CodePredictorConfig {
+        var config = large4bit
+        config.bits = 0
         return config
     }
 }
@@ -276,8 +307,13 @@ public struct Qwen3TTSConfig: Codable, Sendable {
     }
 
     /// Build config for a given model size and quantization.
+    /// `bits == 0` selects the bf16 (no-quantization) path.
     public static func config(for size: TTSModelSize, bits: Int) -> Qwen3TTSConfig {
         switch (size, bits) {
+        case (.small, 0):
+            return Qwen3TTSConfig(talker: .smallBf16, codePredictor: .smallBf16)
+        case (.large, 0):
+            return Qwen3TTSConfig(talker: .largeBf16, codePredictor: .largeBf16)
         case (.small, 8):
             return Qwen3TTSConfig(talker: .small8bit, codePredictor: .small8bit)
         case (.large, 8):

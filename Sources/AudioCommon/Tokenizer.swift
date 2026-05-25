@@ -1,5 +1,12 @@
 import Foundation
 
+// Library logs route to stderr so they don't corrupt a stdout-based IPC
+// channel (e.g. the speech-studio sidecar's NDJSON protocol).
+@inline(__always)
+private func logTokenizer(_ message: String) {
+    FileHandle.standardError.write(Data((message + "\n").utf8))
+}
+
 // MARK: - Errors
 
 public enum TokenizerError: Error, LocalizedError {
@@ -59,7 +66,7 @@ public class Qwen3Tokenizer {
             try loadMerges(from: mergesUrl)
         }
 
-        print("Loaded tokenizer with \(idToToken.count) tokens, \(bpeMerges.count) merges")
+        logTokenizer("Loaded tokenizer with \(idToToken.count) tokens, \(bpeMerges.count) merges")
     }
 
     /// Load added tokens from tokenizer_config.json
@@ -84,7 +91,7 @@ public class Qwen3Tokenizer {
                 tokenToId[content] = id
                 addedCount += 1
             }
-            print("Loaded \(addedCount) added tokens from tokenizer_config.json")
+            logTokenizer("Loaded \(addedCount) added tokens from tokenizer_config.json")
         }
     }
 

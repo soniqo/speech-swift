@@ -12,10 +12,10 @@ public class CodePredictorAttention: Module {
     let headDim: Int
     let scale: Float
 
-    @ModuleInfo var qProj: QuantizedLinear
-    @ModuleInfo var kProj: QuantizedLinear
-    @ModuleInfo var vProj: QuantizedLinear
-    @ModuleInfo var oProj: QuantizedLinear
+    @ModuleInfo var qProj: Linear
+    @ModuleInfo var kProj: Linear
+    @ModuleInfo var vProj: Linear
+    @ModuleInfo var oProj: Linear
     @ModuleInfo var qNorm: RMSNorm
     @ModuleInfo var kNorm: RMSNorm
 
@@ -29,16 +29,16 @@ public class CodePredictorAttention: Module {
 
         let hiddenSize = config.hiddenSize
 
-        self._qProj.wrappedValue = QuantizedLinear(
+        self._qProj.wrappedValue = makeMaybeQuantizedLinear(
             hiddenSize, numHeads * headDim, bias: false,
             groupSize: config.groupSize, bits: config.bits)
-        self._kProj.wrappedValue = QuantizedLinear(
+        self._kProj.wrappedValue = makeMaybeQuantizedLinear(
             hiddenSize, numKVHeads * headDim, bias: false,
             groupSize: config.groupSize, bits: config.bits)
-        self._vProj.wrappedValue = QuantizedLinear(
+        self._vProj.wrappedValue = makeMaybeQuantizedLinear(
             hiddenSize, numKVHeads * headDim, bias: false,
             groupSize: config.groupSize, bits: config.bits)
-        self._oProj.wrappedValue = QuantizedLinear(
+        self._oProj.wrappedValue = makeMaybeQuantizedLinear(
             numHeads * headDim, hiddenSize, bias: false,
             groupSize: config.groupSize, bits: config.bits)
 
@@ -140,9 +140,9 @@ public class CodePredictorModel: Module {
     @ModuleInfo var layers: [CodePredictorDecoderLayer]
     @ModuleInfo var norm: RMSNorm
     // 15 lm_head projections (one per remaining codebook group, quantized)
-    @ModuleInfo var lmHeads: [QuantizedLinear]
+    @ModuleInfo var lmHeads: [Linear]
     // Optional projection from embeddingDim → hiddenSize (1.7B: 2048 → 1024)
-    @ModuleInfo var smallToMtpProjection: QuantizedLinear?
+    @ModuleInfo var smallToMtpProjection: Linear?
 
     public init(config: CodePredictorConfig) {
         self.config = config
@@ -160,13 +160,13 @@ public class CodePredictorModel: Module {
 
         // 15 lm_heads for codebook groups 2-16 (quantized)
         self._lmHeads.wrappedValue = (0..<(config.numCodeGroups - 1)).map { _ in
-            QuantizedLinear(config.hiddenSize, config.vocabSize, bias: false,
+            makeMaybeQuantizedLinear(config.hiddenSize, config.vocabSize, bias: false,
                            groupSize: config.groupSize, bits: config.bits)
         }
 
         // Projection for 1.7B model (embeddingDim=2048 → hiddenSize=1024)
         if config.needsProjection {
-            self._smallToMtpProjection.wrappedValue = QuantizedLinear(
+            self._smallToMtpProjection.wrappedValue = makeMaybeQuantizedLinear(
                 config.embeddingDim, config.hiddenSize, bias: true,
                 groupSize: config.groupSize, bits: config.bits)
         }

@@ -17,7 +17,7 @@ extension TTSWeightLoader {
     ) throws {
         let allWeights = try CommonWeightLoader.loadAllSafetensors(from: directory)
 
-        print("Found \(allWeights.count) speech tokenizer weights total (encoder load)")
+        logLoad("Found \(allWeights.count) speech tokenizer weights total (encoder load)")
 
         // RVQ codebook weights — same codebooks as decoder, stored under encoder prefix
         loadEncoderRVQWeights(into: encoder.rvq, from: allWeights)
@@ -82,7 +82,7 @@ extension TTSWeightLoader {
             prefix: "encoder.pre_transformer.norm",
             from: allWeights)
 
-        print("Applied weights to Speech Tokenizer Encoder")
+        logLoad("Applied weights to Speech Tokenizer Encoder")
     }
 
     // MARK: - Encoder RVQ
