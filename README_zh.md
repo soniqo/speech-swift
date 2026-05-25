@@ -2,7 +2,7 @@
 
 面向 Apple Silicon 的 AI 语音模型，基于 MLX Swift 和 CoreML。
 
-📖 Read in: [English](README.md) · [中文](README_zh.md) · [日本語](README_ja.md) · [한국어](README_ko.md) · [Español](README_es.md) · [Deutsch](README_de.md) · [Français](README_fr.md) · [हिन्दी](README_hi.md) · [Português](README_pt.md) · [Русский](README_ru.md)
+📖 Read in: [English](README.md) · [中文](README_zh.md) · [日本語](README_ja.md) · [한국어](README_ko.md) · [Español](README_es.md) · [Deutsch](README_de.md) · [Français](README_fr.md) · [हिन्दी](README_hi.md) · [Português](README_pt.md) · [Русский](README_ru.md) · [العربية](README_ar.md)
 
 端侧语音识别、合成与理解，适用于 Mac 与 iOS。完全在 Apple Silicon 上本地运行——无需云端、无需 API 密钥、数据不出设备。
 

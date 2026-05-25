@@ -2,7 +2,7 @@
 
 MLX Swift와 CoreML 기반의 Apple Silicon용 AI 음성 모델.
 
-📖 Read in: [English](README.md) · [中文](README_zh.md) · [日本語](README_ja.md) · [한국어](README_ko.md) · [Español](README_es.md) · [Deutsch](README_de.md) · [Français](README_fr.md) · [हिन्दी](README_hi.md) · [Português](README_pt.md) · [Русский](README_ru.md)
+📖 Read in: [English](README.md) · [中文](README_zh.md) · [日本語](README_ja.md) · [한국어](README_ko.md) · [Español](README_es.md) · [Deutsch](README_de.md) · [Français](README_fr.md) · [हिन्दी](README_hi.md) · [Português](README_pt.md) · [Русский](README_ru.md) · [العربية](README_ar.md)
 
 Mac과 iOS를 위한 온디바이스 음성 인식, 합성 및 이해. Apple Silicon에서 완전히 로컬로 실행됩니다 — 클라우드 없이, API 키 없이, 데이터가 기기 밖으로 나가지 않습니다.
 

@@ -2,7 +2,7 @@
 
 Apple Silicon के लिए AI स्पीच मॉडल, MLX Swift और CoreML द्वारा संचालित।
 
-📖 Read in: [English](README.md) · [中文](README_zh.md) · [日本語](README_ja.md) · [한국어](README_ko.md) · [Español](README_es.md) · [Deutsch](README_de.md) · [Français](README_fr.md) · [हिन्दी](README_hi.md) · [Português](README_pt.md) · [Русский](README_ru.md)
+📖 Read in: [English](README.md) · [中文](README_zh.md) · [日本語](README_ja.md) · [한국어](README_ko.md) · [Español](README_es.md) · [Deutsch](README_de.md) · [Français](README_fr.md) · [हिन्दी](README_hi.md) · [Português](README_pt.md) · [Русский](README_ru.md) · [العربية](README_ar.md)
 
 Mac और iOS के लिए ऑन-डिवाइस स्पीच रिकग्निशन, सिंथेसिस और समझ। Apple Silicon पर पूरी तरह लोकली चलता है — कोई क्लाउड नहीं, कोई API key नहीं, कोई डेटा डिवाइस से बाहर नहीं जाता।
 

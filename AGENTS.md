@@ -6,7 +6,7 @@ AI speech models for Apple Silicon (MLX Swift). ASR, TTS, speech-to-speech, VAD,
 
 - **Always work in a separate git worktree** so concurrent agents don't fight over the same working directory. Create one with `git worktree add ../speech-swift-<task> <branch>`, do all edits there, push from there. Multiple agents may be running against this repo at the same time — checking out branches in the shared working copy clobbers their state and silently loses WIP files. Delete the worktree (`git worktree remove`) when the task is done.
 - **Never commit, push, or comment on GitHub without explicit user confirmation.** Draft first, ask to confirm, then execute.
-- **Every README.md change must update all 9 translations** (`README_zh.md`, `README_ja.md`, `README_ko.md`, `README_es.md`, `README_de.md`, `README_fr.md`, `README_hi.md`, `README_pt.md`, `README_ru.md`). No exceptions.
+- **Every README.md change must update all 10 translations** (`README_zh.md`, `README_ja.md`, `README_ko.md`, `README_es.md`, `README_de.md`, `README_fr.md`, `README_hi.md`, `README_pt.md`, `README_ru.md`, `README_ar.md`). No exceptions.
 
 ## Git Conventions
 
@@ -223,7 +223,7 @@ soniqo-web/public/
 
 ### README translations
 
-Translated READMEs live in the repo root: `README_zh.md`, `README_ja.md`, `README_ko.md`, `README_es.md`, `README_de.md`, `README_fr.md`, `README_hi.md`, `README_pt.md`, `README_ru.md`. **Whenever README.md is updated, all translations must be updated to match.** Each translation links back to the main README and lists all available languages at the top.
+Translated READMEs live in the repo root: `README_zh.md`, `README_ja.md`, `README_ko.md`, `README_es.md`, `README_de.md`, `README_fr.md`, `README_hi.md`, `README_pt.md`, `README_ru.md`, `README_ar.md`. **Whenever README.md is updated, all translations must be updated to match.** Each translation links back to the main README and lists all available languages at the top.
 
 ### Mapping: code changes → docs pages
 

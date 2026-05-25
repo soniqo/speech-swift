@@ -2,7 +2,7 @@
 
 Apple Silicon向けAI音声モデル。MLX SwiftとCoreMLで動作します。
 
-📖 Read in: [English](README.md) · [中文](README_zh.md) · [日本語](README_ja.md) · [한국어](README_ko.md) · [Español](README_es.md) · [Deutsch](README_de.md) · [Français](README_fr.md) · [हिन्दी](README_hi.md) · [Português](README_pt.md) · [Русский](README_ru.md)
+📖 Read in: [English](README.md) · [中文](README_zh.md) · [日本語](README_ja.md) · [한국어](README_ko.md) · [Español](README_es.md) · [Deutsch](README_de.md) · [Français](README_fr.md) · [हिन्दी](README_hi.md) · [Português](README_pt.md) · [Русский](README_ru.md) · [العربية](README_ar.md)
 
 Mac・iOS向けのオンデバイス音声認識・合成・理解。Apple Silicon上で完全にローカル動作します——クラウド不要、APIキー不要、データはデバイスから外部に送信されません。
 
