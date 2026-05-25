@@ -163,7 +163,7 @@ speech transcribe recording.wav
 speech speak "Hello world"
 speech translate "Hello, how are you?" --to es
 speech respond --input question.wav --transcript
-speech-server --port 8080            # เซิร์ฟเวอร์ HTTP / WebSocket ท้องถิ่น (รองรับ /v1/realtime ของ OpenAI)
+speech-server --port 8080            # เซิร์ฟเวอร์ HTTP / WebSocket ท้องถิ่น (รองรับ /v1/realtime + /v1/audio/transcriptions ของ OpenAI)
 ```
 
 **[คู่มืออ้างอิง CLI ฉบับเต็ม →](https://soniqo.audio/cli)**
@@ -357,7 +357,7 @@ pipeline.pushAudio(micSamples)
 speech-server --port 8080
 ```
 
-เปิดให้เข้าถึงทุกโมเดลผ่าน endpoints HTTP REST + WebSocket รวมถึง WebSocket ที่รองรับ OpenAI Realtime API ที่ `/v1/realtime` ดู [`Sources/AudioServer/`](Sources/AudioServer/)
+เปิดให้เข้าถึงทุกโมเดลผ่าน endpoints HTTP REST + WebSocket รวมถึง API ที่รองรับ OpenAI: Realtime WebSocket ที่ `/v1/realtime` และ REST endpoint สำหรับการถอดเสียงที่ `/v1/audio/transcriptions` ดู [`Sources/AudioServer/`](Sources/AudioServer/)
 
 ## สถาปัตยกรรม
 

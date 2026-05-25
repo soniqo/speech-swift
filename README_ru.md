@@ -163,7 +163,7 @@ speech transcribe recording.wav
 speech speak "Hello world"
 speech translate "Hello, how are you?" --to es
 speech respond --input question.wav --transcript
-speech-server --port 8080            # локальный HTTP / WebSocket сервер (OpenAI-совместимый /v1/realtime)
+speech-server --port 8080            # локальный HTTP / WebSocket сервер (OpenAI-совместимый /v1/realtime + /v1/audio/transcriptions)
 ```
 
 **[Полный справочник CLI →](https://soniqo.audio/ru/cli)**
@@ -359,7 +359,7 @@ pipeline.pushAudio(micSamples)
 speech-server --port 8080
 ```
 
-Предоставляет все модели через HTTP REST + WebSocket-эндпоинты, включая совместимый с OpenAI Realtime API WebSocket по адресу `/v1/realtime`. См. [`Sources/AudioServer/`](Sources/AudioServer/).
+Предоставляет все модели через HTTP REST + WebSocket-эндпоинты, включая совместимые с OpenAI API: Realtime WebSocket по адресу `/v1/realtime` и REST-эндпоинт транскрипции по адресу `/v1/audio/transcriptions`. См. [`Sources/AudioServer/`](Sources/AudioServer/).
 
 ## Архитектура
 
