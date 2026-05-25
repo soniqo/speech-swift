@@ -82,22 +82,34 @@ public final class CosyVoiceTTSModel {
             }
         }
 
-        // Read the bundle's `config.json` so the LLM module is constructed with
-        // the correct quantization bit width. Without this, the model defaults
-        // to 4-bit and MLX's QuantizedLinear blows up on 8-bit weights.
+        // Read the bundle's `config.json` so each component (LLM, flow DiT) is
+        // constructed with the correct quantization bit width. Without this,
+        // they default to 4-bit and MLX's QuantizedLinear blows up on 8-bit
+        // weights at first forward pass.
         var config = CosyVoiceConfig.default
         let configURL = cacheDir.appendingPathComponent("config.json")
         if FileManager.default.fileExists(atPath: configURL.path),
            let data = try? Data(contentsOf: configURL),
-           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let quant = json["quantization"] as? [String: Any] {
-            // The convert.py emits BOTH `bits` (legacy default = 4) and a
-            // per-component override `llm_bits`. Prefer the LLM-specific value.
-            if let bits = (quant["llm_bits"] as? Int) ?? (quant["bits"] as? Int) {
-                config.llm.bits = bits
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            // LLM bits: convert.py emits BOTH `bits` (legacy default = 4) and
+            // a per-component override `llm_bits` inside `quantization`.
+            if let quant = json["quantization"] as? [String: Any] {
+                if let bits = (quant["llm_bits"] as? Int) ?? (quant["bits"] as? Int) {
+                    config.llm.bits = bits
+                }
+                if let gs = quant["group_size"] as? Int { config.llm.groupSize = gs }
             }
-            if let gs = quant["group_size"] as? Int { config.llm.groupSize = gs }
-            print("  Bundle quantization: \(config.llm.bits)-bit (group_size \(config.llm.groupSize))")
+            // DiT (flow) bits: convert.py with `--quantize-dit` emits a
+            // separate `dit_quantization` block; older bundles may carry
+            // `flow_bits` inside the main `quantization` block instead.
+            if let ditQuant = json["dit_quantization"] as? [String: Any] {
+                if let bits = ditQuant["bits"] as? Int { config.flow.dit.bits = bits }
+                if let gs = ditQuant["group_size"] as? Int { config.flow.dit.groupSize = gs }
+            } else if let quant = json["quantization"] as? [String: Any],
+                      let bits = quant["flow_bits"] as? Int {
+                config.flow.dit.bits = bits
+            }
+            print("  Bundle quantization: LLM \(config.llm.bits)-bit, DiT \(config.flow.dit.bits)-bit (group_size \(config.llm.groupSize))")
         }
         let model = CosyVoiceTTSModel(config: config)
 
