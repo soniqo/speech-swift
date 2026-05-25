@@ -10,8 +10,8 @@ import AudioCommon
 public final class Qwen3TTSCoreMLModel {
     public static let defaultModelId = "aufklarer/Qwen3-TTS-CoreML"
 
-    private var codeDecoder: TalkerGenerator?
-    private var multiCodeDecoder: MultiCodeDecoderCoreML?
+    private var codeDecoder: CodeDecoderInterface?
+    private var multiCodeDecoder: MultiCodeDecoderInterface?
     private var speechDecoder: SpeechDecoderCoreML?
     private var textProjector: TextProjectorModel?
     private var codeEmbedder: CodeEmbedderModel?
@@ -60,17 +60,32 @@ public final class Qwen3TTSCoreMLModel {
         let cpuConfig = MLModelConfiguration()
         cpuConfig.computeUnits = .cpuOnly
 
-        // CodeDecoder/MultiCodeDecoder on CPU+GPU. They are stateful
-        // transformers and the MLState KV cache stays put across calls.
-        let defaultConfig = MLModelConfiguration()
-        defaultConfig.computeUnits = .cpuAndGPU
+        // CodeDecoder / MultiCodeDecoder / SpeechDecoder default to ANE.
+        // The bundle was exported with the CPU_AND_NE + FP32 recipe so the
+        // 28-layer transformer's logit precision stays stable on ANE — see
+        // models/qwen3-tts/export/convert_coreml.py. Routing the full
+        // decoder chain here lets the pipeline run with no GPU traffic.
+        //
+        // Per-model overrides (for benchmarking / debugging):
+        //   QWEN3TTS_ROUTE_CD  = ane|gpu|cpu|all   (CodeDecoder)
+        //   QWEN3TTS_ROUTE_MCD = ane|gpu|cpu|all   (MultiCodeDecoder)
+        //   QWEN3TTS_ROUTE_SD  = ane|gpu|cpu|all   (SpeechDecoder)
+        func route(_ key: String, _ fallback: MLComputeUnits) -> MLModelConfiguration {
+            let cfg = MLModelConfiguration()
+            switch ProcessInfo.processInfo.environment[key] {
+            case "ane": cfg.computeUnits = .cpuAndNeuralEngine
+            case "gpu": cfg.computeUnits = .cpuAndGPU
+            case "cpu": cfg.computeUnits = .cpuOnly
+            case "all": cfg.computeUnits = .all
+            default:    cfg.computeUnits = fallback
+            }
+            return cfg
+        }
+        let cdConfig = route("QWEN3TTS_ROUTE_CD", .cpuAndNeuralEngine)
+        let mcdConfig = route("QWEN3TTS_ROUTE_MCD", .cpuAndNeuralEngine)
+        let sdConfig = route("QWEN3TTS_ROUTE_SD", .cpuAndNeuralEngine)
 
-        // SpeechDecoder pinned to ANE. The vocoder is a single forward pass
-        // on a fixed 125-frame input — runs ~5x faster on ANE than on GPU
-        // (local A/B at 12.5s vs 75s for the same 10s clip) without any
-        // audible quality regression.
-        let sdConfig = MLModelConfiguration()
-        sdConfig.computeUnits = .cpuAndNeuralEngine
+        let defaultConfig = cdConfig
 
         let model = Qwen3TTSCoreMLModel()
 
@@ -87,8 +102,48 @@ public final class Qwen3TTSCoreMLModel {
         model.textProjector = TextProjectorModel(model: try loadML("TextProjector", cpuConfig))
         model.codeEmbedder = CodeEmbedderModel(model: try loadML("CodeEmbedder", cpuConfig))
         model.multiCodeEmbedder = MultiCodeEmbedderModel(model: try loadML("MultiCodeEmbedder", cpuConfig))
-        model.codeDecoder = TalkerGenerator(model: try loadML("CodeDecoder"))
-        model.multiCodeDecoder = MultiCodeDecoderCoreML(model: try loadML("MultiCodeDecoder"))
+
+        // Detect chunked decoder layouts emitted by `convert_coreml.py
+        // --ane-recipe`. Each decoder ships as N stateless ≤4-layer chunks
+        // plus a 1-of-a-kind head model. If the chunk artifacts are absent
+        // we fall back to the legacy monolithic single-model export.
+        let fm = FileManager.default
+        let bundleContents = (try? fm.contentsOfDirectory(atPath: resolvedCacheDir.path)) ?? []
+
+        // CD: prefer chunked layout when present.
+        let cdChunkFiles = bundleContents
+            .filter { $0.hasPrefix("CodeDecoder_chunk") && $0.hasSuffix(".mlmodelc") }
+            .sorted()
+        if !cdChunkFiles.isEmpty {
+            let cdChunks: [MLModel] = try cdChunkFiles.map { name in
+                let url = resolvedCacheDir.appendingPathComponent(name, isDirectory: true)
+                return try MLModel(contentsOf: url, configuration: cdConfig)
+            }
+            let cdHeadURL = resolvedCacheDir.appendingPathComponent(
+                "CodeDecoder_head.mlmodelc", isDirectory: true)
+            let cdHead = try MLModel(contentsOf: cdHeadURL, configuration: cdConfig)
+            model.codeDecoder = TalkerGeneratorChunked(chunks: cdChunks, head: cdHead)
+        } else {
+            model.codeDecoder = TalkerGenerator(model: try loadML("CodeDecoder", cdConfig))
+        }
+
+        // MCD: same detection pattern.
+        let chunkFiles = bundleContents
+            .filter { $0.hasPrefix("MultiCodeDecoder_chunk") && $0.hasSuffix(".mlmodelc") }
+            .sorted()
+        if !chunkFiles.isEmpty {
+            let chunks: [MLModel] = try chunkFiles.map { name in
+                let url = resolvedCacheDir.appendingPathComponent(name, isDirectory: true)
+                return try MLModel(contentsOf: url, configuration: mcdConfig)
+            }
+            let headURL = resolvedCacheDir.appendingPathComponent(
+                "MultiCodeDecoder_head.mlmodelc", isDirectory: true)
+            let headModel = try MLModel(contentsOf: headURL, configuration: mcdConfig)
+            model.multiCodeDecoder = MultiCodeDecoderChunked(chunks: chunks, head: headModel)
+        } else {
+            model.multiCodeDecoder = MultiCodeDecoderCoreML(model: try loadML("MultiCodeDecoder", mcdConfig))
+        }
+
         model.speechDecoder = SpeechDecoderCoreML(model: try loadML("SpeechDecoder", sdConfig))
 
         progressHandler?(0.9, "Loading embeddings...")
@@ -145,12 +200,20 @@ public final class Qwen3TTSCoreMLModel {
             throw TTSCoreMLError.modelNotLoaded
         }
 
+        // Per-stage timing — printed at the end when QWEN3TTS_BENCH=1
+        let benchOn = ProcessInfo.processInfo.environment["QWEN3TTS_BENCH"] == "1"
+        let tStart = CFAbsoluteTimeGetCurrent()
+        var tPromptEnd = tStart, tDecodeEnd = tStart, tVocoderEnd = tStart
+        var cdPrefillCalls = 0, cdDecodeCalls = 0, mcdPredictCalls = 0
+        var cdPrefillSec = 0.0, cdDecodeSec = 0.0, mcdSec = 0.0, embedSec = 0.0
+
         // Build non-streaming prefill (all text in prefill)
         let prefillEmbeds = try PromptBuilder.build(
             text: text, language: language, tokenizer: tokenizer,
             textProjector: textProjector, codeEmbedder: codeEmbedder,
             ttsPadEmbed: ttsPadEmbed, ttsBosEmbed: ttsBosEmbed,
             ttsEosEmbed: ttsEosEmbed, speakerEmbedding: speakerEmbedding)
+        tPromptEnd = CFAbsoluteTimeGetCurrent()
 
         // Cap decode tokens: min(requested, 8× prefill, remaining KV cache slots)
         let maxStepsByPrefill = 8 * prefillEmbeds.count
@@ -164,7 +227,10 @@ public final class Qwen3TTSCoreMLModel {
         var lastLogits = [Float]()
         var lastHidden = try MLMultiArray(shape: [1, 1024, 1, 1], dataType: .float16)
         for embed in prefillEmbeds {
+            let t = CFAbsoluteTimeGetCurrent()
             (lastLogits, _) = try codeDecoder.forward(embedArray: embed)
+            cdPrefillSec += CFAbsoluteTimeGetCurrent() - t
+            cdPrefillCalls += 1
         }
         lastHidden = codeDecoder.lastHiddenState!
 
@@ -180,10 +246,13 @@ public final class Qwen3TTSCoreMLModel {
         var generatedCB0 = [nextToken]
 
         // MultiCodeDecoder: predict CB1-15 for first frame
+        let tMcd0 = CFAbsoluteTimeGetCurrent()
         var cpTokens = try multiCodeDecoder.predict(
             hiddenState: lastHidden, cb0Token: nextToken,
             codeEmbedder: codeEmbedder, multiCodeEmbedder: multiCodeEmbedder,
             temperature: temperature, topK: topK)
+        mcdSec += CFAbsoluteTimeGetCurrent() - tMcd0
+        mcdPredictCalls += 1
         for (i, token) in cpTokens.enumerated() {
             allCodebooks[i + 1].append(token)
         }
@@ -195,6 +264,7 @@ public final class Qwen3TTSCoreMLModel {
             var sum32 = [Float](repeating: 0, count: hiddenSize)
 
             // Add CB0 embedding
+            let tEmb0 = CFAbsoluteTimeGetCurrent()
             let cb0Emb = ensureNCHW(try codeEmbedder.embed(Int(nextToken)), channels: hiddenSize)
             let cb0Ptr = cb0Emb.dataPointer.assumingMemoryBound(to: Float16.self)
             for i in 0..<hiddenSize { sum32[i] += Float(cb0Ptr[i]) }
@@ -207,6 +277,7 @@ public final class Qwen3TTSCoreMLModel {
                 let ptr = mceEmb.dataPointer.assumingMemoryBound(to: Float16.self)
                 for i in 0..<hiddenSize { sum32[i] += Float(ptr[i]) }
             }
+            embedSec += CFAbsoluteTimeGetCurrent() - tEmb0
 
             // Add tts_pad (FP32 from npy)
             if ttsPadEmbed.dataType == .float32 {
@@ -223,7 +294,10 @@ public final class Qwen3TTSCoreMLModel {
             for i in 0..<hiddenSize { outPtr[i] = Float16(sum32[i]) }
 
             // CodeDecoder forward
+            let tCd = CFAbsoluteTimeGetCurrent()
             (lastLogits, _) = try codeDecoder.forward(embedArray: stepInput)
+            cdDecodeSec += CFAbsoluteTimeGetCurrent() - tCd
+            cdDecodeCalls += 1
             lastHidden = codeDecoder.lastHiddenState!
 
             // Sample CB0 — suppress control tokens [2048, 3072) except EOS
@@ -247,24 +321,56 @@ public final class Qwen3TTSCoreMLModel {
             allCodebooks[0].append(nextToken)
 
             // MultiCodeDecoder: predict CB1-15
+            let tMcd = CFAbsoluteTimeGetCurrent()
             cpTokens = try multiCodeDecoder.predict(
                 hiddenState: lastHidden, cb0Token: nextToken,
                 codeEmbedder: codeEmbedder, multiCodeEmbedder: multiCodeEmbedder,
                 temperature: temperature, topK: topK)
+            mcdSec += CFAbsoluteTimeGetCurrent() - tMcd
+            mcdPredictCalls += 1
             for (i, token) in cpTokens.enumerated() {
                 allCodebooks[i + 1].append(token)
             }
         }
+        tDecodeEnd = CFAbsoluteTimeGetCurrent()
 
         // SpeechDecoder: all codes → audio
         guard !allCodebooks[0].isEmpty else { return [] }
         var audio = try speechDecoder.decode(codes: allCodebooks)
+        tVocoderEnd = CFAbsoluteTimeGetCurrent()
 
         // Normalize amplitude
         let peak = audio.map { abs($0) }.max() ?? 0
         if peak > 0.001 {
             let gain = min(0.9 / peak, 10.0)
             for i in 0..<audio.count { audio[i] *= gain }
+        }
+
+        if benchOn {
+            let total = tVocoderEnd - tStart
+            let audioSec = Double(audio.count) / 24000.0
+            let rtfx = audioSec / max(total, 1e-9)
+            let mcdPerCallMs = mcdPredictCalls > 0 ? mcdSec / Double(mcdPredictCalls) * 1000 : 0
+            let cdDecodePerCallMs = cdDecodeCalls > 0 ? cdDecodeSec / Double(cdDecodeCalls) * 1000 : 0
+            // MCD internally calls its CoreML model 16x per predict() (positions 0..15)
+            let mcdInnerCalls = mcdPredictCalls * 16
+            let mcdInnerPerCallMs = mcdInnerCalls > 0 ? mcdSec / Double(mcdInnerCalls) * 1000 : 0
+            func f(_ x: Double) -> String { String(format: "%6.3f", x) }
+            print("""
+
+            [BENCH Qwen3TTSCoreML]
+              text                = \"\(text)\"
+              audio output        = \(f(audioSec))s
+              wall total          = \(f(total))s   RTFx = \(String(format: "%.2f", rtfx))
+              prompt build        = \(f(tPromptEnd - tStart))s
+              CD prefill          = \(f(cdPrefillSec))s  (\(cdPrefillCalls) calls)
+              CD decode           = \(f(cdDecodeSec))s  (\(cdDecodeCalls) calls, \(String(format: "%.1f", cdDecodePerCallMs))ms/call)
+              MCD predict (outer) = \(f(mcdSec))s  (\(mcdPredictCalls) calls, \(String(format: "%.1f", mcdPerCallMs))ms/call)
+              MCD inner CoreML    = \(mcdInnerCalls) calls, \(String(format: "%.1f", mcdInnerPerCallMs))ms/call
+              embedder sum loop   = \(f(embedSec))s
+              SpeechDecoder       = \(f(tVocoderEnd - tDecodeEnd))s
+              accounted           = \(f(cdPrefillSec + cdDecodeSec + mcdSec + embedSec + (tVocoderEnd - tDecodeEnd) + (tPromptEnd - tStart)))s
+            """)
         }
 
         return audio
