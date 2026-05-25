@@ -65,6 +65,10 @@ let package = Package(
             targets: ["MAGNeTMusicGen"]
         ),
         .library(
+            name: "StableAudio3MusicGen",
+            targets: ["StableAudio3MusicGen"]
+        ),
+        .library(
             name: "FlashSR",
             targets: ["FlashSR"]
         ),
@@ -281,6 +285,17 @@ let package = Package(
             ]
         ),
         .target(
+            name: "StableAudio3MusicGen",
+            dependencies: [
+                "AudioCommon",
+                "MLXCommon",
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXNN", package: "mlx-swift"),
+                .product(name: "MLXFast", package: "mlx-swift"),
+                .product(name: "MLXRandom", package: "mlx-swift"),
+            ]
+        ),
+        .target(
             name: "FlashSR",
             dependencies: [
                 "AudioCommon",
@@ -393,6 +408,7 @@ let package = Package(
                 "VibeVoiceTTS",
                 "VoxCPM2TTS",
                 "MAGNeTMusicGen",
+                "StableAudio3MusicGen",
                 "FlashSR",
                 "MagpieTTS",
                 "MagpieTTSCoreML",
@@ -549,6 +565,14 @@ let package = Package(
             name: "MAGNeTMusicGenTests",
             dependencies: [
                 "MAGNeTMusicGen",
+                "AudioCommon",
+                .product(name: "MLX", package: "mlx-swift")
+            ]
+        ),
+        .testTarget(
+            name: "StableAudio3MusicGenTests",
+            dependencies: [
+                "StableAudio3MusicGen",
                 "AudioCommon",
                 .product(name: "MLX", package: "mlx-swift")
             ]
