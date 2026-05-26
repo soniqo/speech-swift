@@ -30,7 +30,7 @@ func handleOpenAITranscriptions(
 
     if contentType.contains("multipart/form-data") {
         guard let boundary = parseBoundary(contentType) else {
-            return errorResponse("Missing multipart boundary", status: .badRequest)
+            return openAIErrorResponse("Missing multipart boundary", status: .badRequest)
         }
         let parts = MultipartParser.parse(Data(buffer: body), boundary: boundary)
         let formFields = Dictionary(
@@ -40,7 +40,7 @@ func handleOpenAITranscriptions(
             })
 
         guard let filePart = formFields["file"], !filePart.body.isEmpty else {
-            return errorResponse("Missing 'file' field", status: .badRequest)
+            return openAIErrorResponse("Missing 'file' field", status: .badRequest)
         }
         audioData = filePart.body
         language = formFields["language"]?.stringValue
@@ -49,7 +49,7 @@ func handleOpenAITranscriptions(
         // Fallback: reuse the existing JSON / raw-WAV parsing used by /transcribe.
         let params = try RequestParams.parse(body, contentType: contentType)
         guard let data = params.audioData else {
-            return errorResponse("Missing 'file' field", status: .badRequest)
+            return openAIErrorResponse("Missing 'file' field", status: .badRequest)
         }
         audioData = data
         language = params.string("language")
@@ -62,7 +62,7 @@ func handleOpenAITranscriptions(
     do {
         audio = try decodeWAVData(audioData, targetSampleRate: sampleRate)
     } catch {
-        return errorResponse(
+        return openAIErrorResponse(
             "Could not decode audio: \(error.localizedDescription)",
             status: .badRequest)
     }
@@ -119,13 +119,46 @@ func handleOpenAITranscriptions(
             body: .init(byteBuffer: .init(string: vtt)))
 
     default:  // "json" and any unrecognized value
-        var json: [String: Any] = [
-            "text": result.text,
-            "duration": durationRounded
-        ]
-        if let lang = result.language ?? language { json["language"] = lang }
-        return jsonResponse(json)
+        // OpenAI's plain `json` returns only {"text": "..."} — keep the shape
+        // strict so typed deserializers in the openai-* SDKs don't reject it.
+        // Rich metadata (duration, language, segments) belongs in verbose_json.
+        return jsonResponse(["text": result.text])
     }
+}
+
+/// OpenAI-shaped error envelope:
+/// `{"error": {"message": "...", "type": "invalid_request_error", "code": null, "param": null}}`.
+/// The official openai-python / openai-node SDKs parse `error.message` as a
+/// nested field; returning a bare `{"error": "string"}` crashes their error
+/// handling. Kept local to this file so the shared `errorResponse` used by
+/// other endpoints (e.g. `/transcribe`) keeps its existing shape.
+private func openAIErrorResponse(
+    _ message: String,
+    status: HTTPResponse.Status
+) -> Response {
+    let type: String
+    switch status {
+    case .unauthorized, .forbidden:
+        type = "authentication_error"
+    case .internalServerError, .badGateway, .serviceUnavailable:
+        type = "server_error"
+    default:
+        type = "invalid_request_error"
+    }
+    let envelope: [String: Any] = [
+        "error": [
+            "message": message,
+            "type": type,
+            "code": NSNull(),
+            "param": NSNull()
+        ]
+    ]
+    let data = (try? JSONSerialization.data(
+        withJSONObject: envelope, options: [])) ?? Data()
+    return Response(
+        status: status,
+        headers: [.contentType: "application/json"],
+        body: .init(byteBuffer: .init(data: data)))
 }
 
 private func parseBoundary(_ contentType: String) -> String? {

@@ -97,7 +97,12 @@ final class E2EOpenAITranscriptionsTests: XCTestCase {
         XCTAssertNotNil(json?["text"] as? String)
         XCTAssertFalse((json?["text"] as? String ?? "").isEmpty,
             "Transcription text should not be empty")
-        XCTAssertNotNil(json?["duration"] as? Double)
+        // OpenAI's default `json` response returns only {"text": "..."}.
+        // Rich metadata belongs in verbose_json — assert we don't leak extras
+        // that strict client deserializers would reject.
+        XCTAssertNil(json?["duration"], "default json must not include duration")
+        XCTAssertNil(json?["language"], "default json must not include language")
+        XCTAssertNil(json?["segments"], "default json must not include segments")
     }
 
     func testMultipartVerboseJSON() async throws {
@@ -191,10 +196,27 @@ final class E2EOpenAITranscriptionsTests: XCTestCase {
         body.append(Data("whisper-1".utf8))
         body.append(Data("\r\n--\(boundary)--\r\n".utf8))
 
-        let (status, _, _) = try await post(
+        let (status, data, headers) = try await post(
             path: "/v1/audio/transcriptions",
             body: body,
             contentType: "multipart/form-data; boundary=\(boundary)")
         XCTAssertEqual(status, 400)
+        XCTAssertTrue((headers["content-type"] ?? "").contains("application/json"))
+
+        // OpenAI error envelope shape:
+        //   {"error": {"message": "...", "type": "invalid_request_error",
+        //              "code": null, "param": null}}
+        // The official openai-python / openai-node SDKs parse `error.message`
+        // as a nested object — a bare {"error": "..."} crashes their handlers.
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        let error = json?["error"] as? [String: Any]
+        XCTAssertNotNil(error, "error must be a nested object, not a bare string")
+        XCTAssertEqual(error?["type"] as? String, "invalid_request_error")
+        XCTAssertNotNil(error?["message"] as? String)
+        XCTAssertFalse((error?["message"] as? String ?? "").isEmpty)
+        // `code` and `param` must exist as keys (even if null) so SDKs that
+        // unconditionally read them don't trip on missing-key errors.
+        XCTAssertTrue(error?.keys.contains("code") ?? false)
+        XCTAssertTrue(error?.keys.contains("param") ?? false)
     }
 }
