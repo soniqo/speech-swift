@@ -217,16 +217,27 @@ public class CoreMLTextDecoder {
     }
 
     /// Get argmax token ID from logits.
+    ///
+    /// Stride-aware: walks `vocabSize` (the logical last-dim length) using
+    /// `strides.last` as the step, so this is correct for CoreML outputs
+    /// where the runtime decides to return a strided buffer (e.g. ANE
+    /// padding). NaN-safe — NaN values are skipped, so a single bad logit
+    /// can't poison the argmax (the previous flat `ptr[i]` loop combined
+    /// with `maxVal = -Float.infinity` would silently keep `maxIdx = 0`
+    /// if NaN propagated through the comparison).
     public func argmax(logits: MLMultiArray) -> Int32 {
-        let count = logits.count
+        let vocab = logits.shape.last?.intValue ?? logits.count
+        let lastStride = logits.strides.last?.intValue ?? 1
         var maxVal: Float = -Float.infinity
         var maxIdx: Int32 = 0
+        var nanCount: Int = 0
 
         switch logits.dataType {
         case .float16:
             let ptr = logits.dataPointer.assumingMemoryBound(to: Float16.self)
-            for i in 0..<count {
-                let val = Float(ptr[i])
+            for i in 0..<vocab {
+                let val = Float(ptr[i * lastStride])
+                if val.isNaN { nanCount += 1; continue }
                 if val > maxVal {
                     maxVal = val
                     maxIdx = Int32(i)
@@ -234,40 +245,55 @@ public class CoreMLTextDecoder {
             }
         case .float32:
             let ptr = logits.dataPointer.assumingMemoryBound(to: Float.self)
-            for i in 0..<count {
-                if ptr[i] > maxVal {
-                    maxVal = ptr[i]
+            for i in 0..<vocab {
+                let val = ptr[i * lastStride]
+                if val.isNaN { nanCount += 1; continue }
+                if val > maxVal {
+                    maxVal = val
                     maxIdx = Int32(i)
                 }
             }
         default:
             let ptr = logits.dataPointer.assumingMemoryBound(to: Float.self)
-            for i in 0..<count {
-                if ptr[i] > maxVal {
-                    maxVal = ptr[i]
+            for i in 0..<vocab {
+                let val = ptr[i * lastStride]
+                if val.isNaN { nanCount += 1; continue }
+                if val > maxVal {
+                    maxVal = val
                     maxIdx = Int32(i)
                 }
             }
         }
 
         // Diagnostic logging for the Magpie ASR-roundtrip CI failure where
-        // argmax appears to pick low-id tokens (likely strided MLMultiArray
-        // with non-unit stride[-1]). Opt-in via `SPEECH_DEBUG_ARGMAX=1`.
-        // Logs full layout once + the first 8 picked tokens, then goes quiet.
+        // the local Mac (macOS 16, warm cache) passes cleanly but the
+        // GitHub-hosted macos-15 runner produces low-id byte-BPE garbage.
+        // Writes to stderr because XCTest swallows stdout from library code
+        // — only stderr surfaces in CI streaming logs alongside XCTAssert
+        // failure messages. Opt-in via `SPEECH_DEBUG_ARGMAX=1`. Remove once
+        // we have a confirmed root cause and the fix has stabilised.
         if ProcessInfo.processInfo.environment["SPEECH_DEBUG_ARGMAX"] == "1" {
             if debugArgmaxCallCount == 0 {
-                print("[SPEECH_DEBUG_ARGMAX] logits.shape=\(logits.shape) " +
-                      "strides=\(logits.strides) dataType=\(logits.dataType.rawValue) " +
-                      "count=\(count) vocabSize=\(vocabSize)")
+                Self.debugLog("[ARGMAX] shape=\(logits.shape) strides=\(logits.strides) " +
+                              "dtype=\(logits.dataType.rawValue) vocab=\(vocab) " +
+                              "lastStride=\(lastStride) vocabSize=\(vocabSize) " +
+                              "nans=\(nanCount)")
             }
-            if debugArgmaxCallCount < 8 {
-                print("[SPEECH_DEBUG_ARGMAX] call=\(debugArgmaxCallCount) " +
-                      "pickedToken=\(maxIdx) maxVal=\(maxVal)")
+            if debugArgmaxCallCount < 12 {
+                Self.debugLog("[ARGMAX] call=\(debugArgmaxCallCount) " +
+                              "picked=\(maxIdx) max=\(maxVal) nans=\(nanCount)")
             }
             debugArgmaxCallCount += 1
         }
 
         return maxIdx
+    }
+
+    /// Write a debug line to stderr, unbuffered, so it survives XCTest's
+    /// stdout capture in CI.
+    internal static func debugLog(_ message: String) {
+        guard let data = (message + "\n").data(using: .utf8) else { return }
+        FileHandle.standardError.write(data)
     }
 
     // MARK: - Audio Embedding Injection
@@ -288,6 +314,21 @@ public class CoreMLTextDecoder {
         for i in 0..<hidden {
             ptr[i] = data[i]
         }
+
+        // Diagnostic for the Magpie ASR-roundtrip CI failure — verify the
+        // MLX→MLMultiArray bridge produces reasonable values on the runner
+        // (e.g. not all-zero / NaN from a cold-Metal initialisation glitch).
+        // Opt-in via `SPEECH_DEBUG_ARGMAX=1`. Stderr so it survives XCTest.
+        if index < 3 && ProcessInfo.processInfo.environment["SPEECH_DEBUG_ARGMAX"] == "1" {
+            let absMax = data.map { abs($0) }.max() ?? 0
+            let mean = data.reduce(0, +) / Float(data.count)
+            let nz = data.filter { $0 != 0 }.count
+            let nans = data.filter { $0.isNaN }.count
+            Self.debugLog("[AUDIO-EMB] idx=\(index) shape=\(embedding.shape) " +
+                          "hidden=\(hidden) absMax=\(absMax) mean=\(mean) " +
+                          "nonZero=\(nz)/\(data.count) nans=\(nans)")
+        }
+
         return result
     }
 
