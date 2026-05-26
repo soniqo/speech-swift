@@ -628,6 +628,9 @@ let package = Package(
             name: "AudioServerTests",
             dependencies: [
                 "AudioServer"
+            ],
+            resources: [
+                .copy("Resources/test_audio.wav")
             ]
         ),
         .testTarget(

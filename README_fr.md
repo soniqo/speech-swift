@@ -163,7 +163,7 @@ speech transcribe recording.wav
 speech speak "Hello world"
 speech translate "Hello, how are you?" --to es
 speech respond --input question.wav --transcript
-speech-server --port 8080            # serveur HTTP / WebSocket local (OpenAI-compatible /v1/realtime)
+speech-server --port 8080            # serveur HTTP / WebSocket local (OpenAI-compatible /v1/realtime + /v1/audio/transcriptions)
 ```
 
 **[Reference CLI complete →](https://soniqo.audio/fr/cli)**
@@ -359,7 +359,7 @@ pipeline.pushAudio(micSamples)
 speech-server --port 8080
 ```
 
-Expose chaque modele via des endpoints HTTP REST + WebSocket, y compris un WebSocket compatible OpenAI Realtime API sur `/v1/realtime`. Voir [`Sources/AudioServer/`](Sources/AudioServer/).
+Expose chaque modele via des endpoints HTTP REST + WebSocket, y compris des APIs compatibles OpenAI : un WebSocket Realtime sur `/v1/realtime` et un endpoint REST de transcription sur `/v1/audio/transcriptions`. Voir [`Sources/AudioServer/`](Sources/AudioServer/).
 
 ## Architecture
 

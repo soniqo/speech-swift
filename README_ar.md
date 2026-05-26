@@ -215,7 +215,7 @@ speech transcribe recording.wav
 speech speak "Hello world"
 speech translate "Hello, how are you?" --to es
 speech respond --input question.wav --transcript
-speech-server --port 8080            # خادم HTTP / WebSocket محلي (متوافق مع OpenAI /v1/realtime)
+speech-server --port 8080            # خادم HTTP / WebSocket محلي (متوافق مع OpenAI /v1/realtime + /v1/audio/transcriptions)
 ```
 
 <div dir="rtl">
@@ -447,7 +447,7 @@ speech-server --port 8080
 
 <div dir="rtl">
 
-يعرض كل نموذج عبر نقاط نهاية HTTP REST + WebSocket، بما في ذلك WebSocket متوافق مع OpenAI Realtime API على `/v1/realtime`. انظر [`Sources/AudioServer/`](Sources/AudioServer/).
+يعرض كل نموذج عبر نقاط نهاية HTTP REST + WebSocket، بما في ذلك واجهات برمجة متوافقة مع OpenAI: WebSocket Realtime على `/v1/realtime` ونقطة نهاية REST للنسخ الصوتي على `/v1/audio/transcriptions`. انظر [`Sources/AudioServer/`](Sources/AudioServer/).
 
 </div>
 

@@ -61,6 +61,10 @@ public struct AudioServer {
                 body: .init(byteBuffer: .init(string: "{\"status\":\"ok\"}")))
         }
 
+        router.post("/v1/audio/transcriptions") { request, _ in
+            try await handleOpenAITranscriptions(request: request, state: state)
+        }
+
         router.post("/transcribe") { request, _ in
             let body = try await request.body.collect(upTo: 50 * 1024 * 1024)
             let params = try RequestParams.parse(body, contentType: request.headers[.contentType])

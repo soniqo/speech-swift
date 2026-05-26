@@ -163,7 +163,7 @@ speech transcribe recording.wav
 speech speak "Hello world"
 speech translate "Hello, how are you?" --to es
 speech respond --input question.wav --transcript
-speech-server --port 8080            # máy chủ HTTP / WebSocket cục bộ (tương thích OpenAI /v1/realtime)
+speech-server --port 8080            # máy chủ HTTP / WebSocket cục bộ (tương thích OpenAI /v1/realtime + /v1/audio/transcriptions)
 ```
 
 **[Tài liệu CLI đầy đủ →](https://soniqo.audio/cli)**
@@ -357,7 +357,7 @@ pipeline.pushAudio(micSamples)
 speech-server --port 8080
 ```
 
-Cung cấp mỗi mô hình thông qua endpoint HTTP REST + WebSocket, bao gồm WebSocket tương thích OpenAI Realtime API tại `/v1/realtime`. Xem [`Sources/AudioServer/`](Sources/AudioServer/).
+Cung cấp mỗi mô hình thông qua endpoint HTTP REST + WebSocket, bao gồm các API tương thích OpenAI: Realtime WebSocket tại `/v1/realtime` và endpoint REST phiên âm tại `/v1/audio/transcriptions`. Xem [`Sources/AudioServer/`](Sources/AudioServer/).
 
 ## Kiến trúc
 

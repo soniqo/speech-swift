@@ -163,7 +163,7 @@ speech transcribe recording.wav
 speech speak "Hello world"
 speech translate "Hello, how are you?" --to es
 speech respond --input question.wav --transcript
-speech-server --port 8080            # 로컬 HTTP / WebSocket 서버 (OpenAI 호환 /v1/realtime)
+speech-server --port 8080            # 로컬 HTTP / WebSocket 서버 (OpenAI 호환 /v1/realtime + /v1/audio/transcriptions)
 ```
 
 **[전체 CLI 레퍼런스 →](https://soniqo.audio/ko/cli)**
@@ -359,7 +359,7 @@ pipeline.pushAudio(micSamples)
 speech-server --port 8080
 ```
 
-HTTP REST + WebSocket 엔드포인트로 모든 모델을 공개합니다. OpenAI Realtime API 호환 WebSocket `/v1/realtime`도 포함됩니다. [`Sources/AudioServer/`](Sources/AudioServer/)를 참조하세요.
+HTTP REST + WebSocket 엔드포인트로 모든 모델을 공개합니다. OpenAI 호환 API로 `/v1/realtime`의 Realtime WebSocket과 `/v1/audio/transcriptions`의 음성 인식 REST 엔드포인트가 포함됩니다. [`Sources/AudioServer/`](Sources/AudioServer/)를 참조하세요.
 
 ## 아키텍처
 

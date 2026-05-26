@@ -163,7 +163,7 @@ speech transcribe recording.wav
 speech speak "Hello world"
 speech translate "Hello, how are you?" --to es
 speech respond --input question.wav --transcript
-speech-server --port 8080            # ローカル HTTP / WebSocket サーバー（OpenAI 互換 /v1/realtime）
+speech-server --port 8080            # ローカル HTTP / WebSocket サーバー（OpenAI 互換 /v1/realtime + /v1/audio/transcriptions）
 ```
 
 **[完全なCLIリファレンス →](https://soniqo.audio/ja/cli)**
@@ -359,7 +359,7 @@ pipeline.pushAudio(micSamples)
 speech-server --port 8080
 ```
 
-HTTP REST + WebSocketエンドポイントですべてのモデルを公開します。OpenAI Realtime API互換のWebSocket `/v1/realtime` も含まれます。[`Sources/AudioServer/`](Sources/AudioServer/) を参照してください。
+HTTP REST + WebSocketエンドポイントですべてのモデルを公開します。OpenAI 互換 API として `/v1/realtime` の Realtime WebSocket と `/v1/audio/transcriptions` の文字起こし REST エンドポイントを含みます。[`Sources/AudioServer/`](Sources/AudioServer/) を参照してください。
 
 ## アーキテクチャ
 
