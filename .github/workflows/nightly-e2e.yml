@@ -1,0 +1,129 @@
+name: Nightly E2E
+
+# Runs the full E2E test suite with real model downloads from HuggingFace.
+# PR/push CI (`tests.yml`) deliberately skips these because each shard
+# downloads multi-GB models and runs real MLX/CoreML inference.
+#
+# Rollout: starts with 6 light shards (~1 GB of models each). Heavy shards
+# (Qwen3-TTS, PersonaPlex, VibeVoice, VoxCPM2 bf16, Omnilingual 7B, etc.)
+# will be added once we've seen the workflow + Discord notify pass green.
+
+on:
+  schedule:
+    # 20:00 UTC = 21:00 CET (22:00 CEST during summer time).
+    # GitHub cron uses UTC and does not observe DST — adjust if you
+    # want the wall-clock time pinned to summer instead of winter.
+    - cron: '0 20 * * *'
+  workflow_dispatch:
+    inputs:
+      shard:
+        description: 'Run a single shard (regex matching matrix shard name); leave blank for all'
+        required: false
+        default: ''
+
+concurrency:
+  group: nightly-e2e
+  cancel-in-progress: false
+
+jobs:
+  e2e:
+    runs-on: macos-15
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          # Filter is a swift-test regex matched against target/class/method
+          # names. Targets in the matrix below pull in the entire module's
+          # tests (E2E + unit), which is the intended nightly coverage.
+          - name: light-coreml
+            filter: 'KokoroTTSTests|ParakeetASRTests|ParakeetStreamingASRTests|MagpieTTSCoreMLTests|SpeechEnhancementTests|SpeechWakeWordTests'
+          - name: vad-diar
+            filter: 'SpeechVADTests'
+          - name: audio-infra
+            filter: 'AudioCommonTests|AudioServerTests|SpeechUITests'
+          - name: qwen3-chat
+            filter: 'Qwen3ChatTests'
+          - name: qwen3-asr
+            filter: 'Qwen3ASRTests'
+          - name: cosyvoice
+            filter: 'CosyVoiceTTSTests'
+
+    name: ${{ matrix.shard.name }}
+    steps:
+      - name: Skip non-matching shard (workflow_dispatch with shard input)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.shard != '' && !contains(matrix.shard.name, github.event.inputs.shard)
+        run: |
+          echo "Skipping ${{ matrix.shard.name }} — manual run filtered to '${{ github.event.inputs.shard }}'"
+          exit 0
+
+      - uses: actions/checkout@v4
+
+      - name: Cache SwiftPM build
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: spm-nightly-${{ runner.os }}-${{ hashFiles('Package.swift', 'Package.resolved') }}
+          restore-keys: |
+            spm-nightly-${{ runner.os }}-
+            spm-${{ runner.os }}-
+
+      - name: Build debug + tests
+        run: swift build --build-tests --disable-sandbox
+
+      - name: Build MLX metallib
+        run: ./scripts/build_mlx_metallib.sh debug
+
+      - name: Copy metallib into test bundles
+        run: |
+          ARCH="$(uname -m)-apple-macosx"
+          for BUNDLE in .build/$ARCH/debug/*.xctest/Contents/MacOS; do
+            [ -d "$BUNDLE" ] && cp .build/debug/mlx.metallib "$BUNDLE/" 2>/dev/null || true
+          done
+
+      - name: Disk space before tests
+        run: df -h /
+
+      - name: Run E2E tests
+        run: swift test --skip-build --filter "${{ matrix.shard.filter }}"
+
+      - name: Disk space after tests
+        if: always()
+        run: df -h /
+
+      - name: Show model cache footprint
+        if: always()
+        run: |
+          du -sh ~/Library/Caches/qwen3-speech 2>/dev/null || echo "(no cache)"
+
+  notify:
+    name: Discord notify (on failure)
+    needs: e2e
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post failure to Discord
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SHA: ${{ github.sha }}
+          REF: ${{ github.ref_name }}
+        run: |
+          PAYLOAD=$(jq -n \
+            --arg url "$RUN_URL" \
+            --arg sha "${SHA:0:7}" \
+            --arg ref "$REF" \
+            '{
+              username: "Nightly E2E",
+              embeds: [{
+                title: "Nightly E2E failed",
+                url: $url,
+                color: 15158332,
+                fields: [
+                  {name: "Branch", value: $ref, inline: true},
+                  {name: "Commit", value: $sha, inline: true}
+                ],
+                footer: {text: "One or more shards failed — click title for details"}
+              }]
+            }')
+          curl -fsS -H "Content-Type: application/json" -d "$PAYLOAD" "$WEBHOOK"
