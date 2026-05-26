@@ -26,6 +26,10 @@ public class CoreMLTextDecoder {
     /// Current position in the KV cache (incremented per step).
     private var currentPosition: Int = 0
 
+    /// Number of times `argmax` has been called since process start. Used to
+    /// throttle diagnostic logging (see `SPEECH_DEBUG_ARGMAX`).
+    private var debugArgmaxCallCount: Int = 0
+
     public static let defaultModelId = "aufklarer/Qwen3-ASR-CoreML"
 
     public init(
@@ -245,6 +249,24 @@ public class CoreMLTextDecoder {
                 }
             }
         }
+
+        // Diagnostic logging for the Magpie ASR-roundtrip CI failure where
+        // argmax appears to pick low-id tokens (likely strided MLMultiArray
+        // with non-unit stride[-1]). Opt-in via `SPEECH_DEBUG_ARGMAX=1`.
+        // Logs full layout once + the first 8 picked tokens, then goes quiet.
+        if ProcessInfo.processInfo.environment["SPEECH_DEBUG_ARGMAX"] == "1" {
+            if debugArgmaxCallCount == 0 {
+                print("[SPEECH_DEBUG_ARGMAX] logits.shape=\(logits.shape) " +
+                      "strides=\(logits.strides) dataType=\(logits.dataType.rawValue) " +
+                      "count=\(count) vocabSize=\(vocabSize)")
+            }
+            if debugArgmaxCallCount < 8 {
+                print("[SPEECH_DEBUG_ARGMAX] call=\(debugArgmaxCallCount) " +
+                      "pickedToken=\(maxIdx) maxVal=\(maxVal)")
+            }
+            debugArgmaxCallCount += 1
+        }
+
         return maxIdx
     }
 

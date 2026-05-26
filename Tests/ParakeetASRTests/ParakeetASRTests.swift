@@ -107,42 +107,14 @@ final class ParakeetASRTests: XCTestCase {
 final class E2EParakeetASRTests: XCTestCase {
 
     func testModelLoading() async throws {
-        // Skip if model is not cached locally
-        let modelId = ParakeetASRModel.defaultModelId
-        let cacheDir: URL
-        do {
-            cacheDir = try HuggingFaceDownloader.getCacheDirectory(for: modelId)
-        } catch {
-            throw XCTSkip("Cannot resolve cache directory: \(error)")
-        }
-
-        let encoderPath = cacheDir.appendingPathComponent("encoder.mlmodelc")
-        guard FileManager.default.fileExists(atPath: encoderPath.path) else {
-            throw XCTSkip("Parakeet model not cached at \(cacheDir.path)")
-        }
-
-        let model = try await ParakeetASRModel.fromPretrained(modelId: modelId)
+        let model = try await ParakeetASRModel.fromPretrained(modelId: ParakeetASRModel.defaultModelId)
         XCTAssertEqual(model.config.sampleRate, 16000)
         XCTAssertEqual(model.config.encoderHidden, 1024)
     }
 
     func testTranscription() async throws {
-        let modelId = ParakeetASRModel.defaultModelId
-        let cacheDir: URL
-        do {
-            cacheDir = try HuggingFaceDownloader.getCacheDirectory(for: modelId)
-        } catch {
-            throw XCTSkip("Cannot resolve cache directory: \(error)")
-        }
+        let model = try await ParakeetASRModel.fromPretrained(modelId: ParakeetASRModel.defaultModelId)
 
-        let encoderPath = cacheDir.appendingPathComponent("encoder.mlmodelc")
-        guard FileManager.default.fileExists(atPath: encoderPath.path) else {
-            throw XCTSkip("Parakeet model not cached at \(cacheDir.path)")
-        }
-
-        let model = try await ParakeetASRModel.fromPretrained(modelId: modelId)
-
-        // Load test audio
         guard let audioURL = Bundle.module.url(forResource: "test_audio", withExtension: "wav") else {
             throw XCTSkip("test_audio.wav not found in test resources")
         }
@@ -159,20 +131,7 @@ final class E2EParakeetASRTests: XCTestCase {
     }
 
     func testWordConfidenceFromRealAudio() async throws {
-        let modelId = ParakeetASRModel.defaultModelId
-        let cacheDir: URL
-        do {
-            cacheDir = try HuggingFaceDownloader.getCacheDirectory(for: modelId)
-        } catch {
-            throw XCTSkip("Cannot resolve cache directory: \(error)")
-        }
-
-        let encoderPath = cacheDir.appendingPathComponent("encoder.mlmodelc")
-        guard FileManager.default.fileExists(atPath: encoderPath.path) else {
-            throw XCTSkip("Parakeet model not cached at \(cacheDir.path)")
-        }
-
-        let model = try await ParakeetASRModel.fromPretrained(modelId: modelId)
+        let model = try await ParakeetASRModel.fromPretrained(modelId: ParakeetASRModel.defaultModelId)
 
         guard let audioURL = Bundle.module.url(forResource: "test_audio", withExtension: "wav") else {
             throw XCTSkip("test_audio.wav not found in test resources")
@@ -212,7 +171,7 @@ final class E2EParakeetASRTests: XCTestCase {
     }
 
     func testGermanTranscription() async throws {
-        let model = try await loadParakeetModel()
+        let model = try await ParakeetASRModel.fromPretrained(modelId: ParakeetASRModel.defaultModelId)
 
         guard let audioURL = Bundle.module.url(forResource: "test_audio_german", withExtension: "wav") else {
             throw XCTSkip("test_audio_german.wav not found in test resources")
@@ -229,38 +188,8 @@ final class E2EParakeetASRTests: XCTestCase {
         print("German transcription: \(result)")
     }
 
-    // MARK: - Helpers
-
-    private func loadParakeetModel() async throws -> ParakeetASRModel {
-        let modelId = ParakeetASRModel.defaultModelId
-        let cacheDir: URL
-        do {
-            cacheDir = try HuggingFaceDownloader.getCacheDirectory(for: modelId)
-        } catch {
-            throw XCTSkip("Cannot resolve cache directory: \(error)")
-        }
-        let encoderPath = cacheDir.appendingPathComponent("encoder.mlmodelc")
-        guard FileManager.default.fileExists(atPath: encoderPath.path) else {
-            throw XCTSkip("Parakeet model not cached at \(cacheDir.path)")
-        }
-        return try await ParakeetASRModel.fromPretrained(modelId: modelId)
-    }
-
     func testWarmup() async throws {
-        let modelId = ParakeetASRModel.defaultModelId
-        let cacheDir: URL
-        do {
-            cacheDir = try HuggingFaceDownloader.getCacheDirectory(for: modelId)
-        } catch {
-            throw XCTSkip("Cannot resolve cache directory: \(error)")
-        }
-
-        let encoderPath = cacheDir.appendingPathComponent("encoder.mlmodelc")
-        guard FileManager.default.fileExists(atPath: encoderPath.path) else {
-            throw XCTSkip("Parakeet model not cached at \(cacheDir.path)")
-        }
-
-        let model = try await ParakeetASRModel.fromPretrained(modelId: modelId)
+        let model = try await ParakeetASRModel.fromPretrained(modelId: ParakeetASRModel.defaultModelId)
 
         guard let audioURL = Bundle.module.url(forResource: "test_audio", withExtension: "wav") else {
             throw XCTSkip("test_audio.wav not found in test resources")
@@ -299,20 +228,7 @@ final class E2EParakeetASRTests: XCTestCase {
     // MARK: - Performance Tests
 
     func testTranscriptionLatency() async throws {
-        let modelId = ParakeetASRModel.defaultModelId
-        let cacheDir: URL
-        do {
-            cacheDir = try HuggingFaceDownloader.getCacheDirectory(for: modelId)
-        } catch {
-            throw XCTSkip("Cannot resolve cache directory: \(error)")
-        }
-
-        let encoderPath = cacheDir.appendingPathComponent("encoder.mlmodelc")
-        guard FileManager.default.fileExists(atPath: encoderPath.path) else {
-            throw XCTSkip("Parakeet model not cached at \(cacheDir.path)")
-        }
-
-        let model = try await ParakeetASRModel.fromPretrained(modelId: modelId)
+        let model = try await ParakeetASRModel.fromPretrained(modelId: ParakeetASRModel.defaultModelId)
 
         guard let audioURL = Bundle.module.url(forResource: "test_audio", withExtension: "wav") else {
             throw XCTSkip("test_audio.wav not found in test resources")

@@ -4,7 +4,7 @@ name: Nightly E2E
 # PR/push CI (`tests.yml`) deliberately skips these because each shard
 # downloads multi-GB models and runs real MLX/CoreML inference.
 #
-# Rollout: starts with 6 light shards (~1 GB of models each). Heavy shards
+# Rollout: starts with light shards (~1-3 GB models each). Heavy shards
 # (Qwen3-TTS, PersonaPlex, VibeVoice, VoxCPM2 bf16, Omnilingual 7B, etc.)
 # will be added once we've seen the workflow + Discord notify pass green.
 
@@ -33,23 +33,58 @@ jobs:
       fail-fast: false
       matrix:
         shard:
-          # Filter is a swift-test regex matched against target/class/method
-          # names. Targets in the matrix below pull in the entire module's
-          # tests (E2E + unit), which is the intended nightly coverage.
+          # `filter` and `skip` are swift-test regexes matched against
+          # target/class/method names. Targets like `Qwen3ASRTests` pull in
+          # the entire module's tests (E2E + unit). Use `skip` to peel heavy
+          # methods off into their own shard.
           - name: light-coreml
             filter: 'KokoroTTSTests|ParakeetASRTests|ParakeetStreamingASRTests|MagpieTTSCoreMLTests|SpeechEnhancementTests|SpeechWakeWordTests'
+            skip: ''
           - name: vad-diar
             filter: 'SpeechVADTests'
+            skip: ''
           - name: audio-infra
             filter: 'AudioCommonTests|AudioServerTests|SpeechUITests'
+            skip: ''
           - name: qwen3-chat
             filter: 'Qwen3ChatTests'
-          - name: qwen3-asr
+            skip: ''
+          # qwen3-asr was a single shard in the first nightly and OOM-killed
+          # the runner (~8 GB unique-weight footprint vs ~7 GB usable RAM on
+          # macos-15). Split into 4 sub-shards so each xctest process loads
+          # a bounded set of model variants.
+          - name: qwen3-asr-06b
             filter: 'Qwen3ASRTests'
+            # Peel off 1.7B, 8-bit, aligner, and streaming into their own
+            # shards; this one runs unit tests + 0.6B-4bit E2E + decoding.
+            skip: 'testLargeModel|testSmall8bit|ForcedAlignerTests|StreamingASRTests'
+          - name: qwen3-asr-17b
+            # Matches both `testLargeModel*` (1.7B-MLX-8bit) and
+            # `testSmall8bit*` (0.6B-MLX-8bit) methods inside
+            # E2EQwen3ASRIntegrationTests.
+            filter: 'testLargeModel|testSmall8bit'
+            skip: ''
+          - name: qwen3-asr-aligner
+            # 4-bit and bf16 forced-aligner variants — bf16 alone is ~2.3 GB
+            # working set, so keep isolated from main ASR shards.
+            filter: 'ForcedAlignerTests'
+            skip: ''
+          - name: qwen3-asr-streaming
+            # StreamingASR loads ASR-0.6B-4bit + SileroVAD per test method;
+            # 3 methods × fresh load = enough memory churn to deserve isolation.
+            filter: 'StreamingASRTests'
+            skip: ''
           - name: cosyvoice
             filter: 'CosyVoiceTTSTests'
+            skip: ''
 
     name: ${{ matrix.shard.name }}
+    env:
+      # Temporary diagnostic for the Magpie ASR-roundtrip failure in
+      # `light-coreml`. CoreMLASRModel.transcribe logs logits shape/strides
+      # /dtype + first 5 picked token IDs on first call when this is set.
+      # Remove once the strides hypothesis is confirmed and fixed.
+      SPEECH_DEBUG_ARGMAX: '1'
     steps:
       - name: Skip non-matching shard (workflow_dispatch with shard input)
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.shard != '' && !contains(matrix.shard.name, github.event.inputs.shard)
@@ -85,7 +120,12 @@ jobs:
         run: df -h /
 
       - name: Run E2E tests
-        run: swift test --skip-build --filter "${{ matrix.shard.filter }}"
+        run: |
+          if [ -n "${{ matrix.shard.skip }}" ]; then
+            swift test --skip-build --filter "${{ matrix.shard.filter }}" --skip "${{ matrix.shard.skip }}"
+          else
+            swift test --skip-build --filter "${{ matrix.shard.filter }}"
+          fi
 
       - name: Disk space after tests
         if: always()
