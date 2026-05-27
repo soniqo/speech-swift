@@ -93,30 +93,12 @@ public class CoreMLASRModel {
         language: String? = nil,
         maxTokens: Int = 448
     ) throws -> String {
-        // Diagnostic for the Magpie ASR-roundtrip CI failure — confirms the
-        // incoming audio buffer is real (not silent / NaN from a broken
-        // upstream TTS). Opt-in via `SPEECH_DEBUG_ARGMAX=1`. Stderr so it
-        // survives XCTest's stdout capture.
-        if ProcessInfo.processInfo.environment["SPEECH_DEBUG_ARGMAX"] == "1" {
-            let peak = audio.map { abs($0) }.max() ?? 0
-            let rms = sqrt(audio.map { $0 * $0 }.reduce(0, +) / Float(audio.count))
-            let nans = audio.filter { $0.isNaN }.count
-            CoreMLTextDecoder.debugLog("[ASR-IN] count=\(audio.count) sr=\(sampleRate) " +
-                "lang=\(language ?? "nil") peak=\(peak) rms=\(rms) nans=\(nans) " +
-                "duration=\(Float(audio.count)/Float(sampleRate))s")
-        }
-
         // Extract mel features
         let melFeatures = featureExtractor.process(audio, sampleRate: sampleRate)
 
         // Encode audio → embeddings [1, T/8, 1024]
         let audioEmbeds = try encoder.encode(melFeatures)
         let numAudioTokens = audioEmbeds.dim(1)
-
-        if ProcessInfo.processInfo.environment["SPEECH_DEBUG_ARGMAX"] == "1" {
-            CoreMLTextDecoder.debugLog("[ASR-ENC] mel.shape=\(melFeatures.shape) " +
-                "audioEmbeds.shape=\(audioEmbeds.shape) numAudioTokens=\(numAudioTokens)")
-        }
 
         // Reset decoder KV cache
         decoder.resetCache()

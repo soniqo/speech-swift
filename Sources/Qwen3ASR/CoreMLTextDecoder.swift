@@ -26,10 +26,6 @@ public class CoreMLTextDecoder {
     /// Current position in the KV cache (incremented per step).
     private var currentPosition: Int = 0
 
-    /// Number of times `argmax` has been called since process start. Used to
-    /// throttle diagnostic logging (see `SPEECH_DEBUG_ARGMAX`).
-    private var debugArgmaxCallCount: Int = 0
-
     public static let defaultModelId = "aufklarer/Qwen3-ASR-CoreML"
 
     public init(
@@ -265,35 +261,7 @@ public class CoreMLTextDecoder {
             }
         }
 
-        // Diagnostic logging for the Magpie ASR-roundtrip CI failure where
-        // the local Mac (macOS 16, warm cache) passes cleanly but the
-        // GitHub-hosted macos-15 runner produces low-id byte-BPE garbage.
-        // Writes to stderr because XCTest swallows stdout from library code
-        // — only stderr surfaces in CI streaming logs alongside XCTAssert
-        // failure messages. Opt-in via `SPEECH_DEBUG_ARGMAX=1`. Remove once
-        // we have a confirmed root cause and the fix has stabilised.
-        if ProcessInfo.processInfo.environment["SPEECH_DEBUG_ARGMAX"] == "1" {
-            if debugArgmaxCallCount == 0 {
-                Self.debugLog("[ARGMAX] shape=\(logits.shape) strides=\(logits.strides) " +
-                              "dtype=\(logits.dataType.rawValue) vocab=\(vocab) " +
-                              "lastStride=\(lastStride) vocabSize=\(vocabSize) " +
-                              "nans=\(nanCount)")
-            }
-            if debugArgmaxCallCount < 12 {
-                Self.debugLog("[ARGMAX] call=\(debugArgmaxCallCount) " +
-                              "picked=\(maxIdx) max=\(maxVal) nans=\(nanCount)")
-            }
-            debugArgmaxCallCount += 1
-        }
-
         return maxIdx
-    }
-
-    /// Write a debug line to stderr, unbuffered, so it survives XCTest's
-    /// stdout capture in CI.
-    internal static func debugLog(_ message: String) {
-        guard let data = (message + "\n").data(using: .utf8) else { return }
-        FileHandle.standardError.write(data)
     }
 
     // MARK: - Audio Embedding Injection
@@ -313,20 +281,6 @@ public class CoreMLTextDecoder {
         let data: [Float] = slice.asArray(Float.self)
         for i in 0..<hidden {
             ptr[i] = data[i]
-        }
-
-        // Diagnostic for the Magpie ASR-roundtrip CI failure — verify the
-        // MLX→MLMultiArray bridge produces reasonable values on the runner
-        // (e.g. not all-zero / NaN from a cold-Metal initialisation glitch).
-        // Opt-in via `SPEECH_DEBUG_ARGMAX=1`. Stderr so it survives XCTest.
-        if index < 3 && ProcessInfo.processInfo.environment["SPEECH_DEBUG_ARGMAX"] == "1" {
-            let absMax = data.map { abs($0) }.max() ?? 0
-            let mean = data.reduce(0, +) / Float(data.count)
-            let nz = data.filter { $0 != 0 }.count
-            let nans = data.filter { $0.isNaN }.count
-            Self.debugLog("[AUDIO-EMB] idx=\(index) shape=\(embedding.shape) " +
-                          "hidden=\(hidden) absMax=\(absMax) mean=\(mean) " +
-                          "nonZero=\(nz)/\(data.count) nans=\(nans)")
         }
 
         return result

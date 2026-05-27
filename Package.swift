@@ -601,7 +601,8 @@ let package = Package(
                 "MagpieTTS",
                 "Qwen3ASR",
                 "AudioCommon",
-            ]
+            ],
+            resources: [.process("Resources")]
         ),
         .testTarget(
             name: "Qwen3ChatTests",

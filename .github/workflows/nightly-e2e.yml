@@ -79,12 +79,6 @@ jobs:
             skip: ''
 
     name: ${{ matrix.shard.name }}
-    env:
-      # Temporary diagnostic for the Magpie ASR-roundtrip failure in
-      # `light-coreml`. CoreMLASRModel.transcribe logs logits shape/strides
-      # /dtype + first 5 picked token IDs on first call when this is set.
-      # Remove once the strides hypothesis is confirmed and fixed.
-      SPEECH_DEBUG_ARGMAX: '1'
     steps:
       - name: Skip non-matching shard (workflow_dispatch with shard input)
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.shard != '' && !contains(matrix.shard.name, github.event.inputs.shard)
