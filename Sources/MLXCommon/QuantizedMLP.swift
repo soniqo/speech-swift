@@ -29,3 +29,27 @@ public class QuantizedMLP: Module {
         return downProj(gate * up)
     }
 }
+
+/// SwiGLU MLP with `Linear` projections — used by modules that need to
+/// support both bf16/fp16 and quantized bundles. The runtime swaps
+/// Linear → QuantizedLinear in place via `quantize(model:filter:)` when
+/// the loaded weights carry `.scales` for these paths.
+public class MLP: Module {
+    @ModuleInfo public var gateProj: Linear
+    @ModuleInfo public var upProj: Linear
+    @ModuleInfo public var downProj: Linear
+
+    public init(hiddenSize: Int, intermediateSize: Int) {
+        self._gateProj.wrappedValue = Linear(hiddenSize, intermediateSize, bias: false)
+        self._upProj.wrappedValue = Linear(hiddenSize, intermediateSize, bias: false)
+        self._downProj.wrappedValue = Linear(intermediateSize, hiddenSize, bias: false)
+
+        super.init()
+    }
+
+    public func callAsFunction(_ x: MLXArray) -> MLXArray {
+        let gate = silu(gateProj(x))
+        let up = upProj(x)
+        return downProj(gate * up)
+    }
+}

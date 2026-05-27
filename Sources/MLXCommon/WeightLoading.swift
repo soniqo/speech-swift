@@ -218,6 +218,36 @@ public enum CommonWeightLoader {
         applyQuantizedLinearWeights(to: mlp.upProj, prefix: "\(prefix).up_proj", from: weights)
         applyQuantizedLinearWeights(to: mlp.downProj, prefix: "\(prefix).down_proj", from: weights)
     }
+
+    /// Apply MLP weights (SwiGLU) — dispatches to quantized or plain
+    /// projections per-leaf based on `.scales` presence. Use when the
+    /// surrounding module was declared with `Linear` and may have been
+    /// swapped to `QuantizedLinear` by `quantize(model:filter:)`.
+    public static func applyMLPWeights(
+        to mlp: MLP,
+        prefix: String,
+        from weights: [String: MLXArray]
+    ) {
+        applyMaybeQuantizedLinearWeights(to: mlp.gateProj, prefix: "\(prefix).gate_proj", from: weights)
+        applyMaybeQuantizedLinearWeights(to: mlp.upProj, prefix: "\(prefix).up_proj", from: weights)
+        applyMaybeQuantizedLinearWeights(to: mlp.downProj, prefix: "\(prefix).down_proj", from: weights)
+    }
+
+    /// Apply weights to a `Linear` that may have been swapped to
+    /// `QuantizedLinear`. Picks the right keys (`weight`, optional `bias`
+    /// for plain Linear; plus `scales`, `biases` when quantized) based on
+    /// what is present in the safetensors.
+    public static func applyMaybeQuantizedLinearWeights(
+        to linear: Linear,
+        prefix: String,
+        from weights: [String: MLXArray]
+    ) {
+        if weights["\(prefix).scales"] != nil, let q = linear as? QuantizedLinear {
+            applyQuantizedLinearWeights(to: q, prefix: prefix, from: weights)
+        } else {
+            applyLinearWeights(to: linear, prefix: prefix, from: weights)
+        }
+    }
 }
 
 /// Weight loading errors

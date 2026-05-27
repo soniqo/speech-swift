@@ -56,11 +56,31 @@ Three-stage pipeline: LLM → DiT Flow Matching → HiFi-GAN Vocoder → 24kHz a
 
 ## Weight Conversion
 - Source: FunAudioLLM/Fun-CosyVoice3-0.5B-2512 (PyTorch .pt)
-- LLM: 4-bit quantized (group_size=64)
-- DiT Flow: bfloat16
-- HiFi-GAN: float32
+- HiFi-GAN: float32 (weight-norm folded)
 - Conv1d weights transposed: PyTorch [out,in,k] → MLX [out,k,in]
-- Total: ~1.9 GB (quantized)
+
+### Available bundles
+
+| Variant | LLM | DiT | speech_tokenizer | Total | HF repo |
+|---|---|---|---|---:|---|
+| **4-bit** (default) | int4, group=64 | bf16 | bf16 | ~1.2 GB | [aufklarer/CosyVoice3-0.5B-MLX-4bit](https://huggingface.co/aufklarer/CosyVoice3-0.5B-MLX-4bit) |
+| **8-bit** | int8, group=64 | bf16 | bf16 | ~1.4 GB | [aufklarer/CosyVoice3-0.5B-MLX-8bit](https://huggingface.co/aufklarer/CosyVoice3-0.5B-MLX-8bit) |
+| **8-bit-full** | int8, group=64 | int8, group=64 | bf16 | ~1.6 GB | [aufklarer/CosyVoice3-0.5B-MLX-8bit-full](https://huggingface.co/aufklarer/CosyVoice3-0.5B-MLX-8bit-full) |
+| **bf16** | bf16 | bf16 | bf16 | ~2.1 GB | [aufklarer/CosyVoice3-0.5B-MLX-bf16](https://huggingface.co/aufklarer/CosyVoice3-0.5B-MLX-bf16) |
+
+The runtime declares every weight-bearing matmul in the LLM and the DiT
+as `Linear`. Bundles that ship `.scales` for a given projection get a
+per-path `Linear → QuantizedLinear` swap at load time; bundles that omit
+the `quantization` block (bf16) stay in plain `Linear` form. This lets a
+single runtime serve all four variants from the same module hierarchy.
+
+Pick via the CLI:
+
+```bash
+speech speak "Hello, world" --engine cosyvoice --cosyvoice-variant bf16 -o hi.wav
+```
+
+`--model-id` still wins if you point it at a custom HF repo.
 
 ## Configuration
 Key parameters from cosyvoice3.yaml:

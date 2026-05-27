@@ -73,8 +73,11 @@ public struct SpeakCommand: ParsableCommand {
 
     // MARK: - CosyVoice-specific options
 
-    @Option(name: .long, help: "[cosyvoice] HuggingFace model ID")
-    public var modelId: String = "aufklarer/CosyVoice3-0.5B-MLX-4bit"
+    @Option(name: .long, help: "[cosyvoice] HuggingFace model ID. Set explicitly to bypass --cosyvoice-variant resolution.")
+    public var modelId: String?
+
+    @Option(name: .long, help: "[cosyvoice] Quantization variant: 4bit (default), 8bit, 8bit-full, bf16. Resolves to aufklarer/CosyVoice3-0.5B-MLX-<variant>. Ignored when --model-id is set.")
+    public var cosyvoiceVariant: String = "4bit"
 
     @Option(name: .long, help: "[cosyvoice] Speaker mapping: s1=alice.wav,s2=bob.wav")
     public var speakers: String?
@@ -771,12 +774,26 @@ public struct SpeakCommand: ParsableCommand {
 
     // MARK: - CosyVoice engine
 
+    private func resolvedCosyVoiceModelId() throws -> String {
+        if let explicit = modelId, !explicit.isEmpty { return explicit }
+        switch cosyvoiceVariant.lowercased() {
+        case "4bit":      return "aufklarer/CosyVoice3-0.5B-MLX-4bit"
+        case "8bit":      return "aufklarer/CosyVoice3-0.5B-MLX-8bit"
+        case "8bit-full": return "aufklarer/CosyVoice3-0.5B-MLX-8bit-full"
+        case "bf16":      return "aufklarer/CosyVoice3-0.5B-MLX-bf16"
+        default:
+            throw ValidationError(
+                "--cosyvoice-variant must be 4bit, 8bit, 8bit-full, or bf16 (got '\(cosyvoiceVariant)')")
+        }
+    }
+
     private func runCosyVoice() throws {
         try runAsync {
             print("Loading CosyVoice3 model...")
-            let bundleOverride = cosyBundleDir.map { URL(fileURLWithPath: $0) }
+            let resolvedId = try self.resolvedCosyVoiceModelId()
+            let bundleOverride = self.cosyBundleDir.map { URL(fileURLWithPath: $0) }
             let cosyModel = try await CosyVoiceTTSModel.fromPretrained(
-                modelId: modelId,
+                modelId: resolvedId,
                 cacheDir: bundleOverride,
                 progressHandler: reportProgress)
 
@@ -828,7 +845,7 @@ public struct SpeakCommand: ParsableCommand {
                 // reference conditioning. Bundles produced before this change
                 // won't have the file — we fall back to the spk-only path with
                 // a warning so the operator knows why cloning quality is capped.
-                let cacheDir = try HuggingFaceDownloader.getCacheDirectory(for: modelId)
+                let cacheDir = try HuggingFaceDownloader.getCacheDirectory(for: resolvedId)
                 let tokURL = cosySpeechTokenizer.map { URL(fileURLWithPath: $0) }
                     ?? cacheDir.appendingPathComponent("speech_tokenizer.safetensors")
                 if FileManager.default.fileExists(atPath: tokURL.path) {

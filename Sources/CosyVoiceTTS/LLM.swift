@@ -134,10 +134,10 @@ public class CosyVoiceAttention: Module {
     let headDim: Int
     let scale: Float
 
-    @ModuleInfo var qProj: QuantizedLinear
-    @ModuleInfo var kProj: QuantizedLinear
-    @ModuleInfo var vProj: QuantizedLinear
-    @ModuleInfo var oProj: QuantizedLinear
+    @ModuleInfo var qProj: Linear
+    @ModuleInfo var kProj: Linear
+    @ModuleInfo var vProj: Linear
+    @ModuleInfo var oProj: Linear
 
     let rope: MLXNN.RoPE
 
@@ -149,18 +149,10 @@ public class CosyVoiceAttention: Module {
 
         let hiddenSize = config.hiddenSize
 
-        self._qProj.wrappedValue = QuantizedLinear(
-            hiddenSize, numHeads * headDim, bias: true,
-            groupSize: config.groupSize, bits: config.bits)
-        self._kProj.wrappedValue = QuantizedLinear(
-            hiddenSize, numKVHeads * headDim, bias: true,
-            groupSize: config.groupSize, bits: config.bits)
-        self._vProj.wrappedValue = QuantizedLinear(
-            hiddenSize, numKVHeads * headDim, bias: true,
-            groupSize: config.groupSize, bits: config.bits)
-        self._oProj.wrappedValue = QuantizedLinear(
-            numHeads * headDim, hiddenSize, bias: false,
-            groupSize: config.groupSize, bits: config.bits)
+        self._qProj.wrappedValue = Linear(hiddenSize, numHeads * headDim, bias: true)
+        self._kProj.wrappedValue = Linear(hiddenSize, numKVHeads * headDim, bias: true)
+        self._vProj.wrappedValue = Linear(hiddenSize, numKVHeads * headDim, bias: true)
+        self._oProj.wrappedValue = Linear(numHeads * headDim, hiddenSize, bias: false)
 
         self.rope = MLXNN.RoPE(dimensions: headDim, traditional: false, base: config.ropeTheta)
 
@@ -215,20 +207,20 @@ public class CosyVoiceAttention: Module {
 // MARK: - CosyVoiceBlock
 
 /// Pre-norm transformer block for CosyVoice LLM.
-/// Uses SwiGLU MLP via QuantizedMLP from AudioCommon.
+/// Uses the Linear-based `MLP` so the bundle's quantization decides
+/// whether the gate/up/down projections stay bf16 or get swapped to
+/// `QuantizedLinear` at load time.
 public class CosyVoiceBlock: Module {
     @ModuleInfo var selfAttn: CosyVoiceAttention
-    @ModuleInfo var mlp: QuantizedMLP
+    @ModuleInfo var mlp: MLP
     @ModuleInfo var inputLayerNorm: RMSNorm
     @ModuleInfo var postAttentionLayerNorm: RMSNorm
 
     public init(config: CosyVoiceLLMConfig) {
         self._selfAttn.wrappedValue = CosyVoiceAttention(config: config)
-        self._mlp.wrappedValue = QuantizedMLP(
+        self._mlp.wrappedValue = MLP(
             hiddenSize: config.hiddenSize,
-            intermediateSize: config.intermediateSize,
-            groupSize: config.groupSize,
-            bits: config.bits)
+            intermediateSize: config.intermediateSize)
         self._inputLayerNorm.wrappedValue = RMSNorm(dimensions: config.hiddenSize, eps: config.rmsNormEps)
         self._postAttentionLayerNorm.wrappedValue = RMSNorm(dimensions: config.hiddenSize, eps: config.rmsNormEps)
 
@@ -275,7 +267,7 @@ public class CosyVoiceLLM: Module {
     @ModuleInfo var speechEmbedding: Embedding
     @ModuleInfo var layers: [CosyVoiceBlock]
     @ModuleInfo var norm: RMSNorm
-    @ModuleInfo var speechHead: QuantizedLinear
+    @ModuleInfo var speechHead: Linear
 
     /// Compiled generation step (24-layer transformer + speech head) for kernel fusion.
     /// Uses shapeless=true to handle growing KV cache without recompilation.
@@ -303,10 +295,11 @@ public class CosyVoiceLLM: Module {
         // Final layer norm
         self._norm.wrappedValue = RMSNorm(dimensions: config.hiddenSize, eps: config.rmsNormEps)
 
-        // Speech token head: project hidden states to speech vocabulary logits
-        self._speechHead.wrappedValue = QuantizedLinear(
-            config.hiddenSize, config.totalSpeechVocabSize, bias: false,
-            groupSize: config.groupSize, bits: config.bits)
+        // Speech token head: project hidden states to speech vocabulary logits.
+        // Declared as Linear; swapped to QuantizedLinear at load time when the
+        // bundle ships scales/biases for `speech_head`.
+        self._speechHead.wrappedValue = Linear(
+            config.hiddenSize, config.totalSpeechVocabSize, bias: false)
 
         super.init()
     }

@@ -82,22 +82,35 @@ public final class CosyVoiceTTSModel {
             }
         }
 
-        // Read the bundle's `config.json` so the LLM module is constructed with
-        // the correct quantization bit width. Without this, the model defaults
-        // to 4-bit and MLX's QuantizedLinear blows up on 8-bit weights.
+        // Read the bundle's `config.json` so the LLM/DiT modules can be told
+        // the correct quantization bits. The bf16 bundle omits the
+        // `quantization` block entirely; in that case we keep the static
+        // defaults and the loader detects bf16 via the absence of `.scales`
+        // tensors in the safetensors.
         var config = CosyVoiceConfig.default
         let configURL = cacheDir.appendingPathComponent("config.json")
         if FileManager.default.fileExists(atPath: configURL.path),
            let data = try? Data(contentsOf: configURL),
-           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let quant = json["quantization"] as? [String: Any] {
-            // The convert.py emits BOTH `bits` (legacy default = 4) and a
-            // per-component override `llm_bits`. Prefer the LLM-specific value.
-            if let bits = (quant["llm_bits"] as? Int) ?? (quant["bits"] as? Int) {
-                config.llm.bits = bits
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            if let quant = json["quantization"] as? [String: Any] {
+                // The convert.py emits BOTH `bits` (legacy default = 4) and a
+                // per-component override `llm_bits`. Prefer the LLM-specific value.
+                if let bits = (quant["llm_bits"] as? Int) ?? (quant["bits"] as? Int) {
+                    config.llm.bits = bits
+                }
+                if let gs = quant["group_size"] as? Int { config.llm.groupSize = gs }
+                print("  Bundle quantization (LLM): \(config.llm.bits)-bit (group_size \(config.llm.groupSize))")
+            } else {
+                print("  Bundle: unquantised (bf16) — LLM + DiT stay in plain Linear form")
             }
-            if let gs = quant["group_size"] as? Int { config.llm.groupSize = gs }
-            print("  Bundle quantization: \(config.llm.bits)-bit (group_size \(config.llm.groupSize))")
+            // The "8-bit-full" variant emits a `dit_quantization` block to
+            // override the DiT bits without affecting the LLM. The bf16 bundle
+            // omits this; the loader will keep DiT as plain Linear.
+            if let dit = json["dit_quantization"] as? [String: Any] {
+                if let bits = dit["bits"] as? Int { config.flow.dit.bits = bits }
+                if let gs = dit["group_size"] as? Int { config.flow.dit.groupSize = gs }
+                print("  Bundle quantization (DiT): \(config.flow.dit.bits)-bit (group_size \(config.flow.dit.groupSize))")
+            }
         }
         let model = CosyVoiceTTSModel(config: config)
 
@@ -134,8 +147,21 @@ public final class CosyVoiceTTSModel {
     /// Metal kernel fusion for the LLM generation loop (~360 kernel dispatches fused)
     /// and DiT flow matching (~330 kernel dispatches × 10 ODE steps fused).
     public func warmUp() {
-        // Set up compiled LLM generation step (shapeless=true, traced on first call)
-        llm.setupCompilation()
+        // Shapeless compile fuses ~360 LLM kernel dispatches per step, but
+        // MLX-Swift's tracer cannot infer the output shape of `addmm` under a
+        // shapeless trace — that's the bias-fused matmul path that plain
+        // `Linear` uses. Quantised bundles route attention/MLP through
+        // `QuantizedLinear` (which uses `quantized_matmul + add` instead) so
+        // they trace cleanly; the bf16 bundle's plain `Linear` does not.
+        // When we detect a non-quantised LLM, skip compile entirely and run
+        // the autoregressive loop through the direct `forwardStep` path
+        // (still per-call eager, just no kernel fusion).
+        let isLLMQuantized = (llm.layers.first?.selfAttn.qProj as? QuantizedLinear) != nil
+
+        if isLLMQuantized {
+            // Set up compiled LLM generation step (shapeless=true, traced on first call)
+            llm.setupCompilation()
+        }
 
         // Run a minimal prefill to compile all 24-layer attention + MLP shaders
         let textTokens: [Int32] = [2610]  // single token "You"
@@ -151,7 +177,8 @@ public final class CosyVoiceTTSModel {
             embeds: warmupEmbed, offset: prefixEmbeds.dim(1), cache: warmupCache)
         eval(warmupLogits)
 
-        // Set up compiled DiT forward pass (shapeless=false, ~330 kernel dispatches fused)
+        // The flow decoder uses a fixed-shape compile, so it traces cleanly
+        // regardless of whether the DiT is quantised.
         flow.decoder.setupCompilation()
         flow.decoder.warmUp()
     }
