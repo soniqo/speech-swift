@@ -38,6 +38,22 @@ public class CoreMLTextDecoder {
     /// Current position in the KV cache (incremented per step).
     private var currentPosition: Int = 0
 
+    /// Reused per-step input buffers. Allocating these fresh on every
+    /// ``decoderStep`` (mask is 1024 floats = 4KB) showed up as ~1ms/step
+    /// in profiling for a 20s clip with 250 audio-prefill steps. Mask
+    /// starts fully masked-out and we only flip the new position each
+    /// step (the prior position stays unmasked because mask is monotone).
+    /// Reset in ``resetCache``.
+    private lazy var cachedMask: MLMultiArray = {
+        let mask = try! MLMultiArray(shape: [1, 1, 1, maxSeqLength as NSNumber], dataType: .float32)
+        let ptr = mask.dataPointer.assumingMemoryBound(to: Float.self)
+        for i in 0..<maxSeqLength { ptr[i] = -1e4 }
+        return mask
+    }()
+    private lazy var cachedPosition: MLMultiArray = {
+        try! MLMultiArray(shape: [1], dataType: .int32)
+    }()
+
     public static let defaultModelId = "aufklarer/Qwen3-ASR-CoreML"
 
     public init(
@@ -188,6 +204,9 @@ public class CoreMLTextDecoder {
         currentPosition = 0
         part1State = decoderPart1Model.makeState()
         part2State = decoderPart2Model.makeState()
+        // Re-mask the cached mask buffer back to fully masked-out.
+        let ptr = cachedMask.dataPointer.assumingMemoryBound(to: Float.self)
+        for i in 0..<maxSeqLength { ptr[i] = -1e4 }
     }
 
     // MARK: - Token Operations
@@ -221,22 +240,17 @@ public class CoreMLTextDecoder {
                 reason: "Sequence length \(currentPosition) exceeds max \(maxSeqLength)")
         }
 
-        let mask = try MLMultiArray(shape: [1, 1, 1, maxSeqLength as NSNumber], dataType: .float32)
-        let maskPtr = mask.dataPointer.assumingMemoryBound(to: Float.self)
-        for i in 0...currentPosition {
-            maskPtr[i] = 0
-        }
-        for i in (currentPosition + 1)..<maxSeqLength {
-            maskPtr[i] = -1e4
-        }
-
-        let position = try MLMultiArray(shape: [1], dataType: .int32)
-        position[0] = NSNumber(value: Int32(currentPosition))
+        // Reuse cached mask + position buffers — the mask is monotone
+        // (every new position becomes unmasked and stays unmasked), so we
+        // only flip the current position's entry from -1e4 → 0 each step.
+        let maskPtr = cachedMask.dataPointer.assumingMemoryBound(to: Float.self)
+        maskPtr[currentPosition] = 0
+        cachedPosition[0] = NSNumber(value: Int32(currentPosition))
 
         let part1Input = try MLDictionaryFeatureProvider(dictionary: [
             "input_embeds": MLFeatureValue(multiArray: embedding),
-            "position": MLFeatureValue(multiArray: position),
-            "attention_mask": MLFeatureValue(multiArray: mask),
+            "position": MLFeatureValue(multiArray: cachedPosition),
+            "attention_mask": MLFeatureValue(multiArray: cachedMask),
         ])
         let part1Out = try decoderPart1Model.prediction(from: part1Input, using: part1State)
         guard let hidden = part1Out.featureValue(for: "hidden_state")?.multiArrayValue else {
@@ -247,8 +261,8 @@ public class CoreMLTextDecoder {
 
         let part2Input = try MLDictionaryFeatureProvider(dictionary: [
             "input_embeds": MLFeatureValue(multiArray: hidden),
-            "position": MLFeatureValue(multiArray: position),
-            "attention_mask": MLFeatureValue(multiArray: mask),
+            "position": MLFeatureValue(multiArray: cachedPosition),
+            "attention_mask": MLFeatureValue(multiArray: cachedMask),
         ])
         let part2Out = try decoderPart2Model.prediction(from: part2Input, using: part2State)
 
