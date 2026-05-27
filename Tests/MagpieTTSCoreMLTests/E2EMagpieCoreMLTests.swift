@@ -67,10 +67,18 @@ final class E2EMagpieCoreMLTests: XCTestCase {
         XCTAssertGreaterThan(audio.count, Int(MagpieTTSCoreML.sampleRate) / 2,
                              "fixture audio <0.5 s — file may be corrupt")
 
+        let tracker = PerfTracker("magpie-asr-roundtrip")
         let asr = try await CoreMLASRModel.fromPretrained()
+        tracker.checkpoint("asr-loaded")
+        let transcribeStart = CFAbsoluteTimeGetCurrent()
         let raw = asr.transcribe(audio: audio,
                                   sampleRate: Int(MagpieTTSCoreML.sampleRate),
                                   language: "english")
+        let transcribeMs = (CFAbsoluteTimeGetCurrent() - transcribeStart) * 1000
+        let audioMs = Double(audio.count) / Double(MagpieTTSCoreML.sampleRate) * 1000
+        print(String(format: "[PERF] magpie-asr-roundtrip transcribe=%.0fms audio=%.0fms rtf=%.3f",
+                     transcribeMs, audioMs, transcribeMs / audioMs))
+        tracker.finish()
         let normalised = raw
             .lowercased()
             .components(separatedBy: CharacterSet.alphanumerics.inverted)

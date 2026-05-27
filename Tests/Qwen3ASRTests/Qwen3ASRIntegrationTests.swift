@@ -124,12 +124,17 @@ final class E2EQwen3ASRIntegrationTests: XCTestCase {
         }
 
         // Transcribe
+        let tracker = PerfTracker("qwen3-asr-06b-fullpipeline")
+        tracker.checkpoint("model-loaded")
         let start = Date()
         let result = model.transcribe(audio: audio, sampleRate: targetSampleRate)
         let elapsed = Date().timeIntervalSince(start)
 
+        let audioMs = Double(audio.count) / Double(targetSampleRate) * 1000
+        print(String(format: "[PERF] qwen3-asr-06b-fullpipeline transcribe=%.0fms audio=%.0fms rtf=%.3f",
+                     elapsed * 1000, audioMs, (elapsed * 1000) / audioMs))
+        tracker.finish()
         print("Transcription: \(result)")
-        print("Elapsed time: \(elapsed)s")
 
         // Verify correct transcription
         // Test audio contains: "Can you guarantee that the replacement part will be shipped tomorrow?"
