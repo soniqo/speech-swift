@@ -10,18 +10,30 @@ import AudioCommon
 /// Uses fixed-size KV cache with attention masking. Requires macOS 15+ / iOS 18+
 /// for MLState support.
 ///
-/// The decoder consists of two CoreML models:
-///   - **embedding**: Token ID → embedding vector lookup
-///   - **decoder**: Embedding → logits, with 56 KV cache states (28 layers × 2)
+/// The decoder is split into three CoreML models so the 28-layer Qwen3
+/// transformer fits within the ANE compiler's per-model graph-size
+/// budget (the full 28-layer monolithic decoder fails with
+/// ``ANECCompile() FAILED``):
+///   - **embedding**:     Token ID → embedding vector lookup
+///   - **decoder_part1**: Embedding → hidden state, layers 0..(split-1),
+///                        keeps half the KV cache states in its MLState
+///   - **decoder_part2**: Hidden state → logits, layers split..N-1 plus
+///                        the final RMSNorm + tied LM head, keeps the
+///                        remaining KV cache states in its MLState
+///
+/// Each part has its own ``MLState``. ``decoderStep`` runs the two parts
+/// sequentially and returns the final logits.
 public class CoreMLTextDecoder {
     private let embeddingModel: MLModel
-    private let decoderModel: MLModel
+    private let decoderPart1Model: MLModel
+    private let decoderPart2Model: MLModel
     private let maxSeqLength: Int
     private let vocabSize: Int
     private let hiddenSize: Int
 
-    /// MLState holds the KV cache buffers managed by CoreML.
-    private var decoderState: MLState
+    /// One MLState per decoder part, each holds that part's KV caches.
+    private var part1State: MLState
+    private var part2State: MLState
 
     /// Current position in the KV cache (incremented per step).
     private var currentPosition: Int = 0
@@ -30,20 +42,24 @@ public class CoreMLTextDecoder {
 
     public init(
         embeddingModel: MLModel,
-        decoderModel: MLModel,
+        decoderPart1Model: MLModel,
+        decoderPart2Model: MLModel,
         maxSeqLength: Int = 1024,
         vocabSize: Int = 151936,
         hiddenSize: Int = 1024
     ) {
         self.embeddingModel = embeddingModel
-        self.decoderModel = decoderModel
+        self.decoderPart1Model = decoderPart1Model
+        self.decoderPart2Model = decoderPart2Model
         self.maxSeqLength = maxSeqLength
         self.vocabSize = vocabSize
         self.hiddenSize = hiddenSize
-        self.decoderState = decoderModel.makeState()
+        self.part1State = decoderPart1Model.makeState()
+        self.part2State = decoderPart2Model.makeState()
     }
 
-    /// Load decoder models from a directory containing `embedding.mlmodelc` and `decoder.mlmodelc`.
+    /// Load decoder models from a directory containing
+    /// ``embedding.mlmodelc``, ``decoder_part1.mlmodelc`` and ``decoder_part2.mlmodelc``.
     public static func load(
         from directory: URL,
         computeUnits: MLComputeUnits = .all
@@ -51,7 +67,6 @@ public class CoreMLTextDecoder {
         let config = MLModelConfiguration()
         config.computeUnits = computeUnits
 
-        // Load config.json for model parameters
         var maxSeq = 1024
         var vocabSize = 151936
         var hiddenSize = 1024
@@ -63,27 +78,34 @@ public class CoreMLTextDecoder {
             hiddenSize = json["hidden_size"] as? Int ?? 1024
         }
 
-        // Only pre-compiled ``.mlmodelc`` is supported (see ``findModel``).
         let embURL = findModel(named: "embedding", in: directory)
-        let decURL = findModel(named: "decoder", in: directory)
+        let p1URL = findModel(named: "decoder_part1", in: directory)
+        let p2URL = findModel(named: "decoder_part2", in: directory)
 
         guard let embURL else {
             throw AudioModelError.modelLoadFailed(
                 modelId: "embedding",
                 reason: "CoreML embedding not found in \(directory.path)")
         }
-        guard let decURL else {
+        guard let p1URL else {
             throw AudioModelError.modelLoadFailed(
-                modelId: "decoder",
-                reason: "CoreML decoder not found in \(directory.path)")
+                modelId: "decoder_part1",
+                reason: "CoreML decoder_part1 not found in \(directory.path)")
+        }
+        guard let p2URL else {
+            throw AudioModelError.modelLoadFailed(
+                modelId: "decoder_part2",
+                reason: "CoreML decoder_part2 not found in \(directory.path)")
         }
 
         let embModel = try MLModel(contentsOf: embURL, configuration: config)
-        let decModel = try MLModel(contentsOf: decURL, configuration: config)
+        let p1Model = try MLModel(contentsOf: p1URL, configuration: config)
+        let p2Model = try MLModel(contentsOf: p2URL, configuration: config)
 
         return CoreMLTextDecoder(
             embeddingModel: embModel,
-            decoderModel: decModel,
+            decoderPart1Model: p1Model,
+            decoderPart2Model: p2Model,
             maxSeqLength: maxSeq,
             vocabSize: vocabSize,
             hiddenSize: hiddenSize
@@ -106,7 +128,8 @@ public class CoreMLTextDecoder {
             to: cacheDir,
             additionalFiles: [
                 "embedding.mlmodelc/**",
-                "decoder.mlmodelc/**",
+                "decoder_part1.mlmodelc/**",
+                "decoder_part2.mlmodelc/**",
                 "config.json",
             ],
             offlineMode: offlineMode
@@ -120,38 +143,51 @@ public class CoreMLTextDecoder {
         return decoder
     }
 
-    /// Warm up both models with dummy inputs.
+    /// Warm up all three models with dummy inputs.
     public func warmUp() throws {
-        // Warm embedding
+        // Embedding
         let dummyToken = try MLMultiArray(shape: [1, 1], dataType: .int32)
         dummyToken[0] = 0
-        let embInput = try MLDictionaryFeatureProvider(dictionary: [
+        _ = try embeddingModel.prediction(from: MLDictionaryFeatureProvider(dictionary: [
             "token_id": MLFeatureValue(multiArray: dummyToken),
-        ])
-        _ = try embeddingModel.prediction(from: embInput)
+        ]))
 
-        // Warm decoder with a single step (using a temporary state so we don't pollute the real cache)
-        let warmupState = decoderModel.makeState()
+        // Decoder parts — use throwaway MLStates so we don't pollute the live caches.
         let dummyEmbed = try MLMultiArray(shape: [1, 1, hiddenSize as NSNumber], dataType: .float32)
         let dummyPos = try MLMultiArray(shape: [1], dataType: .int32)
         dummyPos[0] = 0
         let dummyMask = try MLMultiArray(shape: [1, 1, 1, maxSeqLength as NSNumber], dataType: .float32)
-        let ptr = dummyMask.dataPointer.assumingMemoryBound(to: Float.self)
-        for i in 0..<maxSeqLength { ptr[i] = -1e4 }
-        ptr[0] = 0  // Allow position 0
+        let mptr = dummyMask.dataPointer.assumingMemoryBound(to: Float.self)
+        for i in 0..<maxSeqLength { mptr[i] = -1e4 }
+        mptr[0] = 0
 
-        let decInput = try MLDictionaryFeatureProvider(dictionary: [
+        let warmP1 = decoderPart1Model.makeState()
+        let warmP2 = decoderPart2Model.makeState()
+
+        let dummyInputs = try MLDictionaryFeatureProvider(dictionary: [
             "input_embeds": MLFeatureValue(multiArray: dummyEmbed),
             "position": MLFeatureValue(multiArray: dummyPos),
             "attention_mask": MLFeatureValue(multiArray: dummyMask),
         ])
-        _ = try decoderModel.prediction(from: decInput, using: warmupState)
+        let p1Out = try decoderPart1Model.prediction(from: dummyInputs, using: warmP1)
+        guard let hidden = p1Out.featureValue(for: "hidden_state")?.multiArrayValue else {
+            throw AudioModelError.inferenceFailed(
+                operation: "CoreML decoder part1 warmup",
+                reason: "Missing hidden_state output")
+        }
+        let p2Inputs = try MLDictionaryFeatureProvider(dictionary: [
+            "input_embeds": MLFeatureValue(multiArray: hidden),
+            "position": MLFeatureValue(multiArray: dummyPos),
+            "attention_mask": MLFeatureValue(multiArray: dummyMask),
+        ])
+        _ = try decoderPart2Model.prediction(from: p2Inputs, using: warmP2)
     }
 
-    /// Reset the KV cache for a new transcription.
+    /// Reset the KV caches in both parts for a new transcription.
     public func resetCache() {
         currentPosition = 0
-        decoderState = decoderModel.makeState()
+        part1State = decoderPart1Model.makeState()
+        part2State = decoderPart2Model.makeState()
     }
 
     // MARK: - Token Operations
@@ -173,9 +209,11 @@ public class CoreMLTextDecoder {
         return embedding
     }
 
-    /// Run one decoder step with the given embedding.
+    /// Run one decoder step.
     ///
-    /// Updates the KV cache at the current position and returns logits.
+    /// Chains the two CoreML parts: ``embedding → part1 → part2 → logits``.
+    /// Each part updates its own KV cache via its own ``MLState``. The
+    /// hidden state handed from part1 to part2 has shape ``[1, 1, hidden]``.
     public func decoderStep(embedding: MLMultiArray) throws -> MLMultiArray {
         guard currentPosition < maxSeqLength else {
             throw AudioModelError.inferenceFailed(
@@ -183,7 +221,6 @@ public class CoreMLTextDecoder {
                 reason: "Sequence length \(currentPosition) exceeds max \(maxSeqLength)")
         }
 
-        // Build attention mask: 0 for valid positions, -1e4 for invalid
         let mask = try MLMultiArray(shape: [1, 1, 1, maxSeqLength as NSNumber], dataType: .float32)
         let maskPtr = mask.dataPointer.assumingMemoryBound(to: Float.self)
         for i in 0...currentPosition {
@@ -196,18 +233,31 @@ public class CoreMLTextDecoder {
         let position = try MLMultiArray(shape: [1], dataType: .int32)
         position[0] = NSNumber(value: Int32(currentPosition))
 
-        let input = try MLDictionaryFeatureProvider(dictionary: [
+        let part1Input = try MLDictionaryFeatureProvider(dictionary: [
             "input_embeds": MLFeatureValue(multiArray: embedding),
             "position": MLFeatureValue(multiArray: position),
             "attention_mask": MLFeatureValue(multiArray: mask),
         ])
+        let part1Out = try decoderPart1Model.prediction(from: part1Input, using: part1State)
+        guard let hidden = part1Out.featureValue(for: "hidden_state")?.multiArrayValue else {
+            throw AudioModelError.inferenceFailed(
+                operation: "CoreML decoder part1",
+                reason: "Missing hidden_state output")
+        }
 
-        let output = try decoderModel.prediction(from: input, using: decoderState)
+        let part2Input = try MLDictionaryFeatureProvider(dictionary: [
+            "input_embeds": MLFeatureValue(multiArray: hidden),
+            "position": MLFeatureValue(multiArray: position),
+            "attention_mask": MLFeatureValue(multiArray: mask),
+        ])
+        let part2Out = try decoderPart2Model.prediction(from: part2Input, using: part2State)
+
         currentPosition += 1
 
-        guard let logits = output.featureValue(for: "logits")?.multiArrayValue else {
+        guard let logits = part2Out.featureValue(for: "logits")?.multiArrayValue else {
             throw AudioModelError.inferenceFailed(
-                operation: "CoreML decoder", reason: "Missing logits output")
+                operation: "CoreML decoder part2",
+                reason: "Missing logits output")
         }
         return logits
     }
