@@ -2,20 +2,21 @@ import Foundation
 import MLX
 import MLXNN
 
-/// SwiGLU MLP with quantized linear layers — shared by ASR text decoder, TTS Talker, and Code Predictor
+/// SwiGLU MLP — shared by ASR text decoder, TTS Talker, and Code Predictor.
+/// Linear layers are quantized when `bits > 0`, plain Linear otherwise (bf16/fp32 path).
 public class QuantizedMLP: Module {
-    @ModuleInfo public var gateProj: QuantizedLinear
-    @ModuleInfo public var upProj: QuantizedLinear
-    @ModuleInfo public var downProj: QuantizedLinear
+    @ModuleInfo public var gateProj: Linear
+    @ModuleInfo public var upProj: Linear
+    @ModuleInfo public var downProj: Linear
 
     public init(hiddenSize: Int, intermediateSize: Int, groupSize: Int = 64, bits: Int = 4) {
-        self._gateProj.wrappedValue = QuantizedLinear(
+        self._gateProj.wrappedValue = makeMaybeQuantizedLinear(
             hiddenSize, intermediateSize, bias: false,
             groupSize: groupSize, bits: bits)
-        self._upProj.wrappedValue = QuantizedLinear(
+        self._upProj.wrappedValue = makeMaybeQuantizedLinear(
             hiddenSize, intermediateSize, bias: false,
             groupSize: groupSize, bits: bits)
-        self._downProj.wrappedValue = QuantizedLinear(
+        self._downProj.wrappedValue = makeMaybeQuantizedLinear(
             intermediateSize, hiddenSize, bias: false,
             groupSize: groupSize, bits: bits)
 

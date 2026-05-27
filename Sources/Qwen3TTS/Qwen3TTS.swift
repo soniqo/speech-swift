@@ -1404,7 +1404,9 @@ public class Qwen3TTSModel {
         ttsPadEmbed: MLXArray,
         sampling: SamplingConfig
     ) -> (allCodebooks: MLXArray, numFrames: Int) {
-        let safeMaxTokens = min(sampling.maxTokens, 500)
+        // Reference (QwenLM + mlx-audio) uses 2048 here. Earlier 500 cap clipped
+        // long lines mid-word and produced hard-cut endings.
+        let safeMaxTokens = min(sampling.maxTokens, 2048)
 
         var talkerCache: [(MLXArray, MLXArray)]? = nil
         var generatedFirstCodebook: [Int32] = []

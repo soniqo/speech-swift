@@ -5,6 +5,15 @@ import MLXFast
 import MLXCommon
 import AudioCommon
 
+/// Synthesis progress logs go to stderr so they don't corrupt a stdout-based
+/// IPC channel (e.g. speech-studio sidecar's NDJSON protocol). Swift's stdio
+/// `print()` is line-buffered and may flush at unexpected boundaries; routing
+/// to stderr keeps the stdout pipe clean for JSON responses.
+@inline(__always)
+private func iclLog(_ message: String) {
+    FileHandle.standardError.write(Data((message + "\n").utf8))
+}
+
 // MARK: - ICL Voice Cloning
 
 extension Qwen3TTSModel {
@@ -62,7 +71,7 @@ extension Qwen3TTSModel {
         referenceAudio: [Float],
         referenceSampleRate: Int = 24000,
         referenceText: String,
-        language: String = "english",
+        language: String = "auto",
         sampling: SamplingConfig = .default,
         codecEncoder: SpeechTokenizerEncoder,
         trimReference: Bool = true
@@ -70,12 +79,21 @@ extension Qwen3TTSModel {
         guard let tokenizer = tokenizer else {
             fatalError("Tokenizer not loaded")
         }
-        guard let langId = CodecTokens.languageId(for: language) else {
-            print("Warning: Unknown language '\(language)', defaulting to English")
+        // "auto" (matches the QwenLM reference + mlx-audio default) skips the
+        // language-id token and switches the codec prefix to the codec_nothink
+        // branch. Any other value must resolve to a known language id.
+        let langId: Int?
+        let normalized = language.lowercased()
+        if normalized == "auto" || normalized.isEmpty {
+            langId = nil
+        } else if let id = CodecTokens.languageId(for: language) {
+            langId = id
+        } else {
+            iclLog("Warning: Unknown language '\(language)', falling back to auto")
             return synthesizeWithVoiceCloneICL(
                 text: text, referenceAudio: referenceAudio,
                 referenceSampleRate: referenceSampleRate,
-                referenceText: referenceText, language: "english",
+                referenceText: referenceText, language: "auto",
                 sampling: sampling, codecEncoder: codecEncoder,
                 trimReference: trimReference)
         }
@@ -86,7 +104,7 @@ extension Qwen3TTSModel {
         let refCodes: MLXArray
         if let cached = referenceAudioCache.codecRefCodes(for: referenceAudio, sampleRate: referenceSampleRate) {
             refCodes = cached
-            print("  ICL: codec tokens cache hit (\(cached.dim(2)) frames)")
+            iclLog("  ICL: codec tokens cache hit (\(cached.dim(2)) frames)")
         } else {
             let audio24k = referenceSampleRate == 24000
                 ? referenceAudio
@@ -95,7 +113,7 @@ extension Qwen3TTSModel {
             eval(codes)
             referenceAudioCache.storeCodecRefCodes(codes, audio: referenceAudio, sampleRate: referenceSampleRate)
             refCodes = codes
-            print("  ICL: encoded \(audio24k.count) samples → \(codes.dim(2)) codec frames")
+            iclLog("  ICL: encoded \(audio24k.count) samples → \(codes.dim(2)) codec frames")
         }
 
         // Step 3: Extract speaker embedding (ICL still uses x-vector for speaker conditioning; cached)
@@ -123,14 +141,27 @@ extension Qwen3TTSModel {
         eval(prefillEmbeds, trailingTextHidden, ttsPadEmbed)
         let t1 = CFAbsoluteTimeGetCurrent()
 
-        // Step 5: Autoregressive generation. The Python mlx-audio reference
-        // auto-boosts repetition_penalty to >= 1.5 for ICL because the long
-        // reference prefill makes codec tokens prone to degenerate repetition
-        // (audible as buzzy/robotic artifacts) without it. Match that.
+        // Step 5: Autoregressive generation. Auto-bump repetition_penalty to
+        // >= 1.5 ONLY when caller is sampling (T > 0). Under sampling the
+        // bump matches mlx-audio's recipe and prevents codec-token repetition
+        // artifacts. Under greedy the bump is a degeneration trap (argmax
+        // flips on Metal logit jitter) — leave the caller's value as-is.
         var iclSampling = sampling
-        if iclSampling.repetitionPenalty < 1.5 {
+        if iclSampling.temperature > 0 && iclSampling.repetitionPenalty < 1.5 {
             iclSampling.repetitionPenalty = 1.5
         }
+        // Cap maxTokens so under-EOS runaway outputs can't exhaust GPU memory.
+        // ICL generates [ref reproduction + target], so the budget must cover
+        // BOTH: ref-codec-frames (from the encoded reference) plus a per-target-
+        // text allowance. 6 codec frames per text token is a loose upper bound
+        // on natural speech rate (~12.5 fps / ~2 tok/s). Extra 1.5× safety
+        // margin on the reference portion handles model speech-rate variance.
+        let refCodecFrames = refCodes.dim(2)
+        let targetTokenCount = tokenizer.encode(text).count
+        let refBudget = refCodecFrames + refCodecFrames / 2  // 1.5x of ref frames
+        let targetBudget = max(75, targetTokenCount * 6)
+        let textDerivedCap = refBudget + targetBudget
+        iclSampling.maxTokens = min(iclSampling.maxTokens, textDerivedCap)
         let (allCodebooks, numFrames) = generateWithCodePredictor(
             prefillEmbeds: prefillEmbeds,
             trailingTextHidden: trailingTextHidden,
@@ -141,28 +172,36 @@ extension Qwen3TTSModel {
         let t2 = CFAbsoluteTimeGetCurrent()
 
         guard numFrames > 0 else {
-            print("Warning: ICL generation produced no tokens")
+            iclLog("Warning: ICL generation produced no tokens")
             return []
         }
 
         // Step 6: Decode codec tokens → waveform
         let outputSamples = numFrames * 1920
-        print("  ICL: decoding \(numFrames) frames → \(outputSamples) samples...")
+        iclLog("  ICL: decoding \(numFrames) frames → \(outputSamples) samples...")
         let waveform = codecDecoder.decode(codes: allCodebooks)
         let t3 = CFAbsoluteTimeGetCurrent()
 
         // Step 7: Optionally trim the reference echo from the start of the waveform.
-        // The model is conditioned on [ref_text + target_text] and produces codec for both,
-        // so the raw decoded waveform begins with a regeneration of the reference.
+        // The model is conditioned on [ref_text + target_text] and produces codec
+        // for both, so the raw decoded waveform begins with a regeneration of the
+        // reference. Trim by the text-token ratio (refTokens / totalTokens) — this
+        // is more robust than trimming by raw reference-audio sample count, because
+        // the model often reproduces the reference at a different speech rate
+        // than the original recording (slower → reference leaks into target).
         let trimmedWaveform: [Float]
         if trimReference {
-            let before = waveform.count
-            trimmedWaveform = Qwen3TTSModel.trimICLReferenceFromWaveform(
-                waveform, referenceAudio: referenceAudio,
+            let refTokenCount = tokenizer.encode(referenceText).count
+            let targetTokenCount = tokenizer.encode(text).count
+            trimmedWaveform = Qwen3TTSModel.trimICLReferenceByTokenRatio(
+                waveform,
+                referenceTokenCount: refTokenCount,
+                targetTokenCount: targetTokenCount,
+                referenceAudio: referenceAudio,
                 referenceSampleRate: referenceSampleRate)
-            if trimmedWaveform.count < before {
-                let removed = before - trimmedWaveform.count
-                print("  ICL: trimmed \(removed) reference samples (~\(String(format: "%.2f", Double(removed)/24000.0))s) from output start")
+            let removed = waveform.count - trimmedWaveform.count
+            if removed > 0 {
+                iclLog("  ICL: trimmed \(removed) reference samples (~\(String(format: "%.2f", Double(removed)/24000.0))s, refTok=\(refTokenCount) tgtTok=\(targetTokenCount)) from output start")
             }
         } else {
             trimmedWaveform = waveform
@@ -176,7 +215,7 @@ extension Qwen3TTSModel {
         let totTime = String(format: "%.3f", t3-t0)
         let audDur = String(format: "%.2f", audioDur)
         let rtf = String(format: "%.2f", (t3-t0)/max(audioDur, 0.001))
-        print("  ICL timing: encode=\(encTime)s | generate=\(genTime)s (\(numFrames) steps, \(msPerStep)ms/step) | decode=\(decTime)s | total=\(totTime)s | audio=\(audDur)s | RTF=\(rtf)")
+        iclLog("  ICL timing: encode=\(encTime)s | generate=\(genTime)s (\(numFrames) steps, \(msPerStep)ms/step) | decode=\(decTime)s | total=\(totTime)s | audio=\(audDur)s | RTF=\(rtf)")
 
         return trimmedWaveform
     }
@@ -206,6 +245,48 @@ extension Qwen3TTSModel {
         return Array(waveform.dropFirst(refSampleCount24k))
     }
 
+    /// Trim the reference reproduction by text-token proportion.
+    ///
+    /// The model generates [ref_reproduction + target] for `numFrames` codec frames
+    /// totalling `waveform.count` samples. Token-count ratio approximates the
+    /// time-domain split: the ref portion is `refTokens / (refTokens + targetTokens)`
+    /// of the output. We add a small safety margin (1 codec frame = 1920 samples
+    /// at 24 kHz = 80 ms) to account for the model's transition between ref and
+    /// target. Falls back to the audio-sample-based heuristic if token counts
+    /// are unavailable (zero or nonsensical).
+    static func trimICLReferenceByTokenRatio(
+        _ waveform: [Float],
+        referenceTokenCount: Int,
+        targetTokenCount: Int,
+        referenceAudio: [Float],
+        referenceSampleRate: Int
+    ) -> [Float] {
+        let total = referenceTokenCount + targetTokenCount
+        guard referenceTokenCount > 0, targetTokenCount > 0, total > 0 else {
+            return trimICLReferenceFromWaveform(waveform,
+                referenceAudio: referenceAudio,
+                referenceSampleRate: referenceSampleRate)
+        }
+        // Token-proportion estimate of where the target audio begins.
+        let proportional = waveform.count * referenceTokenCount / total
+        // Safety margin: 10 codec frames (~800 ms) catches the trailing word
+        // of the reference reproduction (e.g. "Ruddering.", "of fellows.").
+        let margin = 1920 * 10
+        let estimate = proportional + margin
+
+        // Floor on the target audio that survives the trim: rough estimate of
+        // how much audio a `targetTokenCount`-long sentence should produce —
+        // 6 codec frames per BPE token at 12.5 fps ≈ 0.48 s per token. With
+        // the floor we never trim INTO the target, even when MLX-Metal jitter
+        // makes the model produce an unusually short output and the
+        // proportional estimate over-shoots.
+        let minTargetSamples = max(1920 * 6, targetTokenCount * 6 * 1920)
+        let maxTrim = waveform.count - minTargetSamples
+        let trim = min(estimate, max(0, maxTrim))
+        guard trim > 0, trim < waveform.count else { return waveform }
+        return Array(waveform.dropFirst(trim))
+    }
+
     // MARK: - ICL Prefill Construction
 
     /// Build ICL prefill embeddings following the Python mlx-audio reference.
@@ -222,7 +303,7 @@ extension Qwen3TTSModel {
         referenceText: String,
         targetText: String,
         language: String,
-        languageId: Int,
+        languageId: Int?,
         speakerEmbed: MLXArray,     // [1, 1024]
         tokenizer: Qwen3Tokenizer
     ) -> (prefillEmbeds: MLXArray, trailingTextHidden: MLXArray, ttsPadEmbed: MLXArray) {
@@ -271,16 +352,41 @@ extension Qwen3TTSModel {
         let codecWithTextPad = codecEmbedICL + broadcast(ttsPadEmbed, to: [1, codecLens, hiddenSize])
         let iclInputEmbed = concatenated([textWithCodecPad, codecWithTextPad], axis: 1)
 
-        // 6. Codec prefix: [think, think_bos, lang, think_eos, speaker_embed, pad, bos]
-        let codecPrefixTokens = buildCodecPrefix(languageId: languageId)
+        // 6. Codec prefix. Two layouts (reference parity):
+        //   With language id: [codec_think, codec_think_bos, lang_id, codec_think_eos, pad, bos]
+        //                     speaker injected after think_eos → 7 tokens.
+        //   Without (auto):   [codec_nothink, codec_think_bos, codec_think_eos, pad, bos]
+        //                     speaker injected after think_eos → 6 tokens.
+        let codecPrefixTokens: [Int32]
+        let speakerInjectAt: Int
+        if let langId = languageId {
+            codecPrefixTokens = [
+                Int32(CodecTokens.codecThink),
+                Int32(CodecTokens.codecThinkBos),
+                Int32(langId),
+                Int32(CodecTokens.codecThinkEos),
+                Int32(CodecTokens.codecPad),
+                Int32(CodecTokens.codecBos),
+            ]
+            speakerInjectAt = 4
+        } else {
+            codecPrefixTokens = [
+                Int32(CodecTokens.codecNothink),
+                Int32(CodecTokens.codecThinkBos),
+                Int32(CodecTokens.codecThinkEos),
+                Int32(CodecTokens.codecPad),
+                Int32(CodecTokens.codecBos),
+            ]
+            speakerInjectAt = 3
+        }
         let codecPrefixArray = MLXArray(codecPrefixTokens).expandedDimensions(axis: 0)
-        var codecPrefixEmbed = talker.embedCodec(codecPrefixArray)  // [1, 6, D]
+        var codecPrefixEmbed = talker.embedCodec(codecPrefixArray)
 
-        // Inject speaker embedding
+        // Inject speaker embedding right after think_eos.
         let spkEmbedReshaped = speakerEmbed.reshaped([1, 1, hiddenSize])
-        let part0 = codecPrefixEmbed[0..., 0..<4, 0...]
-        let part1 = codecPrefixEmbed[0..., 4..., 0...]
-        codecPrefixEmbed = concatenated([part0, spkEmbedReshaped, part1], axis: 1)  // [1, 7, D]
+        let part0 = codecPrefixEmbed[0..., 0..<speakerInjectAt, 0...]
+        let part1 = codecPrefixEmbed[0..., speakerInjectAt..., 0...]
+        codecPrefixEmbed = concatenated([part0, spkEmbedReshaped, part1], axis: 1)
 
         let codecSuffixEmbed = talker.embedCodec(
             MLXArray([Int32(CodecTokens.codecPad), Int32(CodecTokens.codecBos)]).expandedDimensions(axis: 0))

@@ -2,6 +2,24 @@ import Foundation
 import MLX
 import MLXNN
 
+/// Build a Linear layer that is quantized when bits > 0, plain when bits == 0.
+/// QuantizedLinear inherits from Linear, so the return type is always Linear and
+/// caller code can store it in a single `@ModuleInfo var x: Linear` field.
+public func makeMaybeQuantizedLinear(
+    _ inputDimensions: Int,
+    _ outputDimensions: Int,
+    bias: Bool,
+    groupSize: Int,
+    bits: Int
+) -> Linear {
+    if bits > 0 {
+        return QuantizedLinear(inputDimensions, outputDimensions, bias: bias,
+                               groupSize: groupSize, bits: bits)
+    } else {
+        return Linear(inputDimensions, outputDimensions, bias: bias)
+    }
+}
+
 /// Generic weight loading utilities shared between ASR and TTS
 public enum CommonWeightLoader {
 
@@ -67,8 +85,12 @@ public enum CommonWeightLoader {
         }
     }
 
+    /// Apply weights to a Linear (or QuantizedLinear, since the latter inherits from
+    /// the former). When the layer is a QuantizedLinear, `.scales`/`.biases` are wired
+    /// in addition to `.weight`. For plain Linear those keys are absent in the
+    /// safetensors (bf16/fp32 model) and only `.weight` (+ optional `.bias`) apply.
     public static func applyQuantizedLinearWeights(
-        to linear: QuantizedLinear,
+        to linear: Linear,
         prefix: String,
         from weights: [String: MLXArray]
     ) {
@@ -77,14 +99,15 @@ public enum CommonWeightLoader {
         if let weight = weights["\(prefix).weight"] {
             params["weight"] = .value(weight)
         }
-        if let scales = weights["\(prefix).scales"] {
-            params["scales"] = .value(scales)
-        }
-        if let biases = weights["\(prefix).biases"] {
-            params["biases"] = .value(biases)
+        if linear is QuantizedLinear {
+            if let scales = weights["\(prefix).scales"] {
+                params["scales"] = .value(scales)
+            }
+            if let biases = weights["\(prefix).biases"] {
+                params["biases"] = .value(biases)
+            }
         }
         // Regular linear bias (separate from quantization biases)
-        // Qwen2.5 attention q/k/v projections have regular biases
         if let bias = weights["\(prefix).bias"] {
             params["bias"] = .value(bias)
         }
