@@ -132,37 +132,35 @@ public class CoreMLASRModel {
         }
         suffixTokens.append(asrTextId)
 
-        // ── Prefill: process all prefix tokens ──
+        // ── Prefill: process all prefix tokens (one batched call) ──
         var lastLogits: MLMultiArray?
-
-        for token in prefixTokens {
-            let embedding = try decoder.embed(tokenId: token)
-            lastLogits = try decoder.decoderStep(embedding: embedding)
-        }
+        lastLogits = try decoder.decoderPrefillTokens(prefixTokens)
         let t3 = CFAbsoluteTimeGetCurrent()
 
         // ── Prefill: process audio embeddings ──
-        // Bulk-evaluate the MLX audio embeddings into a contiguous CPU
-        // Float buffer once (single Metal sync) instead of slicing per
-        // step (250 Metal syncs for a 20 s clip). The per-step
-        // ``audioEmbeddingToMultiArray`` path triggered an MLX eval +
-        // GPU→CPU copy every call and dominated profile output.
-        let hidden = audioEmbeds.dim(2)
+        // Bulk-extract the MLX audio embeddings once (single Metal sync)
+        // then feed them to the decoder in batched chunks of
+        // ``prefillBatchSize`` tokens. The fixed-T CoreML decoder packs
+        // T tokens per ANE dispatch, so a 20 s / 250-token clip becomes
+        // ~2 calls instead of 250 (each ANE dispatch costs ~30 ms — the
+        // dispatch overhead dominated the per-step cost in profiling).
+        let _ = audioEmbeds.dim(2)  // sanity-check hidden dim
         let audioEmbedsFlat: [Float] = audioEmbeds.asArray(Float.self)
-        let stepBuffer = try MLMultiArray(shape: [1, 1, hidden as NSNumber], dataType: .float32)
-        let stepPtr = stepBuffer.dataPointer.assumingMemoryBound(to: Float.self)
-        for i in 0..<numAudioTokens {
-            let srcOffset = i * hidden
-            for j in 0..<hidden { stepPtr[j] = audioEmbedsFlat[srcOffset + j] }
-            lastLogits = try decoder.decoderStep(embedding: stepBuffer)
+        let chunk = decoder.prefillBatchSize
+        var consumed = 0
+        while consumed < numAudioTokens {
+            let n = min(chunk, numAudioTokens - consumed)
+            lastLogits = try decoder.decoderPrefill(
+                flatEmbeddings: audioEmbedsFlat,
+                offset: consumed,
+                realCount: n,
+            )
+            consumed += n
         }
         let t4 = CFAbsoluteTimeGetCurrent()
 
-        // ── Prefill: process suffix tokens ──
-        for token in suffixTokens {
-            let embedding = try decoder.embed(tokenId: token)
-            lastLogits = try decoder.decoderStep(embedding: embedding)
-        }
+        // ── Prefill: process suffix tokens (one batched call) ──
+        lastLogits = try decoder.decoderPrefillTokens(suffixTokens)
         let t5 = CFAbsoluteTimeGetCurrent()
 
         // ── Autoregressive generation ──

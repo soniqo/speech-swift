@@ -7,22 +7,28 @@ import AudioCommon
 /// CoreML text decoder for Qwen3-ASR with MLState KV cache.
 ///
 /// Runs the full text decoder on Neural Engine via CoreML instead of GPU via MLX.
-/// Uses fixed-size KV cache with attention masking. Requires macOS 15+ / iOS 18+
-/// for MLState support.
+/// Requires macOS 15+ / iOS 18+ for MLState support.
 ///
-/// The decoder is split into three CoreML models so the 28-layer Qwen3
-/// transformer fits within the ANE compiler's per-model graph-size
-/// budget (the full 28-layer monolithic decoder fails with
-/// ``ANECCompile() FAILED``):
+/// Architecture (three CoreML models for ANE compile-budget reasons):
 ///   - **embedding**:     Token ID → embedding vector lookup
-///   - **decoder_part1**: Embedding → hidden state, layers 0..(split-1),
-///                        keeps half the KV cache states in its MLState
-///   - **decoder_part2**: Hidden state → logits, layers split..N-1 plus
-///                        the final RMSNorm + tied LM head, keeps the
-///                        remaining KV cache states in its MLState
+///   - **decoder_part1**: Layers 0..(split-1), embedding-in → hidden-out
+///   - **decoder_part2**: Layers split..N-1 + norm + lm_head, hidden-in → logits
 ///
-/// Each part has its own ``MLState``. ``decoderStep`` runs the two parts
-/// sequentially and returns the final logits.
+/// Each part keeps its own ``MLState`` pool of KV caches. Hidden state
+/// flows part1 → part2.
+///
+/// **Batched dispatch.** Both decoder parts are converted with a fixed
+/// ``T`` (per ``config.json: enumerated_t`` — typically 128). One ANE
+/// dispatch processes T tokens at once: prefill chunks a contiguous run
+/// of new positions through a single call; single-token generation
+/// reserves indices ``[0, T-2]`` for *scratch* positions (the last T-1
+/// slots of the KV cache, addresses ``maxSeqLength - (T-1)..maxSeqLength``)
+/// whose writes are discarded by attention masking. This collapses ~250
+/// single-token audio-prefill dispatches into ~2 batched calls.
+///
+/// EnumeratedShapes(T) is **not** ANE-compatible at this layer count,
+/// so the model is fixed-T and we wrap step calls with scratch padding
+/// rather than running a smaller variant.
 public class CoreMLTextDecoder {
     private let embeddingModel: MLModel
     private let decoderPart1Model: MLModel
@@ -31,28 +37,21 @@ public class CoreMLTextDecoder {
     private let vocabSize: Int
     private let hiddenSize: Int
 
+    /// Fixed batch size used by both decoder parts. Loaded from
+    /// ``config.json: enumerated_t``. Single-token decode pads to this.
+    private let batchSize: Int
+
     /// One MLState per decoder part, each holds that part's KV caches.
     private var part1State: MLState
     private var part2State: MLState
 
-    /// Current position in the KV cache (incremented per step).
+    /// Current real position in the KV cache (incremented per real token).
     private var currentPosition: Int = 0
 
-    /// Reused per-step input buffers. Allocating these fresh on every
-    /// ``decoderStep`` (mask is 1024 floats = 4KB) showed up as ~1ms/step
-    /// in profiling for a 20s clip with 250 audio-prefill steps. Mask
-    /// starts fully masked-out and we only flip the new position each
-    /// step (the prior position stays unmasked because mask is monotone).
-    /// Reset in ``resetCache``.
-    private lazy var cachedMask: MLMultiArray = {
-        let mask = try! MLMultiArray(shape: [1, 1, 1, maxSeqLength as NSNumber], dataType: .float32)
-        let ptr = mask.dataPointer.assumingMemoryBound(to: Float.self)
-        for i in 0..<maxSeqLength { ptr[i] = -1e4 }
-        return mask
-    }()
-    private lazy var cachedPosition: MLMultiArray = {
-        try! MLMultiArray(shape: [1], dataType: .int32)
-    }()
+    /// First slot index reserved for scratch writes by partial / step calls.
+    /// Cache writes at these positions are garbage; attention masks them.
+    /// Range: ``[scratchStart, maxSeqLength)``, length ``batchSize - 1``.
+    private var scratchStart: Int { maxSeqLength - (batchSize - 1) }
 
     public static let defaultModelId = "aufklarer/Qwen3-ASR-CoreML"
 
@@ -62,7 +61,8 @@ public class CoreMLTextDecoder {
         decoderPart2Model: MLModel,
         maxSeqLength: Int = 1024,
         vocabSize: Int = 151936,
-        hiddenSize: Int = 1024
+        hiddenSize: Int = 1024,
+        batchSize: Int = 128
     ) {
         self.embeddingModel = embeddingModel
         self.decoderPart1Model = decoderPart1Model
@@ -70,6 +70,7 @@ public class CoreMLTextDecoder {
         self.maxSeqLength = maxSeqLength
         self.vocabSize = vocabSize
         self.hiddenSize = hiddenSize
+        self.batchSize = batchSize
         self.part1State = decoderPart1Model.makeState()
         self.part2State = decoderPart2Model.makeState()
     }
@@ -78,7 +79,7 @@ public class CoreMLTextDecoder {
     /// ``embedding.mlmodelc``, ``decoder_part1.mlmodelc`` and ``decoder_part2.mlmodelc``.
     public static func load(
         from directory: URL,
-        computeUnits: MLComputeUnits = .all
+        computeUnits: MLComputeUnits = .cpuAndNeuralEngine
     ) throws -> CoreMLTextDecoder {
         let config = MLModelConfiguration()
         config.computeUnits = computeUnits
@@ -86,12 +87,16 @@ public class CoreMLTextDecoder {
         var maxSeq = 1024
         var vocabSize = 151936
         var hiddenSize = 1024
+        var batchSize = 128
         let configPath = directory.appendingPathComponent("config.json")
         if let data = try? Data(contentsOf: configPath),
            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             maxSeq = json["max_seq_length"] as? Int ?? 1024
             vocabSize = json["vocab_size"] as? Int ?? 151936
             hiddenSize = json["hidden_size"] as? Int ?? 1024
+            if let ts = json["enumerated_t"] as? [Int], let t = ts.first {
+                batchSize = t
+            }
         }
 
         let embURL = findModel(named: "embedding", in: directory)
@@ -124,14 +129,15 @@ public class CoreMLTextDecoder {
             decoderPart2Model: p2Model,
             maxSeqLength: maxSeq,
             vocabSize: vocabSize,
-            hiddenSize: hiddenSize
+            hiddenSize: hiddenSize,
+            batchSize: batchSize
         )
     }
 
     /// Load from HuggingFace.
     public static func fromPretrained(
         modelId: String = defaultModelId,
-        computeUnits: MLComputeUnits = .all,
+        computeUnits: MLComputeUnits = .cpuAndNeuralEngine,
         cacheDir: URL? = nil,
         offlineMode: Bool = false,
         progressHandler: ((Double, String) -> Void)? = nil
@@ -159,33 +165,33 @@ public class CoreMLTextDecoder {
         return decoder
     }
 
-    /// Warm up all three models with dummy inputs.
+    /// Warm up the three models so the first real call doesn't pay
+    /// the ANE compile / load latency. Uses throwaway MLStates so the
+    /// live KV cache stays untouched.
     public func warmUp() throws {
-        // Embedding
         let dummyToken = try MLMultiArray(shape: [1, 1], dataType: .int32)
         dummyToken[0] = 0
         _ = try embeddingModel.prediction(from: MLDictionaryFeatureProvider(dictionary: [
             "token_id": MLFeatureValue(multiArray: dummyToken),
         ]))
 
-        // Decoder parts — use throwaway MLStates so we don't pollute the live caches.
-        let dummyEmbed = try MLMultiArray(shape: [1, 1, hiddenSize as NSNumber], dataType: .float32)
-        let dummyPos = try MLMultiArray(shape: [1], dataType: .int32)
-        dummyPos[0] = 0
-        let dummyMask = try MLMultiArray(shape: [1, 1, 1, maxSeqLength as NSNumber], dataType: .float32)
-        let mptr = dummyMask.dataPointer.assumingMemoryBound(to: Float.self)
-        for i in 0..<maxSeqLength { mptr[i] = -1e4 }
-        mptr[0] = 0
-
         let warmP1 = decoderPart1Model.makeState()
         let warmP2 = decoderPart2Model.makeState()
+        let dummyEmbeds = try MLMultiArray(shape: [1, batchSize as NSNumber, hiddenSize as NSNumber],
+                                            dataType: .float32)
+        let dummyPositions = try MLMultiArray(shape: [batchSize as NSNumber], dataType: .int32)
+        for i in 0..<batchSize { dummyPositions[i] = NSNumber(value: Int32(i)) }
+        let dummyMask = try MLMultiArray(shape: [1, 1, batchSize as NSNumber, maxSeqLength as NSNumber],
+                                          dataType: .float32)
+        let mptr = dummyMask.dataPointer.assumingMemoryBound(to: Float.self)
+        for i in 0..<(batchSize * maxSeqLength) { mptr[i] = -1e4 }
 
-        let dummyInputs = try MLDictionaryFeatureProvider(dictionary: [
-            "input_embeds": MLFeatureValue(multiArray: dummyEmbed),
-            "position": MLFeatureValue(multiArray: dummyPos),
+        let warmInputs = try MLDictionaryFeatureProvider(dictionary: [
+            "input_embeds": MLFeatureValue(multiArray: dummyEmbeds),
+            "positions": MLFeatureValue(multiArray: dummyPositions),
             "attention_mask": MLFeatureValue(multiArray: dummyMask),
         ])
-        let p1Out = try decoderPart1Model.prediction(from: dummyInputs, using: warmP1)
+        let p1Out = try decoderPart1Model.prediction(from: warmInputs, using: warmP1)
         guard let hidden = p1Out.featureValue(for: "hidden_state")?.multiArrayValue else {
             throw AudioModelError.inferenceFailed(
                 operation: "CoreML decoder part1 warmup",
@@ -193,7 +199,7 @@ public class CoreMLTextDecoder {
         }
         let p2Inputs = try MLDictionaryFeatureProvider(dictionary: [
             "input_embeds": MLFeatureValue(multiArray: hidden),
-            "position": MLFeatureValue(multiArray: dummyPos),
+            "positions": MLFeatureValue(multiArray: dummyPositions),
             "attention_mask": MLFeatureValue(multiArray: dummyMask),
         ])
         _ = try decoderPart2Model.prediction(from: p2Inputs, using: warmP2)
@@ -204,14 +210,12 @@ public class CoreMLTextDecoder {
         currentPosition = 0
         part1State = decoderPart1Model.makeState()
         part2State = decoderPart2Model.makeState()
-        // Re-mask the cached mask buffer back to fully masked-out.
-        let ptr = cachedMask.dataPointer.assumingMemoryBound(to: Float.self)
-        for i in 0..<maxSeqLength { ptr[i] = -1e4 }
     }
 
     // MARK: - Token Operations
 
-    /// Look up embedding for a token ID.
+    /// Look up the embedding vector for a single token id.
+    /// Returns shape ``[1, 1, hidden_size]``.
     public func embed(tokenId: Int32) throws -> MLMultiArray {
         let tokenArray = try MLMultiArray(shape: [1, 1], dataType: .int32)
         tokenArray[0] = NSNumber(value: tokenId)
@@ -228,47 +232,210 @@ public class CoreMLTextDecoder {
         return embedding
     }
 
-    /// Run one decoder step.
+    /// Run one decoder step on a single embedding.
     ///
-    /// Chains the two CoreML parts: ``embedding → part1 → part2 → logits``.
-    /// Each part updates its own KV cache via its own ``MLState``. The
-    /// hidden state handed from part1 to part2 has shape ``[1, 1, hidden]``.
+    /// Packs the one real token into the last input slot and fills the
+    /// remaining ``batchSize - 1`` slots with scratch positions whose
+    /// outputs and cache writes are discarded by masking. Single-token
+    /// decode pays the same ANE dispatch cost as a full chunked prefill.
     public func decoderStep(embedding: MLMultiArray) throws -> MLMultiArray {
-        guard currentPosition < maxSeqLength else {
-            throw AudioModelError.inferenceFailed(
-                operation: "CoreML decoder",
-                reason: "Sequence length \(currentPosition) exceeds max \(maxSeqLength)")
+        let bufs = try writeChunk(realEmbeddingsSource: { (slot, dstPtr) in
+            Self.copyRow(from: embedding, sourceRow: 0, hidden: self.hiddenSize,
+                         to: dstPtr, destSlot: slot)
+        }, realCount: 1)
+        return try runParts(embeds: bufs.embeds, positions: bufs.positions, mask: bufs.mask)
+    }
+
+    /// Copy one ``hidden``-length row from an MLMultiArray (any float
+    /// dtype, any strides) into a contiguous Float32 destination row.
+    /// The decoder input is declared Float32, but CoreML model *outputs*
+    /// (embedding lookup, part1 hidden) may come back as Float16 with
+    /// padded strides on ANE; a raw ``assumingMemoryBound(to: Float)``
+    /// copy would then read garbage.
+    private static func copyRow(from src: MLMultiArray, sourceRow: Int, hidden: Int,
+                                to dst: UnsafeMutablePointer<Float>, destSlot: Int) {
+        let rowStride = src.strides.count >= 2 ? src.strides[src.strides.count - 2].intValue : hidden
+        let lastStride = src.strides.last?.intValue ?? 1
+        let base = sourceRow * rowStride
+        let dstBase = destSlot * hidden
+        switch src.dataType {
+        case .float16:
+            let p = src.dataPointer.assumingMemoryBound(to: Float16.self)
+            for j in 0..<hidden { dst[dstBase + j] = Float(p[base + j * lastStride]) }
+        case .float32:
+            let p = src.dataPointer.assumingMemoryBound(to: Float.self)
+            for j in 0..<hidden { dst[dstBase + j] = p[base + j * lastStride] }
+        default:
+            let p = src.dataPointer.assumingMemoryBound(to: Float.self)
+            for j in 0..<hidden { dst[dstBase + j] = p[base + j * lastStride] }
+        }
+    }
+
+    /// Run a chunked multi-token prefill, source from MLMultiArray rows.
+    ///
+    /// ``embeddings`` is shape ``[1, N, hidden]`` containing the real
+    /// next-N tokens to commit to positions ``[currentPosition,
+    /// currentPosition + N)``. ``N`` must be ``<= batchSize``. The
+    /// returned MLMultiArray is the logits for the last real position.
+    @discardableResult
+    public func decoderPrefill(embeddings: MLMultiArray, realCount n: Int) throws -> MLMultiArray {
+        precondition(n > 0 && n <= batchSize,
+                     "realCount \(n) must be in 1...\(batchSize)")
+        let bufs = try writeChunk(realEmbeddingsSource: { (slot, dstPtr) in
+            let srcPtr = embeddings.dataPointer.assumingMemoryBound(to: Float.self)
+            for t in 0..<n {
+                let srcOff = t * self.hiddenSize
+                let dstOff = (slot + t) * self.hiddenSize
+                for j in 0..<self.hiddenSize {
+                    dstPtr[dstOff + j] = srcPtr[srcOff + j]
+                }
+            }
+        }, realCount: n)
+        return try runParts(embeds: bufs.embeds, positions: bufs.positions, mask: bufs.mask)
+    }
+
+    /// Embed a contiguous run of token ids and prefill them in batched
+    /// chunks of ``batchSize``. Used for the chat-template prefix/suffix
+    /// runs, replacing per-token ``embed`` + ``decoderStep`` loops with
+    /// one ANE dispatch per chunk. Returns the logits for the last token.
+    @discardableResult
+    public func decoderPrefillTokens(_ tokenIds: [Int32]) throws -> MLMultiArray {
+        precondition(!tokenIds.isEmpty, "decoderPrefillTokens requires at least one token")
+        var lastLogits: MLMultiArray!
+        var consumed = 0
+        while consumed < tokenIds.count {
+            let n = min(batchSize, tokenIds.count - consumed)
+            // Pack n token embeddings into a [1, n, hidden] Float32 buffer.
+            let packed = try MLMultiArray(shape: [1, n as NSNumber, hiddenSize as NSNumber],
+                                           dataType: .float32)
+            let pptr = packed.dataPointer.assumingMemoryBound(to: Float.self)
+            for k in 0..<n {
+                let emb = try embed(tokenId: tokenIds[consumed + k])
+                Self.copyRow(from: emb, sourceRow: 0, hidden: hiddenSize,
+                             to: pptr, destSlot: k)
+            }
+            lastLogits = try decoderPrefill(embeddings: packed, realCount: n)
+            consumed += n
+        }
+        return lastLogits
+    }
+
+    /// Run a chunked prefill where embeddings come from a Float buffer
+    /// (typical: bulk-extracted MLX audio embeddings).
+    @discardableResult
+    public func decoderPrefill(flatEmbeddings: [Float], offset: Int, realCount n: Int) throws -> MLMultiArray {
+        precondition(n > 0 && n <= batchSize,
+                     "realCount \(n) must be in 1...\(batchSize)")
+        let bufs = try writeChunk(realEmbeddingsSource: { (slot, dstPtr) in
+            flatEmbeddings.withUnsafeBufferPointer { buf in
+                let src = buf.baseAddress!
+                for t in 0..<n {
+                    let srcOff = (offset + t) * self.hiddenSize
+                    let dstOff = (slot + t) * self.hiddenSize
+                    for j in 0..<self.hiddenSize {
+                        dstPtr[dstOff + j] = src[srcOff + j]
+                    }
+                }
+            }
+        }, realCount: n)
+        return try runParts(embeds: bufs.embeds, positions: bufs.positions, mask: bufs.mask)
+    }
+
+    // MARK: - Internal: chunked dispatch primitives
+
+    /// Set up the input buffers (positions, mask, embeds) for a chunk of
+    /// ``realCount`` real tokens placed in the LAST ``realCount`` input
+    /// slots, with the remaining slots filled by scratch positions. The
+    /// ``realEmbeddingsSource`` callback is given the slot where real
+    /// data should land and a pointer into the embeds buffer.
+    ///
+    /// Allocates FRESH MLMultiArrays each call. Reusing buffers across
+    /// calls was tried and produces wrong outputs — CoreML appears to
+    /// hold references into the input buffer past prediction return,
+    /// so mutating it before the next call corrupts the stored KV state.
+    /// Per-call allocation costs ~0.5 ms (mask is 64 KB) which is well
+    /// below the dispatch budget.
+    private func writeChunk(
+        realEmbeddingsSource: (Int, UnsafeMutablePointer<Float>) -> Void,
+        realCount n: Int
+    ) throws -> (embeds: MLMultiArray, positions: MLMultiArray, mask: MLMultiArray) {
+        precondition(currentPosition + n <= scratchStart,
+                     "Cache overflow: would write real position \(currentPosition + n - 1) into scratch range starting at \(scratchStart)")
+
+        let T = batchSize
+        let firstRealSlot = T - n
+
+        let embeds = try MLMultiArray(shape: [1, T as NSNumber, hiddenSize as NSNumber],
+                                       dataType: .float32)
+        let positions = try MLMultiArray(shape: [T as NSNumber], dataType: .int32)
+        let mask = try MLMultiArray(shape: [1, 1, T as NSNumber, maxSeqLength as NSNumber],
+                                     dataType: .float32)
+
+        // Positions: scratch slots fill 0..firstRealSlot-1, real fills firstRealSlot..T-1
+        for i in 0..<firstRealSlot {
+            positions[i] = NSNumber(value: Int32(scratchStart + i))
+        }
+        for i in 0..<n {
+            positions[firstRealSlot + i] = NSNumber(value: Int32(currentPosition + i))
         }
 
-        // Reuse cached mask + position buffers — the mask is monotone
-        // (every new position becomes unmasked and stays unmasked), so we
-        // only flip the current position's entry from -1e4 → 0 each step.
-        let maskPtr = cachedMask.dataPointer.assumingMemoryBound(to: Float.self)
-        maskPtr[currentPosition] = 0
-        cachedPosition[0] = NSNumber(value: Int32(currentPosition))
+        // Mask: shape [1, 1, T, MAX_SEQ]
+        let mptr = mask.dataPointer.assumingMemoryBound(to: Float.self)
+        let rowSize = maxSeqLength
+        let scratchStartLocal = scratchStart
+        for t in 0..<T {
+            let rowBase = t * rowSize
+            if t < firstRealSlot {
+                for j in 0..<rowSize {
+                    mptr[rowBase + j] = -1e4
+                }
+            } else {
+                let realIdxInChunk = t - firstRealSlot
+                let absPosition = currentPosition + realIdxInChunk
+                for j in 0..<rowSize {
+                    if j <= absPosition && j < scratchStartLocal {
+                        mptr[rowBase + j] = 0
+                    } else {
+                        mptr[rowBase + j] = -1e4
+                    }
+                }
+            }
+        }
 
-        let part1Input = try MLDictionaryFeatureProvider(dictionary: [
-            "input_embeds": MLFeatureValue(multiArray: embedding),
-            "position": MLFeatureValue(multiArray: cachedPosition),
-            "attention_mask": MLFeatureValue(multiArray: cachedMask),
+        // Embeddings: zero the scratch rows + populate the real rows.
+        let eptr = embeds.dataPointer.assumingMemoryBound(to: Float.self)
+        for s in 0..<firstRealSlot {
+            for j in 0..<hiddenSize { eptr[s * hiddenSize + j] = 0 }
+        }
+        realEmbeddingsSource(firstRealSlot, eptr)
+
+        currentPosition += n
+        return (embeds, positions, mask)
+    }
+
+    /// Dispatch part1 then part2 over the given input buffers. Returns
+    /// the part2 logits MLMultiArray (shape ``[1, 1, vocab]`` — the last
+    /// real position's next-token distribution).
+    private func runParts(embeds: MLMultiArray, positions: MLMultiArray, mask: MLMultiArray) throws -> MLMultiArray {
+        let p1Input = try MLDictionaryFeatureProvider(dictionary: [
+            "input_embeds": MLFeatureValue(multiArray: embeds),
+            "positions": MLFeatureValue(multiArray: positions),
+            "attention_mask": MLFeatureValue(multiArray: mask),
         ])
-        let part1Out = try decoderPart1Model.prediction(from: part1Input, using: part1State)
-        guard let hidden = part1Out.featureValue(for: "hidden_state")?.multiArrayValue else {
+        let p1Out = try decoderPart1Model.prediction(from: p1Input, using: part1State)
+        guard let hidden = p1Out.featureValue(for: "hidden_state")?.multiArrayValue else {
             throw AudioModelError.inferenceFailed(
                 operation: "CoreML decoder part1",
                 reason: "Missing hidden_state output")
         }
 
-        let part2Input = try MLDictionaryFeatureProvider(dictionary: [
+        let p2Input = try MLDictionaryFeatureProvider(dictionary: [
             "input_embeds": MLFeatureValue(multiArray: hidden),
-            "position": MLFeatureValue(multiArray: cachedPosition),
-            "attention_mask": MLFeatureValue(multiArray: cachedMask),
+            "positions": MLFeatureValue(multiArray: positions),
+            "attention_mask": MLFeatureValue(multiArray: mask),
         ])
-        let part2Out = try decoderPart2Model.prediction(from: part2Input, using: part2State)
-
-        currentPosition += 1
-
-        guard let logits = part2Out.featureValue(for: "logits")?.multiArrayValue else {
+        let p2Out = try decoderPart2Model.prediction(from: p2Input, using: part2State)
+        guard let logits = p2Out.featureValue(for: "logits")?.multiArrayValue else {
             throw AudioModelError.inferenceFailed(
                 operation: "CoreML decoder part2",
                 reason: "Missing logits output")
@@ -276,15 +443,18 @@ public class CoreMLTextDecoder {
         return logits
     }
 
+    /// Expose the fixed batch size so callers can chunk audio prefill.
+    public var prefillBatchSize: Int { batchSize }
+
     /// Get argmax token ID from logits.
     ///
-    /// Stride-aware: walks `vocabSize` (the logical last-dim length) using
-    /// `strides.last` as the step, so this is correct for CoreML outputs
-    /// where the runtime decides to return a strided buffer (e.g. ANE
-    /// padding). NaN-safe — NaN values are skipped, so a single bad logit
-    /// can't poison the argmax (the previous flat `ptr[i]` loop combined
-    /// with `maxVal = -Float.infinity` would silently keep `maxIdx = 0`
-    /// if NaN propagated through the comparison).
+    /// Stride-aware: walks ``vocabSize`` (the logical last-dim length)
+    /// using ``strides.last`` as the step, correct for CoreML outputs
+    /// that may be strided (e.g. ANE padding). NaN-safe — NaN values
+    /// are skipped, so one bad logit can't poison the argmax (the
+    /// previous flat ``ptr[i]`` loop with ``maxVal = -Float.infinity``
+    /// would silently keep ``maxIdx = 0`` since IEEE-754 ``NaN > x``
+    /// is always false).
     public func argmax(logits: MLMultiArray) -> Int32 {
         let vocab = logits.shape.last?.intValue ?? logits.count
         let lastStride = logits.strides.last?.intValue ?? 1
@@ -331,35 +501,19 @@ public class CoreMLTextDecoder {
     // MARK: - Audio Embedding Injection
 
     /// Convert MLXArray audio embeddings to MLMultiArray for decoder input.
-    ///
-    /// Audio embeddings from the CoreML encoder are [1, T, 1024].
-    /// Each position is fed to the decoder one at a time during prefill.
     public func audioEmbeddingToMultiArray(_ embedding: MLXArray, at index: Int) throws -> MLMultiArray {
-        // embedding: [1, T, hidden_size] — extract [1, 1, hidden_size] at index
         let hidden = embedding.dim(2)
         let result = try MLMultiArray(shape: [1, 1, hidden as NSNumber], dataType: .float32)
         let ptr = result.dataPointer.assumingMemoryBound(to: Float.self)
-
-        // Extract the slice at index
         let slice = embedding[0..., index..<(index + 1), 0...]
         let data: [Float] = slice.asArray(Float.self)
         for i in 0..<hidden {
             ptr[i] = data[i]
         }
-
         return result
     }
 
     /// Extract audio embedding at index from MLMultiArray (no MLX dependency).
-    ///
-    /// This is the MLX-free equivalent of `audioEmbeddingToMultiArray(_:at:)`.
-    /// Used by `transcribeWithoutMLX()` to avoid any Metal GPU evaluation,
-    /// making it safe for iOS background execution.
-    ///
-    /// - Parameters:
-    ///   - embeddings: Audio embeddings as MLMultiArray with shape `[1, T, hidden_size]`
-    ///   - index: Time-step index to extract (0..<T)
-    /// - Returns: MLMultiArray with shape `[1, 1, hidden_size]` for a single time step
     public func audioEmbeddingFromMultiArray(_ embeddings: MLMultiArray, at index: Int) throws -> MLMultiArray {
         let hidden = embeddings.shape[2].intValue
         let result = try MLMultiArray(shape: [1, 1, hidden as NSNumber], dataType: .float32)
@@ -375,9 +529,6 @@ public class CoreMLTextDecoder {
     // MARK: - Helpers
 
     private static func findModel(named name: String, in directory: URL) -> URL? {
-        // Only pre-compiled ``.mlmodelc`` is supported — on-device
-        // ``MLModel.compileModel`` drifts per runtime, and the published
-        // ``aufklarer/Qwen3-ASR-CoreML`` repo ships compiled bundles only.
         let compiled = directory.appendingPathComponent("\(name).mlmodelc", isDirectory: true)
         if FileManager.default.fileExists(atPath: compiled.path) {
             return compiled
