@@ -29,6 +29,12 @@ jobs:
   e2e:
     runs-on: macos-15
     timeout-minutes: 90
+    # macos-15 runners are virtualized and have no usable Neural Engine, so
+    # loading a CoreML model with ANE targets triggers an on-device ANE
+    # compile that hangs on large graphs (a 27-min silent stall loading the
+    # Qwen3-ASR T=128 decoder). Force CPU+GPU in CI; on-device keeps the ANE.
+    env:
+      SPEECH_COREML_COMPUTE_UNITS: cpuAndGPU
     strategy:
       fail-fast: false
       matrix:

@@ -14,6 +14,10 @@ jobs:
   build-and-test:
     runs-on: macos-15
     timeout-minutes: 45
+    # No usable Neural Engine on the virtualized runner — force CPU+GPU so
+    # any CoreML model load skips the (hang-prone) on-device ANE compile.
+    env:
+      SPEECH_COREML_COMPUTE_UNITS: cpuAndGPU
     steps:
       - uses: actions/checkout@v5
 

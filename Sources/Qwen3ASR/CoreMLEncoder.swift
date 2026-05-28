@@ -27,7 +27,7 @@ public class CoreMLASREncoder {
     /// Load encoder from a directory containing `encoder.mlmodelc`.
     public static func load(
         from directory: URL,
-        computeUnits: MLComputeUnits = .all
+        computeUnits: MLComputeUnits = CoreMLComputeUnitsResolver.resolved(default: .all)
     ) throws -> CoreMLASREncoder {
         let modelURL = directory.appendingPathComponent("encoder.mlmodelc", isDirectory: true)
         guard FileManager.default.fileExists(atPath: modelURL.path) else {
@@ -45,7 +45,7 @@ public class CoreMLASREncoder {
     /// Load encoder from HuggingFace.
     public static func fromPretrained(
         modelId: String = defaultModelId,
-        computeUnits: MLComputeUnits = .all,
+        computeUnits: MLComputeUnits = CoreMLComputeUnitsResolver.resolved(default: .all),
         cacheDir: URL? = nil,
         offlineMode: Bool = false,
         progressHandler: ((Double, String) -> Void)? = nil
