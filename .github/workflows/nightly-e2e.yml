@@ -86,10 +86,10 @@ jobs:
           echo "Skipping ${{ matrix.shard.name }} — manual run filtered to '${{ github.event.inputs.shard }}'"
           exit 0
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Cache SwiftPM build
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .build
           key: spm-nightly-${{ runner.os }}-${{ hashFiles('Package.swift', 'Package.resolved') }}
