@@ -121,22 +121,23 @@ public class ParakeetASRModel {
             // iterate over valid frames.
             let bufferFrames = mel.shape[2].intValue
             var start = 0
-            var nWindows = 0
+            var windows = 0
             while start < melLength {
                 let win = min(maxWindow, melLength - start)
                 let windowMel = try sliceMel(mel: mel, start: start, length: win, totalFrames: bufferFrames)
                 let r = try encodeAndDecodeWindow(mel: windowMel, actualLength: win)
                 tokenIds += r.tokens; tokenLogProbs += r.tokenLogProbs
-                start += maxWindow; nWindows += 1
+                start += maxWindow; windows += 1
             }
             AudioLog.inference.debug(
-                "Parakeet: split \(melLength) mel frames into \(nWindows) windows of \(maxWindow)")
+                "Parakeet: split \(melLength) mel frames into \(windows) windows of \(maxWindow)")
         }
         let tInfer1 = CFAbsoluteTimeGetCurrent()
 
-        // Step 4: Vocabulary decode + overall confidence. Derive confidence
-        // from all emitted token log-probs (silent windows emit none, so
-        // chunking doesn't dilute it) — same formula as TDTGreedyDecoder.
+        // Step 4: Vocabulary decode + overall confidence. Compute confidence
+        // from the emitted token log-probs (the decoder's own formula) rather
+        // than averaging per-window — otherwise silent windows in chunked long
+        // audio would dilute it toward zero.
         let text = vocabulary.decode(tokenIds)
         lastConfidence = tokenLogProbs.isEmpty
             ? 0
