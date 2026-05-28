@@ -148,7 +148,7 @@ public final class WeSpeakerModel {
             }
 
             let mlConfig = MLModelConfiguration()
-            mlConfig.computeUnits = .cpuAndNeuralEngine
+            mlConfig.computeUnits = CoreMLComputeUnitsResolver.resolved(default: .cpuAndNeuralEngine)
 
             let model: MLModel
             do {

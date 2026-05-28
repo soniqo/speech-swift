@@ -14,10 +14,12 @@ jobs:
   build-and-test:
     runs-on: macos-15
     timeout-minutes: 45
-    # No usable Neural Engine on the virtualized runner — force CPU+GPU so
-    # any CoreML model load skips the (hang-prone) on-device ANE compile.
+    # The virtualized runner has no usable Neural Engine AND its paravirtual
+    # GPU can't JIT CoreML's first-load Metal program for stateful graphs, so
+    # both ANE and cpuAndGPU loads hang. Force cpuOnly — no ANE/GPU codegen,
+    # deterministic, and fine for correctness assertions. On-device keeps ANE.
     env:
-      SPEECH_COREML_COMPUTE_UNITS: cpuAndGPU
+      SPEECH_COREML_COMPUTE_UNITS: cpuOnly
     steps:
       - uses: actions/checkout@v5
 

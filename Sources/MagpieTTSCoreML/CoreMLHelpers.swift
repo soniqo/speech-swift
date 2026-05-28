@@ -1,5 +1,6 @@
 import CoreML
 import Foundation
+import AudioCommon
 
 /// FP32 / Int32 marshalling between Swift buffers and the
 /// `MLMultiArray` instances our `.mlmodelc` bundles consume. Our bundle is
@@ -51,8 +52,11 @@ enum MagpieCoreMLBridge {
         case "all":             config.computeUnits = .all
         case "cpuAndGPU":       config.computeUnits = .cpuAndGPU
         case "cpuOnly":         config.computeUnits = .cpuOnly
-        case "ane", nil:        config.computeUnits = .cpuAndNeuralEngine
-        default:                config.computeUnits = .all
+        case "ane":             config.computeUnits = .cpuAndNeuralEngine
+        // No Magpie-specific override: honor the global SPEECH_COREML_COMPUTE_UNITS
+        // (CI forces cpuOnly; on-device this stays ANE).
+        case nil:               config.computeUnits = CoreMLComputeUnitsResolver.resolved(default: .cpuAndNeuralEngine)
+        default:                config.computeUnits = CoreMLComputeUnitsResolver.resolved(default: .all)
         }
         do {
             return try MLModel(contentsOf: url, configuration: config)

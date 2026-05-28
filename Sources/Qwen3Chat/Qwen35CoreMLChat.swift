@@ -176,7 +176,7 @@ public final class Qwen35CoreMLChat: @unchecked Sendable {
         }
 
         let mlConfig = MLModelConfiguration()
-        mlConfig.computeUnits = computeUnits
+        mlConfig.computeUnits = CoreMLComputeUnitsResolver.resolved(default: computeUnits)
         return try await MLModel.load(contentsOf: compiledURL, configuration: mlConfig)
     }
 

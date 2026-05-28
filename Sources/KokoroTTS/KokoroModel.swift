@@ -13,7 +13,7 @@ class KokoroNetwork {
     /// Load E2E CoreML model from cache directory.
     init(directory: URL, computeUnits: MLComputeUnits = .all) throws {
         let config = MLModelConfiguration()
-        config.computeUnits = computeUnits
+        config.computeUnits = CoreMLComputeUnitsResolver.resolved(default: computeUnits)
 
         let e2eNames = ["kokoro_5s", "kokoro_10s", "kokoro_15s", "kokoro"]
         var loaded: MLModel?

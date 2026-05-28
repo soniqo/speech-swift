@@ -448,7 +448,7 @@ public class ParakeetASRModel {
         }
 
         let mlConfig = MLModelConfiguration()
-        mlConfig.computeUnits = computeUnits
+        mlConfig.computeUnits = CoreMLComputeUnitsResolver.resolved(default: computeUnits)
 
         do {
             let model = try MLModel(contentsOf: modelURL, configuration: mlConfig)

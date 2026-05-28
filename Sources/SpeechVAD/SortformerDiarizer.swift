@@ -92,7 +92,7 @@ public final class SortformerDiarizer {
         }
 
         let mlConfig = MLModelConfiguration()
-        mlConfig.computeUnits = .cpuAndNeuralEngine
+        mlConfig.computeUnits = CoreMLComputeUnitsResolver.resolved(default: .cpuAndNeuralEngine)
 
         let mlModel: MLModel
         do {

@@ -5,20 +5,20 @@ import Foundation
 /// Resolves the `MLComputeUnits` a CoreML model should load with, honoring
 /// the `SPEECH_COREML_COMPUTE_UNITS` environment override.
 ///
-/// **Why this exists.** A `.mlmodelc` is compiled MIL, but the Apple Neural
-/// Engine program is chip-and-OS-specific and is generated the *first time*
-/// the model loads with `.cpuAndNeuralEngine` (or `.all`). On real M-series
-/// hardware that first-load ANE compile takes seconds; on a virtualized
-/// GitHub `macos-15` runner — which has no usable Neural Engine — the OS
-/// still attempts the ANE compile of a large graph and **hangs** (observed:
-/// a 27-minute silent stall loading the Qwen3-ASR T=128 decoder, vs ~5 min
-/// for every other shard).
+/// **Why this exists.** A `.mlmodelc` is compiled MIL, but the device-specific
+/// program (ANE *or* GPU/Metal) is generated the *first time* the model loads.
+/// On real M-series hardware that first-load codegen takes seconds; on a
+/// virtualized GitHub `macos-15` runner it **hangs**: the runner has no usable
+/// Neural Engine (so `.cpuAndNeuralEngine`/`.all` stall attempting the ANE
+/// compile) AND its paravirtual GPU can't JIT CoreML's Metal program for a
+/// stateful graph (so `.cpuAndGPU` stalls too). Both were observed as 17-27 min
+/// silent hangs loading the Qwen3-ASR T=128 stateful decoder.
 ///
-/// On-device we keep the ANE (callers pass their normal default as
-/// `fallback`). In CI we set `SPEECH_COREML_COMPUTE_UNITS=cpuAndGPU` so the
-/// runner skips the ANE compile entirely — GPU/CPU execution is fast and
-/// deterministic (measured ~86 ms/step CPU for the T=128 decoder) and gives
-/// the same numerical results for our text-matching assertions.
+/// On-device we keep the normal default (callers pass it as `fallback`; the env
+/// is unset so this is a no-op). In CI we set `SPEECH_COREML_COMPUTE_UNITS=cpuOnly`
+/// so every loader skips ANE *and* GPU codegen — pure CPU MIL execution loads
+/// instantly, is deterministic, and yields identical text for our roundtrip
+/// assertions (~86 ms/step for the T=128 decoder, fine for correctness tests).
 public enum CoreMLComputeUnitsResolver {
     public static let envKey = "SPEECH_COREML_COMPUTE_UNITS"
 

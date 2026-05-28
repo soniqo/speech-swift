@@ -77,7 +77,7 @@ public final class Qwen3TTSCoreMLModel {
             case "gpu": cfg.computeUnits = .cpuAndGPU
             case "cpu": cfg.computeUnits = .cpuOnly
             case "all": cfg.computeUnits = .all
-            default:    cfg.computeUnits = fallback
+            default:    cfg.computeUnits = CoreMLComputeUnitsResolver.resolved(default: fallback)
             }
             return cfg
         }
