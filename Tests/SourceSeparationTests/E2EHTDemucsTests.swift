@@ -91,6 +91,58 @@ final class E2EHTDemucsTests: XCTestCase {
         XCTAssertGreaterThan(snrTorch, 20.0, "int8 should still track the reference (\(snrTorch) dB)")
     }
 
+    /// Export a pre-quantized int8 bundle, reload it via `fromLocal`, and confirm
+    /// it tracks both the in-memory int8 path and the PyTorch reference. Validates
+    /// the publishable int8 round-trip (quantize → save → quantize-structure → load).
+    func testInt8BundleRoundTrip() throws {
+        guard FileManager.default.fileExists(atPath: Self.fp32Dir.appendingPathComponent("htdemucs_ft.safetensors").path),
+              FileManager.default.fileExists(atPath: Self.parityFile.path) else {
+            throw XCTSkip("fp32 weights or parity_m0.safetensors not present")
+        }
+        func snr(_ ref: MLXArray, _ x: MLXArray) -> Float {
+            let d = x - ref
+            let s = (ref * ref).sum().item(Float.self)
+            let e = (d * d).sum().item(Float.self)
+            return 10 * log10(s / max(e, 1e-20))
+        }
+        let dump = try MLX.loadArrays(url: Self.parityFile)
+        let input = dump["input"]!, expected = dump["expected"]!
+
+        let inMem = try HTDemucsSeparator.fromLocal(directory: Self.fp32Dir, quantizeBits: 8)
+        let outMem = inMem.models[0](input); eval(outMem)
+
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("htd_int8_\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        try HTDemucsSeparator.exportQuantizedBundle(fromDirectory: Self.fp32Dir, toDirectory: tmp)
+
+        let reloaded = try HTDemucsSeparator.fromLocal(directory: tmp, modelName: "htdemucs_ft_int8")
+        XCTAssertEqual(reloaded.config.quantization?.bits, 8)
+        XCTAssertEqual(reloaded.config.quantization?.groupSize, 64)
+        let outReloaded = reloaded.models[0](input); eval(outReloaded)
+
+        XCTAssertEqual(outReloaded.shape, expected.shape)
+        let snrVsMem = snr(outMem, outReloaded)
+        let snrVsTorch = snr(expected, outReloaded)
+        print("INT8 BUNDLE: SNR(reloaded vs in-mem int8) = \(snrVsMem) dB, SNR(reloaded vs torch) = \(snrVsTorch) dB")
+        XCTAssertGreaterThan(snrVsMem, 35.0, "bundle reload should match in-memory int8 (\(snrVsMem) dB)")
+        XCTAssertGreaterThan(snrVsTorch, 20.0, "int8 bundle should track the reference (\(snrVsTorch) dB)")
+    }
+
+    /// One-shot artifact export: set `HTDEMUCS_INT8_OUT=<dir>` to write the
+    /// publishable int8 bundle (skipped otherwise, so CI/dev runs stay clean).
+    func testExportInt8Artifact() throws {
+        guard let outPath = ProcessInfo.processInfo.environment["HTDEMUCS_INT8_OUT"] else {
+            throw XCTSkip("set HTDEMUCS_INT8_OUT=<dir> to export the int8 bundle")
+        }
+        guard FileManager.default.fileExists(atPath: Self.fp32Dir.appendingPathComponent("htdemucs_ft.safetensors").path) else {
+            throw XCTSkip("fp32 weights not present")
+        }
+        let out = URL(fileURLWithPath: outPath)
+        try HTDemucsSeparator.exportQuantizedBundle(fromDirectory: Self.fp32Dir, toDirectory: out)
+        print("Wrote int8 bundle to \(out.path)")
+    }
+
     /// Forward runs end-to-end and produces the right shape with finite values.
     func testForwardShape() throws {
         try skipIfMissing()

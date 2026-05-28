@@ -48,15 +48,18 @@ combine-weights — inference runs each sub-model and keeps its own stem.
 
 ## Precision
 
-| Variant | Parity vs PyTorch | Bundle size |
-|---|---|---|
-| fp32 | 57.6 dB SNR | 640 MB |
-| **fp16** (shipped) | ≈ fp32 | **320 MB** |
-| int8 (transformer Linear only) | 42.2 dB SNR | ~240 MB |
+| Variant | Parity vs PyTorch | Bundle | Published file |
+|---|---|---|---|
+| fp32 | 57.6 dB SNR | 640 MB | — (export only) |
+| **fp16** (default) | ≈ fp32 | **320 MB** | `htdemucs_ft.safetensors` |
+| int8 (transformer Linear only) | 42.0 dB SNR | **236 MB** | `htdemucs_ft_int8.safetensors` |
 
 The MLX-Swift port matches the PyTorch reference at **57.6 dB SNR** (fp32). int8
 quantizes only the transformer Linear layers (convs and packed-attention
-`in_proj` aren't MLX-quantizable), so it saves ~25% with a small quality cost.
+`in_proj` aren't MLX-quantizable), saving ~26% download for a small quality cost.
+Both bundles live in the same HuggingFace repo and are selected at load time —
+fp16 is the default; pass `--htdemucs-precision int8` (CLI) or
+`precision: .int8` (Swift) for the smaller bundle.
 
 ## Quality vs Open-Unmix
 
@@ -75,8 +78,11 @@ matches it to 57.6 dB SNR.
 ## Usage
 
 ```bash
-# Downloads htdemucs_ft from HuggingFace on first run
+# Downloads htdemucs_ft (fp16) from HuggingFace on first run
 speech separate song.wav --engine htdemucs
+
+# Smaller int8 bundle (default is fp16)
+speech separate song.wav --engine htdemucs --htdemucs-precision int8
 
 # Specific stems / output dir
 speech separate song.wav --engine htdemucs --stems vocals,drums --output-dir stems/
@@ -84,7 +90,8 @@ speech separate song.wav --engine htdemucs --stems vocals,drums --output-dir ste
 
 ```swift
 import SourceSeparation
-let sep = try await HTDemucsSeparator.fromPretrained()
+let sep = try await HTDemucsSeparator.fromPretrained()              // fp16 (default)
+let int8 = try await HTDemucsSeparator.fromPretrained(precision: .int8)
 let stems = sep.separate(mix)   // [1,2,L] → ["vocals": [1,2,L], ...]
 ```
 

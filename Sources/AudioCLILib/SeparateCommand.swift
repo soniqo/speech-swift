@@ -28,6 +28,9 @@ public struct SeparateCommand: ParsableCommand {
     @Option(name: .long, help: "Local htdemucs weights dir (htdemucs_ft.safetensors + _config.json)")
     public var htdemucsDir: String?
 
+    @Option(name: .long, help: "HTDemucs precision: fp16 (default) or int8 (smaller download)")
+    public var htdemucsPrecision: String = "fp16"
+
     @Flag(name: .long, help: "Show timing info")
     public var verbose: Bool = false
 
@@ -86,13 +89,16 @@ public struct SeparateCommand: ParsableCommand {
 
     private func runHTDemucs(inputURL: URL, outDir: URL, targets: [SeparationTarget]) throws {
         try runAsync {
+            let precision = HTDemucsSeparator.Precision(rawValue: htdemucsPrecision.lowercased()) ?? .fp16
             let separator: HTDemucsSeparator
             if let dir = htdemucsDir {
-                print("Loading HTDemucs (Demucs v4) from \(dir)...")
-                separator = try HTDemucsSeparator.fromLocal(directory: URL(fileURLWithPath: dir))
+                print("Loading HTDemucs (Demucs v4, \(precision.rawValue)) from \(dir)...")
+                separator = try HTDemucsSeparator.fromLocal(
+                    directory: URL(fileURLWithPath: dir), modelName: precision.modelName)
             } else {
-                print("Loading HTDemucs (Demucs v4)...")
-                separator = try await HTDemucsSeparator.fromPretrained(progressHandler: reportProgress)
+                print("Loading HTDemucs (Demucs v4, \(precision.rawValue))...")
+                separator = try await HTDemucsSeparator.fromPretrained(
+                    precision: precision, progressHandler: reportProgress)
             }
 
             print("Loading audio: \(input)")

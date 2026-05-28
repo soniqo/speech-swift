@@ -16,9 +16,17 @@ public struct HTDemucsConfig: Codable, Sendable {
     public let segment: Double         // seconds per inference window (7.8)
     public let audioChannels: Int
     public let arch: Arch
+    /// Present only for pre-quantized bundles (e.g. int8). When set, the loader
+    /// builds the quantized module structure before loading the packed weights.
+    public let quantization: Quantization?
 
     public var hopLength: Int { arch.nfft / 4 }
     public var trainingLength: Int { Int(segment * Double(samplerate)) }
+
+    public struct Quantization: Codable, Sendable {
+        public let bits: Int
+        public let groupSize: Int
+    }
 
     public struct Arch: Codable, Sendable {
         public let channels: Int
