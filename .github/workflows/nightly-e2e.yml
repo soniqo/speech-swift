@@ -49,56 +49,56 @@ jobs:
           # CoreML model families, one shard each so a slow/failing model is
           # isolated and each xctest process loads a bounded weight set. All
           # run cpuOnly in CI via SPEECH_COREML_COMPUTE_UNITS (set above).
-          - name: kokoro
+          - name: kokoro-coreml
             filter: 'KokoroTTSTests'
             skip: ''
-          - name: parakeet
+          - name: parakeet-coreml
             filter: 'ParakeetASRTests|ParakeetStreamingASRTests'
             skip: ''
-          - name: magpie
+          - name: magpie-coreml
             filter: 'MagpieTTSCoreMLTests'
             skip: ''
-          - name: speech-enhance
+          - name: speech-enhance-coreml
             filter: 'SpeechEnhancementTests'
             skip: ''
-          - name: wakeword
+          - name: wakeword-coreml
             filter: 'SpeechWakeWordTests'
             skip: ''
-          - name: vad-diar
+          - name: vad-diar-mlx-coreml
             filter: 'SpeechVADTests'
             skip: ''
           - name: audio-infra
             filter: 'AudioCommonTests|AudioServerTests|SpeechUITests'
             skip: ''
-          - name: qwen3-chat
+          - name: qwen3-chat-coreml
             filter: 'Qwen3ChatTests'
             skip: ''
           # qwen3-asr was a single shard in the first nightly and OOM-killed
           # the runner (~8 GB unique-weight footprint vs ~7 GB usable RAM on
           # macos-15). Split into 4 sub-shards so each xctest process loads
           # a bounded set of model variants.
-          - name: qwen3-asr-06b
+          - name: qwen3-asr-06b-mlx-coreml
             filter: 'Qwen3ASRTests'
             # Peel off 1.7B, 8-bit, aligner, and streaming into their own
             # shards; this one runs unit tests + 0.6B-4bit E2E + decoding.
             skip: 'testLargeModel|testSmall8bit|ForcedAlignerTests|StreamingASRTests'
-          - name: qwen3-asr-17b
+          - name: qwen3-asr-17b-mlx
             # Matches both `testLargeModel*` (1.7B-MLX-8bit) and
             # `testSmall8bit*` (0.6B-MLX-8bit) methods inside
             # E2EQwen3ASRIntegrationTests.
             filter: 'testLargeModel|testSmall8bit'
             skip: ''
-          - name: qwen3-asr-aligner
+          - name: qwen3-asr-aligner-mlx
             # 4-bit and bf16 forced-aligner variants — bf16 alone is ~2.3 GB
             # working set, so keep isolated from main ASR shards.
             filter: 'ForcedAlignerTests'
             skip: ''
-          - name: qwen3-asr-streaming
+          - name: qwen3-asr-streaming-mlx-coreml
             # StreamingASR loads ASR-0.6B-4bit + SileroVAD per test method;
             # 3 methods × fresh load = enough memory churn to deserve isolation.
             filter: 'StreamingASRTests'
             skip: ''
-          - name: cosyvoice
+          - name: cosyvoice-mlx-coreml
             filter: 'CosyVoiceTTSTests'
             skip: ''
 
