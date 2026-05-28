@@ -323,6 +323,25 @@ final class E2EOpenUnmixTests: XCTestCase {
         }
     }
 
+    func testSeparateResamplesNon44kInput() throws {
+        let s = try separator
+        // Feed 48 kHz audio. UMX runs at 44.1 kHz, so separate() must resample
+        // the mix to the model rate; stems come back at 44.1 kHz, not 48 kHz.
+        let audio48 = makeStereoTestSignal(seconds: 2.0, sampleRate: 48000)
+        let stems = s.separate(audio: audio48, sampleRate: 48000, wiener: false)
+        let expected = Int((Double(audio48[0].count) * 44100.0 / 48000.0).rounded())
+        XCTAssertEqual(stems.count, 4)
+        for target in SeparationTarget.allCases {
+            guard let stem = stems[target] else {
+                XCTFail("Missing stem: \(target.rawValue)")
+                continue
+            }
+            XCTAssertEqual(stem[0].count, expected,
+                "\(target.rawValue) should be at the 44.1 kHz model rate (got \(stem[0].count), expected \(expected))")
+            XCTAssertEqual(stem[1].count, expected)
+        }
+    }
+
     func testSeparateStemsAreNotSilent() throws {
         let s = try separator
         let audio = makeStereoTestSignal(seconds: 2.0)
