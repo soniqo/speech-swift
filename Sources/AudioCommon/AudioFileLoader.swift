@@ -157,18 +157,21 @@ public enum AudioFileLoader {
         return (samples, Int(sampleRate))
     }
 
-    /// Resample mono audio using AVAudioConverter with mastering-grade sinc.
+    /// Resample mono audio using `AVAudioConverter`.
     ///
-    /// Uses the steepest band-limited sinc + anti-alias filter (the default
-    /// "normal" algorithm rolls off the top octave and can alias on music) and
-    /// fully drains the converter's internal tail so the last samples aren't
-    /// truncated.
+    /// Selects the Mastering sample-rate-conversion algorithm at maximum
+    /// quality (`AVSampleRateConverterAlgorithm_Mastering`, `.max`) — intended
+    /// for offline/high-quality conversion rather than realtime preview. Fully
+    /// drains the converter via `.endOfStream` so the filter tail isn't
+    /// truncated, and normalizes the result to the exact expected frame count.
     ///
     /// - Parameters:
     ///   - samples: mono PCM Float32 audio
     ///   - inputRate: source sample rate in Hz
     ///   - outputRate: target sample rate in Hz
-    /// - Returns: resampled audio at `outputRate` (original samples on failure)
+    /// - Returns: resampled audio at `outputRate`. On converter-setup or
+    ///   conversion failure, returns the original `samples` unchanged (callers
+    ///   never receive partial/truncated output).
     public static func resample(_ samples: [Float], from inputRate: Int, to outputRate: Int) -> [Float] {
         guard inputRate != outputRate, !samples.isEmpty else { return samples }
 
@@ -253,8 +256,16 @@ public enum AudioFileLoader {
     }
 
     /// Run the converter to completion, draining its internal tail via
-    /// `.endOfStream`, and return one Float array per channel. `nil` on failure
-    /// or empty output.
+    /// `.endOfStream`, and return one Float array per channel normalized to the
+    /// exact expected frame count.
+    ///
+    /// Returns `nil` unless the converter reaches `.endOfStream` cleanly. Only
+    /// `.endOfStream` is success: `.error` (or a thrown `NSError`) is a hard
+    /// failure, and a no-progress step that isn't end-of-stream means the
+    /// converter is stuck. In every non-success case the partial output is
+    /// discarded rather than returned, so callers can fall back instead of
+    /// silently propagating a truncated buffer (which would desync downstream
+    /// audio/video).
     private static func convertDrained(
         converter: AVAudioConverter,
         source: AVAudioPCMBuffer,
@@ -278,8 +289,8 @@ public enum AudioFileLoader {
             var error: NSError?
             let status = converter.convert(to: target, error: &error) { _, outStatus in
                 if fed {
-                    // Signal true end-of-stream so the converter flushes its
-                    // tail instead of stopping short (the old .noDataNow path).
+                    // Signal end-of-stream so the converter flushes its sinc
+                    // tail instead of stopping short.
                     outStatus.pointee = .endOfStream
                     return nil
                 }
@@ -295,12 +306,29 @@ public enum AudioFileLoader {
                 }
             }
 
-            if status == .endOfStream || status == .error || status == .inputRanDry { break }
-            if error != nil { break }
-            if produced == 0 { break }  // no-progress guard
+            // Order matters: a clean `.endOfStream` (success) usually arrives on
+            // a call that produces 0 frames, so check it before the no-progress
+            // guard. `.inputRanDry` is not terminal — keep pulling until the
+            // input block signals `.endOfStream`.
+            if status == .error || error != nil { return nil }
+            if status == .endOfStream { break }
+            if produced == 0 { return nil }
         }
 
-        return out[0].isEmpty ? nil : out
+        // Normalize to the exact expected length so output is a strict function
+        // of input length and ratio (downstream stereo alignment and A/V sync
+        // rely on this). Mastering SRC compensates filter latency, so this is a
+        // 0–1 sample trim/pad in practice.
+        let expected = Int((Double(inputFrames) * ratio).rounded())
+        guard expected > 0, !out[0].isEmpty else { return nil }
+        for c in 0..<channels {
+            if out[c].count > expected {
+                out[c].removeLast(out[c].count - expected)
+            } else if out[c].count < expected {
+                out[c].append(contentsOf: repeatElement(0, count: expected - out[c].count))
+            }
+        }
+        return out
     }
 }
 

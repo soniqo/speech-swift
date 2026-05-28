@@ -40,15 +40,24 @@ final class ResampleTests: XCTestCase {
         let input = sine(freq: 1000, seconds: 1.0, sampleRate: 48000)
         let out = AudioFileLoader.resample(input, from: 48000, to: 44100)
         let expected = Int((Double(input.count) * 44100.0 / 48000.0).rounded())
-        XCTAssertEqual(out.count, expected, accuracy: 2,
-            "48k→44.1k length should match the ratio (got \(out.count), expected \(expected))")
+        XCTAssertEqual(out.count, expected,
+            "48k→44.1k length must be exactly round(N·ratio) (got \(out.count), expected \(expected))")
     }
 
     func testUpsampleLength() {
         let input = sine(freq: 1000, seconds: 0.5, sampleRate: 16000)
         let out = AudioFileLoader.resample(input, from: 16000, to: 48000)
         let expected = Int((Double(input.count) * 48000.0 / 16000.0).rounded())
-        XCTAssertEqual(out.count, expected, accuracy: 2)
+        XCTAssertEqual(out.count, expected)
+    }
+
+    func testExactLengthOddRatio() {
+        // Non-integer ratio downsample (44.1k→16k) must still land on exactly
+        // round(N·ratio) — the normalization step enforces this.
+        let input = sine(freq: 1000, seconds: 0.7, sampleRate: 44100)
+        let out = AudioFileLoader.resample(input, from: 44100, to: 16000)
+        let expected = Int((Double(input.count) * 16000.0 / 44100.0).rounded())
+        XCTAssertEqual(out.count, expected)
     }
 
     func testIdentityReturnsInput() {
@@ -78,6 +87,54 @@ final class ResampleTests: XCTestCase {
         let out = AudioFileLoader.resample(input, from: 48000, to: 44100)
         XCTAssertEqual(rms(out), rms(input), accuracy: 0.02,
             "Overall energy should be preserved across resampling")
+    }
+
+    func testEndImpulseLandsInTail() {
+        // A unit impulse as the *last* input sample is the strongest drain
+        // test: its sinc response sits in the final output samples. A broken
+        // drain (the old single-convert path) truncates the converter's
+        // latency tail and would zero these out. A continuous sine can't catch
+        // this — it has energy at the end regardless of correct draining.
+        let n = 48000
+        var input = [Float](repeating: 0, count: n)
+        input[n - 1] = 1.0
+        let out = AudioFileLoader.resample(input, from: 48000, to: 44100)
+
+        let expected = Int((Double(n) * 44100.0 / 48000.0).rounded())
+        XCTAssertEqual(out.count, expected, "exact length even with an end impulse")
+
+        // The response must actually be present at the tail, not truncated.
+        XCTAssertGreaterThan(rms(Array(out.suffix(32))), 0.1,
+            "End-impulse response must survive the drain (tail not zeroed)")
+        // Peak should sit at/near the very last sample.
+        let peakIdx = out.indices.max(by: { abs(out[$0]) < abs(out[$1]) }) ?? 0
+        XCTAssertGreaterThan(peakIdx, out.count - 16,
+            "Impulse peak should land in the final samples, not be truncated/shifted")
+    }
+
+    func testLateImpulseRetainsFullEnergy() {
+        // An impulse a few ms before the end (response fully inside the output)
+        // must retain the same energy as the identical impulse mid-buffer. If
+        // the drain dropped the tail latency, the late impulse would lose
+        // energy relative to the centered one.
+        let n = 48000
+        var mid = [Float](repeating: 0, count: n)
+        mid[n / 2] = 1.0
+        var late = [Float](repeating: 0, count: n)
+        late[n - 100] = 1.0
+
+        let outMid = AudioFileLoader.resample(mid, from: 48000, to: 44100)
+        let outLate = AudioFileLoader.resample(late, from: 48000, to: 44100)
+
+        func energy(_ x: [Float]) -> Double { x.reduce(0.0) { $0 + Double($1) * Double($1) } }
+        let eMid = energy(outMid)
+        let eLate = energy(outLate)
+        XCTAssertGreaterThan(eMid, 0.5, "impulse should resample to non-trivial energy")
+        XCTAssertEqual(eLate / eMid, 1.0, accuracy: 0.05,
+            "A late impulse must retain the same energy as a centered one (tail not lost)")
+        // And that energy must live in the tail region, not be shifted earlier.
+        XCTAssertGreaterThan(energy(Array(outLate.suffix(128))) / eLate, 0.5,
+            "Late-impulse response should sit in the final output samples")
     }
 
     // MARK: - Anti-aliasing
@@ -133,7 +190,7 @@ final class ResampleTests: XCTestCase {
         let sig = sine(freq: 4000, seconds: 0.3, sampleRate: 48000)
         let mono = AudioFileLoader.resample(sig, from: 48000, to: 44100)
         let stereo = AudioFileLoader.resampleStereo([sig, sig], from: 48000, to: 44100)
-        XCTAssertEqual(stereo[0].count, mono.count, accuracy: 2)
+        XCTAssertEqual(stereo[0].count, mono.count)
         let n = min(stereo[0].count, mono.count)
         var maxDiff = 0.0
         for i in 0..<n { maxDiff = max(maxDiff, abs(Double(stereo[0][i] - mono[i]))) }
