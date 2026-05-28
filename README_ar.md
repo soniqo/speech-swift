@@ -47,7 +47,7 @@
 - **[MADLAD-400](https://soniqo.audio/ar/guides/translate)** — ترجمة متعددة الاتجاهات عبر أكثر من 400 لغة (3B، MLX INT4 + INT8، T5 v1.1، Apache 2.0)
 - **[PersonaPlex](https://soniqo.audio/ar/guides/respond)** — تحويل صوت إلى صوت ثنائي الاتجاه الكامل (7B، صوت داخل → صوت خارج، 18 إعداداً صوتياً مسبقاً)
 - **[DeepFilterNet3](https://soniqo.audio/ar/guides/denoise)** — قمع الضوضاء في الزمن الحقيقي (2.1M معامل، 48 كيلوهرتز)
-- **[فصل المصادر](https://soniqo.audio/ar/guides/separate)** — فصل المصادر الموسيقية عبر Open-Unmix (UMX-HQ / UMX-L، 4 طبقات: غناء/طبول/باس/أخرى، 44.1 كيلوهرتز ستيريو)
+- **[فصل المصادر](https://soniqo.audio/ar/guides/separate)** — فصل المصادر الموسيقية عبر HTDemucs (Demucs v4) + Open-Unmix (UMX-HQ / UMX-L، 4 طبقات: غناء/طبول/باس/أخرى، 44.1 كيلوهرتز ستيريو)
 - **[MAGNeT](https://soniqo.audio/ar/guides/compose)** — توليد الموسيقى من النص (Meta MAGNeT Small 300M / Medium 1.5B، MLX INT4/INT8، مقاطع 30 ثانية بجودة 32 كيلوهرتز مونو، فك ترميز متوازي مقنع)
 - **[FlashSR](https://soniqo.audio/ar/guides/upsample)** — رفع دقة الصوت (FlashSR ICASSP 2025، MLX، 48 كيلوهرتز مونو، انتشار مقطر بخطوة واحدة، INT4 363 ميغابايت / INT8 720 ميغابايت)
 - **[كلمة التنبيه](https://soniqo.audio/ar/guides/wake-word)** — اكتشاف الكلمات المفتاحية على الجهاز (KWS Zipformer 3M، CoreML، 26× الزمن الحقيقي، قائمة كلمات مفتاحية قابلة للتهيئة)
@@ -185,6 +185,7 @@ struct DictateView: View {
 | [Pyannote](https://soniqo.audio/ar/guides/diarize) | VAD + تمييز | MLX | 1.5M | محايد للغة |
 | [Sortformer](https://soniqo.audio/ar/guides/diarize) | تمييز (E2E) | CoreML (ANE) | — | محايد للغة |
 | [DeepFilterNet3](https://soniqo.audio/ar/guides/denoise) | تحسين الكلام | CoreML | 2.1M | محايد للغة |
+| [HTDemucs (Demucs v4)](https://soniqo.audio/ar/guides/separate) | فصل المصادر | MLX | 168M | محايد للغة |
 | [Open-Unmix](https://soniqo.audio/ar/guides/separate) | فصل المصادر | MLX | 8.6M | محايد للغة |
 | [MAGNeT](https://soniqo.audio/ar/guides/compose) | نص → موسيقى (30 ث @ 32 كيلوهرتز) | MLX | 300M / 1.5B (int4/int8) | أوامر بالإنجليزية |
 | [FlashSR](https://soniqo.audio/ar/guides/upsample) | رفع دقة الصوت (48 كيلوهرتز) | MLX | 363 ميغابايت / 720 ميغابايت (int4/int8) | محايد للغة |
@@ -460,7 +461,7 @@ speech-swift مقسم إلى هدف SPM واحد لكل نموذج بحيث يد
 **[مخطط الهيكلة الكامل مع الواجهات الخلفية وجداول الذاكرة وخريطة الوحدات → soniqo.audio/architecture](https://soniqo.audio/ar/architecture)** · **[مرجع API → soniqo.audio/api](https://soniqo.audio/ar/api)** · **[الاختبارات → soniqo.audio/benchmarks](https://soniqo.audio/ar/benchmarks)**
 
 الوثائق المحلية (المستودع):
-- **النماذج:** [Qwen3-ASR](docs/models/asr-model.md) · [Qwen3-TTS](docs/models/tts-model.md) · [CosyVoice](docs/models/cosyvoice-tts.md) · [Kokoro](docs/models/kokoro-tts.md) · [VibeVoice](docs/models/vibevoice.md) · [Parakeet TDT](docs/models/parakeet-asr.md) · [Parakeet Streaming](docs/models/parakeet-streaming-asr.md) · [Nemotron Streaming](docs/models/nemotron-streaming.md) · [Omnilingual ASR](docs/models/omnilingual-asr.md) · [PersonaPlex](docs/models/personaplex.md) · [FireRedVAD](docs/models/fireredvad.md) · [Source Separation](docs/models/source-separation.md) · [MAGNeT](docs/models/magnet-music-gen.md) · [FlashSR](docs/models/flashsr.md)
+- **النماذج:** [Qwen3-ASR](docs/models/asr-model.md) · [Qwen3-TTS](docs/models/tts-model.md) · [CosyVoice](docs/models/cosyvoice-tts.md) · [Kokoro](docs/models/kokoro-tts.md) · [VibeVoice](docs/models/vibevoice.md) · [Parakeet TDT](docs/models/parakeet-asr.md) · [Parakeet Streaming](docs/models/parakeet-streaming-asr.md) · [Nemotron Streaming](docs/models/nemotron-streaming.md) · [Omnilingual ASR](docs/models/omnilingual-asr.md) · [PersonaPlex](docs/models/personaplex.md) · [FireRedVAD](docs/models/fireredvad.md) · [Source Separation](docs/models/source-separation.md) · [HTDemucs](docs/models/htdemucs.md) · [MAGNeT](docs/models/magnet-music-gen.md) · [FlashSR](docs/models/flashsr.md)
 - **الاستدلال:** [Qwen3-ASR](docs/inference/qwen3-asr-inference.md) · [Parakeet TDT](docs/inference/parakeet-asr-inference.md) · [Parakeet Streaming](docs/inference/parakeet-streaming-asr-inference.md) · [Nemotron Streaming](docs/inference/nemotron-streaming-inference.md) · [Omnilingual ASR](docs/inference/omnilingual-asr-inference.md) · [TTS](docs/inference/qwen3-tts-inference.md) · [VibeVoice](docs/inference/vibevoice-inference.md) · [MAGNeT](docs/inference/magnet-music-gen.md) · [FlashSR](docs/inference/flashsr.md) · [Forced Aligner](docs/inference/forced-aligner.md) · [Silero VAD](docs/inference/silero-vad.md) · [تمييز المتحدثين](docs/inference/speaker-diarization.md) · [تحسين الكلام](docs/inference/speech-enhancement.md)
 - **المرجع:** [البروتوكولات المشتركة](docs/shared-protocols.md)
 

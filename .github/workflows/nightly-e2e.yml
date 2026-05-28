@@ -29,6 +29,15 @@ jobs:
   e2e:
     runs-on: macos-15
     timeout-minutes: 90
+    # macos-15 runners are virtualized: no usable Neural Engine, and the
+    # paravirtual GPU can't JIT CoreML's first-load Metal program for stateful
+    # graphs. Both ANE and cpuAndGPU loads silently stall (a 17-27 min hang
+    # loading the Qwen3-ASR T=128 stateful decoder, observed on both). cpuOnly
+    # does no ANE/GPU codegen — pure CPU MIL execution — so it loads instantly
+    # and gives identical text for our roundtrip assertions. On-device keeps
+    # the ANE (env unset -> each loader's normal default).
+    env:
+      SPEECH_COREML_COMPUTE_UNITS: cpuOnly
     strategy:
       fail-fast: false
       matrix:
@@ -37,8 +46,23 @@ jobs:
           # target/class/method names. Targets like `Qwen3ASRTests` pull in
           # the entire module's tests (E2E + unit). Use `skip` to peel heavy
           # methods off into their own shard.
-          - name: light-coreml
-            filter: 'KokoroTTSTests|ParakeetASRTests|ParakeetStreamingASRTests|MagpieTTSCoreMLTests|SpeechEnhancementTests|SpeechWakeWordTests'
+          # CoreML model families, one shard each so a slow/failing model is
+          # isolated and each xctest process loads a bounded weight set. All
+          # run cpuOnly in CI via SPEECH_COREML_COMPUTE_UNITS (set above).
+          - name: kokoro
+            filter: 'KokoroTTSTests'
+            skip: ''
+          - name: parakeet
+            filter: 'ParakeetASRTests|ParakeetStreamingASRTests'
+            skip: ''
+          - name: magpie
+            filter: 'MagpieTTSCoreMLTests'
+            skip: ''
+          - name: speech-enhance
+            filter: 'SpeechEnhancementTests'
+            skip: ''
+          - name: wakeword
+            filter: 'SpeechWakeWordTests'
             skip: ''
           - name: vad-diar
             filter: 'SpeechVADTests'
@@ -86,10 +110,10 @@ jobs:
           echo "Skipping ${{ matrix.shard.name }} — manual run filtered to '${{ github.event.inputs.shard }}'"
           exit 0
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Cache SwiftPM build
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .build
           key: spm-nightly-${{ runner.os }}-${{ hashFiles('Package.swift', 'Package.resolved') }}

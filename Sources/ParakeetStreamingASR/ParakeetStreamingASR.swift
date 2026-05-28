@@ -229,7 +229,7 @@ public class ParakeetStreamingASRModel {
                 modelId: name, reason: "CoreML model not found at \(modelURL.path)")
         }
         let mlConfig = MLModelConfiguration()
-        mlConfig.computeUnits = computeUnits
+        mlConfig.computeUnits = CoreMLComputeUnitsResolver.resolved(default: computeUnits)
         return try MLModel(contentsOf: modelURL, configuration: mlConfig)
     }
 }

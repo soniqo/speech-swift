@@ -14,11 +14,17 @@ jobs:
   build-and-test:
     runs-on: macos-15
     timeout-minutes: 45
+    # The virtualized runner has no usable Neural Engine AND its paravirtual
+    # GPU can't JIT CoreML's first-load Metal program for stateful graphs, so
+    # both ANE and cpuAndGPU loads hang. Force cpuOnly — no ANE/GPU codegen,
+    # deterministic, and fine for correctness assertions. On-device keeps ANE.
+    env:
+      SPEECH_COREML_COMPUTE_UNITS: cpuOnly
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Cache SwiftPM
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .build
           key: spm-${{ runner.os }}-${{ hashFiles('Package.swift') }}

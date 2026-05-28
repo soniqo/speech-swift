@@ -1,5 +1,6 @@
 import Foundation
 import CoreML
+import AudioCommon
 
 /// Core ML wrapper for the DeepFilterNet3 neural network.
 ///
@@ -18,7 +19,7 @@ class DeepFilterNet3Network {
     /// only ``.mlmodelc`` for this reason.
     init(modelURL: URL, computeUnits: MLComputeUnits = .all) throws {
         let config = MLModelConfiguration()
-        config.computeUnits = computeUnits
+        config.computeUnits = CoreMLComputeUnitsResolver.resolved(default: computeUnits)
         self.model = try MLModel(contentsOf: modelURL, configuration: config)
     }
 

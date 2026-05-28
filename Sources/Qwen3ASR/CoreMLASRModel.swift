@@ -28,7 +28,7 @@ public class CoreMLASRModel {
         encoderModelId: String = CoreMLASREncoder.defaultModelId,
         decoderModelId: String = CoreMLASREncoder.defaultModelId,
         tokenizerModelId: String = "aufklarer/Qwen3-ASR-0.6B-MLX-4bit",
-        computeUnits: MLComputeUnits = .all,
+        computeUnits: MLComputeUnits = CoreMLComputeUnitsResolver.resolved(default: .all),
         cacheDir: URL? = nil,
         offlineMode: Bool = false,
         progressHandler: ((Double, String) -> Void)? = nil

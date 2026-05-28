@@ -79,7 +79,7 @@ public class CoreMLTextDecoder {
     /// ``embedding.mlmodelc``, ``decoder_part1.mlmodelc`` and ``decoder_part2.mlmodelc``.
     public static func load(
         from directory: URL,
-        computeUnits: MLComputeUnits = .cpuAndNeuralEngine
+        computeUnits: MLComputeUnits = CoreMLComputeUnitsResolver.resolved(default: .cpuAndNeuralEngine)
     ) throws -> CoreMLTextDecoder {
         let config = MLModelConfiguration()
         config.computeUnits = computeUnits
@@ -137,7 +137,7 @@ public class CoreMLTextDecoder {
     /// Load from HuggingFace.
     public static func fromPretrained(
         modelId: String = defaultModelId,
-        computeUnits: MLComputeUnits = .cpuAndNeuralEngine,
+        computeUnits: MLComputeUnits = CoreMLComputeUnitsResolver.resolved(default: .cpuAndNeuralEngine),
         cacheDir: URL? = nil,
         offlineMode: Bool = false,
         progressHandler: ((Double, String) -> Void)? = nil

@@ -37,7 +37,7 @@ Reconocimiento, síntesis y comprensión de voz en el dispositivo para Mac e iOS
 - **[MADLAD-400](https://soniqo.audio/es/guides/translate)** — Traducción multidireccional entre 400+ idiomas (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
 - **[PersonaPlex](https://soniqo.audio/es/guides/respond)** — Voz a voz full-duplex (7B, audio de entrada → audio de salida, 18 presets de voz)
 - **[DeepFilterNet3](https://soniqo.audio/es/guides/denoise)** — Supresión de ruido en tiempo real (2.1M parámetros, 48 kHz)
-- **[Separación de fuentes](https://soniqo.audio/es/guides/separate)** — Separación de fuentes musicales con Open-Unmix (UMX-HQ / UMX-L, 4 stems: voces/batería/bajo/otros, 44,1 kHz estéreo)
+- **[Separación de fuentes](https://soniqo.audio/es/guides/separate)** — Separación de fuentes musicales con HTDemucs (Demucs v4) + Open-Unmix (UMX-HQ / UMX-L, 4 stems: voces/batería/bajo/otros, 44,1 kHz estéreo)
 - **[MAGNeT](https://soniqo.audio/es/guides/compose)** — Generación de música a partir de texto (Meta MAGNeT Small 300M / Medium 1.5B, MLX INT4/INT8, clips de 30 s a 32 kHz mono, decodificación enmascarada en paralelo)
 - **[FlashSR](https://soniqo.audio/es/guides/upsample)** — Super-resolución de audio (FlashSR ICASSP 2025, MLX, 48 kHz mono, difusión destilada en 1 paso, INT4 363 MB / INT8 720 MB)
 - **[Palabra de activación](https://soniqo.audio/es/guides/wake-word)** — Detección de palabras clave en el dispositivo (KWS Zipformer 3M, CoreML, 26× tiempo real, lista de palabras clave configurable)
@@ -141,6 +141,7 @@ Vista compacta a continuación. **[Catálogo completo de modelos con tamaños, c
 | [Pyannote](https://soniqo.audio/es/guides/diarize) | VAD + Diarización | MLX | 1.5M | Agnóstico |
 | [Sortformer](https://soniqo.audio/es/guides/diarize) | Diarización (E2E) | CoreML (ANE) | — | Agnóstico |
 | [DeepFilterNet3](https://soniqo.audio/es/guides/denoise) | Mejora de voz | CoreML | 2.1M | Agnóstico |
+| [HTDemucs (Demucs v4)](https://soniqo.audio/es/guides/separate) | Separación de fuentes | MLX | 168M | Agnostic |
 | [Open-Unmix](https://soniqo.audio/es/guides/separate) | Separación de fuentes | MLX | 8.6M | Agnostic |
 | [MAGNeT](https://soniqo.audio/es/guides/compose) | Texto → Música (30 s @ 32 kHz) | MLX | 300M / 1.5B (int4/int8) | Prompts en EN |
 | [FlashSR](https://soniqo.audio/es/guides/upsample) | Super-resolución de audio (48 kHz) | MLX | 363 MB / 720 MB (int4/int8) | Agnóstico |
@@ -368,7 +369,7 @@ speech-swift está dividido en un target SPM por modelo para que los consumidore
 **[Diagrama completo de arquitectura con backends, tablas de memoria y mapa de módulos → soniqo.audio/architecture](https://soniqo.audio/es/architecture)** · **[Referencia de API → soniqo.audio/api](https://soniqo.audio/es/api)** · **[Benchmarks → soniqo.audio/benchmarks](https://soniqo.audio/es/benchmarks)**
 
 Docs locales (repositorio):
-- **Modelos:** [Qwen3-ASR](docs/models/asr-model.md) · [Qwen3-TTS](docs/models/tts-model.md) · [CosyVoice](docs/models/cosyvoice-tts.md) · [Kokoro](docs/models/kokoro-tts.md) · [VibeVoice](docs/models/vibevoice.md) · [Parakeet TDT](docs/models/parakeet-asr.md) · [Parakeet Streaming](docs/models/parakeet-streaming-asr.md) · [Nemotron Streaming](docs/models/nemotron-streaming.md) · [Omnilingual ASR](docs/models/omnilingual-asr.md) · [PersonaPlex](docs/models/personaplex.md) · [FireRedVAD](docs/models/fireredvad.md) · [Source Separation](docs/models/source-separation.md) · [MAGNeT](docs/models/magnet-music-gen.md) · [FlashSR](docs/models/flashsr.md)
+- **Modelos:** [Qwen3-ASR](docs/models/asr-model.md) · [Qwen3-TTS](docs/models/tts-model.md) · [CosyVoice](docs/models/cosyvoice-tts.md) · [Kokoro](docs/models/kokoro-tts.md) · [VibeVoice](docs/models/vibevoice.md) · [Parakeet TDT](docs/models/parakeet-asr.md) · [Parakeet Streaming](docs/models/parakeet-streaming-asr.md) · [Nemotron Streaming](docs/models/nemotron-streaming.md) · [Omnilingual ASR](docs/models/omnilingual-asr.md) · [PersonaPlex](docs/models/personaplex.md) · [FireRedVAD](docs/models/fireredvad.md) · [Source Separation](docs/models/source-separation.md) · [HTDemucs](docs/models/htdemucs.md) · [MAGNeT](docs/models/magnet-music-gen.md) · [FlashSR](docs/models/flashsr.md)
 - **Inferencia:** [Qwen3-ASR](docs/inference/qwen3-asr-inference.md) · [Parakeet TDT](docs/inference/parakeet-asr-inference.md) · [Parakeet Streaming](docs/inference/parakeet-streaming-asr-inference.md) · [Nemotron Streaming](docs/inference/nemotron-streaming-inference.md) · [Omnilingual ASR](docs/inference/omnilingual-asr-inference.md) · [TTS](docs/inference/qwen3-tts-inference.md) · [VibeVoice](docs/inference/vibevoice-inference.md) · [Forced Aligner](docs/inference/forced-aligner.md) · [Silero VAD](docs/inference/silero-vad.md) · [Diarización](docs/inference/speaker-diarization.md) · [Mejora de voz](docs/inference/speech-enhancement.md) · [MAGNeT](docs/inference/magnet-music-gen.md) · [FlashSR](docs/inference/flashsr.md)
 - **Referencia:** [Protocolos compartidos](docs/shared-protocols.md)
 

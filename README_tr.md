@@ -37,7 +37,7 @@ Mac ve iOS için cihaz üzerinde konuşma tanıma, sentezleme ve anlama. Apple S
 - **[MADLAD-400](https://soniqo.audio/guides/translate)** — 400+ dil arasında çoktan-çoğa çeviri (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
 - **[PersonaPlex](https://soniqo.audio/guides/respond)** — Tam çift yönlü (full-duplex) konuşmadan konuşmaya (7B, ses girişi → ses çıkışı, 18 ses ön ayarı)
 - **[DeepFilterNet3](https://soniqo.audio/guides/denoise)** — Gerçek zamanlı gürültü bastırma (2.1M parametre, 48 kHz)
-- **[Kaynak Ayrıştırma](https://soniqo.audio/guides/separate)** — Open-Unmix ile müzik kaynağı ayrıştırma (UMX-HQ / UMX-L, 4 katman: vokal/davul/bas/diğer, 44,1 kHz stereo)
+- **[Kaynak Ayrıştırma](https://soniqo.audio/guides/separate)** — HTDemucs (Demucs v4) + Open-Unmix ile müzik kaynağı ayrıştırma (UMX-HQ / UMX-L, 4 katman: vokal/davul/bas/diğer, 44,1 kHz stereo)
 - **[MAGNeT](https://soniqo.audio/guides/compose)** — Metinden müziğe üretim (Meta MAGNeT Small 300M / Medium 1.5B, MLX INT4/INT8, 32 kHz mono'da 30 sn klipler, maskelenmiş paralel kod çözme)
 - **[FlashSR](https://soniqo.audio/guides/upsample)** — Ses süper çözünürlük (FlashSR ICASSP 2025, MLX, 48 kHz mono, 1 adımda damıtılmış difüzyon, INT4 363 MB / INT8 720 MB)
 - **[Uyandırma kelimesi](https://soniqo.audio/guides/wake-word)** — Cihaz üzerinde anahtar kelime tespiti (KWS Zipformer 3M, CoreML, 26× gerçek zaman, yapılandırılabilir anahtar kelime listesi)
@@ -141,6 +141,7 @@ Aşağıda kompakt bir görünüm. **[Boyutlar, kuantizasyonlar, indirme URL'ler
 | [Pyannote](https://soniqo.audio/guides/diarize) | VAD + Konuşmacı Ayrımı | MLX | 1.5M | Bağımsız |
 | [Sortformer](https://soniqo.audio/guides/diarize) | Konuşmacı Ayrımı (E2E) | CoreML (ANE) | — | Bağımsız |
 | [DeepFilterNet3](https://soniqo.audio/guides/denoise) | Konuşma İyileştirme | CoreML | 2.1M | Bağımsız |
+| [HTDemucs (Demucs v4)](https://soniqo.audio/guides/separate) | Kaynak Ayrıştırma | MLX | 168M | Bağımsız |
 | [Open-Unmix](https://soniqo.audio/guides/separate) | Kaynak Ayrıştırma | MLX | 8.6M | Bağımsız |
 | [MAGNeT](https://soniqo.audio/guides/compose) | Metin → Müzik (30s @ 32 kHz) | MLX | 300M / 1.5B (int4/int8) | EN prompt'ları |
 | [FlashSR](https://soniqo.audio/guides/upsample) | Ses süper çözünürlük (48 kHz) | MLX | 363 MB / 720 MB (int4/int8) | Bağımsız |
@@ -366,7 +367,7 @@ speech-swift, kullanıcıların yalnızca içe aktardıkları şey için bedel �
 **[Backend'ler, bellek tabloları ve modül haritasıyla tam mimari diyagramı → soniqo.audio/architecture](https://soniqo.audio/architecture)** · **[API referansı → soniqo.audio/api](https://soniqo.audio/api)** · **[Benchmark'lar → soniqo.audio/benchmarks](https://soniqo.audio/benchmarks)**
 
 Yerel dokümantasyon (depo):
-- **Modeller:** [Qwen3-ASR](docs/models/asr-model.md) · [Qwen3-TTS](docs/models/tts-model.md) · [CosyVoice](docs/models/cosyvoice-tts.md) · [Kokoro](docs/models/kokoro-tts.md) · [VibeVoice](docs/models/vibevoice.md) · [Parakeet TDT](docs/models/parakeet-asr.md) · [Parakeet Streaming](docs/models/parakeet-streaming-asr.md) · [Nemotron Streaming](docs/models/nemotron-streaming.md) · [Omnilingual ASR](docs/models/omnilingual-asr.md) · [PersonaPlex](docs/models/personaplex.md) · [FireRedVAD](docs/models/fireredvad.md) · [Source Separation](docs/models/source-separation.md) · [MAGNeT](docs/models/magnet-music-gen.md) · [FlashSR](docs/models/flashsr.md)
+- **Modeller:** [Qwen3-ASR](docs/models/asr-model.md) · [Qwen3-TTS](docs/models/tts-model.md) · [CosyVoice](docs/models/cosyvoice-tts.md) · [Kokoro](docs/models/kokoro-tts.md) · [VibeVoice](docs/models/vibevoice.md) · [Parakeet TDT](docs/models/parakeet-asr.md) · [Parakeet Streaming](docs/models/parakeet-streaming-asr.md) · [Nemotron Streaming](docs/models/nemotron-streaming.md) · [Omnilingual ASR](docs/models/omnilingual-asr.md) · [PersonaPlex](docs/models/personaplex.md) · [FireRedVAD](docs/models/fireredvad.md) · [Source Separation](docs/models/source-separation.md) · [HTDemucs](docs/models/htdemucs.md) · [MAGNeT](docs/models/magnet-music-gen.md) · [FlashSR](docs/models/flashsr.md)
 - **Çıkarım:** [Qwen3-ASR](docs/inference/qwen3-asr-inference.md) · [Parakeet TDT](docs/inference/parakeet-asr-inference.md) · [Parakeet Streaming](docs/inference/parakeet-streaming-asr-inference.md) · [Nemotron Streaming](docs/inference/nemotron-streaming-inference.md) · [Omnilingual ASR](docs/inference/omnilingual-asr-inference.md) · [TTS](docs/inference/qwen3-tts-inference.md) · [VibeVoice](docs/inference/vibevoice-inference.md) · [MAGNeT](docs/inference/magnet-music-gen.md) · [FlashSR](docs/inference/flashsr.md) · [Forced Aligner](docs/inference/forced-aligner.md) · [Silero VAD](docs/inference/silero-vad.md) · [Konuşmacı Ayrımı](docs/inference/speaker-diarization.md) · [Konuşma İyileştirme](docs/inference/speech-enhancement.md)
 - **Referans:** [Paylaşılan Protokoller](docs/shared-protocols.md)
 
