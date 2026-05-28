@@ -1,6 +1,7 @@
 import Foundation
 import MLX
 import MLXNN
+import AudioCommon
 
 /// Bag-of-models source separator for Hybrid Transformer Demucs (Demucs v4).
 ///
@@ -11,15 +12,36 @@ public final class HTDemucsSeparator {
     public let config: HTDemucsConfig
     let models: [HTDemucs]
 
+    public static let defaultModelId = "aufklarer/HTDemucs-FT-MLX"
+
     init(config: HTDemucsConfig, models: [HTDemucs]) {
         self.config = config
         self.models = models
     }
 
+    /// Download the bag from HuggingFace (default `aufklarer/HTDemucs-FT-MLX`) and load it.
+    public static func fromPretrained(
+        modelId: String = defaultModelId,
+        quantizeBits: Int? = nil,
+        progressHandler: ((Double, String) -> Void)? = nil
+    ) async throws -> HTDemucsSeparator {
+        let cacheDir = try HuggingFaceDownloader.getCacheDirectory(for: modelId)
+        progressHandler?(0.0, "Downloading htdemucs_ft...")
+        try await HuggingFaceDownloader.downloadWeights(
+            modelId: modelId, to: cacheDir,
+            additionalFiles: ["htdemucs_ft.safetensors", "htdemucs_ft_config.json"]
+        ) { f in progressHandler?(f * 0.9, "Downloading htdemucs_ft...") }
+        progressHandler?(0.95, "Loading...")
+        let sep = try fromLocal(directory: cacheDir, modelName: "htdemucs_ft", quantizeBits: quantizeBits)
+        progressHandler?(1.0, "Ready")
+        return sep
+    }
+
     /// Load the bag from a local export directory containing
     /// `<model>.safetensors` + `<model>_config.json`. Weights are cast to
     /// float32 (parity-friendly); use a quantized loader for int8.
-    public static func fromLocal(directory: URL, modelName: String = "htdemucs_ft") throws -> HTDemucsSeparator {
+    public static func fromLocal(directory: URL, modelName: String = "htdemucs_ft",
+                                 quantizeBits: Int? = nil) throws -> HTDemucsSeparator {
         let cfg = try HTDemucsConfig.load(
             from: directory.appendingPathComponent("\(modelName)_config.json"))
         let all = try MLX.loadArrays(
@@ -37,6 +59,12 @@ public final class HTDemucsSeparator {
             // .all => fail on any unused/missing/shape-mismatched key, i.e. the
             // Swift module tree must exactly mirror the exported names.
             try model.update(parameters: ModuleParameters.unflattened(sub), verify: .all)
+            if let bits = quantizeBits {
+                // Quantize only Linear layers (the cross-transformer FFN/out-proj —
+                // a large share of params). Embedding dim 48 isn't group-aligned and
+                // convs/packed-attention in_proj aren't MLX-quantizable.
+                quantize(model: model, groupSize: 64, bits: bits) { _, m in m is Linear }
+            }
             models.append(model)
         }
         return HTDemucsSeparator(config: cfg, models: models)

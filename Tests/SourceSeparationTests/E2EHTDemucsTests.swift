@@ -63,6 +63,34 @@ final class E2EHTDemucsTests: XCTestCase {
         XCTAssertGreaterThan(snr, 20.0, "Swift output should match the PyTorch reference (SNR \(snr) dB)")
     }
 
+    /// int8 quantization quality: how much does quantizing the transformer
+    /// Linear layers cost vs fp32? Informs the publish decision.
+    func testInt8QuantizationParity() throws {
+        guard FileManager.default.fileExists(atPath: Self.fp32Dir.appendingPathComponent("htdemucs_ft.safetensors").path),
+              FileManager.default.fileExists(atPath: Self.parityFile.path) else {
+            throw XCTSkip("fp32 weights or parity_m0.safetensors not present")
+        }
+        func snr(_ ref: MLXArray, _ x: MLXArray) -> Float {
+            let d = x - ref
+            let s = (ref * ref).sum().item(Float.self)
+            let e = (d * d).sum().item(Float.self)
+            return 10 * log10(s / max(e, 1e-20))
+        }
+        let dump = try MLX.loadArrays(url: Self.parityFile)
+        let input = dump["input"]!, expected = dump["expected"]!
+
+        let fp32 = try HTDemucsSeparator.fromLocal(directory: Self.fp32Dir)
+        let outFp32 = fp32.models[0](input); eval(outFp32)
+
+        let int8 = try HTDemucsSeparator.fromLocal(directory: Self.fp32Dir, quantizeBits: 8)
+        let outInt8 = int8.models[0](input); eval(outInt8)
+
+        let snrTorch = snr(expected, outInt8)
+        let snrFp32 = snr(outFp32, outInt8)
+        print("INT8 PARITY: SNR(int8 vs torch) = \(snrTorch) dB, SNR(int8 vs swift-fp32) = \(snrFp32) dB")
+        XCTAssertGreaterThan(snrTorch, 20.0, "int8 should still track the reference (\(snrTorch) dB)")
+    }
+
     /// Forward runs end-to-end and produces the right shape with finite values.
     func testForwardShape() throws {
         try skipIfMissing()

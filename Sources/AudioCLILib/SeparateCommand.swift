@@ -85,34 +85,39 @@ public struct SeparateCommand: ParsableCommand {
     }
 
     private func runHTDemucs(inputURL: URL, outDir: URL, targets: [SeparationTarget]) throws {
-        guard let dir = htdemucsDir else {
-            throw ValidationError("--htdemucs-dir is required for --engine htdemucs (local weights until HF upload)")
+        try runAsync {
+            let separator: HTDemucsSeparator
+            if let dir = htdemucsDir {
+                print("Loading HTDemucs (Demucs v4) from \(dir)...")
+                separator = try HTDemucsSeparator.fromLocal(directory: URL(fileURLWithPath: dir))
+            } else {
+                print("Loading HTDemucs (Demucs v4)...")
+                separator = try await HTDemucsSeparator.fromPretrained(progressHandler: reportProgress)
+            }
+
+            print("Loading audio: \(input)")
+            let audio = try AudioFileLoader.loadStereo(url: inputURL, targetSampleRate: 44100)
+            let L = audio[0].count
+            let duration = Double(L) / 44100.0
+            print("  Duration: \(String(format: "%.1f", duration))s")
+            let mix = MLXArray(audio[0] + audio[1], [1, 2, L])
+
+            let wanted = Set(targets.map(\.rawValue))
+            print("Separating into \(targets.map(\.rawValue).joined(separator: ", "))...")
+            let start = CFAbsoluteTimeGetCurrent()
+            let stems = separator.separate(mix)
+            let elapsed = CFAbsoluteTimeGetCurrent() - start
+
+            for (name, arr) in stems where wanted.contains(name) {
+                let flat = arr.asArray(Float.self)             // [1, 2, L] → 2L
+                let left = Array(flat[0..<L])
+                let right = Array(flat[L..<(2 * L)])
+                let outputURL = outDir.appendingPathComponent("\(name).wav")
+                try WAVWriter.writeStereo(left: left, right: right, sampleRate: 44100, to: outputURL)
+                print("  Saved: \(outputURL.lastPathComponent)")
+            }
+            let rtf = elapsed / duration
+            print("Done in \(String(format: "%.1f", elapsed))s (RTF: \(String(format: "%.2f", rtf)))")
         }
-        print("Loading HTDemucs (Demucs v4) from \(dir)...")
-        let separator = try HTDemucsSeparator.fromLocal(directory: URL(fileURLWithPath: dir))
-
-        print("Loading audio: \(input)")
-        let audio = try AudioFileLoader.loadStereo(url: inputURL, targetSampleRate: 44100)
-        let L = audio[0].count
-        let duration = Double(L) / 44100.0
-        print("  Duration: \(String(format: "%.1f", duration))s")
-        let mix = MLXArray(audio[0] + audio[1], [1, 2, L])
-
-        let wanted = Set(targets.map(\.rawValue))
-        print("Separating into \(targets.map(\.rawValue).joined(separator: ", "))...")
-        let start = CFAbsoluteTimeGetCurrent()
-        let stems = separator.separate(mix)
-        let elapsed = CFAbsoluteTimeGetCurrent() - start
-
-        for (name, arr) in stems where wanted.contains(name) {
-            let flat = arr.asArray(Float.self)             // [1, 2, L] → 2L
-            let left = Array(flat[0..<L])
-            let right = Array(flat[L..<(2 * L)])
-            let outputURL = outDir.appendingPathComponent("\(name).wav")
-            try WAVWriter.writeStereo(left: left, right: right, sampleRate: 44100, to: outputURL)
-            print("  Saved: \(outputURL.lastPathComponent)")
-        }
-        let rtf = elapsed / duration
-        print("Done in \(String(format: "%.1f", elapsed))s (RTF: \(String(format: "%.2f", rtf)))")
     }
 }
