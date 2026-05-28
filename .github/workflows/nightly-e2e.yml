@@ -38,6 +38,9 @@ jobs:
     # the ANE (env unset -> each loader's normal default).
     env:
       SPEECH_COREML_COMPUTE_UNITS: cpuOnly
+      # Emit a symbolicated stack trace if a test process crashes (e.g. the
+      # Parakeet cpuOnly SIGSEGV) so failures are diagnosable from CI logs.
+      SWIFT_BACKTRACE: enable=yes,symbolicate=full
     strategy:
       fail-fast: false
       matrix:
