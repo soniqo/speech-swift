@@ -116,10 +116,15 @@ public class ParakeetASRModel {
             let r = try encodeAndDecodeWindow(mel: mel, actualLength: melLength)
             tokenIds = r.tokens; tokenLogProbs = r.tokenLogProbs; confidences = [r.confidence]
         } else {
+            // The mel buffer is [1, 128, bufferFrames] where bufferFrames
+            // (mel.shape[2]) can exceed the valid melLength — extract zero-pads
+            // the tail. Slice with the buffer's real per-bin stride, but only
+            // iterate over valid frames.
+            let bufferFrames = mel.shape[2].intValue
             var start = 0
             while start < melLength {
                 let win = min(maxWindow, melLength - start)
-                let windowMel = try sliceMel(mel: mel, start: start, length: win, totalFrames: melLength)
+                let windowMel = try sliceMel(mel: mel, start: start, length: win, totalFrames: bufferFrames)
                 let r = try encodeAndDecodeWindow(mel: windowMel, actualLength: win)
                 tokenIds += r.tokens; tokenLogProbs += r.tokenLogProbs; confidences.append(r.confidence)
                 start += maxWindow
