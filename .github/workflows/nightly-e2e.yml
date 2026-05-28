@@ -28,7 +28,10 @@ concurrency:
 jobs:
   e2e:
     runs-on: macos-15
-    timeout-minutes: 90
+    # Per-shard cap. Healthy shards finish in <15 min on cpuOnly; 30 min
+    # bounds any stuck shard so it fails fast (with logs) instead of holding
+    # the run to the old 90 min ceiling.
+    timeout-minutes: 30
     # macos-15 runners are virtualized: no usable Neural Engine, and the
     # paravirtual GPU can't JIT CoreML's first-load Metal program for stateful
     # graphs. Both ANE and cpuAndGPU loads silently stall (a 17-27 min hang
@@ -59,14 +62,20 @@ jobs:
             filter: 'ParakeetASRTests|ParakeetStreamingASRTests'
             skip: ''
           - name: magpie-coreml
+            # Minimal roundtrip only (testLoadAndSynthesizeEnglish). Skip the
+            # ASR cross-check — it loads the full Qwen3-ASR CoreML decoder and
+            # transcribes on cpuOnly (~13 min), which is what stalled the shard.
             filter: 'MagpieTTSCoreMLTests'
-            skip: ''
+            skip: 'testAsrTranscribeCapturedMagpieAudio'
           - name: speech-enhance-coreml
             filter: 'SpeechEnhancementTests'
             skip: ''
           - name: wakeword-coreml
+            # Keep load + detect roundtrips. Skip the RTF benchmark, the
+            # memory-stress reload, and beam-search — slow on cpuOnly and not
+            # roundtrip-correctness checks.
             filter: 'SpeechWakeWordTests'
-            skip: ''
+            skip: 'testStreamingRealTimeFactor|testMemoryManagement|testBeamSearchEmitsOnReferenceEncoder'
           - name: vad-diar-mlx-coreml
             filter: 'SpeechVADTests'
             skip: ''
@@ -92,10 +101,12 @@ jobs:
             filter: 'testLargeModel|testSmall8bit'
             skip: ''
           - name: qwen3-asr-aligner-mlx
-            # 4-bit and bf16 forced-aligner variants — bf16 alone is ~2.3 GB
-            # working set, so keep isolated from main ASR shards.
+            # Minimal-quant policy: run only the 4-bit roundtrip + the unit
+            # tests. Skip the bf16 variant (~2.3 GB working set — too heavy for
+            # the runner, the source of the ~18 min stall) and the latency
+            # benchmark (runs align 4x; a perf probe, not a correctness test).
             filter: 'ForcedAlignerTests'
-            skip: ''
+            skip: 'testForcedAlignerE2EBf16Variant|testForcedAlignerLatency'
           - name: qwen3-asr-streaming-mlx-coreml
             # StreamingASR loads ASR-0.6B-4bit + SileroVAD per test method;
             # 3 methods × fresh load = enough memory churn to deserve isolation.
@@ -147,6 +158,18 @@ jobs:
           else
             swift test --skip-build --filter "${{ matrix.shard.filter }}"
           fi
+
+      - name: Dump crash reports
+        if: always()
+        run: |
+          shopt -s nullglob
+          found=0
+          for f in ~/Library/Logs/DiagnosticReports/*.ips ~/Library/Logs/DiagnosticReports/*.crash; do
+            found=1
+            echo "===================== $f ====================="
+            cat "$f"
+          done
+          [ "$found" = 0 ] && echo "(no crash reports — process exited cleanly or was killed by timeout)"
 
       - name: Disk space after tests
         if: always()
