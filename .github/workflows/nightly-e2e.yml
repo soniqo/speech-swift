@@ -61,7 +61,10 @@ jobs:
             # the TDT E2E at the fixed-shape iOS-5s variant (no EnumeratedShapes);
             # transcribeAudio window-chunks the >5 s fixtures across 5 s windows.
             filter: 'ParakeetASRTests|ParakeetStreamingASRTests'
-            skip: ''
+            # Skip the macOS shape-discovery test — it explicitly loads the
+            # default EnumeratedShapes model (not the iOS-5s override), which
+            # crashes CoreML's cpuOnly loader on the runner.
+            skip: 'testMacOSModelDiscoversEnumeratedShapes'
             modelId: 'aufklarer/Parakeet-TDT-v3-CoreML-INT8-iOS-5s'
           - name: magpie-coreml
             # Minimal roundtrip only (testLoadAndSynthesizeEnglish). Skip the

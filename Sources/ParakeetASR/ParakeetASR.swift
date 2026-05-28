@@ -110,11 +110,10 @@ public class ParakeetASRModel {
         let tInfer0 = CFAbsoluteTimeGetCurrent()
         var tokenIds: [Int] = []
         var tokenLogProbs: [Float] = []
-        var confidences: [Float] = []
 
         if melLength <= maxWindow {
             let r = try encodeAndDecodeWindow(mel: mel, actualLength: melLength)
-            tokenIds = r.tokens; tokenLogProbs = r.tokenLogProbs; confidences = [r.confidence]
+            tokenIds = r.tokens; tokenLogProbs = r.tokenLogProbs
         } else {
             // The mel buffer is [1, 128, bufferFrames] where bufferFrames
             // (mel.shape[2]) can exceed the valid melLength — extract zero-pads
@@ -122,21 +121,26 @@ public class ParakeetASRModel {
             // iterate over valid frames.
             let bufferFrames = mel.shape[2].intValue
             var start = 0
+            var nWindows = 0
             while start < melLength {
                 let win = min(maxWindow, melLength - start)
                 let windowMel = try sliceMel(mel: mel, start: start, length: win, totalFrames: bufferFrames)
                 let r = try encodeAndDecodeWindow(mel: windowMel, actualLength: win)
-                tokenIds += r.tokens; tokenLogProbs += r.tokenLogProbs; confidences.append(r.confidence)
-                start += maxWindow
+                tokenIds += r.tokens; tokenLogProbs += r.tokenLogProbs
+                start += maxWindow; nWindows += 1
             }
             AudioLog.inference.debug(
-                "Parakeet: split \(melLength) mel frames into \(confidences.count) windows of \(maxWindow)")
+                "Parakeet: split \(melLength) mel frames into \(nWindows) windows of \(maxWindow)")
         }
         let tInfer1 = CFAbsoluteTimeGetCurrent()
 
-        // Step 4: Vocabulary decode with per-word confidence
+        // Step 4: Vocabulary decode + overall confidence. Derive confidence
+        // from all emitted token log-probs (silent windows emit none, so
+        // chunking doesn't dilute it) — same formula as TDTGreedyDecoder.
         let text = vocabulary.decode(tokenIds)
-        lastConfidence = confidences.isEmpty ? 0 : confidences.reduce(0, +) / Float(confidences.count)
+        lastConfidence = tokenLogProbs.isEmpty
+            ? 0
+            : min(1.0, exp(tokenLogProbs.reduce(0, +) / Float(tokenLogProbs.count)))
         lastWordConfidences = vocabulary.decodeWords(tokenIds, logProbs: tokenLogProbs)
 
         let melMs = (tMel1 - tMel0) * 1000
