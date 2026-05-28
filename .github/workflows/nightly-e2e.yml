@@ -41,9 +41,6 @@ jobs:
     # the ANE (env unset -> each loader's normal default).
     env:
       SPEECH_COREML_COMPUTE_UNITS: cpuOnly
-      # Emit a symbolicated stack trace if a test process crashes (e.g. the
-      # Parakeet cpuOnly SIGSEGV) so failures are diagnosable from CI logs.
-      SWIFT_BACKTRACE: enable=yes,symbolicate=full
     strategy:
       fail-fast: false
       matrix:
@@ -59,8 +56,13 @@ jobs:
             filter: 'KokoroTTSTests'
             skip: ''
           - name: parakeet-coreml
+            # The default Parakeet-TDT encoder uses EnumeratedShapes, which
+            # crashes CoreML's cpuOnly loader on the virtualized runner. Point
+            # the TDT E2E at the fixed-shape iOS-5s variant (no EnumeratedShapes);
+            # transcribeAudio window-chunks the >5 s fixtures across 5 s windows.
             filter: 'ParakeetASRTests|ParakeetStreamingASRTests'
             skip: ''
+            modelId: 'aufklarer/Parakeet-TDT-v3-CoreML-INT8-iOS-5s'
           - name: magpie-coreml
             # Minimal roundtrip only (testLoadAndSynthesizeEnglish). Skip the
             # ASR cross-check — it loads the full Qwen3-ASR CoreML decoder and
@@ -71,11 +73,11 @@ jobs:
             filter: 'SpeechEnhancementTests'
             skip: ''
           - name: wakeword-coreml
-            # Keep load + detect roundtrips. Skip the RTF benchmark, the
-            # memory-stress reload, and beam-search — slow on cpuOnly and not
-            # roundtrip-correctness checks.
+            # The KWS CoreML model crashes CoreML's cpuOnly loader on the
+            # runner (same class as Parakeet-TDT). Skip the E2E class until the
+            # model ships a fixed-shape export; the unit tests still run.
             filter: 'SpeechWakeWordTests'
-            skip: 'testStreamingRealTimeFactor|testMemoryManagement|testBeamSearchEmitsOnReferenceEncoder'
+            skip: 'E2ESpeechWakeWordTests'
           - name: vad-diar-mlx-coreml
             filter: 'SpeechVADTests'
             skip: ''
@@ -91,9 +93,12 @@ jobs:
           # a bounded set of model variants.
           - name: qwen3-asr-06b-mlx-coreml
             filter: 'Qwen3ASRTests'
-            # Peel off 1.7B, 8-bit, aligner, and streaming into their own
-            # shards; this one runs unit tests + 0.6B-4bit E2E + decoding.
-            skip: 'testLargeModel|testSmall8bit|ForcedAlignerTests|StreamingASRTests'
+            # Peel off 1.7B, 8-bit, aligner, streaming. Also skip the CoreML
+            # ASR decoder E2E: it's MLState-stateful, so ANE/GPU hang and
+            # cpuOnly crashes the loader — no compute unit runs it on the
+            # virtualized runner (validated on-device). Leaves the MLX
+            # 0.6B-4bit roundtrip + decoding tests.
+            skip: 'testLargeModel|testSmall8bit|ForcedAlignerTests|StreamingASRTests|E2ECoreMLASRTests'
           - name: qwen3-asr-17b-mlx
             # Matches both `testLargeModel*` (1.7B-MLX-8bit) and
             # `testSmall8bit*` (0.6B-MLX-8bit) methods inside
@@ -152,6 +157,10 @@ jobs:
         run: df -h /
 
       - name: Run E2E tests
+        env:
+          # Per-shard model override (parakeet -> fixed-shape iOS-5s); empty for
+          # shards that don't set matrix.shard.modelId.
+          PARAKEET_TEST_MODEL_ID: ${{ matrix.shard.modelId }}
         run: |
           if [ -n "${{ matrix.shard.skip }}" ]; then
             swift test --skip-build --filter "${{ matrix.shard.filter }}" --skip "${{ matrix.shard.skip }}"

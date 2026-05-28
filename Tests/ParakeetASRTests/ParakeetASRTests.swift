@@ -106,14 +106,25 @@ final class ParakeetASRTests: XCTestCase {
 
 final class E2EParakeetASRTests: XCTestCase {
 
+    /// E2E model id, overridable via `PARAKEET_TEST_MODEL_ID`. CI points this
+    /// at the fixed-shape iOS-5s variant because the default EnumeratedShapes
+    /// encoder crashes CoreML's cpuOnly loader on the virtualized runner;
+    /// `transcribeAudio` window-chunks long audio so the 5 s model still
+    /// transcribes the multi-second fixtures.
+    static var modelId: String {
+        let env = ProcessInfo.processInfo.environment["PARAKEET_TEST_MODEL_ID"]
+        if let env, !env.isEmpty { return env }
+        return ParakeetASRModel.defaultModelId
+    }
+
     func testModelLoading() async throws {
-        let model = try await ParakeetASRModel.fromPretrained(modelId: ParakeetASRModel.defaultModelId)
+        let model = try await ParakeetASRModel.fromPretrained(modelId: Self.modelId)
         XCTAssertEqual(model.config.sampleRate, 16000)
         XCTAssertEqual(model.config.encoderHidden, 1024)
     }
 
     func testTranscription() async throws {
-        let model = try await ParakeetASRModel.fromPretrained(modelId: ParakeetASRModel.defaultModelId)
+        let model = try await ParakeetASRModel.fromPretrained(modelId: Self.modelId)
 
         guard let audioURL = Bundle.module.url(forResource: "test_audio", withExtension: "wav") else {
             throw XCTSkip("test_audio.wav not found in test resources")
@@ -131,7 +142,7 @@ final class E2EParakeetASRTests: XCTestCase {
     }
 
     func testWordConfidenceFromRealAudio() async throws {
-        let model = try await ParakeetASRModel.fromPretrained(modelId: ParakeetASRModel.defaultModelId)
+        let model = try await ParakeetASRModel.fromPretrained(modelId: Self.modelId)
 
         guard let audioURL = Bundle.module.url(forResource: "test_audio", withExtension: "wav") else {
             throw XCTSkip("test_audio.wav not found in test resources")
@@ -171,7 +182,7 @@ final class E2EParakeetASRTests: XCTestCase {
     }
 
     func testGermanTranscription() async throws {
-        let model = try await ParakeetASRModel.fromPretrained(modelId: ParakeetASRModel.defaultModelId)
+        let model = try await ParakeetASRModel.fromPretrained(modelId: Self.modelId)
 
         guard let audioURL = Bundle.module.url(forResource: "test_audio_german", withExtension: "wav") else {
             throw XCTSkip("test_audio_german.wav not found in test resources")
@@ -189,7 +200,7 @@ final class E2EParakeetASRTests: XCTestCase {
     }
 
     func testWarmup() async throws {
-        let model = try await ParakeetASRModel.fromPretrained(modelId: ParakeetASRModel.defaultModelId)
+        let model = try await ParakeetASRModel.fromPretrained(modelId: Self.modelId)
 
         guard let audioURL = Bundle.module.url(forResource: "test_audio", withExtension: "wav") else {
             throw XCTSkip("test_audio.wav not found in test resources")
@@ -228,7 +239,7 @@ final class E2EParakeetASRTests: XCTestCase {
     // MARK: - Performance Tests
 
     func testTranscriptionLatency() async throws {
-        let model = try await ParakeetASRModel.fromPretrained(modelId: ParakeetASRModel.defaultModelId)
+        let model = try await ParakeetASRModel.fromPretrained(modelId: Self.modelId)
 
         guard let audioURL = Bundle.module.url(forResource: "test_audio", withExtension: "wav") else {
             throw XCTSkip("test_audio.wav not found in test resources")

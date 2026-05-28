@@ -100,37 +100,70 @@ public class ParakeetASRModel {
         let (mel, melLength) = try melPreprocessor.extract(samples)
         let tMel1 = CFAbsoluteTimeGetCurrent()
 
-        // Step 2: Encoder — mel → encoded representations
-        // Pad / truncate mel to a shape the encoder accepts. `effectiveLength`
-        // is what we mask the encoder with — it equals `melLength` for normal
-        // pad-up cases and the encoder's max for truncated overflows.
-        let (paddedMel, effectiveLength) = try padMelToEnumeratedShape(mel: mel, actualLength: melLength)
-        AudioLog.inference.debug("Parakeet: encoding \(effectiveLength) mel frames, tensor width \(paddedMel.shape[2])")
-        let tEnc0 = CFAbsoluteTimeGetCurrent()
-        let encoderOutput = try runEncoder(mel: paddedMel, length: effectiveLength)
-        let tEnc1 = CFAbsoluteTimeGetCurrent()
-        let encoded = encoderOutput.featureValue(for: "encoded")!.multiArrayValue!
-        let encodedLengthArray = encoderOutput.featureValue(for: "encoded_length")!.multiArrayValue!
-        let encodedLength = encodedLengthArray[0].intValue
+        // Steps 2-3: encode + TDT greedy decode. Audio longer than the
+        // encoder's largest supported window is split into consecutive
+        // windows and the per-window token streams are concatenated. This
+        // lets a fixed-shape export (e.g. the 500-frame iOS-5s model, which
+        // has no EnumeratedShapes) transcribe arbitrarily long audio instead
+        // of truncating to the tail.
+        let maxWindow = supportedMelLengths.last ?? melLength
+        let tInfer0 = CFAbsoluteTimeGetCurrent()
+        var tokenIds: [Int] = []
+        var tokenLogProbs: [Float] = []
+        var confidences: [Float] = []
 
-        // Step 3: TDT greedy decode
-        let tdtDecoder = TDTGreedyDecoder(config: config, decoder: decoder!, joint: joint!)
-        let tDec0 = CFAbsoluteTimeGetCurrent()
-        let (tokenIds, tokenLogProbs, confidence) = try tdtDecoder.decode(encoded: encoded, encodedLength: encodedLength)
-        let tDec1 = CFAbsoluteTimeGetCurrent()
+        if melLength <= maxWindow {
+            let r = try encodeAndDecodeWindow(mel: mel, actualLength: melLength)
+            tokenIds = r.tokens; tokenLogProbs = r.tokenLogProbs; confidences = [r.confidence]
+        } else {
+            var start = 0
+            while start < melLength {
+                let win = min(maxWindow, melLength - start)
+                let windowMel = try sliceMel(mel: mel, start: start, length: win, totalFrames: melLength)
+                let r = try encodeAndDecodeWindow(mel: windowMel, actualLength: win)
+                tokenIds += r.tokens; tokenLogProbs += r.tokenLogProbs; confidences.append(r.confidence)
+                start += maxWindow
+            }
+            AudioLog.inference.debug(
+                "Parakeet: split \(melLength) mel frames into \(confidences.count) windows of \(maxWindow)")
+        }
+        let tInfer1 = CFAbsoluteTimeGetCurrent()
 
         // Step 4: Vocabulary decode with per-word confidence
         let text = vocabulary.decode(tokenIds)
-        lastConfidence = confidence
+        lastConfidence = confidences.isEmpty ? 0 : confidences.reduce(0, +) / Float(confidences.count)
         lastWordConfidences = vocabulary.decodeWords(tokenIds, logProbs: tokenLogProbs)
 
         let melMs = (tMel1 - tMel0) * 1000
-        let encMs = (tEnc1 - tEnc0) * 1000
-        let decMs = (tDec1 - tDec0) * 1000
-        let totalMs = melMs + encMs + decMs
-        AudioLog.inference.info("Parakeet: mel=\(String(format: "%.1f", melMs))ms enc=\(String(format: "%.1f", encMs))ms dec=\(String(format: "%.1f", decMs))ms total=\(String(format: "%.1f", totalMs))ms (\(tokenIds.count) tokens, \(encodedLength) frames)")
+        let inferMs = (tInfer1 - tInfer0) * 1000
+        AudioLog.inference.info("Parakeet: mel=\(String(format: "%.1f", melMs))ms infer=\(String(format: "%.1f", inferMs))ms (\(tokenIds.count) tokens, \(melLength) mel frames)")
 
         return text
+    }
+
+    /// Encode one mel window and run TDT greedy decode on it.
+    private func encodeAndDecodeWindow(mel: MLMultiArray, actualLength: Int)
+        throws -> (tokens: [Int], tokenLogProbs: [Float], confidence: Float)
+    {
+        let (paddedMel, effectiveLength) = try padMelToEnumeratedShape(mel: mel, actualLength: actualLength)
+        let encoderOutput = try runEncoder(mel: paddedMel, length: effectiveLength)
+        let encoded = encoderOutput.featureValue(for: "encoded")!.multiArrayValue!
+        let encodedLength = encoderOutput.featureValue(for: "encoded_length")!.multiArrayValue![0].intValue
+        let tdtDecoder = TDTGreedyDecoder(config: config, decoder: decoder!, joint: joint!)
+        return try tdtDecoder.decode(encoded: encoded, encodedLength: encodedLength)
+    }
+
+    /// Copy frames `[start, start+length)` out of a `[1, 128, totalFrames]`
+    /// mel into a fresh `[1, 128, length]` array (bin-major Float16 layout).
+    private func sliceMel(mel: MLMultiArray, start: Int, length: Int, totalFrames: Int) throws -> MLMultiArray {
+        let sub = try MLMultiArray(shape: [1, 128, length as NSNumber], dataType: mel.dataType)
+        let srcPtr = mel.dataPointer.assumingMemoryBound(to: Float16.self)
+        let dstPtr = sub.dataPointer.assumingMemoryBound(to: Float16.self)
+        for bin in 0..<config.numMelBins {
+            dstPtr.advanced(by: bin * length)
+                .update(from: srcPtr.advanced(by: bin * totalFrames + start), count: length)
+        }
+        return sub
     }
 
     // MARK: - CoreML Inference Helpers
