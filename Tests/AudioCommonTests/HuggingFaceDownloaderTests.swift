@@ -253,4 +253,46 @@ final class HuggingFaceDownloaderTests: XCTestCase {
         XCTAssertTrue(progressReported)
         XCTAssertTrue(HuggingFaceDownloader.weightsExist(in: tmpDir))
     }
+
+    // MARK: - Download stall guard
+
+    /// A stalled operation (reports progress once, then sleeps forever)
+    /// must be aborted by the guard rather than hanging. Uses a 1 s
+    /// stall window so the test is fast.
+    func testStallGuardAbortsWedgedDownload() async throws {
+        let start = Date()
+        do {
+            try await HuggingFaceDownloader.withDownloadStallGuard(
+                modelId: "fake/wedged", stallTimeoutSeconds: 1
+            ) { reportProgress in
+                reportProgress(0.1)  // one tick, then never again
+                try await Task.sleep(for: .seconds(60))  // simulate a wedged transfer
+            }
+            XCTFail("expected stall guard to throw")
+        } catch let error as DownloadError {
+            guard case .stalled(let modelId, let seconds) = error else {
+                return XCTFail("expected .stalled, got \(error)")
+            }
+            XCTAssertEqual(modelId, "fake/wedged")
+            XCTAssertEqual(seconds, 1)
+        }
+        // Must abort within a few seconds, not wait out the 60 s sleep.
+        XCTAssertLessThan(Date().timeIntervalSince(start), 10,
+                          "stall guard should abort promptly after the window")
+    }
+
+    /// An operation that keeps reporting progress must NOT be tripped by
+    /// the guard even when it runs longer than the stall window.
+    func testStallGuardAllowsProgressingDownload() async throws {
+        try await HuggingFaceDownloader.withDownloadStallGuard(
+            modelId: "fake/healthy", stallTimeoutSeconds: 1
+        ) { reportProgress in
+            // Tick every 200 ms for ~1.6 s (> the 1 s stall window) so the
+            // clock keeps resetting; should complete without stalling.
+            for i in 1...8 {
+                try await Task.sleep(for: .milliseconds(200))
+                reportProgress(Double(i) / 8.0)
+            }
+        }
+    }
 }

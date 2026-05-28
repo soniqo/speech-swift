@@ -6,6 +6,9 @@ import os
 public enum DownloadError: Error, LocalizedError {
     case failedToDownload(String)
     case invalidRemoteFileName(String)
+    /// A download attempt made no progress for `seconds` and was aborted
+    /// so the caller's retry loop can fire instead of hanging.
+    case stalled(modelId: String, seconds: Int)
 
     public var errorDescription: String? {
         switch self {
@@ -13,6 +16,8 @@ public enum DownloadError: Error, LocalizedError {
             return "Failed to download: \(file)"
         case .invalidRemoteFileName(let file):
             return "Refusing to write unsafe remote file name: \(file)"
+        case .stalled(let modelId, let seconds):
+            return "Download stalled for \(modelId): no progress in \(seconds)s"
         }
     }
 }
@@ -125,12 +130,18 @@ public enum HuggingFaceDownloader {
 
         // Retry with exponential backoff — HuggingFace can timeout on
         // slow connections or rate-limit. 3 attempts: 0s, 5s, 15s delays.
+        // Each attempt is wrapped in a progress-stall guard so a wedged
+        // mid-transfer (which `hub.snapshot` won't surface on its own)
+        // aborts and retries instead of hanging until the CI job is killed.
         let maxRetries = 3
         var lastError: Error?
         for attempt in 1...maxRetries {
             do {
-                try await hub.snapshot(from: repo, matching: globs) { progress in
-                    progressHandler?(progress.fractionCompleted)
+                try await withDownloadStallGuard(modelId: modelId) { reportProgress in
+                    try await hub.snapshot(from: repo, matching: globs) { progress in
+                        reportProgress(progress.fractionCompleted)
+                        progressHandler?(progress.fractionCompleted)
+                    }
                 }
                 return  // Success
             } catch {
@@ -167,8 +178,11 @@ public enum HuggingFaceDownloader {
         var lastError: Error?
         for attempt in 1...maxRetries {
             do {
-                try await hub.snapshot(from: repo, matching: globs) { progress in
-                    progressHandler?(progress.fractionCompleted)
+                try await withDownloadStallGuard(modelId: modelId) { reportProgress in
+                    try await hub.snapshot(from: repo, matching: globs) { progress in
+                        reportProgress(progress.fractionCompleted)
+                        progressHandler?(progress.fractionCompleted)
+                    }
                 }
                 return
             } catch {
@@ -180,6 +194,69 @@ public enum HuggingFaceDownloader {
             }
         }
         throw DownloadError.failedToDownload("\(modelId): \(lastError?.localizedDescription ?? "unknown")")
+    }
+
+    // MARK: - Download stall guard
+
+    /// Seconds of zero download progress after which an attempt is
+    /// considered wedged and aborted. `hub.snapshot` reports
+    /// `fractionCompleted` continuously while bytes flow, so a healthy
+    /// (even slow) transfer keeps resetting the clock; only a genuinely
+    /// stalled connection trips this. Overridable via
+    /// `HF_DOWNLOAD_STALL_TIMEOUT` for CI tuning.
+    static var downloadStallTimeoutSeconds: Int {
+        if let raw = ProcessInfo.processInfo.environment["HF_DOWNLOAD_STALL_TIMEOUT"],
+           let v = Int(raw), v > 0 {
+            return v
+        }
+        return 90
+    }
+
+    /// Thread-safe last-progress timestamp. `hub.snapshot`'s progress
+    /// callback may fire from a background queue, so guard with a lock.
+    private final class ProgressClock: @unchecked Sendable {
+        private let lock = NSLock()
+        private var last = Date()
+        func tick() { lock.lock(); last = Date(); lock.unlock() }
+        func idleSeconds() -> Double {
+            lock.lock(); defer { lock.unlock() }
+            return Date().timeIntervalSince(last)
+        }
+    }
+
+    /// Run a download `operation` that reports fractional progress, and
+    /// abort it if progress stalls for `downloadStallTimeoutSeconds`.
+    /// On stall the in-flight `hub.snapshot` task is cancelled (URLSession
+    /// honors cancellation) and `DownloadError.stalled` is thrown so the
+    /// caller's retry loop fires instead of hanging indefinitely.
+    static func withDownloadStallGuard(
+        modelId: String,
+        stallTimeoutSeconds: Int? = nil,
+        _ operation: @escaping (@escaping @Sendable (Double) -> Void) async throws -> Void
+    ) async throws {
+        let stall = stallTimeoutSeconds ?? downloadStallTimeoutSeconds
+        let clock = ProgressClock()
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await operation { _ in clock.tick() }
+            }
+            group.addTask {
+                // Poll on a fraction of the window so we detect a stall
+                // within ~stall..stall+pollStep seconds.
+                let pollStep = max(1, stall / 3)
+                while true {
+                    try await Task.sleep(for: .seconds(pollStep))
+                    if clock.idleSeconds() >= Double(stall) {
+                        throw DownloadError.stalled(modelId: modelId, seconds: stall)
+                    }
+                }
+            }
+            // Whichever finishes first wins; cancel the other (the poller
+            // on success, or the download on stall).
+            defer { group.cancelAll() }
+            try await group.next()
+        }
     }
 
     // MARK: - Security Helpers (kept for backward compat + security tests)
