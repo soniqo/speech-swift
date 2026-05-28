@@ -2,9 +2,10 @@
 
 State-of-the-art music source separation. Splits stereo music into 4 stems
 (drums, bass, other, vocals) — substantially higher separation quality than
-Open-Unmix (Demucs v4; see reference). An SDR comparison harness (`htdemucs_ft`
-vs our UMX-HQ on MUSDB samples) ships in the `speech-models` repo
-(`benchmark.py`); run it locally to reproduce the gap on your own material.
+Open-Unmix. On a directional benchmark (3 MUSDB *sample* clips, museval /
+BSSEval v4) `htdemucs_ft` averages **+3.01 dB SDR** over UMX-HQ, with the
+largest gains on bass (**+5.75 dB**) and drums (**+2.40 dB**). Reproduce with
+`benchmark.py` in the `speech-models` repo.
 
 ## Architecture
 
@@ -56,6 +57,20 @@ combine-weights — inference runs each sub-model and keeps its own stem.
 The MLX-Swift port matches the PyTorch reference at **57.6 dB SNR** (fp32). int8
 quantizes only the transformer Linear layers (convs and packed-attention
 `in_proj` aren't MLX-quantizable), so it saves ~25% with a small quality cost.
+
+## Quality vs Open-Unmix
+
+Median SDR (museval / BSSEval v4) over 3 MUSDB *sample* clips — directional, not
+the full 50-track MUSDB18-HQ. `htdemucs_ft` is the PyTorch reference; our MLX port
+matches it to 57.6 dB SNR.
+
+| Stem | htdemucs_ft | UMX-HQ | Δ |
+|---|---|---|---|
+| drums | 6.89 | 4.49 | +2.40 |
+| bass | 9.50 | 3.75 | +5.75 |
+| other | 4.70 | 2.85 | +1.85 |
+| vocals | 10.57 | 8.53 | +2.05 |
+| **AVG** | **7.92** | **4.91** | **+3.01** |
 
 ## Usage
 
