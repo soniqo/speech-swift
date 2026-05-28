@@ -34,7 +34,9 @@ public struct UpsampleCommand: ParsableCommand {
 
             let inputURL = URL(fileURLWithPath: audioFile)
             print("Loading audio: \(audioFile)")
-            let audio = try AudioFileLoader.load(url: inputURL, targetSampleRate: FlashSR.sampleRate)
+            // Super-resolution: resample the input up to 48 kHz at mastering
+            // quality before the model adds high-frequency detail.
+            let audio = try AudioFileLoader.load(url: inputURL, targetSampleRate: FlashSR.sampleRate, quality: .mastering)
             let durIn = Double(audio.count) / Double(FlashSR.sampleRate)
             print("  Loaded \(audio.count) samples (\(String(format: "%.2f", durIn))s @ 48 kHz)")
 

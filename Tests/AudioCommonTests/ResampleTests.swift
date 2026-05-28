@@ -155,12 +155,50 @@ final class ResampleTests: XCTestCase {
 
     func testHighFreqPreserved48to44() {
         // 18 kHz is below both Nyquist limits (24k and 22.05k) so it must
-        // survive. Mastering SRC should keep most of its amplitude.
+        // survive even on the default (speech) quality, which only rolls off
+        // closer to Nyquist.
         let input = sine(freq: 18000, seconds: 0.5, sampleRate: 48000)
         let out = AudioFileLoader.resample(input, from: 48000, to: 44100)
         let amp = toneAmplitude(out, freq: 18000, sampleRate: 44100)
-        XCTAssertGreaterThan(amp, 0.6,
+        XCTAssertGreaterThan(amp, 0.8,
             "18 kHz content should be preserved on 48k→44.1k (got amp \(amp))")
+    }
+
+    // MARK: - Quality (mastering for music/upsampling)
+
+    func testMasteringRetainsMoreHighFreqThanStandard() {
+        // The whole point of `.mastering` for music: fuller high-frequency
+        // retention near Nyquist. At 18 kHz on 48k→44.1k, mastering keeps
+        // essentially all of it while the default rolls off a little.
+        let input = sine(freq: 18000, seconds: 0.5, sampleRate: 48000)
+        let std = AudioFileLoader.resample(input, from: 48000, to: 44100, quality: .standard)
+        let mas = AudioFileLoader.resample(input, from: 48000, to: 44100, quality: .mastering)
+        let stdAmp = toneAmplitude(std, freq: 18000, sampleRate: 44100)
+        let masAmp = toneAmplitude(mas, freq: 18000, sampleRate: 44100)
+        XCTAssertGreaterThan(masAmp, 0.95, "mastering should retain ~all of 18 kHz (got \(masAmp))")
+        XCTAssertGreaterThan(masAmp, stdAmp,
+            "mastering should retain more HF than standard (mastering \(masAmp) vs standard \(stdAmp))")
+    }
+
+    func testMasteringDrainsAndExactLength() {
+        // The mastering branch must drain and hit exact length just like the
+        // default — verify with an end impulse on a non-integer ratio.
+        let n = 48000
+        var input = [Float](repeating: 0, count: n)
+        input[n - 1] = 1.0
+        let out = AudioFileLoader.resample(input, from: 48000, to: 44100, quality: .mastering)
+        let expected = Int((Double(n) * 44100.0 / 48000.0).rounded())
+        XCTAssertEqual(out.count, expected, "mastering must produce exact length")
+        XCTAssertGreaterThan(rms(Array(out.suffix(32))), 0.1,
+            "mastering must retain the end-impulse tail")
+    }
+
+    func testMasteringStereoStaysAlignedAndExact() {
+        let mono = sine(freq: 5000, seconds: 0.4, sampleRate: 48000)
+        let out = AudioFileLoader.resampleStereo([mono, mono], from: 48000, to: 44100, quality: .mastering)
+        let expected = Int((Double(mono.count) * 44100.0 / 48000.0).rounded())
+        XCTAssertEqual(out[0].count, expected)
+        XCTAssertEqual(out[0], out[1], "identical channels must resample identically at mastering quality")
     }
 
     // MARK: - Stereo

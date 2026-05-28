@@ -50,7 +50,7 @@ public struct SeparateCommand: ParsableCommand {
                 modelId: modelId, progressHandler: reportProgress)
 
             print("Loading audio: \(input)")
-            let audio = try AudioFileLoader.loadStereo(url: inputURL, targetSampleRate: 44100)
+            let audio = try AudioFileLoader.loadStereo(url: inputURL, targetSampleRate: 44100, quality: .mastering)
             let duration = Double(audio[0].count) / 44100.0
             print("  Duration: \(String(format: "%.1f", duration))s")
 

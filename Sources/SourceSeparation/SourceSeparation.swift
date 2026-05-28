@@ -31,17 +31,11 @@ public final class SourceSeparator {
     ///
     /// - Parameters:
     ///   - audio: Stereo audio as `[[Float]]` — `audio[0]` = left, `audio[1]` = right
-    ///   - sampleRate: Input sample rate (resampled to 44100 if different)
-    ///   - targets: Which stems to extract (default: all 4)
-    /// - Returns: Dictionary of target → stereo audio `[[Float]]`
-    /// Separate a stereo audio mix into stems.
-    ///
-    /// - Parameters:
-    ///   - audio: Stereo audio as `[[Float]]` — `audio[0]` = left, `audio[1]` = right
-    ///   - sampleRate: Input sample rate (resampled to 44100 if different)
+    ///   - sampleRate: Input sample rate. Resampled to the model rate
+    ///     (`config.sampleRate`, 44.1 kHz) at mastering quality if different.
     ///   - targets: Which stems to extract (default: all 4)
     ///   - wiener: Apply Wiener post-filtering (improves SDR ~0.5 dB, requires all 4 stems)
-    /// - Returns: Dictionary of target → stereo audio `[[Float]]`
+    /// - Returns: Dictionary of target → stereo audio `[[Float]]` at the model rate
     public func separate(
         audio: [[Float]],
         sampleRate: Int = 44100,
@@ -57,12 +51,23 @@ public final class SourceSeparator {
                 targets: targets, wiener: wiener, metricsHandler: metricsHandler)
         }
 
-        let left = audio[0]
-        let right = audio[1]
+        // UMX is trained at 44.1 kHz; feeding another rate would mis-map every
+        // STFT bin (wrong pitch/tempo). Bring the mix to the model rate first.
+        // Music → mastering quality for full-band fidelity.
+        let stereo: [[Float]]
+        if sampleRate != config.sampleRate {
+            stereo = AudioFileLoader.resampleStereo(
+                audio, from: sampleRate, to: config.sampleRate, quality: .mastering)
+        } else {
+            stereo = audio
+        }
+
+        let left = stereo[0]
+        let right = stereo[1]
         let length = left.count
 
         var metrics = SourceSeparationMetrics()
-        metrics.audioSeconds = Double(length) / Double(sampleRate)
+        metrics.audioSeconds = Double(length) / Double(config.sampleRate)
         let totalStart = CFAbsoluteTimeGetCurrent()
 
         // STFT each channel
