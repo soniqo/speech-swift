@@ -2,6 +2,7 @@ import Foundation
 import ArgumentParser
 import SourceSeparation
 import AudioCommon
+import MLX
 
 public struct SeparateCommand: ParsableCommand {
     public static let configuration = CommandConfiguration(
@@ -18,8 +19,14 @@ public struct SeparateCommand: ParsableCommand {
     @Option(name: .long, help: "Stems to extract: vocals,drums,bass,other (default: all)")
     public var stems: String?
 
+    @Option(name: .long, help: "Engine: umx (default) or htdemucs (Demucs v4, higher quality)")
+    public var engine: String = "umx"
+
     @Option(name: .long, help: "Model variant: hq (default, 8.9M/stem) or l (28.3M/stem)")
     public var model: String = "hq"
+
+    @Option(name: .long, help: "Local htdemucs weights dir (htdemucs_ft.safetensors + _config.json)")
+    public var htdemucsDir: String?
 
     @Flag(name: .long, help: "Show timing info")
     public var verbose: Bool = false
@@ -42,6 +49,11 @@ public struct SeparateCommand: ParsableCommand {
         }
 
         try FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
+
+        if engine.lowercased() == "htdemucs" {
+            try runHTDemucs(inputURL: inputURL, outDir: outDir, targets: targets)
+            return
+        }
 
         try runAsync {
             let modelId = model.lowercased() == "l" ? SourceSeparator.largeModelId : SourceSeparator.defaultModelId
@@ -70,5 +82,37 @@ public struct SeparateCommand: ParsableCommand {
 
             print("Done in \(String(format: "%.1f", elapsed))s (RTF: \(String(format: "%.2f", rtf)))")
         }
+    }
+
+    private func runHTDemucs(inputURL: URL, outDir: URL, targets: [SeparationTarget]) throws {
+        guard let dir = htdemucsDir else {
+            throw ValidationError("--htdemucs-dir is required for --engine htdemucs (local weights until HF upload)")
+        }
+        print("Loading HTDemucs (Demucs v4) from \(dir)...")
+        let separator = try HTDemucsSeparator.fromLocal(directory: URL(fileURLWithPath: dir))
+
+        print("Loading audio: \(input)")
+        let audio = try AudioFileLoader.loadStereo(url: inputURL, targetSampleRate: 44100)
+        let L = audio[0].count
+        let duration = Double(L) / 44100.0
+        print("  Duration: \(String(format: "%.1f", duration))s")
+        let mix = MLXArray(audio[0] + audio[1], [1, 2, L])
+
+        let wanted = Set(targets.map(\.rawValue))
+        print("Separating into \(targets.map(\.rawValue).joined(separator: ", "))...")
+        let start = CFAbsoluteTimeGetCurrent()
+        let stems = separator.separate(mix)
+        let elapsed = CFAbsoluteTimeGetCurrent() - start
+
+        for (name, arr) in stems where wanted.contains(name) {
+            let flat = arr.asArray(Float.self)             // [1, 2, L] → 2L
+            let left = Array(flat[0..<L])
+            let right = Array(flat[L..<(2 * L)])
+            let outputURL = outDir.appendingPathComponent("\(name).wav")
+            try WAVWriter.writeStereo(left: left, right: right, sampleRate: 44100, to: outputURL)
+            print("  Saved: \(outputURL.lastPathComponent)")
+        }
+        let rtf = elapsed / duration
+        print("Done in \(String(format: "%.1f", elapsed))s (RTF: \(String(format: "%.2f", rtf)))")
     }
 }
