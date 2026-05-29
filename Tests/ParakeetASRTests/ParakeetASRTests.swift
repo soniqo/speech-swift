@@ -27,7 +27,8 @@ final class ParakeetASRTests: XCTestCase {
     }
 
     func testModelVariantConstants() {
-        XCTAssertEqual(ParakeetASRModel.defaultModelId, "aufklarer/Parakeet-TDT-v3-CoreML-INT8")
+        XCTAssertEqual(ParakeetASRModel.defaultModelId, "aufklarer/Parakeet-TDT-v3-CoreML-INT8-30s")
+        XCTAssertEqual(ParakeetASRModel.iosModelId, "aufklarer/Parakeet-TDT-v3-CoreML-INT8-iOS-5s")
     }
 
     func testConfigCodable() throws {
