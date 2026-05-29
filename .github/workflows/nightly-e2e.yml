@@ -71,11 +71,14 @@ jobs:
             filter: 'SpeechEnhancementTests'
             skip: ''
           - name: wakeword-coreml
-            # KWS E2E passes locally on cpuOnly (~25s for 10 tests) but hangs
-            # >28 min on the virtualized macos-15 runner under cpuOnly and hits
-            # the 30-min job cap — the same practical stall as the other CoreML
-            # virtualized-runner cases. Skip the E2E class until that runner
-            # slowdown is understood; the unit tests still run.
+            # The KWS streaming-Zipformer encoder's cpuOnly CoreML compile hangs
+            # on the virtualized macos-15 runner (>28 min -> 30-min cap). Root
+            # cause is the streaming 36-cache graph topology, NOT quantization: a
+            # --no-quantize fp16 re-export hangs identically (A/B confirmed on the
+            # runner). The VM has no usable Neural Engine and GPU is reserved for
+            # MLX, so no allowed compute unit loads it there — same class as the
+            # qwen3-asr CoreML decoder. Skip the E2E class on CI; it passes
+            # on-device (10/10, validated locally). Unit tests still run.
             filter: 'SpeechWakeWordTests'
             skip: 'E2ESpeechWakeWordTests'
           - name: vad-diar-mlx-coreml
