@@ -3,34 +3,25 @@ import XCTest
 @testable import ParakeetASR
 @testable import AudioCommon
 
-/// E2E coverage for the encoder-input-shape adaptation introduced in
-/// `fix(ParakeetASR): adapt mel padding to encoder's actual input
-/// constraint`.
+/// E2E coverage for encoder-input-shape adaptation: `supportedMelLengths`
+/// comes from the encoder's CoreML constraint at load time, so every shipped
+/// export works without per-variant Swift branching. These tests lock in:
 ///
-/// The fix made `supportedMelLengths` come from the encoder's CoreML
-/// constraint at load time, so single-shape exports (iOS-5s) and
-/// enumerated-shape exports (macOS default) both work without any
-/// per-variant Swift branching. These tests lock in:
-///
-/// - macOS variant produces the historical enumerated list (regression for
-///   the enumerated-shape branch)
-/// - iOS-5s variant produces the single fixed length `[500]` (regression
-///   for the bug we just fixed: the padder was picking shorter shapes the
-///   single-shape model rejected)
+/// - default model is a single fixed shape `[3000]` (30s, no EnumeratedShapes)
+/// - iOS-5s variant produces the single fixed length `[500]`
 /// - iOS-5s end-to-end transcribe of a real ≤5 s speech clip returns
-///   sensible text — the user-visible symptom that started this whole
-///   investigation
+///   sensible text
 final class E2EParakeetShapeAdaptationTests: XCTestCase {
 
-    static let macOSModelId = ParakeetASRModel.defaultModelId
-    static let iOSModelId   = ParakeetASRModel.iosModelId
+    static let defaultModelId = ParakeetASRModel.defaultModelId
+    static let iOSModelId     = ParakeetASRModel.iosModelId
 
-    func testMacOSModelDiscoversEnumeratedShapes() async throws {
-        let model = try await ParakeetASRModel.fromPretrained(modelId: Self.macOSModelId)
+    func testDefaultModelDiscoversSingleShape3000() async throws {
+        let model = try await ParakeetASRModel.fromPretrained(modelId: Self.defaultModelId)
         XCTAssertEqual(
             model.supportedMelLengths,
-            [100, 200, 300, 400, 500, 750, 1000, 1500, 2000, 3000],
-            "Default macOS Parakeet encoder must expose its enumerated shape list"
+            [3000],
+            "Default Parakeet encoder must be a single fixed shape [3000] (30s, no EnumeratedShapes)"
         )
     }
 

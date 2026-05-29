@@ -43,8 +43,9 @@ The model is split into 3 CoreML sub-models for optimal compute unit placement:
 | `decoder.mlmodelc` | CPU + Neural Engine | None | LSTM prediction network |
 | `joint.mlmodelc` | CPU + Neural Engine | None | Dual-head token + duration logits |
 
-Default quantization:
-- **INT8** (`aufklarer/Parakeet-TDT-v3-CoreML-INT8`) — ~50% size reduction, best quality/speed balance
+Default model (`aufklarer/Parakeet-TDT-v3-CoreML-INT8-30s`):
+- **INT8** palettized encoder — ~50% size reduction, best quality/speed balance
+- **Single fixed shape** (3000 mel frames = 30s), not EnumeratedShapes — so it loads on any CoreML compute unit (CPU-only, GPU, or Neural Engine) without the heavy multi-shape compile. Audio longer than 30s is window-chunked in `transcribeAudio`. The `aufklarer/Parakeet-TDT-v3-CoreML-INT8-iOS-5s` variant (fixed 500 frames = 5s) trades a smaller window for lower runtime memory on iOS.
 
 Mel preprocessing (pre-emphasis, STFT, mel filterbank, normalization) is done in Swift using Accelerate/vDSP — no CoreML preprocessor model needed. Decoder and joint are small enough that quantization isn't necessary.
 
@@ -78,7 +79,8 @@ On Apple Silicon with Neural Engine (M2 Max, 20s audio):
 
 ## Model Weights
 
-- [aufklarer/Parakeet-TDT-v3-CoreML-INT8](https://huggingface.co/aufklarer/Parakeet-TDT-v3-CoreML-INT8)
+- [aufklarer/Parakeet-TDT-v3-CoreML-INT8-30s](https://huggingface.co/aufklarer/Parakeet-TDT-v3-CoreML-INT8-30s) — default (single fixed 30s shape)
+- [aufklarer/Parakeet-TDT-v3-CoreML-INT8-iOS-5s](https://huggingface.co/aufklarer/Parakeet-TDT-v3-CoreML-INT8-iOS-5s) — iOS (single fixed 5s shape, lower memory)
 
 ## Thread Safety
 

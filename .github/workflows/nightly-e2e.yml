@@ -56,16 +56,11 @@ jobs:
             filter: 'KokoroTTSTests'
             skip: ''
           - name: parakeet-coreml
-            # The default Parakeet-TDT encoder uses EnumeratedShapes, which
-            # crashes CoreML's cpuOnly loader on the virtualized runner. Point
-            # the TDT E2E at the fixed-shape iOS-5s variant (no EnumeratedShapes);
-            # transcribeAudio window-chunks the >5 s fixtures across 5 s windows.
+            # The default Parakeet-TDT model is now a single fixed-shape export
+            # (30s, no EnumeratedShapes), so it loads cleanly on the cpuOnly
+            # virtualized runner. transcribeAudio window-chunks audio >30s.
             filter: 'ParakeetASRTests|ParakeetStreamingASRTests'
-            # Skip the macOS shape-discovery test — it explicitly loads the
-            # default EnumeratedShapes model (not the iOS-5s override), which
-            # crashes CoreML's cpuOnly loader on the runner.
-            skip: 'testMacOSModelDiscoversEnumeratedShapes'
-            modelId: 'aufklarer/Parakeet-TDT-v3-CoreML-INT8-iOS-5s'
+            skip: ''
           - name: magpie-coreml
             # Minimal roundtrip only (testLoadAndSynthesizeEnglish). Skip the
             # ASR cross-check — it loads the full Qwen3-ASR CoreML decoder and
@@ -76,9 +71,14 @@ jobs:
             filter: 'SpeechEnhancementTests'
             skip: ''
           - name: wakeword-coreml
-            # The KWS CoreML model crashes CoreML's cpuOnly loader on the
-            # runner (same class as Parakeet-TDT). Skip the E2E class until the
-            # model ships a fixed-shape export; the unit tests still run.
+            # The KWS streaming-Zipformer encoder's cpuOnly CoreML compile hangs
+            # on the virtualized macos-15 runner (>28 min -> 30-min cap). Root
+            # cause is the streaming 36-cache graph topology, NOT quantization: a
+            # --no-quantize fp16 re-export hangs identically (A/B confirmed on the
+            # runner). The VM has no usable Neural Engine and GPU is reserved for
+            # MLX, so no allowed compute unit loads it there — same class as the
+            # qwen3-asr CoreML decoder. Skip the E2E class on CI; it passes
+            # on-device (10/10, validated locally). Unit tests still run.
             filter: 'SpeechWakeWordTests'
             skip: 'E2ESpeechWakeWordTests'
           - name: vad-diar-mlx-coreml

@@ -13,11 +13,14 @@ public class ParakeetASRModel {
     /// Model configuration.
     public let config: ParakeetConfig
 
-    /// Default HuggingFace model ID (INT8 quantized encoder, 30s max).
-    public static let defaultModelId = "aufklarer/Parakeet-TDT-v3-CoreML-INT8"
+    /// Default HuggingFace model ID: INT8 encoder, single fixed 3000-frame
+    /// shape (30s max). Single fixed shape (no EnumeratedShapes) so it loads
+    /// on any CoreML compute unit, including `.cpuOnly`. Audio longer than 30s
+    /// is window-chunked in `transcribeAudio`.
+    public static let defaultModelId = "aufklarer/Parakeet-TDT-v3-CoreML-INT8-30s"
 
-    /// iOS-optimized model: single 500-frame shape (5s max), no EnumeratedShapes overhead.
-    /// Saves ~600MB runtime memory vs the default model.
+    /// iOS-optimized model: single 500-frame shape (5s max), lower runtime
+    /// memory than the 30s default. Long audio is window-chunked.
     public static let iosModelId = "aufklarer/Parakeet-TDT-v3-CoreML-INT8-iOS-5s"
 
     /// Whether the model is loaded and ready for inference.
@@ -29,10 +32,10 @@ public class ParakeetASRModel {
     var joint: MLModel?
     private let vocabulary: ParakeetVocabulary
     /// Mel frame counts the loaded encoder accepts, sorted ascending.
-    /// Derived from the encoder's CoreML input constraint at load time, so
-    /// fixed-shape exports (e.g. iOS-5s = `[500]`) and enumerated-shape
-    /// exports (e.g. macOS = `[100, 200, 300, 400, 500, 750, 1000, 1500,
-    /// 2000, 3000]`) both work without any per-variant Swift logic.
+    /// Derived from the encoder's CoreML input constraint at load time. Our
+    /// shipped models are single fixed shapes (default = `[3000]`, iOS-5s =
+    /// `[500]`); legacy enumerated-shape exports also work without any
+    /// per-variant Swift logic.
     /// Internal access so tests can assert discovery results.
     let supportedMelLengths: [Int]
     /// Compute units the encoder ended up using (after the prefer-ANE,
@@ -155,7 +158,7 @@ public class ParakeetASRModel {
     private func encodeAndDecodeWindow(mel: MLMultiArray, actualLength: Int)
         throws -> (tokens: [Int], tokenLogProbs: [Float], confidence: Float)
     {
-        let (paddedMel, effectiveLength) = try padMelToEnumeratedShape(mel: mel, actualLength: actualLength)
+        let (paddedMel, effectiveLength) = try padMelToSupportedShape(mel: mel, actualLength: actualLength)
         let encoderOutput = try runEncoder(mel: paddedMel, length: effectiveLength)
         let encoded = encoderOutput.featureValue(for: "encoded")!.multiArrayValue!
         let encodedLength = encoderOutput.featureValue(for: "encoded_length")!.multiArrayValue![0].intValue
@@ -195,7 +198,7 @@ public class ParakeetASRModel {
     ///
     /// Returns `(padded, effectiveLength)` because truncation also reduces
     /// the masked length the encoder uses.
-    private func padMelToEnumeratedShape(
+    private func padMelToSupportedShape(
         mel: MLMultiArray, actualLength: Int
     ) throws -> (padded: MLMultiArray, length: Int) {
         let melFrames = mel.shape[2].intValue
@@ -409,9 +412,10 @@ public class ParakeetASRModel {
     /// Read the encoder's mel input shape constraint and return the supported
     /// frame counts (dim 2 of `[batch, mel_bins, frames]`), sorted ascending.
     ///
-    /// Handles both export styles produced by `models/parakeet-asr/export/convert.py`:
-    /// - `--single-shape` → fixed shape, returns one element (e.g. `[500]` for iOS-5s)
-    /// - default → `EnumeratedShapes`, returns the enumerated frame counts
+    /// Handles every export style produced by `models/parakeet-asr/export/convert.py`:
+    /// - `--single-shape` → fixed shape, returns one element (e.g. `[3000]` for
+    ///   the 30s default, `[500]` for iOS-5s)
+    /// - legacy default → `EnumeratedShapes`, returns the enumerated frame counts
     ///
     /// Falls back to `defaultMelLengths` if introspection fails — that matches
     /// the historical hardcoded list, so behaviour on previously-working exports
