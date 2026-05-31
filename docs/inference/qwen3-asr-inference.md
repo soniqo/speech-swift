@@ -69,13 +69,47 @@ let text = model.transcribe(
 The legacy overload `transcribe(audio:sampleRate:language:maxTokens:context:)`
 remains available and forwards into the new path with default options.
 
+## CoreML Encoder Backend (CoreMLEncoder.swift)
+
+The CoreML port of the audio encoder (`aufklarer/Qwen3-ASR-CoreML`) ships a model exported with the same **chunked block attention** the upstream PyTorch model is trained with (100-frame mel chunks → 13 tokens after 3× stride-2 conv, attention restricted to 800-frame / 8-chunk windows). The export uses a **single fixed mel shape** instead of `EnumeratedShapes` and signals real audio length through a dedicated input/output pair so the downstream consumer can slice the padded embeddings to the un-padded count.
+
+### Interface
+
+```
+Inputs
+  mel          MultiArray<Float32>  shape [1, 128, 3000]
+  mel_length   MultiArray<Int32>    shape [1]
+                  Number of real mel frames in mel; remaining frames
+                  are zero-padded and masked out by the in-graph
+                  block-attention bias.
+
+Outputs
+  audio_embeddings  MultiArray<Float16>  shape [1, 390, 1024]
+  output_length     MultiArray<Int32>    shape [1]
+                  Number of real audio tokens. Callers should iterate
+                  only embeddings[:, :output_length, :].
+```
+
+The 8× conv stride downsamples 3000 mel frames to up to 390 audio tokens. For shorter audio the in-graph mask discards the trailing chunks; `output_length` returns the precise real count (e.g. 64 tokens for a 4.9 s clip).
+
+### Swift consumer
+
+`CoreMLEncoder.encode(_:)` returns `(embeddings: MLXArray, outputLength: Int)`. `CoreMLASRModel.transcribe` uses `outputLength` directly as `numAudioTokens` when chunking the audio prefill into the decoder; this replaces the previous `ceil(realMelFrames / 8)` heuristic with the model-reported truth.
+
+### Why the rebuild
+
+The previous export ran **unmasked global self-attention** over mel padded to enumerated buckets `[100, 200, 400, 600, 800, 1000, 1500, 2000, 3000]`. Trailing zero-padded mel frames contaminated the real audio embeddings via attention, and the text decoder emitted `<|im_end|>` right after the first sentence-final period — 24.88% WER on LibriSpeech test-clean vs 1.82% for the same 0.6B-8bit weights via MLX. The rebuilt export brings WER on the same fixture to **3.02%** and is ~4.7× faster (24 ms vs 113 ms per call on M5 Pro).
+
 ## Performance
 
-| Model | Framework | RTF | 10s audio processed in |
-|-------|-----------|-----|------------------------|
-| Qwen3-ASR-0.6B (4-bit) | MLX Swift | ~0.06 | ~0.6s |
-| Whisper-large-v3 | whisper.cpp (Q5_0) | ~0.10 | ~1.0s |
-| Whisper-small | whisper.cpp (Q5_0) | ~0.04 | ~0.4s |
+| Model | Framework | WER% | RTF | xRT |
+|-------|-----------|------|-----|-----|
+| Qwen3-ASR 1.7B (MLX, 8-bit) | MLX Swift | 1.52 | 0.033 | 30.5× |
+| Qwen3-ASR 0.6B (MLX, 8-bit) | MLX Swift | 1.82 | 0.015 | 66.0× |
+| Qwen3-ASR 0.6B (MLX, 4-bit) | MLX Swift | 2.20 | 0.012 | 85.6× |
+| Qwen3-ASR 0.6B (CoreML INT8) | CoreML (ANE+CPU) | 3.02 | 0.098 | 10.2× |
+
+M5 Pro, 48 GB; LibriSpeech test-clean n=200; isolated per-engine. See [docs/benchmarks/asr-wer.md](../benchmarks/asr-wer.md) for the full cross-engine table including WhisperKit, Parakeet, Omnilingual, and Nemotron.
 
 ## Streaming / Partial Transcription
 

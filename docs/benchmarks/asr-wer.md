@@ -36,25 +36,6 @@ The `asr-bench` tool runs each engine in a separate child process (`--isolated`)
 
 The Qwen3-ASR-CoreML row in the table above is the **rebuilt** encoder (chunked block-attention export, [`aufklarer/Qwen3-ASR-CoreML`](https://huggingface.co/aufklarer/Qwen3-ASR-CoreML)). The previous export ran unmasked global self-attention over the zero-padded mel input under `EnumeratedShapes`; padding-derived audio tokens contaminated the real ones via attention, causing the text decoder to emit `<|im_end|>` right after the first sentence-final period — **24.88% WER** on the same n=200 fixture. The rebuilt encoder mirrors upstream's 100-frame chunks + 800-frame attention windows (in-graph block-attention bias from a new `mel_length` input; outputs `(audio_embeddings, output_length)`); encoder time also drops from 113 ms to 24 ms per call.
 
-## Historical: per-engine on M2 Max (legacy table)
-
-The benchmark below was collected separately on M2 Max with the previous reproduction script (Python). Kept as a reference; the M5 Pro `asr-bench` results above are the canonical numbers for the engines they cover.
-
-| Model | Engine | Bits | Size | WER% | RTF | Model Load | Warmup |
-|-------|--------|------|------|------|-----|------------|--------|
-| Qwen3-ASR 1.7B | MLX (GPU) | 8-bit | 2.3 GB | 2.35 | 0.090 | 5.1s | 0.8s |
-| Qwen3-ASR 1.7B | MLX (GPU) | 4-bit | 1.2 GB | 2.57 | 0.045 | 3.2s | 0.4s |
-| Parakeet TDT 0.6B | CoreML (ANE) | INT8 | 634 MB | 2.74 | 0.089 | 128.9s | 2.0s |
-| Qwen3-ASR 0.6B | MLX (GPU) | 8-bit | 960 MB | 2.80 | 0.025 | 2.4s | 0.3s |
-| Qwen3-ASR 0.6B | MLX (GPU) | 4-bit | 675 MB | 3.34 | 0.023 | 2.4s | 0.3s |
-
-**Machine**: Apple M2 Max, 64 GB, macOS 14, release build with compiled metallib.
-
-**Key observations:**
-- Parakeet INT8 achieves the best WER (2.74%) but has a slow cold start (128.9s CoreML compilation)
-- Qwen3-ASR MLX is 10x faster to load (2.4s vs 129s) and has the fastest RTF (0.023)
-- CoreML cold start (first-ever load) compiles a device-specific execution plan: 129s for INT8. Warm start (cached) is 5.4s — CoreML caches compiled plans in `~/Library/Caches/com.apple.CoreML/`. The 129s only happens once per device. Encoder currently uses `.all` compute units; switching to `.cpuAndNeuralEngine` would skip GPU plan compilation
-
 ## Comparison with published models
 
 | Model | Params | Size | Precision | WER% (test-clean) | Source |
