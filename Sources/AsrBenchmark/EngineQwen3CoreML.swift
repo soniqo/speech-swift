@@ -16,11 +16,16 @@ final class Qwen3CoreMLEngine: BenchEngine, @unchecked Sendable {
 
     func transcribe(audio: [Float], sampleRate: Int, language: String?) async throws -> (text: String, timings: Timings) {
         guard let m = model else { throw BenchError.notLoaded(name) }
-        let t0 = Date()
-        let text = m.transcribe(audio: audio, sampleRate: sampleRate, language: language)
-        let elapsed = Date().timeIntervalSince(t0)
-        if ProcessInfo.processInfo.environment["BENCH_DUMP_HYP"] == "1" {
-            FileHandle.standardError.write(Data(("[\(name)] elapsed=\(elapsed)s hyp=\"\(text)\"\n").utf8))
+        // Wrap in an autoreleasepool so CoreML's per-prediction IOSurface
+        // buffers (MLMultiArray scratch, MLState backing pages) are released
+        // between calls instead of piling up. Without this the bench grows
+        // ~30 MB / utt and peaks above 9 GB by utt 200 on M5 Pro.
+        var text = ""
+        var elapsed: Double = 0
+        autoreleasepool {
+            let t0 = Date()
+            text = m.transcribe(audio: audio, sampleRate: sampleRate, language: language)
+            elapsed = Date().timeIntervalSince(t0)
         }
         let dur = Double(audio.count) / Double(sampleRate)
         return (text, Timings(elapsed: elapsed, audioDuration: dur))
