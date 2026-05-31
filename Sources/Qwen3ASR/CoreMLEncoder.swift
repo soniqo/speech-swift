@@ -10,18 +10,33 @@ import AudioCommon
 /// Produces audio embeddings that feed into the MLX text decoder. This enables
 /// lower power consumption on macOS and is a step toward full iOS deployment.
 ///
-/// The encoder processes mel spectrograms without chunking/block attention.
-/// For typical audio lengths (< 30s), this produces equivalent results to the
-/// chunked MLX encoder.
+/// The encoder uses a single fixed 30 s mel shape ``[1, 128, 3000]`` and
+/// applies upstream's chunked block-attention (100-frame chunks → 13 tokens
+/// each, 8-chunk attention windows). Mel input is zero-padded to 3000 frames
+/// and the real length is signaled via a separate ``mel_length`` input so
+/// the in-graph block-attention bias can mask out the padded frames; the
+/// model returns the matching real audio-token count via ``output_length``.
 public class CoreMLASREncoder {
     private let model: MLModel
-    private let enumeratedMelLengths: [Int]
+    /// Fixed mel length the chunked-attention encoder is exported with.
+    /// 3000 mel frames = 30 s @ 100 Hz hop, matching upstream training.
+    public static let paddedMelLength: Int = 3000
+    /// Max audio tokens out of the padded encoder (3000 mel / 8 conv stride ≈
+    /// 30 chunks × 13 tokens). The model writes the real count to ``output_length``.
+    public static let paddedAudioTokens: Int = 390
 
     public static let defaultModelId = "aufklarer/Qwen3-ASR-CoreML"
 
-    public init(model: MLModel, enumeratedMelLengths: [Int] = [100, 200, 400, 600, 800, 1000, 1500, 2000, 3000]) {
+    /// Embeddings + the real, un-padded audio-token count (from the model's
+    /// ``output_length`` output). Callers should iterate only the first
+    /// ``outputLength`` tokens of ``embeddings``.
+    public struct EncodedAudio {
+        public let embeddings: MLMultiArray
+        public let outputLength: Int
+    }
+
+    public init(model: MLModel) {
         self.model = model
-        self.enumeratedMelLengths = enumeratedMelLengths
     }
 
     /// Load encoder from a directory containing `encoder.mlmodelc`.
@@ -70,59 +85,21 @@ public class CoreMLASREncoder {
 
     /// Warm up the encoder with a short dummy input to trigger CoreML compilation.
     public func warmUp() throws {
-        let minT = enumeratedMelLengths.first ?? 100
-        let dummy = try MLMultiArray(shape: [1, 128, minT as NSNumber], dataType: .float32)
-        let input = try MLDictionaryFeatureProvider(dictionary: [
-            "mel": MLFeatureValue(multiArray: dummy),
-        ])
-        _ = try model.prediction(from: input)
+        // Use a small fake length so warmup doesn't depend on a real clip.
+        _ = try encodeRaw(melData: [Float](repeating: 0, count: 128 * Self.paddedMelLength),
+                          melBins: 128, realFrames: 100)
     }
 
-    /// Encode mel spectrogram to audio embeddings.
+    /// Encode a mel spectrogram and return embeddings as an MLXArray.
     ///
     /// - Parameter melFeatures: Mel spectrogram as MLXArray `[128, T]`
-    /// - Returns: Audio embeddings as MLXArray `[1, T/8, 1024]`
-    public func encode(_ melFeatures: MLXArray) throws -> MLXArray {
+    /// - Returns: `(embeddings: [1, paddedAudioTokens, 1024], outputLength)`
+    public func encode(_ melFeatures: MLXArray) throws -> (embeddings: MLXArray, outputLength: Int) {
         let melBins = melFeatures.dim(0)
         let melTime = melFeatures.dim(1)
-
-        guard let targetLength = enumeratedMelLengths.first(where: { $0 >= melTime }) else {
-            throw AudioModelError.inferenceFailed(
-                operation: "CoreML encoder",
-                reason: "Audio too long: \(melTime) mel frames exceeds max \(enumeratedMelLengths.last!)")
-        }
-
-        // Convert MLXArray [128, T] → MLMultiArray [1, 128, targetLength]
         let melData: [Float] = melFeatures.asArray(Float.self)
-        let melArray = try MLMultiArray(
-            shape: [1, melBins as NSNumber, targetLength as NSNumber],
-            dataType: .float32)
-        let ptr = melArray.dataPointer.assumingMemoryBound(to: Float.self)
-
-        for bin in 0..<melBins {
-            let srcOffset = bin * melTime
-            let dstOffset = bin * targetLength
-            for t in 0..<melTime {
-                ptr[dstOffset + t] = melData[srcOffset + t]
-            }
-            for t in melTime..<targetLength {
-                ptr[dstOffset + t] = 0
-            }
-        }
-
-        // Run prediction
-        let input = try MLDictionaryFeatureProvider(dictionary: [
-            "mel": MLFeatureValue(multiArray: melArray),
-        ])
-        let output = try model.prediction(from: input)
-
-        guard let embeddings = output.featureValue(for: "audio_embeddings")?.multiArrayValue else {
-            throw AudioModelError.inferenceFailed(
-                operation: "CoreML encoder", reason: "Missing audio_embeddings output")
-        }
-
-        // Convert MLMultiArray → MLXArray
-        return multiArrayToMLXArray(embeddings)
+        let raw = try encodeRaw(melData: melData, melBins: melBins, realFrames: melTime)
+        return (multiArrayToMLXArray(raw.embeddings), raw.outputLength)
     }
 
     // MARK: - MLX-free encoding (for iOS background / pure CoreML path)
@@ -139,36 +116,46 @@ public class CoreMLASREncoder {
     ///   - melBins: Number of mel frequency bins (typically 128)
     ///   - timeFrames: Number of time frames
     /// - Returns: Audio embeddings as `MLMultiArray` with shape `[1, T/8, 1024]`
-    public func encode(melData: [Float], melBins: Int, timeFrames: Int) throws -> MLMultiArray {
-        guard let targetLength = enumeratedMelLengths.first(where: { $0 >= timeFrames }) else {
+    public func encode(melData: [Float], melBins: Int, timeFrames: Int) throws -> EncodedAudio {
+        return try encodeRaw(melData: melData, melBins: melBins, realFrames: timeFrames)
+    }
+
+    /// Convenience: encode a `MelFeatures` struct directly.
+    public func encode(melFeatures: MelFeatures) throws -> EncodedAudio {
+        return try encodeRaw(melData: melFeatures.data,
+                             melBins: melFeatures.melBins,
+                             realFrames: melFeatures.timeFrames)
+    }
+
+    /// Shared core: zero-pads ``melData`` to the fixed ``paddedMelLength``,
+    /// runs the two-input/two-output graph, and returns the model's reported
+    /// ``output_length`` alongside the full padded embeddings.
+    private func encodeRaw(
+        melData: [Float], melBins: Int, realFrames: Int
+    ) throws -> EncodedAudio {
+        let padded = Self.paddedMelLength
+        guard realFrames <= padded else {
             throw AudioModelError.inferenceFailed(
                 operation: "CoreML encoder",
-                reason: "Audio too long: \(timeFrames) mel frames exceeds max \(enumeratedMelLengths.last!)")
+                reason: "Audio too long: \(realFrames) mel frames exceeds fixed shape \(padded). Segment with SpeechVAD or process in 30s windows.")
         }
-
-        // Create MLMultiArray [1, melBins, targetLength] directly from [Float]
+        // Mel input: [1, melBins, paddedMelLength], zero-padded past realFrames.
         let melArray = try MLMultiArray(
-            shape: [1, melBins as NSNumber, targetLength as NSNumber],
-            dataType: .float32)
-        let ptr = melArray.dataPointer.assumingMemoryBound(to: Float.self)
-
-        // melData layout is [melBins, timeFrames] (row-major)
-        // MLMultiArray layout is [1, melBins, targetLength] (row-major, batch dim = 1)
+            shape: [1, melBins as NSNumber, padded as NSNumber], dataType: .float32)
+        let mptr = melArray.dataPointer.assumingMemoryBound(to: Float.self)
         for bin in 0..<melBins {
-            let srcOffset = bin * timeFrames
-            let dstOffset = bin * targetLength
-            for t in 0..<timeFrames {
-                ptr[dstOffset + t] = melData[srcOffset + t]
-            }
-            // Zero-pad remaining time steps
-            for t in timeFrames..<targetLength {
-                ptr[dstOffset + t] = 0
-            }
+            let src = bin * realFrames
+            let dst = bin * padded
+            for t in 0..<realFrames { mptr[dst + t] = melData[src + t] }
+            for t in realFrames..<padded { mptr[dst + t] = 0 }
         }
+        // mel_length input: [1] int32 with the real (un-padded) frame count.
+        let lengthArray = try MLMultiArray(shape: [1], dataType: .int32)
+        lengthArray[0] = NSNumber(value: Int32(realFrames))
 
-        // Run prediction
         let input = try MLDictionaryFeatureProvider(dictionary: [
             "mel": MLFeatureValue(multiArray: melArray),
+            "mel_length": MLFeatureValue(multiArray: lengthArray),
         ])
         let output = try model.prediction(from: input)
 
@@ -176,13 +163,12 @@ public class CoreMLASREncoder {
             throw AudioModelError.inferenceFailed(
                 operation: "CoreML encoder", reason: "Missing audio_embeddings output")
         }
-
-        return embeddings
-    }
-
-    /// Convenience: encode a `MelFeatures` struct directly.
-    public func encode(melFeatures: MelFeatures) throws -> MLMultiArray {
-        return try encode(melData: melFeatures.data, melBins: melFeatures.melBins, timeFrames: melFeatures.timeFrames)
+        guard let lengthOut = output.featureValue(for: "output_length")?.multiArrayValue else {
+            throw AudioModelError.inferenceFailed(
+                operation: "CoreML encoder", reason: "Missing output_length output (encoder may be an older export without the chunked-attention mask)")
+        }
+        let outLen = max(0, Int(lengthOut[0].int32Value))
+        return EncodedAudio(embeddings: embeddings, outputLength: outLen)
     }
 
     private func multiArrayToMLXArray(_ array: MLMultiArray) -> MLXArray {
@@ -222,15 +208,20 @@ extension Qwen3ASRModel {
     ) throws -> String {
         let melFeatures = featureExtractor.process(audio, sampleRate: sampleRate)
 
-        // CoreML encoder returns [1, T/8, 1024] (batch dim included)
-        let audioEmbeds = try coremlEncoder.encode(melFeatures)
+        // CoreML encoder returns the padded `[1, paddedAudioTokens, 1024]`
+        // embeddings + the real audio-token count via ``outputLength``.
+        let (audioEmbeds, audioLength) = try coremlEncoder.encode(melFeatures)
 
         guard let textDecoder = textDecoder else {
-            return "[CoreML encoded: \(audioEmbeds.shape)] - Text decoder not loaded"
+            return "[CoreML encoded: \(audioEmbeds.shape) length=\(audioLength)] - Text decoder not loaded"
         }
 
+        // Slice the embeddings to the real (un-padded) length before passing
+        // to the MLX text decoder, otherwise trailing zero-derived tokens
+        // would pollute decoder cross-attention.
+        let realEmbeds = audioEmbeds[0..., 0..<audioLength, 0...]
         return generateText(
-            audioEmbeds: audioEmbeds,
+            audioEmbeds: realEmbeds,
             textDecoder: textDecoder,
             language: language,
             maxTokens: maxTokens

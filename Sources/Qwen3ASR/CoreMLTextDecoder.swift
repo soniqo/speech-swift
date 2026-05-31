@@ -446,6 +446,33 @@ public class CoreMLTextDecoder {
     /// Expose the fixed batch size so callers can chunk audio prefill.
     public var prefillBatchSize: Int { batchSize }
 
+    /// Get argmax token ID, optionally excluding a single token.
+    ///
+    /// When ``skipToken`` is non-nil, the slot at that index is ignored —
+    /// used by the ASR generation loop to suppress premature ``<|im_end|>``
+    /// (see `CoreMLASRModel.transcribe`). When it's nil this is the plain
+    /// argmax over the full vocab.
+    public func argmax(logits: MLMultiArray, skipping skipToken: Int32? = nil) -> Int32 {
+        return argmaxImpl(logits: logits, skipIdx: skipToken.map { Int($0) })
+    }
+
+    /// Read a single logit by token index. Stride-aware (matches `argmax`).
+    public func logit(_ logits: MLMultiArray, at index: Int32) -> Float {
+        let lastStride = logits.strides.last?.intValue ?? 1
+        let i = Int(index) * lastStride
+        switch logits.dataType {
+        case .float16:
+            let ptr = logits.dataPointer.assumingMemoryBound(to: Float16.self)
+            return Float(ptr[i])
+        case .float32:
+            let ptr = logits.dataPointer.assumingMemoryBound(to: Float.self)
+            return ptr[i]
+        default:
+            let ptr = logits.dataPointer.assumingMemoryBound(to: Float.self)
+            return ptr[i]
+        }
+    }
+
     /// Get argmax token ID from logits.
     ///
     /// Stride-aware: walks ``vocabSize`` (the logical last-dim length)
@@ -455,7 +482,7 @@ public class CoreMLTextDecoder {
     /// previous flat ``ptr[i]`` loop with ``maxVal = -Float.infinity``
     /// would silently keep ``maxIdx = 0`` since IEEE-754 ``NaN > x``
     /// is always false).
-    public func argmax(logits: MLMultiArray) -> Int32 {
+    private func argmaxImpl(logits: MLMultiArray, skipIdx: Int?) -> Int32 {
         let vocab = logits.shape.last?.intValue ?? logits.count
         let lastStride = logits.strides.last?.intValue ?? 1
         var maxVal: Float = -Float.infinity
@@ -465,7 +492,7 @@ public class CoreMLTextDecoder {
         switch logits.dataType {
         case .float16:
             let ptr = logits.dataPointer.assumingMemoryBound(to: Float16.self)
-            for i in 0..<vocab {
+            for i in 0..<vocab where i != skipIdx {
                 let val = Float(ptr[i * lastStride])
                 if val.isNaN { nanCount += 1; continue }
                 if val > maxVal {
@@ -475,7 +502,7 @@ public class CoreMLTextDecoder {
             }
         case .float32:
             let ptr = logits.dataPointer.assumingMemoryBound(to: Float.self)
-            for i in 0..<vocab {
+            for i in 0..<vocab where i != skipIdx {
                 let val = ptr[i * lastStride]
                 if val.isNaN { nanCount += 1; continue }
                 if val > maxVal {
@@ -485,7 +512,7 @@ public class CoreMLTextDecoder {
             }
         default:
             let ptr = logits.dataPointer.assumingMemoryBound(to: Float.self)
-            for i in 0..<vocab {
+            for i in 0..<vocab where i != skipIdx {
                 let val = ptr[i * lastStride]
                 if val.isNaN { nanCount += 1; continue }
                 if val > maxVal {

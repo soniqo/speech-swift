@@ -99,8 +99,11 @@ public class CoreMLASRModel {
         let melFeatures = featureExtractor.process(audio, sampleRate: sampleRate)
         let t1 = CFAbsoluteTimeGetCurrent()
 
-        let audioEmbeds = try encoder.encode(melFeatures)
-        let numAudioTokens = audioEmbeds.dim(1)
+        // The encoder pads mel to a fixed 30 s shape and reports the real
+        // (un-padded) audio-token count via ``output_length``. We feed only
+        // the first ``numAudioTokens`` of the padded embeddings to the
+        // decoder so trailing zero-derived tokens don't pollute attention.
+        let (audioEmbeds, numAudioTokens) = try encoder.encode(melFeatures)
         let t2 = CFAbsoluteTimeGetCurrent()
 
         decoder.resetCache()
@@ -168,17 +171,39 @@ public class CoreMLASRModel {
             return "[CoreML decoder: no output]"
         }
 
+        // Known WER issue with this path (multi-sentence utterances on
+        // LibriSpeech test-clean): the CoreML port emits ``<|im_end|>``
+        // after the first sentence-final period with a wide logit margin
+        // (~6+ nats over the runner-up). The MLX path at the same
+        // effective bit width keeps generating. We tried both a
+        // logit-margin guard and a force-first-EOS-suppression; neither
+        // helps — the model's runner-up at the truncation point is also
+        // wrong (e.g. " The" instead of " on"), so substituting it just
+        // trades deletions for substitutions. The root cause is upstream
+        // — encoder INT8 quantization / mel padding leakage into audio
+        // embeddings, or position drift in chunked prefill. Tracked as
+        // a separate fix that requires model re-export, not a sampler
+        // change. The ``argmax(skipping:)`` / ``logit(_:at:)`` helpers
+        // stay for that future work.
         var generatedTokens: [Int32] = []
         var nextToken = decoder.argmax(logits: logits)
+        // First-token EOS would mean the model thinks the audio yielded an
+        // empty transcript — never right on real speech. Cheap to guard.
+        if nextToken == imEndId {
+            nextToken = decoder.argmax(logits: logits, skipping: imEndId)
+        }
         generatedTokens.append(nextToken)
 
         for _ in 1..<maxTokens {
             if nextToken == imEndId { break }
-
             let embedding = try decoder.embed(tokenId: nextToken)
             logits = try decoder.decoderStep(embedding: embedding)
             nextToken = decoder.argmax(logits: logits)
             generatedTokens.append(nextToken)
+        }
+        if profile {
+            let audioDuration = Double(audio.count) / Double(sampleRate)
+            print("[COREML-ASR-PROFILE] audio=\(audioDuration)s gen=\(generatedTokens.count)")
         }
         let t6 = CFAbsoluteTimeGetCurrent()
 
@@ -226,13 +251,15 @@ public class CoreMLASRModel {
         // 1. Extract mel features (pure CPU via Accelerate — no MLXArray)
         let melFeatures = featureExtractor.processRaw(audio, sampleRate: sampleRate)
 
-        // 2. Encode audio → MLMultiArray embeddings [1, T/8, 1024]
-        let audioEmbeds = try encoder.encode(
+        // 2. Encode audio → MLMultiArray embeddings + real (un-padded)
+        //    audio-token count from the encoder's ``output_length``.
+        let encoded = try encoder.encode(
             melData: melFeatures.data,
             melBins: melFeatures.melBins,
             timeFrames: melFeatures.timeFrames
         )
-        let numAudioTokens = audioEmbeds.shape[1].intValue
+        let audioEmbeds = encoded.embeddings
+        let numAudioTokens = encoded.outputLength
 
         // 3. Reset decoder KV cache
         decoder.resetCache()
@@ -284,18 +311,21 @@ public class CoreMLASRModel {
             lastLogits = try decoder.decoderStep(embedding: embedding)
         }
 
-        // 7. Autoregressive generation
+        // 7. Autoregressive generation (same EOS note as `transcribe()` —
+        // see that path for the background).
         guard var logits = lastLogits else {
             return "[CoreML decoder: no output]"
         }
 
         var generatedTokens: [Int32] = []
         var nextToken = decoder.argmax(logits: logits)
+        if nextToken == imEndId {
+            nextToken = decoder.argmax(logits: logits, skipping: imEndId)
+        }
         generatedTokens.append(nextToken)
 
         for _ in 1..<maxTokens {
             if nextToken == imEndId { break }
-
             let embedding = try decoder.embed(tokenId: nextToken)
             logits = try decoder.decoderStep(embedding: embedding)
             nextToken = decoder.argmax(logits: logits)

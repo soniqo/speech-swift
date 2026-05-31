@@ -128,6 +128,10 @@ let package = Package(
         .executable(
             name: "audio-server",
             targets: ["AudioServerCLI"]
+        ),
+        .executable(
+            name: "asr-bench",
+            targets: ["AsrBenchmark"]
         )
     ],
     dependencies: [
@@ -139,7 +143,9 @@ let package = Package(
         // Pin swift-websocket to 1.5.x — 1.6.0 added `import NIOSSL` in WSCore/WebSocketHandler.swift
         // without declaring swift-nio-ssl as a target dependency, so the module is unresolvable
         // on a clean checkout. https://github.com/hummingbird-project/swift-websocket
-        .package(url: "https://github.com/hummingbird-project/swift-websocket.git", "1.5.0"..<"1.6.0")
+        .package(url: "https://github.com/hummingbird-project/swift-websocket.git", "1.5.0"..<"1.6.0"),
+        // WhisperKit (Argmax) — used by the AsrBenchmark target only, for competitor comparison.
+        .package(url: "https://github.com/argmaxinc/WhisperKit", from: "1.0.0")
     ],
     targets: [
         .target(
@@ -424,6 +430,18 @@ let package = Package(
             name: "AudioCLI",
             dependencies: ["AudioCLILib"]
         ),
+        .executableTarget(
+            name: "AsrBenchmark",
+            dependencies: [
+                "AudioCommon",
+                "Qwen3ASR",
+                "ParakeetASR",
+                "NemotronStreamingASR",
+                "OmnilingualASR",
+                .product(name: "WhisperKit", package: "WhisperKit"),
+                .product(name: "ArgumentParser", package: "swift-argument-parser")
+            ]
+        ),
         .target(
             name: "AudioServer",
             dependencies: [
@@ -434,7 +452,11 @@ let package = Package(
                 "SpeechEnhancement",
                 "AudioCommon",
                 .product(name: "Hummingbird", package: "hummingbird"),
-                .product(name: "HummingbirdWebSocket", package: "hummingbird-websocket")
+                .product(name: "HummingbirdWebSocket", package: "hummingbird-websocket"),
+                // Pulled in via hummingbird-websocket but we keep the explicit
+                // pin (see top-level deps) so 1.6.0+ can't slip in; reference
+                // it here so SwiftPM doesn't warn that the pin is unused.
+                .product(name: "WSCore", package: "swift-websocket")
             ]
         ),
         .executableTarget(
