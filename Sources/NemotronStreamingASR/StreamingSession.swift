@@ -18,7 +18,8 @@ public class StreamingSession {
     private var cacheLastTime: MLMultiArray
     private var cacheLastChannelLen: MLMultiArray
     private var preCache: MLMultiArray
-    private let languageMask: MLMultiArray
+    /// Nil for English-only bundles whose encoder has no `language_mask` input.
+    private let languageMask: MLMultiArray?
 
     private var h: MLMultiArray
     private var c: MLMultiArray
@@ -64,13 +65,20 @@ public class StreamingSession {
             shape: [1, numMelBins as NSNumber, preCacheSize as NSNumber], dataType: .float32)
         memset(preCache.dataPointer, 0, numMelBins * preCacheSize * MemoryLayout<Float>.stride)
 
-        // One-hot language mask, persisted for the session lifetime.
-        languageMask = try MLMultiArray(
-            shape: [1, numPrompts as NSNumber], dataType: .float32)
-        memset(languageMask.dataPointer, 0, numPrompts * MemoryLayout<Float>.stride)
-        let clamped = max(0, min(numPrompts - 1, languageSlot))
-        let lmPtr = languageMask.dataPointer.assumingMemoryBound(to: Float.self)
-        lmPtr[clamped] = 1.0
+        // One-hot language mask, only allocated when the encoder accepts it.
+        // The English-only bundle's encoder takes no `language_mask` input;
+        // multilingual 3.5 takes a 128-slot one-hot.
+        if encoder.modelDescription.inputDescriptionsByName.keys.contains("language_mask") {
+            let mask = try MLMultiArray(
+                shape: [1, numPrompts as NSNumber], dataType: .float32)
+            memset(mask.dataPointer, 0, numPrompts * MemoryLayout<Float>.stride)
+            let clamped = max(0, min(numPrompts - 1, languageSlot))
+            let lmPtr = mask.dataPointer.assumingMemoryBound(to: Float.self)
+            lmPtr[clamped] = 1.0
+            languageMask = mask
+        } else {
+            languageMask = nil
+        }
 
         cacheLastChannel = try MLMultiArray(
             shape: [layers, 1, attCtx, hidden] as [NSNumber], dataType: .float32)
@@ -179,15 +187,19 @@ public class StreamingSession {
             chunkMel = rawMel
         }
 
-        let encoderInput = try MLDictionaryFeatureProvider(dictionary: [
+        let audioLenArr = try makeInt32Array(value: Int32(expectedFrames))
+        var encoderFeatures: [String: MLFeatureValue] = [
             "audio_signal": MLFeatureValue(multiArray: chunkMel),
-            "audio_length": MLFeatureValue(multiArray: makeInt32Array(value: Int32(expectedFrames))),
-            "language_mask": MLFeatureValue(multiArray: languageMask),
+            "audio_length": MLFeatureValue(multiArray: audioLenArr),
             "pre_cache": MLFeatureValue(multiArray: preCache),
             "cache_last_channel": MLFeatureValue(multiArray: cacheLastChannel),
             "cache_last_time": MLFeatureValue(multiArray: cacheLastTime),
             "cache_last_channel_len": MLFeatureValue(multiArray: cacheLastChannelLen),
-        ])
+        ]
+        if let languageMask = languageMask {
+            encoderFeatures["language_mask"] = MLFeatureValue(multiArray: languageMask)
+        }
+        let encoderInput = try MLDictionaryFeatureProvider(dictionary: encoderFeatures)
         let encoderOutput = try encoder.prediction(from: encoderInput)
 
         let encoded = encoderOutput.featureValue(for: "encoded_output")!.multiArrayValue!

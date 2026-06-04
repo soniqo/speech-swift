@@ -35,7 +35,8 @@
 - **[Parakeet TDT](https://soniqo.audio/ar/guides/parakeet)** — تحويل الكلام إلى نص عبر CoreML (Neural Engine، NVIDIA FastConformer + مفكك ترميز TDT، 25 لغة)
 - **[Omnilingual ASR](https://soniqo.audio/ar/guides/omnilingual)** — تحويل الكلام إلى نص (Meta wav2vec2 + CTC، **1,672 لغة** عبر 32 نظام كتابة، CoreML 300M + MLX 300M/1B/3B/7B)
 - **[الإملاء التدفقي](https://soniqo.audio/ar/guides/dictate)** — إملاء فوري بنتائج جزئية واكتشاف نهاية النطق (Parakeet-EOU-120M)
-- **[Nemotron Streaming](https://soniqo.audio/ar/guides/nemotron)** — تعرف تدفقي على الكلام بزمن استجابة منخفض مع علامات ترقيم وأحرف كبيرة أصلية (NVIDIA Nemotron-Speech-Streaming-0.6B، CoreML، الإنجليزية)
+- **[Nemotron Streaming (متعدد اللغات)](https://soniqo.audio/ar/guides/nemotron)** — تعرف تدفقي على الكلام بزمن استجابة منخفض مع علامات ترقيم وأحرف كبيرة أصلية (NVIDIA Nemotron-3.5-ASR-Streaming-0.6B، CoreML + MLX، **76 لغة ولهجة**)
+- **[Nemotron Streaming (إنجليزي)](https://soniqo.audio/guides/nemotron)** — تعرف تدفقي على الكلام بزمن استجابة منخفض مع علامات ترقيم وأحرف كبيرة أصلية (NVIDIA Nemotron-Speech-Streaming-0.6B، CoreML، الإنجليزية فقط، أصغر وأسرع من المتغير متعدد اللغات)
 - **[Qwen3-ForcedAligner](https://soniqo.audio/ar/guides/align)** — محاذاة الطوابع الزمنية على مستوى الكلمة (صوت + نص → طوابع زمنية)
 - **[Qwen3-TTS](https://soniqo.audio/ar/guides/speak)** — تحويل النص إلى كلام (أعلى جودة، تدفق، متحدثون مخصصون، 10 لغات)
 - **[CosyVoice TTS](https://soniqo.audio/ar/guides/cosyvoice)** — تحويل تدفقي للنص إلى كلام مع استنساخ الصوت وحوار متعدد المتحدثين ووسوم المشاعر (9 لغات)
@@ -168,7 +169,8 @@ struct DictateView: View {
 | [Qwen3-ASR](https://soniqo.audio/ar/guides/transcribe) | كلام → نص | MLX, CoreML (هجين) | 0.6B, 1.7B | 52 |
 | [Parakeet TDT](https://soniqo.audio/ar/guides/parakeet) | كلام → نص | CoreML (ANE) | 0.6B | 25 أوروبية |
 | [Parakeet EOU](https://soniqo.audio/ar/guides/dictate) | كلام → نص (تدفقي) | CoreML (ANE) | 120M | 25 أوروبية |
-| [Nemotron Streaming](https://soniqo.audio/ar/guides/nemotron) | كلام → نص (تدفقي، مع علامات ترقيم) | CoreML (ANE) | 0.6B | الإنجليزية |
+| [Nemotron Streaming (متعدد اللغات)](https://soniqo.audio/ar/guides/nemotron) | كلام → نص (تدفقي، مع علامات ترقيم) | CoreML (ANE), MLX | 0.6B | **76** |
+| [Nemotron Streaming (إنجليزي)](https://soniqo.audio/guides/nemotron) | كلام → نص (تدفقي، مع علامات ترقيم) | CoreML (ANE) | 0.6B | EN |
 | [Omnilingual ASR](https://soniqo.audio/ar/guides/omnilingual) | كلام → نص | CoreML (ANE), MLX | 300M / 1B / 3B / 7B | **[1,672](https://github.com/facebookresearch/omnilingual-asr/blob/main/src/omnilingual_asr/models/wav2vec2_llama/lang_ids.py)** |
 | [Qwen3-ForcedAligner](https://soniqo.audio/ar/guides/align) | صوت + نص → طوابع زمنية | MLX, CoreML | 0.6B | متعدد |
 | [Qwen3-TTS](https://soniqo.audio/ar/guides/speak) | نص → كلام | MLX, CoreML | 0.6B, 1.7B | 10 |
@@ -243,7 +245,7 @@ dependencies: [
 import Qwen3ASR             // التعرف على الكلام (MLX)
 import ParakeetASR          // التعرف على الكلام (CoreML، دفعة)
 import ParakeetStreamingASR // إملاء تدفقي مع جزئيات + EOU
-import NemotronStreamingASR // ASR تدفقي بالإنجليزية مع علامات ترقيم أصلية (0.6B)
+import NemotronStreamingASR // ASR تدفقي متعدد اللغات مع علامات ترقيم أصلية (0.6B، 76 لغة)
 import OmnilingualASR       // 1,672 لغة (CoreML + MLX)
 import Qwen3TTS             // تحويل النص إلى كلام
 import CosyVoiceTTS         // تحويل النص إلى كلام مع استنساخ الصوت
@@ -461,8 +463,8 @@ speech-swift مقسم إلى هدف SPM واحد لكل نموذج بحيث يد
 **[مخطط الهيكلة الكامل مع الواجهات الخلفية وجداول الذاكرة وخريطة الوحدات → soniqo.audio/architecture](https://soniqo.audio/ar/architecture)** · **[مرجع API → soniqo.audio/api](https://soniqo.audio/ar/api)** · **[الاختبارات → soniqo.audio/benchmarks](https://soniqo.audio/ar/benchmarks)**
 
 الوثائق المحلية (المستودع):
-- **النماذج:** [Qwen3-ASR](docs/models/asr-model.md) · [Qwen3-TTS](docs/models/tts-model.md) · [CosyVoice](docs/models/cosyvoice-tts.md) · [Kokoro](docs/models/kokoro-tts.md) · [VibeVoice](docs/models/vibevoice.md) · [Parakeet TDT](docs/models/parakeet-asr.md) · [Parakeet Streaming](docs/models/parakeet-streaming-asr.md) · [Nemotron Streaming](docs/models/nemotron-streaming.md) · [Omnilingual ASR](docs/models/omnilingual-asr.md) · [PersonaPlex](docs/models/personaplex.md) · [FireRedVAD](docs/models/fireredvad.md) · [Source Separation](docs/models/source-separation.md) · [HTDemucs](docs/models/htdemucs.md) · [MAGNeT](docs/models/magnet-music-gen.md) · [FlashSR](docs/models/flashsr.md)
-- **الاستدلال:** [Qwen3-ASR](docs/inference/qwen3-asr-inference.md) · [Parakeet TDT](docs/inference/parakeet-asr-inference.md) · [Parakeet Streaming](docs/inference/parakeet-streaming-asr-inference.md) · [Nemotron Streaming](docs/inference/nemotron-streaming-inference.md) · [Omnilingual ASR](docs/inference/omnilingual-asr-inference.md) · [TTS](docs/inference/qwen3-tts-inference.md) · [VibeVoice](docs/inference/vibevoice-inference.md) · [MAGNeT](docs/inference/magnet-music-gen.md) · [FlashSR](docs/inference/flashsr.md) · [Forced Aligner](docs/inference/forced-aligner.md) · [Silero VAD](docs/inference/silero-vad.md) · [تمييز المتحدثين](docs/inference/speaker-diarization.md) · [تحسين الكلام](docs/inference/speech-enhancement.md)
+- **النماذج:** [Qwen3-ASR](docs/models/asr-model.md) · [Qwen3-TTS](docs/models/tts-model.md) · [CosyVoice](docs/models/cosyvoice-tts.md) · [Kokoro](docs/models/kokoro-tts.md) · [VibeVoice](docs/models/vibevoice.md) · [Parakeet TDT](docs/models/parakeet-asr.md) · [Parakeet Streaming](docs/models/parakeet-streaming-asr.md) · [Nemotron Streaming](docs/models/nemotron-asr-streaming.md) · [Omnilingual ASR](docs/models/omnilingual-asr.md) · [PersonaPlex](docs/models/personaplex.md) · [FireRedVAD](docs/models/fireredvad.md) · [Source Separation](docs/models/source-separation.md) · [HTDemucs](docs/models/htdemucs.md) · [MAGNeT](docs/models/magnet-music-gen.md) · [FlashSR](docs/models/flashsr.md)
+- **الاستدلال:** [Qwen3-ASR](docs/inference/qwen3-asr-inference.md) · [Parakeet TDT](docs/inference/parakeet-asr-inference.md) · [Parakeet Streaming](docs/inference/parakeet-streaming-asr-inference.md) · [Nemotron Streaming](docs/inference/nemotron-asr-streaming.md) · [Omnilingual ASR](docs/inference/omnilingual-asr-inference.md) · [TTS](docs/inference/qwen3-tts-inference.md) · [VibeVoice](docs/inference/vibevoice-inference.md) · [MAGNeT](docs/inference/magnet-music-gen.md) · [FlashSR](docs/inference/flashsr.md) · [Forced Aligner](docs/inference/forced-aligner.md) · [Silero VAD](docs/inference/silero-vad.md) · [تمييز المتحدثين](docs/inference/speaker-diarization.md) · [تحسين الكلام](docs/inference/speech-enhancement.md)
 - **المرجع:** [البروتوكولات المشتركة](docs/shared-protocols.md)
 
 </div>
