@@ -25,7 +25,7 @@ Reconnaissance, synthese et comprehension vocale embarquees pour Mac et iOS. S'e
 - **[Parakeet TDT](https://soniqo.audio/fr/guides/parakeet)** -- Reconnaissance vocale via CoreML (Neural Engine, NVIDIA FastConformer + decodeur TDT, 25 langues)
 - **[Omnilingual ASR](https://soniqo.audio/fr/guides/omnilingual)** -- Reconnaissance vocale (Meta wav2vec2 + CTC, **1 672 langues** reparties dans 32 ecritures, CoreML 300M + MLX 300M/1B/3B/7B)
 - **[Dictee en streaming](https://soniqo.audio/fr/guides/dictate)** -- Dictee en temps reel avec resultats partiels et detection de fin d'enonce (Parakeet-EOU-120M)
-- **[Nemotron Streaming (Multilingue)](https://soniqo.audio/fr/guides/nemotron)** — ASR en streaming à faible latence avec ponctuation et majuscules natives (NVIDIA Nemotron-3.5-ASR-Streaming-0.6B, CoreML + MLX, **76 langues et dialectes**)
+- **[Nemotron Streaming (Multilingue)](https://soniqo.audio/fr/guides/nemotron)** — ASR en streaming à faible latence avec ponctuation et majuscules natives (NVIDIA Nemotron-3.5-ASR-Streaming-0.6B, CoreML + MLX, **40 paramètres régionaux**)
 - **[Nemotron Streaming (Anglais)](https://soniqo.audio/guides/nemotron)** — ASR en streaming à faible latence avec ponctuation et majuscules natives (NVIDIA Nemotron-Speech-Streaming-0.6B, CoreML, anglais uniquement, plus compact et rapide que la variante multilingue)
 - **[Qwen3-ForcedAligner](https://soniqo.audio/fr/guides/align)** -- Alignement temporel au niveau du mot (audio + texte → horodatages)
 - **[Qwen3-TTS](https://soniqo.audio/fr/guides/speak)** -- Synthese vocale (qualite maximale, streaming, locuteurs personnalises, 10 langues)
@@ -125,7 +125,7 @@ Vue compacte ci-dessous. **[Catalogue complet des modeles avec tailles, quantifi
 | [Qwen3-ASR](https://soniqo.audio/fr/guides/transcribe) | Parole → Texte | MLX, CoreML (hybride) | 0.6B, 1.7B | 52 |
 | [Parakeet TDT](https://soniqo.audio/fr/guides/parakeet) | Parole → Texte | CoreML (ANE) | 0.6B | 25 europeennes |
 | [Parakeet EOU](https://soniqo.audio/fr/guides/dictate) | Parole → Texte (streaming) | CoreML (ANE) | 120M | 25 europeennes |
-| [Nemotron Streaming (Multilingue)](https://soniqo.audio/fr/guides/nemotron) | Voix → Texte (streaming, ponctué) | CoreML (ANE), MLX | 0.6B | **76** |
+| [Nemotron Streaming (Multilingue)](https://soniqo.audio/fr/guides/nemotron) | Voix → Texte (streaming, ponctué) | CoreML (ANE), MLX | 0.6B | **40** |
 | [Nemotron Streaming (Anglais)](https://soniqo.audio/guides/nemotron) | Voix → Texte (streaming, ponctué) | CoreML (ANE) | 0.6B | EN |
 | [Omnilingual ASR](https://soniqo.audio/fr/guides/omnilingual) | Parole → Texte | CoreML (ANE), MLX | 300M / 1B / 3B / 7B | **[1 672](https://github.com/facebookresearch/omnilingual-asr/blob/main/src/omnilingual_asr/models/wav2vec2_llama/lang_ids.py)** |
 | [Qwen3-ForcedAligner](https://soniqo.audio/fr/guides/align) | Audio + Texte → Horodatages | MLX, CoreML | 0.6B | Multi |
@@ -185,7 +185,7 @@ N'importez que ce dont vous avez besoin -- chaque modele est sa propre cible SPM
 import Qwen3ASR             // Reconnaissance vocale (MLX)
 import ParakeetASR          // Reconnaissance vocale (CoreML, batch)
 import ParakeetStreamingASR // Dictee en streaming avec partiels + EOU
-import NemotronStreamingASR // ASR streaming multilingue avec ponctuation native (0.6B, 76 langues)
+import NemotronStreamingASR // ASR streaming multilingue avec ponctuation native (0.6B, 40 langues)
 import OmnilingualASR       // 1 672 langues (CoreML + MLX)
 import Qwen3TTS             // Synthese vocale
 import CosyVoiceTTS         // Synthese vocale avec clonage

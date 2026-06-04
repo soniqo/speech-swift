@@ -25,7 +25,7 @@
 - **[Parakeet TDT](https://soniqo.audio/guides/parakeet)** — แปลงเสียงพูดเป็นข้อความผ่าน CoreML (Neural Engine, NVIDIA FastConformer + ตัวถอดรหัส TDT รองรับ 25 ภาษา)
 - **[Omnilingual ASR](https://soniqo.audio/guides/omnilingual)** — แปลงเสียงพูดเป็นข้อความ (Meta wav2vec2 + CTC รองรับ **1,672 ภาษา** ครอบคลุม 32 ระบบอักษร, CoreML 300M + MLX 300M/1B/3B/7B)
 - **[Streaming Dictation](https://soniqo.audio/guides/dictate)** — การเขียนตามคำบอกแบบเรียลไทม์พร้อมผลลัพธ์บางส่วนและการตรวจจับจุดจบของประโยค (Parakeet-EOU-120M)
-- **[Nemotron Streaming (หลายภาษา)](https://soniqo.audio/guides/nemotron)** — ASR แบบสตรีมมิ่งที่มีความหน่วงต่ำ พร้อมเครื่องหมายวรรคตอนและตัวพิมพ์ใหญ่ในตัว (NVIDIA Nemotron-3.5-ASR-Streaming-0.6B, CoreML + MLX, **76 ภาษาและสำเนียง**)
+- **[Nemotron Streaming (หลายภาษา)](https://soniqo.audio/guides/nemotron)** — ASR แบบสตรีมมิ่งที่มีความหน่วงต่ำ พร้อมเครื่องหมายวรรคตอนและตัวพิมพ์ใหญ่ในตัว (NVIDIA Nemotron-3.5-ASR-Streaming-0.6B, CoreML + MLX, **40 ภาษา-ตำแหน่ง**)
 - **[Nemotron Streaming (อังกฤษ)](https://soniqo.audio/guides/nemotron)** — ASR แบบสตรีมมิ่งที่มีความหน่วงต่ำ พร้อมเครื่องหมายวรรคตอนและตัวพิมพ์ใหญ่ในตัว (NVIDIA Nemotron-Speech-Streaming-0.6B, CoreML, ภาษาอังกฤษเท่านั้น เล็กและเร็วกว่ารุ่นหลายภาษา)
 - **[Qwen3-ForcedAligner](https://soniqo.audio/guides/align)** — การจัดเรียงเครื่องหมายเวลาในระดับคำ (เสียง + ข้อความ → เครื่องหมายเวลา)
 - **[Qwen3-TTS](https://soniqo.audio/guides/speak)** — การสังเคราะห์เสียงพูด (คุณภาพสูงสุด สตรีมมิ่ง ผู้พูดที่กำหนดเอง 10 ภาษา)
@@ -125,7 +125,7 @@ struct DictateView: View {
 | [Qwen3-ASR](https://soniqo.audio/guides/transcribe) | เสียงพูด → ข้อความ | MLX, CoreML (ไฮบริด) | 0.6B, 1.7B | 52 |
 | [Parakeet TDT](https://soniqo.audio/guides/parakeet) | เสียงพูด → ข้อความ | CoreML (ANE) | 0.6B | 25 ยุโรป |
 | [Parakeet EOU](https://soniqo.audio/guides/dictate) | เสียงพูด → ข้อความ (สตรีมมิ่ง) | CoreML (ANE) | 120M | 25 ยุโรป |
-| [Nemotron Streaming (หลายภาษา)](https://soniqo.audio/guides/nemotron) | เสียงพูด → ข้อความ (สตรีมมิ่ง มีเครื่องหมายวรรคตอน) | CoreML (ANE), MLX | 0.6B | **76** |
+| [Nemotron Streaming (หลายภาษา)](https://soniqo.audio/guides/nemotron) | เสียงพูด → ข้อความ (สตรีมมิ่ง มีเครื่องหมายวรรคตอน) | CoreML (ANE), MLX | 0.6B | **40** |
 | [Nemotron Streaming (อังกฤษ)](https://soniqo.audio/guides/nemotron) | เสียงพูด → ข้อความ (สตรีมมิ่ง มีเครื่องหมายวรรคตอน) | CoreML (ANE) | 0.6B | EN |
 | [Omnilingual ASR](https://soniqo.audio/guides/omnilingual) | เสียงพูด → ข้อความ | CoreML (ANE), MLX | 300M / 1B / 3B / 7B | **[1,672](https://github.com/facebookresearch/omnilingual-asr/blob/main/src/omnilingual_asr/models/wav2vec2_llama/lang_ids.py)** |
 | [Qwen3-ForcedAligner](https://soniqo.audio/guides/align) | เสียง + ข้อความ → เครื่องหมายเวลา | MLX, CoreML | 0.6B | หลายภาษา |
@@ -185,7 +185,7 @@ dependencies: [
 import Qwen3ASR             // การรู้จำเสียงพูด (MLX)
 import ParakeetASR          // การรู้จำเสียงพูด (CoreML, batch)
 import ParakeetStreamingASR // การเขียนตามคำบอกแบบสตรีมมิ่งพร้อม partials + EOU
-import NemotronStreamingASR // ASR สตรีมมิ่งหลายภาษาพร้อมเครื่องหมายวรรคตอนในตัว (0.6B, 76 ภาษา)
+import NemotronStreamingASR // ASR สตรีมมิ่งหลายภาษาพร้อมเครื่องหมายวรรคตอนในตัว (0.6B, 40 ภาษา)
 import OmnilingualASR       // 1,672 ภาษา (CoreML + MLX)
 import Qwen3TTS             // การสังเคราะห์เสียงพูด
 import CosyVoiceTTS         // การสังเคราะห์เสียงพูดพร้อมการโคลนเสียง

@@ -1,6 +1,6 @@
 # Nemotron-3.5 ASR Streaming — architecture
 
-Multilingual streaming ASR from NVIDIA, ported to CoreML for Apple Silicon via the `NemotronStreamingASR` target. 600 M parameters, 76 languages, native punctuation and capitalization. Cache-aware FastConformer encoder with a prompt-conditioned RNN-T decoder.
+Multilingual streaming ASR from NVIDIA, ported to CoreML for Apple Silicon via the `NemotronStreamingASR` target. 600 M parameters, 40 language-locales, native punctuation and capitalization. Cache-aware FastConformer encoder with a prompt-conditioned RNN-T decoder.
 
 ## Source
 

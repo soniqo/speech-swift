@@ -25,7 +25,7 @@ Mac ve iOS için cihaz üzerinde konuşma tanıma, sentezleme ve anlama. Apple S
 - **[Parakeet TDT](https://soniqo.audio/guides/parakeet)** — CoreML üzerinden konuşmadan metne (Neural Engine, NVIDIA FastConformer + TDT kod çözücü, 25 dil)
 - **[Omnilingual ASR](https://soniqo.audio/guides/omnilingual)** — Konuşmadan metne (Meta wav2vec2 + CTC, 32 yazı sistemi üzerinde **1.672 dil**, CoreML 300M + MLX 300M/1B/3B/7B)
 - **[Akış Dikte](https://soniqo.audio/guides/dictate)** — Kısmi sonuçlar ve söyleyiş sonu algılaması ile gerçek zamanlı dikte (Parakeet-EOU-120M)
-- **[Nemotron Streaming (Çok dilli)](https://soniqo.audio/guides/nemotron)** — Yerel noktalama ve büyük harf desteğiyle düşük gecikmeli akış ASR (NVIDIA Nemotron-3.5-ASR-Streaming-0.6B, CoreML + MLX, **76 dil ve lehçe**)
+- **[Nemotron Streaming (Çok dilli)](https://soniqo.audio/guides/nemotron)** — Yerel noktalama ve büyük harf desteğiyle düşük gecikmeli akış ASR (NVIDIA Nemotron-3.5-ASR-Streaming-0.6B, CoreML + MLX, **40 dil-yerel ayarı**)
 - **[Nemotron Streaming (İngilizce)](https://soniqo.audio/guides/nemotron)** — Yerel noktalama ve büyük harf desteğiyle düşük gecikmeli akış ASR (NVIDIA Nemotron-Speech-Streaming-0.6B, CoreML, yalnızca İngilizce, çok dilli varyanttan daha küçük ve hızlı)
 - **[Qwen3-ForcedAligner](https://soniqo.audio/guides/align)** — Kelime düzeyinde zaman damgası hizalama (ses + metin → zaman damgaları)
 - **[Qwen3-TTS](https://soniqo.audio/guides/speak)** — Metinden konuşmaya (en yüksek kalite, akış, özel konuşmacılar, 10 dil)
@@ -125,7 +125,7 @@ Aşağıda kompakt bir görünüm. **[Boyutlar, kuantizasyonlar, indirme URL'ler
 | [Qwen3-ASR](https://soniqo.audio/guides/transcribe) | Konuşma → Metin | MLX, CoreML (hibrit) | 0.6B, 1.7B | 52 |
 | [Parakeet TDT](https://soniqo.audio/guides/parakeet) | Konuşma → Metin | CoreML (ANE) | 0.6B | 25 Avrupa dili |
 | [Parakeet EOU](https://soniqo.audio/guides/dictate) | Konuşma → Metin (akış) | CoreML (ANE) | 120M | 25 Avrupa dili |
-| [Nemotron Streaming (Çok dilli)](https://soniqo.audio/guides/nemotron) | Konuşma → Metin (akış, noktalamalı) | CoreML (ANE), MLX | 0.6B | **76** |
+| [Nemotron Streaming (Çok dilli)](https://soniqo.audio/guides/nemotron) | Konuşma → Metin (akış, noktalamalı) | CoreML (ANE), MLX | 0.6B | **40** |
 | [Nemotron Streaming (İngilizce)](https://soniqo.audio/guides/nemotron) | Konuşma → Metin (akış, noktalamalı) | CoreML (ANE) | 0.6B | EN |
 | [Omnilingual ASR](https://soniqo.audio/guides/omnilingual) | Konuşma → Metin | CoreML (ANE), MLX | 300M / 1B / 3B / 7B | **[1.672](https://github.com/facebookresearch/omnilingual-asr/blob/main/src/omnilingual_asr/models/wav2vec2_llama/lang_ids.py)** |
 | [Qwen3-ForcedAligner](https://soniqo.audio/guides/align) | Ses + Metin → Zaman damgaları | MLX, CoreML | 0.6B | Çoklu |
@@ -185,7 +185,7 @@ Yalnızca ihtiyacınız olanı içe aktarın — her model kendi SPM hedefidir:
 import Qwen3ASR             // Konuşma tanıma (MLX)
 import ParakeetASR          // Konuşma tanıma (CoreML, batch)
 import ParakeetStreamingASR // Kısmi sonuçlar + EOU ile akış dikte
-import NemotronStreamingASR // Yerel noktalama ile çok dilli akış ASR (0.6B, 76 dil)
+import NemotronStreamingASR // Yerel noktalama ile çok dilli akış ASR (0.6B, 40 dil)
 import OmnilingualASR       // 1.672 dil (CoreML + MLX)
 import Qwen3TTS             // Metinden konuşmaya
 import CosyVoiceTTS         // Ses klonlama ile metinden konuşmaya

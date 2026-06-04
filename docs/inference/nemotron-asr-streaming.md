@@ -1,6 +1,6 @@
 # Nemotron-3.5 ASR Streaming — inference
 
-Swift bindings for the Nemotron-3.5 multilingual streaming ASR bundle (CoreML, 600 M params, 76 languages). Lives in `Sources/NemotronStreamingASR/`.
+Swift bindings for the Nemotron-3.5 multilingual streaming ASR bundle (CoreML, 600 M params, 40 language-locales). Lives in `Sources/NemotronStreamingASR/`.
 
 ## Two ways to consume
 

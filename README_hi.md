@@ -25,7 +25,7 @@ Mac और iOS के लिए ऑन-डिवाइस स्पीच रि
 - **[Parakeet TDT](https://soniqo.audio/hi/guides/parakeet)** — CoreML के माध्यम से स्पीच-टू-टेक्स्ट (Neural Engine, NVIDIA FastConformer + TDT decoder, 25 भाषाएँ)
 - **[Omnilingual ASR](https://soniqo.audio/hi/guides/omnilingual)** — स्पीच-टू-टेक्स्ट (Meta wav2vec2 + CTC, **1,672 भाषाएँ** 32 लिपियों में, CoreML 300M + MLX 300M/1B/3B/7B)
 - **[Streaming Dictation](https://soniqo.audio/hi/guides/dictate)** — पार्शियल्स और एंड-ऑफ-अटरन्स डिटेक्शन के साथ रियल-टाइम डिक्टेशन (Parakeet-EOU-120M)
-- **[Nemotron Streaming (बहुभाषी)](https://soniqo.audio/hi/guides/nemotron)** — नेटिव विराम चिह्न और कैपिटलाइज़ेशन के साथ लो-लेटेंसी स्ट्रीमिंग ASR (NVIDIA Nemotron-3.5-ASR-Streaming-0.6B, CoreML + MLX, **76 भाषाएँ और बोलियाँ**)
+- **[Nemotron Streaming (बहुभाषी)](https://soniqo.audio/hi/guides/nemotron)** — नेटिव विराम चिह्न और कैपिटलाइज़ेशन के साथ लो-लेटेंसी स्ट्रीमिंग ASR (NVIDIA Nemotron-3.5-ASR-Streaming-0.6B, CoreML + MLX, **40 भाषा-लोकेल**)
 - **[Nemotron Streaming (अंग्रेज़ी)](https://soniqo.audio/guides/nemotron)** — नेटिव विराम चिह्न और कैपिटलाइज़ेशन के साथ लो-लेटेंसी स्ट्रीमिंग ASR (NVIDIA Nemotron-Speech-Streaming-0.6B, CoreML, केवल अंग्रेज़ी, बहुभाषी संस्करण से छोटा और तेज़)
 - **[Qwen3-ForcedAligner](https://soniqo.audio/hi/guides/align)** — शब्द-स्तरीय टाइमस्टैम्प अलाइनमेंट (ऑडियो + टेक्स्ट → टाइमस्टैम्प)
 - **[Qwen3-TTS](https://soniqo.audio/hi/guides/speak)** — टेक्स्ट-टू-स्पीच (सर्वोच्च गुणवत्ता, स्ट्रीमिंग, कस्टम स्पीकर, 10 भाषाएँ)
@@ -125,7 +125,7 @@ struct DictateView: View {
 | [Qwen3-ASR](https://soniqo.audio/hi/guides/transcribe) | स्पीच → टेक्स्ट | MLX, CoreML (हाइब्रिड) | 0.6B, 1.7B | 52 |
 | [Parakeet TDT](https://soniqo.audio/hi/guides/parakeet) | स्पीच → टेक्स्ट | CoreML (ANE) | 0.6B | 25 यूरोपीय |
 | [Parakeet EOU](https://soniqo.audio/hi/guides/dictate) | स्पीच → टेक्स्ट (स्ट्रीमिंग) | CoreML (ANE) | 120M | 25 यूरोपीय |
-| [Nemotron Streaming (बहुभाषी)](https://soniqo.audio/hi/guides/nemotron) | भाषण → टेक्स्ट (स्ट्रीमिंग, विराम चिह्नों के साथ) | CoreML (ANE), MLX | 0.6B | **76** |
+| [Nemotron Streaming (बहुभाषी)](https://soniqo.audio/hi/guides/nemotron) | भाषण → टेक्स्ट (स्ट्रीमिंग, विराम चिह्नों के साथ) | CoreML (ANE), MLX | 0.6B | **40** |
 | [Nemotron Streaming (अंग्रेज़ी)](https://soniqo.audio/guides/nemotron) | भाषण → टेक्स्ट (स्ट्रीमिंग, विराम चिह्नों के साथ) | CoreML (ANE) | 0.6B | EN |
 | [Omnilingual ASR](https://soniqo.audio/hi/guides/omnilingual) | स्पीच → टेक्स्ट | CoreML (ANE), MLX | 300M / 1B / 3B / 7B | **[1,672](https://github.com/facebookresearch/omnilingual-asr/blob/main/src/omnilingual_asr/models/wav2vec2_llama/lang_ids.py)** |
 | [Qwen3-ForcedAligner](https://soniqo.audio/hi/guides/align) | ऑडियो + टेक्स्ट → टाइमस्टैम्प | MLX, CoreML | 0.6B | बहुभाषी |
@@ -185,7 +185,7 @@ dependencies: [
 import Qwen3ASR             // स्पीच रिकग्निशन (MLX)
 import ParakeetASR          // स्पीच रिकग्निशन (CoreML, बैच)
 import ParakeetStreamingASR // पार्शियल्स + EOU के साथ स्ट्रीमिंग डिक्टेशन
-import NemotronStreamingASR // बहुभाषी स्ट्रीमिंग ASR नेटिव विराम चिह्न के साथ (0.6B, 76 भाषाएँ)
+import NemotronStreamingASR // बहुभाषी स्ट्रीमिंग ASR नेटिव विराम चिह्न के साथ (0.6B, 40 भाषाएँ)
 import OmnilingualASR       // 1,672 भाषाएँ (CoreML + MLX)
 import Qwen3TTS             // टेक्स्ट-टू-स्पीच
 import CosyVoiceTTS         // वॉयस क्लोनिंग के साथ TTS

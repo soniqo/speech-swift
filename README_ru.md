@@ -25,7 +25,7 @@
 - **[Parakeet TDT](https://soniqo.audio/ru/guides/parakeet)** — Распознавание речи через CoreML (Neural Engine, NVIDIA FastConformer + TDT-декодер, 25 языков)
 - **[Omnilingual ASR](https://soniqo.audio/ru/guides/omnilingual)** — Распознавание речи (Meta wav2vec2 + CTC, **1 672 языка** в 32 письменностях, CoreML 300M + MLX 300M/1B/3B/7B)
 - **[Streaming Dictation](https://soniqo.audio/ru/guides/dictate)** — Диктовка в реальном времени с частичными результатами и детекцией окончания реплики (Parakeet-EOU-120M)
-- **[Nemotron Streaming (Многоязычный)](https://soniqo.audio/ru/guides/nemotron)** — Потоковое ASR с низкой задержкой, нативной пунктуацией и капитализацией (NVIDIA Nemotron-3.5-ASR-Streaming-0.6B, CoreML + MLX, **76 языков и диалектов**)
+- **[Nemotron Streaming (Многоязычный)](https://soniqo.audio/ru/guides/nemotron)** — Потоковое ASR с низкой задержкой, нативной пунктуацией и капитализацией (NVIDIA Nemotron-3.5-ASR-Streaming-0.6B, CoreML + MLX, **40 языковых локалей**)
 - **[Nemotron Streaming (Английский)](https://soniqo.audio/guides/nemotron)** — Потоковое ASR с низкой задержкой, нативной пунктуацией и капитализацией (NVIDIA Nemotron-Speech-Streaming-0.6B, CoreML, только английский, меньше и быстрее многоязычного варианта)
 - **[Qwen3-ForcedAligner](https://soniqo.audio/ru/guides/align)** — Выравнивание временных меток на уровне слов (аудио + текст → временные метки)
 - **[Qwen3-TTS](https://soniqo.audio/ru/guides/speak)** — Синтез речи (наивысшее качество, потоковый режим, пользовательские голоса, 10 языков)
@@ -125,7 +125,7 @@ struct DictateView: View {
 | [Qwen3-ASR](https://soniqo.audio/ru/guides/transcribe) | Речь → Текст | MLX, CoreML (гибрид) | 0.6B, 1.7B | 52 |
 | [Parakeet TDT](https://soniqo.audio/ru/guides/parakeet) | Речь → Текст | CoreML (ANE) | 0.6B | 25 европейских |
 | [Parakeet EOU](https://soniqo.audio/ru/guides/dictate) | Речь → Текст (потоковый) | CoreML (ANE) | 120M | 25 европейских |
-| [Nemotron Streaming (Многоязычный)](https://soniqo.audio/ru/guides/nemotron) | Речь → Текст (потоковый, с пунктуацией) | CoreML (ANE), MLX | 0.6B | **76** |
+| [Nemotron Streaming (Многоязычный)](https://soniqo.audio/ru/guides/nemotron) | Речь → Текст (потоковый, с пунктуацией) | CoreML (ANE), MLX | 0.6B | **40** |
 | [Nemotron Streaming (Английский)](https://soniqo.audio/guides/nemotron) | Речь → Текст (потоковый, с пунктуацией) | CoreML (ANE) | 0.6B | EN |
 | [Omnilingual ASR](https://soniqo.audio/ru/guides/omnilingual) | Речь → Текст | CoreML (ANE), MLX | 300M / 1B / 3B / 7B | **[1 672](https://github.com/facebookresearch/omnilingual-asr/blob/main/src/omnilingual_asr/models/wav2vec2_llama/lang_ids.py)** |
 | [Qwen3-ForcedAligner](https://soniqo.audio/ru/guides/align) | Аудио + Текст → Метки | MLX, CoreML | 0.6B | Многоязычный |
@@ -185,7 +185,7 @@ dependencies: [
 import Qwen3ASR             // Распознавание речи (MLX)
 import ParakeetASR          // Распознавание речи (CoreML, пакетный режим)
 import ParakeetStreamingASR // Потоковая диктовка с частичными результатами + EOU
-import NemotronStreamingASR // Многоязычное потоковое ASR с нативной пунктуацией (0.6B, 76 языков)
+import NemotronStreamingASR // Многоязычное потоковое ASR с нативной пунктуацией (0.6B, 40 языков)
 import OmnilingualASR       // 1 672 языка (CoreML + MLX)
 import Qwen3TTS             // Синтез речи
 import CosyVoiceTTS         // Синтез речи с клонированием голоса
