@@ -18,6 +18,7 @@ public class StreamingSession {
     private var cacheLastTime: MLMultiArray
     private var cacheLastChannelLen: MLMultiArray
     private var preCache: MLMultiArray
+    private let languageMask: MLMultiArray
 
     private var h: MLMultiArray
     private var c: MLMultiArray
@@ -36,6 +37,7 @@ public class StreamingSession {
 
     init(
         config: NemotronStreamingConfig,
+        languageSlot: Int,
         encoder: MLModel,
         decoder: MLModel,
         joint: MLModel,
@@ -56,10 +58,19 @@ public class StreamingSession {
         let convCache = config.convCacheSize
         let preCacheSize = config.streaming.preCacheSize
         let numMelBins = config.numMelBins
+        let numPrompts = config.numPrompts
 
         preCache = try MLMultiArray(
             shape: [1, numMelBins as NSNumber, preCacheSize as NSNumber], dataType: .float32)
         memset(preCache.dataPointer, 0, numMelBins * preCacheSize * MemoryLayout<Float>.stride)
+
+        // One-hot language mask, persisted for the session lifetime.
+        languageMask = try MLMultiArray(
+            shape: [1, numPrompts as NSNumber], dataType: .float32)
+        memset(languageMask.dataPointer, 0, numPrompts * MemoryLayout<Float>.stride)
+        let clamped = max(0, min(numPrompts - 1, languageSlot))
+        let lmPtr = languageMask.dataPointer.assumingMemoryBound(to: Float.self)
+        lmPtr[clamped] = 1.0
 
         cacheLastChannel = try MLMultiArray(
             shape: [layers, 1, attCtx, hidden] as [NSNumber], dataType: .float32)
@@ -171,6 +182,7 @@ public class StreamingSession {
         let encoderInput = try MLDictionaryFeatureProvider(dictionary: [
             "audio_signal": MLFeatureValue(multiArray: chunkMel),
             "audio_length": MLFeatureValue(multiArray: makeInt32Array(value: Int32(expectedFrames))),
+            "language_mask": MLFeatureValue(multiArray: languageMask),
             "pre_cache": MLFeatureValue(multiArray: preCache),
             "cache_last_channel": MLFeatureValue(multiArray: cacheLastChannel),
             "cache_last_time": MLFeatureValue(multiArray: cacheLastTime),

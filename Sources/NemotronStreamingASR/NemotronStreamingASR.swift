@@ -2,18 +2,25 @@ import CoreML
 import Foundation
 import AudioCommon
 
-/// Nemotron Speech Streaming 0.6B — low-latency English streaming ASR on CoreML.
+/// Nemotron-3.5 ASR Streaming 0.6B — multilingual streaming ASR on CoreML.
 ///
-/// Cache-aware FastConformer encoder + RNN-T decoder. 600M parameters (INT8
-/// palettized encoder). Native punctuation and capitalization emitted as
-/// regular BPE tokens — no EOU/EOB heads; caller signals end of stream via
-/// `finalize()`.
+/// Cache-aware FastConformer encoder + prompt-conditioned RNN-T decoder.
+/// 600 M parameters, INT8 palettized encoder, 76 languages. Native
+/// punctuation and capitalization emitted as regular BPE tokens — no
+/// EOU/EOB heads; caller signals end of stream via `finalize()`.
+///
+/// Language is set per-session via the `language` parameter on
+/// `transcribeAudio` / `transcribeStream`, or directly via
+/// `createSession(language:)`. The encoder receives a one-hot
+/// `language_mask` of shape `[1, numPrompts]`; the slot index is resolved
+/// from `languages.json` by `NemotronLanguages.slot(for:)`.
 ///
 /// - Warning: This class is not thread-safe. Create separate instances for concurrent use.
 public class NemotronStreamingASRModel {
     public let config: NemotronStreamingConfig
+    public let languages: NemotronLanguages
 
-    public static let defaultModelId = "aufklarer/Nemotron-Speech-Streaming-0.6B-CoreML-INT8"
+    public static let defaultModelId = "aufklarer/Nemotron-3.5-ASR-Streaming-0.6B-CoreML-INT8"
 
     var _isLoaded = true
     private let melPreprocessor: StreamingMelPreprocessor
@@ -24,12 +31,14 @@ public class NemotronStreamingASRModel {
 
     private init(
         config: NemotronStreamingConfig,
+        languages: NemotronLanguages,
         encoder: MLModel?,
         decoder: MLModel?,
         joint: MLModel?,
         vocabulary: NemotronVocabulary
     ) {
         self.config = config
+        self.languages = languages
         self.melPreprocessor = StreamingMelPreprocessor(config: config)
         self.encoder = encoder
         self.decoder = decoder
@@ -45,13 +54,16 @@ public class NemotronStreamingASRModel {
         public let segmentIndex: Int
     }
 
-    /// Create a new streaming session.
-    public func createSession() throws -> StreamingSession {
+    /// Create a streaming session. `language` is a BCP-47 tag (e.g. `"en-US"`,
+    /// `"ja-JP"`); `nil` or unknown falls back to the model's `"auto"` slot.
+    public func createSession(language: String? = nil) throws -> StreamingSession {
         guard _isLoaded, let encoder, let decoder, let joint else {
             throw AudioModelError.inferenceFailed(operation: "createSession", reason: "Model not loaded")
         }
+        let slot = languages.slot(for: language)
         return try StreamingSession(
             config: config,
+            languageSlot: slot,
             encoder: encoder,
             decoder: decoder,
             joint: joint,
@@ -64,6 +76,7 @@ public class NemotronStreamingASRModel {
     public func transcribeStream(
         audio: [Float],
         sampleRate: Int,
+        language: String? = nil,
         chunkDuration: Float? = nil
     ) -> AsyncStream<PartialTranscript> {
         let chunkMs = chunkDuration.map { Int($0 * 1000) } ?? config.streaming.chunkMs
@@ -78,7 +91,7 @@ public class NemotronStreamingASRModel {
                         samples = audio
                     }
                     let actualSamplesPerChunk = chunkMs * self.config.sampleRate / 1000
-                    let session = try self.createSession()
+                    let session = try self.createSession(language: language)
                     var offset = 0
                     while offset < samples.count {
                         let end = min(offset + actualSamplesPerChunk, samples.count)
@@ -101,25 +114,31 @@ public class NemotronStreamingASRModel {
     /// Transcribe a full audio buffer (non-streaming fallback).
     ///
     /// The streaming encoder starts each session with an all-zero attention /
-    /// convolution cache and an all-zero mel pre-cache. For natural speech with
-    /// ambient lead-in that's fine, but short TTS-generated audio with sharp
-    /// onset and offset can lose the first and last words at chunk boundaries.
-    /// Padding 0.1 s of silence at both ends primes the cache with a single
-    /// encoder output frame of "silent" context — enough to eliminate edge
-    /// clipping on TTS input while staying short enough not to perturb chunk
-    /// alignment on natural audio. Empirically recovers full word accuracy on
-    /// Kokoro-generated test phrases without degrading natural-speech tests.
-    public func transcribeAudio(_ audio: [Float], sampleRate: Int, language: String? = nil) throws -> String {
+    /// convolution cache and an all-zero mel pre-cache. Short TTS-generated
+    /// audio with sharp onsets can lose the first word at chunk boundaries,
+    /// so by default we pad 0.1 s of silence at both ends to prime the cache
+    /// with one "silent" encoder frame. For natural speech (FLEURS, mic
+    /// capture, etc.) the padding can subtly shift chunk alignment — pass
+    /// `padSilence: false` to skip it. Measured impact: ~−5 pp WER for
+    /// Hindi FLEURS, 0–1 pp for other languages.
+    public func transcribeAudio(
+        _ audio: [Float],
+        sampleRate: Int,
+        language: String? = nil,
+        padSilence: Bool = true
+    ) throws -> String {
         var samples: [Float]
         if sampleRate != config.sampleRate {
             samples = AudioFileLoader.resample(audio, from: sampleRate, to: config.sampleRate)
         } else {
             samples = audio
         }
-        let padSamples = config.sampleRate / 10  // 100 ms
-        samples = [Float](repeating: 0, count: padSamples) + samples + [Float](repeating: 0, count: padSamples)
+        if padSilence {
+            let padSamples = config.sampleRate / 10  // 100 ms
+            samples = [Float](repeating: 0, count: padSamples) + samples + [Float](repeating: 0, count: padSamples)
+        }
 
-        let session = try createSession()
+        let session = try createSession(language: language)
         var allPartials = try session.pushAudio(samples)
         allPartials.append(contentsOf: try session.finalize())
         if let lastFinal = allPartials.last(where: { $0.isFinal }) {
@@ -161,6 +180,7 @@ public class NemotronStreamingASRModel {
                     "decoder.mlmodelc/**",
                     "joint.mlmodelc/**",
                     "vocab.json",
+                    "languages.json",
                     "config.json",
                 ]
             ) { fraction in
@@ -171,6 +191,25 @@ public class NemotronStreamingASRModel {
                 modelId: effectiveModelId, reason: "Download failed", underlying: error)
         }
 
+        return try await load(from: cacheDir, source: effectiveModelId, progressHandler: progressHandler)
+    }
+
+    /// Load a model from a local directory (no download). The directory must
+    /// contain `encoder.mlmodelc/`, `decoder.mlmodelc/`, `joint.mlmodelc/`,
+    /// `vocab.json`, `languages.json`, and optionally `config.json`.
+    public static func fromLocal(
+        bundleDir: URL,
+        progressHandler: ((Double, String) -> Void)? = nil
+    ) async throws -> NemotronStreamingASRModel {
+        AudioLog.modelLoading.info("Loading Nemotron Streaming from local: \(bundleDir.path)")
+        return try await load(from: bundleDir, source: bundleDir.path, progressHandler: progressHandler)
+    }
+
+    private static func load(
+        from cacheDir: URL,
+        source: String,
+        progressHandler: ((Double, String) -> Void)?
+    ) async throws -> NemotronStreamingASRModel {
         progressHandler?(0.70, "Loading configuration...")
         let config: NemotronStreamingConfig
         let configURL = cacheDir.appendingPathComponent("config.json")
@@ -185,18 +224,34 @@ public class NemotronStreamingASRModel {
         let vocabURL = cacheDir.appendingPathComponent("vocab.json")
         let vocabulary = try NemotronVocabulary.load(from: vocabURL)
 
+        progressHandler?(0.78, "Loading language map...")
+        let languagesURL = cacheDir.appendingPathComponent("languages.json")
+        let languages: NemotronLanguages
+        if FileManager.default.fileExists(atPath: languagesURL.path) {
+            languages = try NemotronLanguages.load(from: languagesURL)
+        } else {
+            // English-only fallback (single auto slot).
+            languages = NemotronLanguages(promptDictionary: ["en-US": 0, "en": 0, "auto": 0])
+        }
+
+        // `.all` lets CoreML schedule the encoder onto the ANE (which is what
+        // Python coremltools' `ComputeUnit.ALL` does). Encoder gains ~40% RTF
+        // over `.cpuAndGPU`. Decoder + joint are tiny enough that ANE vs CPU
+        // is a wash, but using `.all` keeps the unit selection consistent.
         progressHandler?(0.80, "Loading CoreML models...")
-        let encoder = try loadCoreMLModel(name: "encoder", from: cacheDir, computeUnits: .cpuAndGPU)
+        let encoder = try loadCoreMLModel(name: "encoder", from: cacheDir, computeUnits: .all)
         progressHandler?(0.90, "Loading decoder...")
-        let decoder = try loadCoreMLModel(name: "decoder", from: cacheDir, computeUnits: .cpuAndGPU)
+        let decoder = try loadCoreMLModel(name: "decoder", from: cacheDir, computeUnits: .all)
         progressHandler?(0.95, "Loading joint network...")
-        let joint = try loadCoreMLModel(name: "joint", from: cacheDir, computeUnits: .cpuAndGPU)
+        let joint = try loadCoreMLModel(name: "joint", from: cacheDir, computeUnits: .all)
 
         progressHandler?(1.0, "Model loaded")
-        AudioLog.modelLoading.info("Nemotron Streaming model loaded (\(vocabulary.count) tokens)")
+        AudioLog.modelLoading.info(
+            "Nemotron Streaming loaded from \(source) (\(vocabulary.count) tokens, \(languages.count) lang aliases)")
 
         return NemotronStreamingASRModel(
             config: config,
+            languages: languages,
             encoder: encoder,
             decoder: decoder,
             joint: joint,
