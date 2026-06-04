@@ -25,7 +25,8 @@ Spracherkennung, -synthese und -verständnis auf dem Gerät für Mac und iOS. L�
 - **[Parakeet TDT](https://soniqo.audio/de/guides/parakeet)** — Sprache-zu-Text über CoreML (Neural Engine, NVIDIA FastConformer + TDT-Decoder, 25 Sprachen)
 - **[Omnilingual ASR](https://soniqo.audio/de/guides/omnilingual)** — Sprache-zu-Text (Meta wav2vec2 + CTC, **1.672 Sprachen** in 32 Schriften, CoreML 300M + MLX 300M/1B/3B/7B)
 - **[Streaming-Diktat](https://soniqo.audio/de/guides/dictate)** — Echtzeit-Diktat mit Teilergebnissen und Äußerungsende-Erkennung (Parakeet-EOU-120M)
-- **[Nemotron Streaming](https://soniqo.audio/de/guides/nemotron)** — Streaming-ASR mit geringer Latenz, nativer Interpunktion und Großschreibung (NVIDIA Nemotron-3.5-ASR-Streaming-0.6B, CoreML + MLX, **76 Sprachen und Dialekte**)
+- **[Nemotron Streaming (Mehrsprachig)](https://soniqo.audio/de/guides/nemotron)** — Streaming-ASR mit geringer Latenz, nativer Interpunktion und Großschreibung (NVIDIA Nemotron-3.5-ASR-Streaming-0.6B, CoreML + MLX, **76 Sprachen und Dialekte**)
+- **[Nemotron Streaming (Englisch)](https://soniqo.audio/guides/nemotron)** — Streaming-ASR mit geringer Latenz, nativer Interpunktion und Großschreibung (NVIDIA Nemotron-Speech-Streaming-0.6B, CoreML, nur Englisch, kleiner und schneller als die mehrsprachige Variante)
 - **[Qwen3-ForcedAligner](https://soniqo.audio/de/guides/align)** — Wortgenaue Zeitstempel-Zuordnung (Audio + Text → Zeitstempel)
 - **[Qwen3-TTS](https://soniqo.audio/de/guides/speak)** — Sprachsynthese (höchste Qualität, Streaming, benutzerdefinierte Sprecher, 10 Sprachen)
 - **[CosyVoice TTS](https://soniqo.audio/de/guides/cosyvoice)** — Streaming-TTS mit Stimmklonen, Mehrsprecherdialog, Emotions-Tags (9 Sprachen)
@@ -124,7 +125,8 @@ Kompakte Übersicht unten. **[Vollständiger Modellkatalog mit Größen, Quantis
 | [Qwen3-ASR](https://soniqo.audio/de/guides/transcribe) | Sprache → Text | MLX, CoreML (hybrid) | 0.6B, 1.7B | 52 |
 | [Parakeet TDT](https://soniqo.audio/de/guides/parakeet) | Sprache → Text | CoreML (ANE) | 0.6B | 25 europäisch |
 | [Parakeet EOU](https://soniqo.audio/de/guides/dictate) | Sprache → Text (Streaming) | CoreML (ANE) | 120M | 25 europäisch |
-| [Nemotron Streaming](https://soniqo.audio/de/guides/nemotron) | Sprache → Text (Streaming, mit Interpunktion) | CoreML (ANE), MLX | 0.6B | **76** |
+| [Nemotron Streaming (Mehrsprachig)](https://soniqo.audio/de/guides/nemotron) | Sprache → Text (Streaming, mit Interpunktion) | CoreML (ANE), MLX | 0.6B | **76** |
+| [Nemotron Streaming (Englisch)](https://soniqo.audio/guides/nemotron) | Sprache → Text (Streaming, mit Interpunktion) | CoreML (ANE) | 0.6B | EN |
 | [Omnilingual ASR](https://soniqo.audio/de/guides/omnilingual) | Sprache → Text | CoreML (ANE), MLX | 300M / 1B / 3B / 7B | **[1.672](https://github.com/facebookresearch/omnilingual-asr/blob/main/src/omnilingual_asr/models/wav2vec2_llama/lang_ids.py)** |
 | [Qwen3-ForcedAligner](https://soniqo.audio/de/guides/align) | Audio + Text → Zeitstempel | MLX, CoreML | 0.6B | Multi |
 | [Qwen3-TTS](https://soniqo.audio/de/guides/speak) | Text → Sprache | MLX, CoreML | 0.6B, 1.7B | 10 |

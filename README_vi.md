@@ -25,7 +25,8 @@ Nhận dạng, tổng hợp và hiểu giọng nói trên thiết bị cho Mac v
 - **[Parakeet TDT](https://soniqo.audio/guides/parakeet)** — Chuyển giọng nói thành văn bản qua CoreML (Neural Engine, NVIDIA FastConformer + bộ giải mã TDT, 25 ngôn ngữ)
 - **[Omnilingual ASR](https://soniqo.audio/guides/omnilingual)** — Chuyển giọng nói thành văn bản (Meta wav2vec2 + CTC, **1.672 ngôn ngữ** trên 32 hệ chữ viết, CoreML 300M + MLX 300M/1B/3B/7B)
 - **[Đọc chính tả streaming](https://soniqo.audio/guides/dictate)** — Đọc chính tả thời gian thực với kết quả tạm thời và phát hiện kết thúc phát ngôn (Parakeet-EOU-120M)
-- **[Nemotron Streaming](https://soniqo.audio/guides/nemotron)** — ASR streaming độ trễ thấp với dấu câu và viết hoa tự nhiên (NVIDIA Nemotron-3.5-ASR-Streaming-0.6B, CoreML + MLX, **76 ngôn ngữ và phương ngữ**)
+- **[Nemotron Streaming (Đa ngôn ngữ)](https://soniqo.audio/guides/nemotron)** — ASR streaming độ trễ thấp với dấu câu và viết hoa tự nhiên (NVIDIA Nemotron-3.5-ASR-Streaming-0.6B, CoreML + MLX, **76 ngôn ngữ và phương ngữ**)
+- **[Nemotron Streaming (Tiếng Anh)](https://soniqo.audio/guides/nemotron)** — ASR streaming độ trễ thấp với dấu câu và viết hoa tự nhiên (NVIDIA Nemotron-Speech-Streaming-0.6B, CoreML, chỉ tiếng Anh, nhỏ gọn và nhanh hơn biến thể đa ngôn ngữ)
 - **[Qwen3-ForcedAligner](https://soniqo.audio/guides/align)** — Căn chỉnh dấu thời gian theo cấp độ từ (audio + văn bản → dấu thời gian)
 - **[Qwen3-TTS](https://soniqo.audio/guides/speak)** — Tổng hợp giọng nói (chất lượng cao nhất, streaming, người nói tùy chỉnh, 10 ngôn ngữ)
 - **[CosyVoice TTS](https://soniqo.audio/guides/cosyvoice)** — TTS streaming với nhân bản giọng nói, hội thoại nhiều người nói, thẻ cảm xúc (9 ngôn ngữ)
@@ -124,7 +125,8 @@ Xem tổng quan gọn bên dưới. **[Danh mục mô hình đầy đủ với k
 | [Qwen3-ASR](https://soniqo.audio/guides/transcribe) | Giọng nói → Văn bản | MLX, CoreML (hybrid) | 0.6B, 1.7B | 52 |
 | [Parakeet TDT](https://soniqo.audio/guides/parakeet) | Giọng nói → Văn bản | CoreML (ANE) | 0.6B | 25 ngôn ngữ châu Âu |
 | [Parakeet EOU](https://soniqo.audio/guides/dictate) | Giọng nói → Văn bản (streaming) | CoreML (ANE) | 120M | 25 ngôn ngữ châu Âu |
-| [Nemotron Streaming](https://soniqo.audio/guides/nemotron) | Giọng nói → Văn bản (streaming, có dấu câu) | CoreML (ANE), MLX | 0.6B | **76** |
+| [Nemotron Streaming (Đa ngôn ngữ)](https://soniqo.audio/guides/nemotron) | Giọng nói → Văn bản (streaming, có dấu câu) | CoreML (ANE), MLX | 0.6B | **76** |
+| [Nemotron Streaming (Tiếng Anh)](https://soniqo.audio/guides/nemotron) | Giọng nói → Văn bản (streaming, có dấu câu) | CoreML (ANE) | 0.6B | EN |
 | [Omnilingual ASR](https://soniqo.audio/guides/omnilingual) | Giọng nói → Văn bản | CoreML (ANE), MLX | 300M / 1B / 3B / 7B | **[1.672](https://github.com/facebookresearch/omnilingual-asr/blob/main/src/omnilingual_asr/models/wav2vec2_llama/lang_ids.py)** |
 | [Qwen3-ForcedAligner](https://soniqo.audio/guides/align) | Audio + Văn bản → Dấu thời gian | MLX, CoreML | 0.6B | Đa ngôn ngữ |
 | [Qwen3-TTS](https://soniqo.audio/guides/speak) | Văn bản → Giọng nói | MLX, CoreML | 0.6B, 1.7B | 10 |

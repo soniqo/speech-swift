@@ -25,7 +25,8 @@
 - **[Parakeet TDT](https://soniqo.audio/zh/guides/parakeet)** — 通过 CoreML 进行语音转文字（神经引擎，NVIDIA FastConformer + TDT 解码器，25 种语言）
 - **[Omnilingual ASR](https://soniqo.audio/zh/guides/omnilingual)** — 语音转文字（Meta wav2vec2 + CTC，**1,672 种语言**，覆盖 32 种文字系统，CoreML 300M + MLX 300M/1B/3B/7B）
 - **[流式听写](https://soniqo.audio/zh/guides/dictate)** — 带部分结果和句末检测的实时听写（Parakeet-EOU-120M）
-- **[Nemotron 流式](https://soniqo.audio/zh/guides/nemotron)** — 具有原生标点和大小写的低延迟流式 ASR（NVIDIA Nemotron-3.5-ASR-Streaming-0.6B，CoreML + MLX，**76 种语言和方言**）
+- **[Nemotron 流式 (多语言)](https://soniqo.audio/zh/guides/nemotron)** — 具有原生标点和大小写的低延迟流式 ASR（NVIDIA Nemotron-3.5-ASR-Streaming-0.6B，CoreML + MLX，**76 种语言和方言**）
+- **[Nemotron 流式 (英语)](https://soniqo.audio/guides/nemotron)** — 具有原生标点和大小写的低延迟流式 ASR （NVIDIA Nemotron-Speech-Streaming-0.6B，CoreML，仅英语，比多语言版本更小、更快）
 - **[Qwen3-ForcedAligner](https://soniqo.audio/zh/guides/align)** — 词级时间戳对齐（音频 + 文本 → 时间戳）
 - **[Qwen3-TTS](https://soniqo.audio/zh/guides/speak)** — 文本转语音（最高质量、流式输出、自定义说话人，10 种语言）
 - **[CosyVoice TTS](https://soniqo.audio/zh/guides/cosyvoice)** — 流式 TTS，支持声音克隆、多说话人对话、情感标签（9 种语言）
@@ -124,7 +125,8 @@ struct DictateView: View {
 | [Qwen3-ASR](https://soniqo.audio/zh/guides/transcribe) | 语音 → 文字 | MLX、CoreML（混合） | 0.6B、1.7B | 52 |
 | [Parakeet TDT](https://soniqo.audio/zh/guides/parakeet) | 语音 → 文字 | CoreML (ANE) | 0.6B | 25 种欧洲语言 |
 | [Parakeet EOU](https://soniqo.audio/zh/guides/dictate) | 语音 → 文字（流式） | CoreML (ANE) | 120M | 25 种欧洲语言 |
-| [Nemotron Streaming](https://soniqo.audio/zh/guides/nemotron) | 语音 → 文本（流式、带标点） | CoreML (ANE), MLX | 0.6B | **76** |
+| [Nemotron Streaming (多语言)](https://soniqo.audio/zh/guides/nemotron) | 语音 → 文本（流式、带标点） | CoreML (ANE), MLX | 0.6B | **76** |
+| [Nemotron Streaming (英语)](https://soniqo.audio/guides/nemotron) | 语音 → 文本（流式、带标点） | CoreML (ANE) | 0.6B | EN |
 | [Omnilingual ASR](https://soniqo.audio/zh/guides/omnilingual) | 语音 → 文字 | CoreML (ANE)、MLX | 300M / 1B / 3B / 7B | **[1,672](https://github.com/facebookresearch/omnilingual-asr/blob/main/src/omnilingual_asr/models/wav2vec2_llama/lang_ids.py)** |
 | [Qwen3-ForcedAligner](https://soniqo.audio/zh/guides/align) | 音频 + 文本 → 时间戳 | MLX、CoreML | 0.6B | 多语言 |
 | [Qwen3-TTS](https://soniqo.audio/zh/guides/speak) | 文本 → 语音 | MLX、CoreML | 0.6B、1.7B | 10 |

@@ -25,7 +25,8 @@ Reconocimiento, síntesis y comprensión de voz en el dispositivo para Mac e iOS
 - **[Parakeet TDT](https://soniqo.audio/es/guides/parakeet)** — Voz a texto vía CoreML (Neural Engine, NVIDIA FastConformer + decodificador TDT, 25 idiomas)
 - **[Omnilingual ASR](https://soniqo.audio/es/guides/omnilingual)** — Voz a texto (Meta wav2vec2 + CTC, **1.672 idiomas** en 32 escrituras, CoreML 300M + MLX 300M/1B/3B/7B)
 - **[Dictado en streaming](https://soniqo.audio/es/guides/dictate)** — Dictado en tiempo real con resultados parciales y detección de fin de enunciado (Parakeet-EOU-120M)
-- **[Nemotron Streaming](https://soniqo.audio/es/guides/nemotron)** — ASR en streaming de baja latencia con puntuación y mayúsculas nativas (NVIDIA Nemotron-3.5-ASR-Streaming-0.6B, CoreML + MLX, **76 idiomas y dialectos**)
+- **[Nemotron Streaming (Multilingüe)](https://soniqo.audio/es/guides/nemotron)** — ASR en streaming de baja latencia con puntuación y mayúsculas nativas (NVIDIA Nemotron-3.5-ASR-Streaming-0.6B, CoreML + MLX, **76 idiomas y dialectos**)
+- **[Nemotron Streaming (Inglés)](https://soniqo.audio/guides/nemotron)** — ASR en streaming de baja latencia con puntuación y mayúsculas nativas (NVIDIA Nemotron-Speech-Streaming-0.6B, CoreML, solo inglés, más pequeño y rápido que la variante multilingüe)
 - **[Qwen3-ForcedAligner](https://soniqo.audio/es/guides/align)** — Alineación de marcas temporales a nivel de palabra (audio + texto → marcas temporales)
 - **[Qwen3-TTS](https://soniqo.audio/es/guides/speak)** — Síntesis de texto a voz (máxima calidad, streaming, hablantes personalizados, 10 idiomas)
 - **[CosyVoice TTS](https://soniqo.audio/es/guides/cosyvoice)** — TTS con streaming, clonación de voz, diálogo multi-hablante y etiquetas de emoción (9 idiomas)
@@ -124,7 +125,8 @@ Vista compacta a continuación. **[Catálogo completo de modelos con tamaños, c
 | [Qwen3-ASR](https://soniqo.audio/es/guides/transcribe) | Voz → Texto | MLX, CoreML (híbrido) | 0.6B, 1.7B | 52 |
 | [Parakeet TDT](https://soniqo.audio/es/guides/parakeet) | Voz → Texto | CoreML (ANE) | 0.6B | 25 europeos |
 | [Parakeet EOU](https://soniqo.audio/es/guides/dictate) | Voz → Texto (streaming) | CoreML (ANE) | 120M | 25 europeos |
-| [Nemotron Streaming](https://soniqo.audio/es/guides/nemotron) | Voz → Texto (streaming, con puntuación) | CoreML (ANE), MLX | 0.6B | **76** |
+| [Nemotron Streaming (Multilingüe)](https://soniqo.audio/es/guides/nemotron) | Voz → Texto (streaming, con puntuación) | CoreML (ANE), MLX | 0.6B | **76** |
+| [Nemotron Streaming (Inglés)](https://soniqo.audio/guides/nemotron) | Voz → Texto (streaming, con puntuación) | CoreML (ANE) | 0.6B | EN |
 | [Omnilingual ASR](https://soniqo.audio/es/guides/omnilingual) | Voz → Texto | CoreML (ANE), MLX | 300M / 1B / 3B / 7B | **[1.672](https://github.com/facebookresearch/omnilingual-asr/blob/main/src/omnilingual_asr/models/wav2vec2_llama/lang_ids.py)** |
 | [Qwen3-ForcedAligner](https://soniqo.audio/es/guides/align) | Audio + Texto → Marcas temp. | MLX, CoreML | 0.6B | Multi |
 | [Qwen3-TTS](https://soniqo.audio/es/guides/speak) | Texto → Voz | MLX, CoreML | 0.6B, 1.7B | 10 |

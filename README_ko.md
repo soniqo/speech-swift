@@ -25,7 +25,8 @@ Mac과 iOS를 위한 온디바이스 음성 인식, 합성 및 이해. Apple Sil
 - **[Parakeet TDT](https://soniqo.audio/ko/guides/parakeet)** — CoreML을 통한 음성-텍스트 변환 (Neural Engine, NVIDIA FastConformer + TDT 디코더, 25개 언어)
 - **[Omnilingual ASR](https://soniqo.audio/ko/guides/omnilingual)** — 음성-텍스트 변환 (Meta wav2vec2 + CTC, **1,672개 언어**, 32개 문자 체계, CoreML 300M + MLX 300M/1B/3B/7B)
 - **[스트리밍 받아쓰기](https://soniqo.audio/ko/guides/dictate)** — 부분 결과와 발화 종료 감지를 갖춘 실시간 받아쓰기 (Parakeet-EOU-120M)
-- **[Nemotron 스트리밍](https://soniqo.audio/ko/guides/nemotron)** — 네이티브 구두점 및 대소문자 처리를 제공하는 저지연 스트리밍 ASR (NVIDIA Nemotron-3.5-ASR-Streaming-0.6B, CoreML + MLX, **76개 언어 및 방언**)
+- **[Nemotron 스트리밍 (다국어)](https://soniqo.audio/ko/guides/nemotron)** — 네이티브 구두점 및 대소문자 처리를 제공하는 저지연 스트리밍 ASR (NVIDIA Nemotron-3.5-ASR-Streaming-0.6B, CoreML + MLX, **76개 언어 및 방언**)
+- **[Nemotron 스트리밍 (영어)](https://soniqo.audio/guides/nemotron)** — 네이티브 구두점 및 대소문자 처리를 제공하는 저지연 스트리밍 ASR (NVIDIA Nemotron-Speech-Streaming-0.6B, CoreML, 영어 전용, 다국어 버전보다 가볍고 빠름)
 - **[Qwen3-ForcedAligner](https://soniqo.audio/ko/guides/align)** — 단어 수준 타임스탬프 정렬 (오디오 + 텍스트 → 타임스탬프)
 - **[Qwen3-TTS](https://soniqo.audio/ko/guides/speak)** — 텍스트-음성 변환 (최고 품질, 스트리밍, 커스텀 화자, 10개 언어)
 - **[CosyVoice TTS](https://soniqo.audio/ko/guides/cosyvoice)** — 음성 복제, 다화자 대화, 감정 태그를 지원하는 스트리밍 TTS (9개 언어)
@@ -124,7 +125,8 @@ struct DictateView: View {
 | [Qwen3-ASR](https://soniqo.audio/ko/guides/transcribe) | 음성 → 텍스트 | MLX, CoreML (하이브리드) | 0.6B, 1.7B | 52 |
 | [Parakeet TDT](https://soniqo.audio/ko/guides/parakeet) | 음성 → 텍스트 | CoreML (ANE) | 0.6B | 25개 유럽어 |
 | [Parakeet EOU](https://soniqo.audio/ko/guides/dictate) | 음성 → 텍스트 (스트리밍) | CoreML (ANE) | 120M | 25개 유럽어 |
-| [Nemotron Streaming](https://soniqo.audio/ko/guides/nemotron) | 음성 → 텍스트 (스트리밍, 구두점 포함) | CoreML (ANE), MLX | 0.6B | **76** |
+| [Nemotron Streaming (다국어)](https://soniqo.audio/ko/guides/nemotron) | 음성 → 텍스트 (스트리밍, 구두점 포함) | CoreML (ANE), MLX | 0.6B | **76** |
+| [Nemotron Streaming (영어)](https://soniqo.audio/guides/nemotron) | 음성 → 텍스트 (스트리밍, 구두점 포함) | CoreML (ANE) | 0.6B | EN |
 | [Omnilingual ASR](https://soniqo.audio/ko/guides/omnilingual) | 음성 → 텍스트 | CoreML (ANE), MLX | 300M / 1B / 3B / 7B | **[1,672](https://github.com/facebookresearch/omnilingual-asr/blob/main/src/omnilingual_asr/models/wav2vec2_llama/lang_ids.py)** |
 | [Qwen3-ForcedAligner](https://soniqo.audio/ko/guides/align) | 오디오 + 텍스트 → 타임스탬프 | MLX, CoreML | 0.6B | 다언어 |
 | [Qwen3-TTS](https://soniqo.audio/ko/guides/speak) | 텍스트 → 음성 | MLX, CoreML | 0.6B, 1.7B | 10 |
