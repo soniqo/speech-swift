@@ -40,7 +40,7 @@ final class NemotronStreamingConfigTests: XCTestCase {
         XCTAssertEqual(decoded.streaming.chunkMs, config.streaming.chunkMs)
     }
 
-    /// Legacy English-only bundles ship a config.json without `numPrompts`;
+    /// English-only bundles ship a config.json without `numPrompts`;
     /// the decoder should default to 128 and not crash.
     func testConfigDecodesWithoutNumPrompts() throws {
         let json = """
@@ -149,6 +149,29 @@ private func localBundlePath() -> URL? {
     return nil
 }
 
+/// Path to the English-only bundle (`aufklarer/Nemotron-Speech-Streaming-0.6B-CoreML-INT8`).
+/// English-only Nemotron Speech Streaming is its own model variant — smaller bundle,
+/// 160 ms chunks, attCtx=70, vocab=1024.
+/// First looks at the env override, then the HF cache.
+private func englishOnlyBundlePath() -> URL? {
+    if let env = ProcessInfo.processInfo.environment["NEMOTRON_EN_LOCAL_BUNDLE"], !env.isEmpty {
+        let url = URL(fileURLWithPath: env)
+        if FileManager.default.fileExists(atPath: url.path) { return url }
+    }
+    let home = FileManager.default.homeDirectoryForCurrentUser
+    let cache = home
+        .appendingPathComponent(".cache/huggingface/hub/models--aufklarer--Nemotron-Speech-Streaming-0.6B-CoreML-INT8/snapshots")
+    guard let contents = try? FileManager.default.contentsOfDirectory(at: cache, includingPropertiesForKeys: nil) else {
+        return nil
+    }
+    for entry in contents where entry.hasDirectoryPath {
+        if FileManager.default.fileExists(atPath: entry.appendingPathComponent("encoder.mlmodelc").path) {
+            return entry
+        }
+    }
+    return nil
+}
+
 final class E2ENemotronStreamingASRTests: XCTestCase {
 
     private static var _model: NemotronStreamingASRModel?
@@ -241,6 +264,28 @@ final class E2ENemotronStreamingASRTests: XCTestCase {
         m.unload()
         XCTAssertFalse(m.isLoaded)
         XCTAssertEqual(m.memoryFootprint, 0)
+    }
+
+    /// English-only bundle (`aufklarer/Nemotron-Speech-Streaming-0.6B-CoreML-INT8`)
+    /// loads and transcribes through the same `NemotronStreamingASR` target,
+    /// using the same `transcribeAudio` API. The encoder doesn't accept
+    /// `language_mask`, so `StreamingSession` skips it (geometry differs from
+    /// multilingual: chunk=160 ms, attCtx=70, vocab=1024, no prompt kernel).
+    func testEnglishOnlyBundleTranscription() async throws {
+        guard let bundle = englishOnlyBundlePath() else {
+            throw XCTSkip("English-only bundle not in HF cache")
+        }
+        let m = try await NemotronStreamingASRModel.fromLocal(bundleDir: bundle)
+        XCTAssertTrue(m.isLoaded)
+        // English bundle has the older geometry.
+        XCTAssertEqual(m.config.vocabSize, 1024)
+        XCTAssertEqual(m.config.attentionContext, 70)
+        XCTAssertEqual(m.config.streaming.chunkMs, 160)
+        let audioURL = Bundle.module.url(forResource: "test_audio", withExtension: "wav")!
+        let audio = try AudioFileLoader.load(url: audioURL, targetSampleRate: 16000)
+        let text = try m.transcribeAudio(audio, sampleRate: 16000, language: "en-US")
+        XCTAssertFalse(text.isEmpty, "Transcription should not be empty")
+        print("English-only bundle: \(text)")
     }
 
     /// Round-trip: same Kokoro-synthesized phrase, transcribe with multiple
