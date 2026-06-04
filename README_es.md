@@ -25,7 +25,7 @@ Reconocimiento, síntesis y comprensión de voz en el dispositivo para Mac e iOS
 - **[Parakeet TDT](https://soniqo.audio/es/guides/parakeet)** — Voz a texto vía CoreML (Neural Engine, NVIDIA FastConformer + decodificador TDT, 25 idiomas)
 - **[Omnilingual ASR](https://soniqo.audio/es/guides/omnilingual)** — Voz a texto (Meta wav2vec2 + CTC, **1.672 idiomas** en 32 escrituras, CoreML 300M + MLX 300M/1B/3B/7B)
 - **[Dictado en streaming](https://soniqo.audio/es/guides/dictate)** — Dictado en tiempo real con resultados parciales y detección de fin de enunciado (Parakeet-EOU-120M)
-- **[Nemotron Streaming](https://soniqo.audio/es/guides/nemotron)** — ASR en streaming de baja latencia con puntuación y mayúsculas nativas (NVIDIA Nemotron-Speech-Streaming-0.6B, CoreML, inglés)
+- **[Nemotron Streaming](https://soniqo.audio/es/guides/nemotron)** — ASR en streaming de baja latencia con puntuación y mayúsculas nativas (NVIDIA Nemotron-3.5-ASR-Streaming-0.6B, CoreML + MLX, **76 idiomas y dialectos**)
 - **[Qwen3-ForcedAligner](https://soniqo.audio/es/guides/align)** — Alineación de marcas temporales a nivel de palabra (audio + texto → marcas temporales)
 - **[Qwen3-TTS](https://soniqo.audio/es/guides/speak)** — Síntesis de texto a voz (máxima calidad, streaming, hablantes personalizados, 10 idiomas)
 - **[CosyVoice TTS](https://soniqo.audio/es/guides/cosyvoice)** — TTS con streaming, clonación de voz, diálogo multi-hablante y etiquetas de emoción (9 idiomas)
@@ -124,7 +124,7 @@ Vista compacta a continuación. **[Catálogo completo de modelos con tamaños, c
 | [Qwen3-ASR](https://soniqo.audio/es/guides/transcribe) | Voz → Texto | MLX, CoreML (híbrido) | 0.6B, 1.7B | 52 |
 | [Parakeet TDT](https://soniqo.audio/es/guides/parakeet) | Voz → Texto | CoreML (ANE) | 0.6B | 25 europeos |
 | [Parakeet EOU](https://soniqo.audio/es/guides/dictate) | Voz → Texto (streaming) | CoreML (ANE) | 120M | 25 europeos |
-| [Nemotron Streaming](https://soniqo.audio/es/guides/nemotron) | Voz → Texto (streaming, con puntuación) | CoreML (ANE) | 0.6B | Inglés |
+| [Nemotron Streaming](https://soniqo.audio/es/guides/nemotron) | Voz → Texto (streaming, con puntuación) | CoreML (ANE), MLX | 0.6B | **76** |
 | [Omnilingual ASR](https://soniqo.audio/es/guides/omnilingual) | Voz → Texto | CoreML (ANE), MLX | 300M / 1B / 3B / 7B | **[1.672](https://github.com/facebookresearch/omnilingual-asr/blob/main/src/omnilingual_asr/models/wav2vec2_llama/lang_ids.py)** |
 | [Qwen3-ForcedAligner](https://soniqo.audio/es/guides/align) | Audio + Texto → Marcas temp. | MLX, CoreML | 0.6B | Multi |
 | [Qwen3-TTS](https://soniqo.audio/es/guides/speak) | Texto → Voz | MLX, CoreML | 0.6B, 1.7B | 10 |
@@ -183,7 +183,7 @@ Importa solo lo que necesites — cada modelo es su propio target SPM:
 import Qwen3ASR             // Reconocimiento de voz (MLX)
 import ParakeetASR          // Reconocimiento de voz (CoreML, batch)
 import ParakeetStreamingASR // Dictado en streaming con parciales + EOU
-import NemotronStreamingASR // ASR streaming en inglés con puntuación nativa (0.6B)
+import NemotronStreamingASR // ASR streaming multilingüe con puntuación nativa (0.6B, 76 idiomas)
 import OmnilingualASR       // 1.672 idiomas (CoreML + MLX)
 import Qwen3TTS             // Síntesis de voz
 import CosyVoiceTTS         // Síntesis de voz con clonación
@@ -369,8 +369,8 @@ speech-swift está dividido en un target SPM por modelo para que los consumidore
 **[Diagrama completo de arquitectura con backends, tablas de memoria y mapa de módulos → soniqo.audio/architecture](https://soniqo.audio/es/architecture)** · **[Referencia de API → soniqo.audio/api](https://soniqo.audio/es/api)** · **[Benchmarks → soniqo.audio/benchmarks](https://soniqo.audio/es/benchmarks)**
 
 Docs locales (repositorio):
-- **Modelos:** [Qwen3-ASR](docs/models/asr-model.md) · [Qwen3-TTS](docs/models/tts-model.md) · [CosyVoice](docs/models/cosyvoice-tts.md) · [Kokoro](docs/models/kokoro-tts.md) · [VibeVoice](docs/models/vibevoice.md) · [Parakeet TDT](docs/models/parakeet-asr.md) · [Parakeet Streaming](docs/models/parakeet-streaming-asr.md) · [Nemotron Streaming](docs/models/nemotron-streaming.md) · [Omnilingual ASR](docs/models/omnilingual-asr.md) · [PersonaPlex](docs/models/personaplex.md) · [FireRedVAD](docs/models/fireredvad.md) · [Source Separation](docs/models/source-separation.md) · [HTDemucs](docs/models/htdemucs.md) · [MAGNeT](docs/models/magnet-music-gen.md) · [FlashSR](docs/models/flashsr.md)
-- **Inferencia:** [Qwen3-ASR](docs/inference/qwen3-asr-inference.md) · [Parakeet TDT](docs/inference/parakeet-asr-inference.md) · [Parakeet Streaming](docs/inference/parakeet-streaming-asr-inference.md) · [Nemotron Streaming](docs/inference/nemotron-streaming-inference.md) · [Omnilingual ASR](docs/inference/omnilingual-asr-inference.md) · [TTS](docs/inference/qwen3-tts-inference.md) · [VibeVoice](docs/inference/vibevoice-inference.md) · [Forced Aligner](docs/inference/forced-aligner.md) · [Silero VAD](docs/inference/silero-vad.md) · [Diarización](docs/inference/speaker-diarization.md) · [Mejora de voz](docs/inference/speech-enhancement.md) · [MAGNeT](docs/inference/magnet-music-gen.md) · [FlashSR](docs/inference/flashsr.md)
+- **Modelos:** [Qwen3-ASR](docs/models/asr-model.md) · [Qwen3-TTS](docs/models/tts-model.md) · [CosyVoice](docs/models/cosyvoice-tts.md) · [Kokoro](docs/models/kokoro-tts.md) · [VibeVoice](docs/models/vibevoice.md) · [Parakeet TDT](docs/models/parakeet-asr.md) · [Parakeet Streaming](docs/models/parakeet-streaming-asr.md) · [Nemotron Streaming](docs/models/nemotron-asr-streaming.md) · [Omnilingual ASR](docs/models/omnilingual-asr.md) · [PersonaPlex](docs/models/personaplex.md) · [FireRedVAD](docs/models/fireredvad.md) · [Source Separation](docs/models/source-separation.md) · [HTDemucs](docs/models/htdemucs.md) · [MAGNeT](docs/models/magnet-music-gen.md) · [FlashSR](docs/models/flashsr.md)
+- **Inferencia:** [Qwen3-ASR](docs/inference/qwen3-asr-inference.md) · [Parakeet TDT](docs/inference/parakeet-asr-inference.md) · [Parakeet Streaming](docs/inference/parakeet-streaming-asr-inference.md) · [Nemotron Streaming](docs/inference/nemotron-asr-streaming.md) · [Omnilingual ASR](docs/inference/omnilingual-asr-inference.md) · [TTS](docs/inference/qwen3-tts-inference.md) · [VibeVoice](docs/inference/vibevoice-inference.md) · [Forced Aligner](docs/inference/forced-aligner.md) · [Silero VAD](docs/inference/silero-vad.md) · [Diarización](docs/inference/speaker-diarization.md) · [Mejora de voz](docs/inference/speech-enhancement.md) · [MAGNeT](docs/inference/magnet-music-gen.md) · [FlashSR](docs/inference/flashsr.md)
 - **Referencia:** [Protocolos compartidos](docs/shared-protocols.md)
 
 ## Configuración de caché
