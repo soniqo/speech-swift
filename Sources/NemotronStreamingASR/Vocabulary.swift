@@ -1,10 +1,10 @@
 import Foundation
 import AudioCommon
 
-/// SentencePiece vocabulary for Nemotron Streaming (1024 tokens + blank).
-///
-/// Punctuation and capitalization tokens are part of the regular BPE vocab;
-/// decode passes them through as-is.
+/// SentencePiece vocabulary for Nemotron-3.5 ASR Streaming Multilingual
+/// (13087 BPE pieces + 1 blank). Punctuation, capitalization, and per-language
+/// tags (e.g. `<en-US>`) are emitted as regular BPE tokens; decode passes them
+/// through as-is — callers may strip `<lang-tag>` markers downstream.
 public struct NemotronVocabulary: Sendable {
     private let idToToken: [Int: String]
 

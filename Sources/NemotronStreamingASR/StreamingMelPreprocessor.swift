@@ -28,9 +28,12 @@ class StreamingMelPreprocessor {
     init(config: NemotronStreamingConfig) {
         self.config = config
 
+        // Periodic Hann (sym=False / fftbins=True) — matches librosa.stft's
+        // default. The symmetric form `(winLength - 1)` we used previously
+        // caused subtle mel energy mismatch at frame boundaries vs Python.
         var window = [Float](repeating: 0, count: config.winLength)
         for i in 0..<config.winLength {
-            window[i] = 0.5 * (1.0 - cos(2.0 * Float.pi * Float(i) / Float(config.winLength - 1)))
+            window[i] = 0.5 * (1.0 - cos(2.0 * Float.pi * Float(i) / Float(config.winLength)))
         }
         self.hannWindow = window
 
@@ -71,10 +74,21 @@ class StreamingMelPreprocessor {
             }
         }
 
-        // Zero center padding (pad_mode=constant, NeMo default)
+        // Center padding with pad_mode="reflect" to match librosa.stft (which
+        // is what NeMo's FilterbankFeatures uses). numpy.pad reflect semantics:
+        // [a,b,c,d] with pad=2 → [c,b,a,b,c,d,c,b]. No edge-sample repetition.
         let totalLen = reflectPad + preemphasized.count + reflectPad
         var padded = [Float](repeating: 0, count: totalLen)
         for i in 0..<preemphasized.count { padded[reflectPad + i] = preemphasized[i] }
+        let n = preemphasized.count
+        for i in 0..<reflectPad {
+            // Left pad: reflect of samples 1, 2, ... (skipping index 0)
+            let srcL = min(i + 1, max(0, n - 1))
+            padded[reflectPad - 1 - i] = preemphasized[srcL]
+            // Right pad: reflect of samples n-2, n-3, ... (skipping last)
+            let srcR = max(0, n - 2 - i)
+            padded[reflectPad + n + i] = preemphasized[srcR]
+        }
 
         let nFrames = (padded.count - paddedFFT) / config.hopLength + 1
         let melLength = audio.count / config.hopLength
