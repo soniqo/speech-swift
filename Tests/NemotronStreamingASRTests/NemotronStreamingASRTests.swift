@@ -316,4 +316,26 @@ final class E2ENemotronStreamingASRTests: XCTestCase {
             // produces *some* transcription, just often nonsensical.
         }
     }
+
+    /// Round-trip with the English-only bundle: same Kokoro phrase + the same
+    /// Swift `transcribeAudio` API + the same content-word assertion as the
+    /// multilingual round-trip. Proves both bundles produce equivalent
+    /// end-to-end output through one Swift target.
+    func testEnglishOnlyBundleTTSRoundTrip() async throws {
+        guard let bundle = englishOnlyBundlePath() else {
+            throw XCTSkip("English-only bundle not in HF cache")
+        }
+        let nemotron = try await NemotronStreamingASRModel.fromLocal(bundleDir: bundle)
+        let tts = try await KokoroTTSModel.fromPretrained()
+
+        let phrase = "The quick brown fox jumps over the lazy dog"
+        let audio24k = try tts.synthesize(text: phrase, voice: "af_heart")
+
+        let text = try nemotron.transcribeAudio(audio24k, sampleRate: 24000, language: "en-US")
+        print("English-only round-trip: \"\(text)\"")
+        let expected = ["quick", "brown", "fox", "jumps", "over", "lazy", "dog"]
+        let matched = expected.filter { text.lowercased().contains($0) }
+        XCTAssertEqual(matched.count, expected.count,
+            "English-only bundle should recover every content word; got \(matched)/\(expected)")
+    }
 }
