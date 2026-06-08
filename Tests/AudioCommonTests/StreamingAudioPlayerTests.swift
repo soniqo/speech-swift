@@ -70,7 +70,9 @@ final class StreamingAudioPlayerTests: XCTestCase {
         let expectation = XCTestExpectation(description: "done")
         player.onPlaybackFinished = { expectation.fulfill() }
         player.markGenerationComplete()
-        wait(for: [expectation], timeout: 3.0)
+        // 10s timeout: the no-progress watchdog needs 3 × 200 ms polls (600 ms)
+        // to fire when the render thread freezes mid-stream on virtualized CI.
+        wait(for: [expectation], timeout: 10.0)
         player.stop()
     }
 

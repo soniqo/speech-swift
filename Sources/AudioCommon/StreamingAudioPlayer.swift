@@ -292,9 +292,13 @@ public final class StreamingAudioPlayer: @unchecked Sendable {
     }
 
     private var completionPollTimer: DispatchSourceTimer?
+    private var lastPolledRead: Int = 0
+    private var noProgressPolls: Int = 0
 
     private func startCompletionPolling() {
         completionPollTimer?.cancel()
+        lastPolledRead = -1
+        noProgressPolls = 0
         let timer = DispatchSource.makeTimerSource(queue: .main)
         timer.schedule(deadline: .now() + 0.2, repeating: 0.2)
         timer.setEventHandler { [weak self] in
@@ -317,7 +321,21 @@ public final class StreamingAudioPlayer: @unchecked Sendable {
             // Render thread never started — audio engine not running
             let stalled = complete && read == 0 && written > 0
 
-            if complete && (drained || stalled) {
+            // Render thread stalled mid-stream (partial read, no progress for
+            // 3 consecutive polls = 600 ms). Seen on virtualized macOS CI runners
+            // and on real iOS when an audio-session interrupt freezes the
+            // render thread between buffers.
+            if complete && read > 0 && read < written {
+                if read == self.lastPolledRead {
+                    self.noProgressPolls += 1
+                } else {
+                    self.noProgressPolls = 0
+                    self.lastPolledRead = read
+                }
+            }
+            let frozen = complete && self.noProgressPolls >= 3 && read > 0 && read < written
+
+            if complete && (drained || stalled || frozen) {
                 self.completionPollTimer?.cancel()
                 self.completionPollTimer = nil
                 guard !self.playbackFinishedFired else { return }
@@ -334,6 +352,8 @@ public final class StreamingAudioPlayer: @unchecked Sendable {
     public func resetGeneration() {
         completionPollTimer?.cancel()
         completionPollTimer = nil
+        lastPolledRead = -1
+        noProgressPolls = 0
         lock.lock()
         generationComplete = false
         playbackFinishedFired = false
