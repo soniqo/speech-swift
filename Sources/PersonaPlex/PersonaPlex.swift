@@ -1013,7 +1013,7 @@ public final class PersonaPlexModel: Module {
                     let voiceCache: MLXArray?
                     do {
                         let modelDir = try HuggingFaceDownloader.getCacheDirectory(
-                            for: "aufklarer/PersonaPlex-7B-MLX-4bit")
+                            for: modelId)
                         let voiceFile = modelDir.appendingPathComponent("voices")
                             .appendingPathComponent("\(voice.rawValue).safetensors")
                         if FileManager.default.fileExists(atPath: voiceFile.path) {
