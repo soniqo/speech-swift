@@ -156,7 +156,7 @@ Aşağıda kompakt bir görünüm. **[Boyutlar, kuantizasyonlar, indirme URL'ler
 Yerel ARM Homebrew (`/opt/homebrew`) gerektirir. Rosetta/x86_64 Homebrew desteklenmez.
 
 ```bash
-brew install soniqo/tap/speech
+brew install speech
 ```
 
 Ardından:

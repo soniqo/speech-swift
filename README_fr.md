@@ -156,7 +156,7 @@ Vue compacte ci-dessous. **[Catalogue complet des modeles avec tailles, quantifi
 Necessite un Homebrew ARM natif (`/opt/homebrew`). Homebrew Rosetta/x86_64 n'est pas supporte.
 
 ```bash
-brew install soniqo/tap/speech
+brew install speech
 ```
 
 Ensuite :

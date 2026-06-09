@@ -204,7 +204,7 @@ struct DictateView: View {
 </div>
 
 ```bash
-brew install soniqo/tap/speech
+brew install speech
 ```
 
 <div dir="rtl">

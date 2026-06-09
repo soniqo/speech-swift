@@ -156,7 +156,7 @@ Xem tổng quan gọn bên dưới. **[Danh mục mô hình đầy đủ với k
 Yêu cầu Homebrew ARM gốc (`/opt/homebrew`). Homebrew Rosetta/x86_64 không được hỗ trợ.
 
 ```bash
-brew install soniqo/tap/speech
+brew install speech
 ```
 
 Sau đó:

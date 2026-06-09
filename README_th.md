@@ -156,7 +156,7 @@ struct DictateView: View {
 ต้องใช้ Homebrew ARM แบบเนทีฟ (`/opt/homebrew`) ไม่รองรับ Homebrew แบบ Rosetta/x86_64
 
 ```bash
-brew install soniqo/tap/speech
+brew install speech
 ```
 
 จากนั้น:
