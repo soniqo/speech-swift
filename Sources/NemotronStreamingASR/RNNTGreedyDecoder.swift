@@ -34,14 +34,12 @@ struct RNNTGreedyDecoder {
     let decoder: MLModel
     let joint: MLModel
     let wordBoosting: WordBoostingContext?
-    let ctcValidator: CTCWordBoostingValidator?
 
     private let maxSymbolsPerStep = 10
 
     func decode(
         encoded: MLMultiArray,
         encodedLength: Int,
-        frameOffset: Int = 0,
         h: inout MLMultiArray,
         c: inout MLMultiArray,
         decoderOutput: inout MLMultiArray,
@@ -50,8 +48,7 @@ struct RNNTGreedyDecoder {
         tokenArray: MLMultiArray,
         encSlice: MLMultiArray,
         argmaxBuf: UnsafeMutablePointer<Float>,
-        wordBoostingState: inout WordBoostingState?,
-        globalFrameOffset: Int = 0
+        wordBoostingState: inout WordBoostingState?
     ) throws -> RNNTDecodeResult {
         var tokens = [Int]()
         var tokenLogProbs = [Float]()
@@ -61,8 +58,7 @@ struct RNNTGreedyDecoder {
         let totalClasses = config.vocabSize + 1
 
         for i in 0..<encodedLength {
-            let t = i + frameOffset
-            copyEncoderFrameFP16(from: encoded, at: t, toFP32: encSlice)
+            copyEncoderFrameFP16(from: encoded, at: i, toFP32: encSlice)
 
             for _ in 0..<maxSymbolsPerStep {
                 jointProvider.update("encoder_output", encSlice)
@@ -74,8 +70,7 @@ struct RNNTGreedyDecoder {
                     logits,
                     count: totalClasses,
                     floatBuf: argmaxBuf,
-                    state: &wordBoostingState,
-                    frameIndex: globalFrameOffset + i
+                    state: &wordBoostingState
                 )
                 let tokenId = selection.tokenId
                 if tokenId != selection.unboostedTokenId {
@@ -152,8 +147,7 @@ struct RNNTGreedyDecoder {
         _ array: MLMultiArray,
         count: Int,
         floatBuf: UnsafeMutablePointer<Float>,
-        state: inout WordBoostingState?,
-        frameIndex: Int
+        state: inout WordBoostingState?
     ) -> TokenSelection {
         guard let wordBoosting, var boostingState = state else {
             let tokenId = argmax(array, count: count, floatBuf: floatBuf)
@@ -165,9 +159,7 @@ struct RNNTGreedyDecoder {
             from: floatBuf,
             count: count,
             blankTokenId: config.blankTokenId,
-            state: &boostingState,
-            frameIndex: frameIndex,
-            acousticValidator: ctcValidator
+            state: &boostingState
         )
         state = boostingState
         return TokenSelection(

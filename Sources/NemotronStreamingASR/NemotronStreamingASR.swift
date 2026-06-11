@@ -27,11 +27,9 @@ public class NemotronStreamingASRModel {
     var encoder: MLModel?
     var decoder: MLModel?
     var joint: MLModel?
-    var ctc: MLModel?
     private let vocabulary: NemotronVocabulary
     private let wordBoostingTokenizer: NemotronSentencePieceUnigramTokenizer?
     public let wordBoostingTokenizerStatus: WordBoostingTokenizerStatus
-    public let wordBoostingValidationStatus: WordBoostingValidationStatus
 
     private init(
         config: NemotronStreamingConfig,
@@ -39,11 +37,9 @@ public class NemotronStreamingASRModel {
         encoder: MLModel?,
         decoder: MLModel?,
         joint: MLModel?,
-        ctc: MLModel?,
         vocabulary: NemotronVocabulary,
         wordBoostingTokenizer: NemotronSentencePieceUnigramTokenizer?,
-        wordBoostingTokenizerStatus: WordBoostingTokenizerStatus,
-        wordBoostingValidationStatus: WordBoostingValidationStatus
+        wordBoostingTokenizerStatus: WordBoostingTokenizerStatus
     ) {
         self.config = config
         self.languages = languages
@@ -51,11 +47,9 @@ public class NemotronStreamingASRModel {
         self.encoder = encoder
         self.decoder = decoder
         self.joint = joint
-        self.ctc = ctc
         self.vocabulary = vocabulary
         self.wordBoostingTokenizer = wordBoostingTokenizer
         self.wordBoostingTokenizerStatus = wordBoostingTokenizerStatus
-        self.wordBoostingValidationStatus = wordBoostingValidationStatus
     }
 
     /// A partial transcript from streaming recognition.
@@ -84,7 +78,6 @@ public class NemotronStreamingASRModel {
             encoder: encoder,
             decoder: decoder,
             joint: joint,
-            ctc: ctc,
             vocabulary: vocabulary,
             melPreprocessor: melPreprocessor,
             wordBoosting: wordBoosting,
@@ -211,7 +204,6 @@ public class NemotronStreamingASRModel {
                     "encoder.mlmodelc/**",
                     "decoder.mlmodelc/**",
                     "joint.mlmodelc/**",
-                    "ctc.mlmodelc/**",
                     "vocab.json",
                     "tokenizer.model",
                     "*_tokenizer.model",
@@ -289,15 +281,6 @@ public class NemotronStreamingASRModel {
         let decoder = try loadCoreMLModel(name: "decoder", from: cacheDir, computeUnits: .all)
         progressHandler?(0.95, "Loading joint network...")
         let joint = try loadCoreMLModel(name: "joint", from: cacheDir, computeUnits: .all)
-        progressHandler?(0.97, "Loading CTC verifier...")
-        let loadedCTC = try loadOptionalCoreMLModel(name: "ctc", from: cacheDir, computeUnits: .all)
-        let wordBoostingValidationStatus = WordBoostingValidationStatus(
-            mode: loadedCTC == nil ? .shallowFusionOnly : .ctcAcousticModelAvailable,
-            path: loadedCTC?.url.path,
-            detail: loadedCTC == nil
-                ? "No ctc.mlmodelc was found in the bundle; word boosting uses RNN-T shallow fusion only."
-                : "ctc.mlmodelc is present and can be used for acoustic validation of boosted token paths."
-        )
 
         progressHandler?(1.0, "Model loaded")
         AudioLog.modelLoading.info(
@@ -309,11 +292,9 @@ public class NemotronStreamingASRModel {
             encoder: encoder,
             decoder: decoder,
             joint: joint,
-            ctc: loadedCTC?.model,
             vocabulary: vocabulary,
             wordBoostingTokenizer: wordBoostingTokenizer,
-            wordBoostingTokenizerStatus: wordBoostingTokenizerStatus,
-            wordBoostingValidationStatus: wordBoostingValidationStatus
+            wordBoostingTokenizerStatus: wordBoostingTokenizerStatus
         )
     }
 
@@ -348,17 +329,4 @@ public class NemotronStreamingASRModel {
         return try MLModel(contentsOf: modelURL, configuration: mlConfig)
     }
 
-    private static func loadOptionalCoreMLModel(
-        name: String,
-        from directory: URL,
-        computeUnits: MLComputeUnits
-    ) throws -> (model: MLModel, url: URL)? {
-        let modelURL = directory.appendingPathComponent("\(name).mlmodelc", isDirectory: true)
-        guard FileManager.default.fileExists(atPath: modelURL.path) else {
-            return nil
-        }
-        let mlConfig = MLModelConfiguration()
-        mlConfig.computeUnits = CoreMLComputeUnitsResolver.resolved(default: computeUnits)
-        return (try MLModel(contentsOf: modelURL, configuration: mlConfig), modelURL)
-    }
 }

@@ -135,12 +135,6 @@ public struct NemotronVocabulary: Sendable {
         return "▁" + normalized.replacingOccurrences(of: " ", with: "▁")
     }
 
-    func wordBoostingAcousticIgnoredTokenIds() -> Set<Int> {
-        Set(idToToken.compactMap { id, token in
-            token == "▁" ? id : nil
-        })
-    }
-
     /// Decode with per-word confidence scores.
     public func decodeWords(_ tokenIds: [Int], logProbs: [Float]) -> [WordConfidence] {
         guard tokenIds.count == logProbs.count else { return [] }

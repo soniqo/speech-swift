@@ -8,7 +8,6 @@ extension NemotronStreamingASRModel: ModelMemoryManageable {
         encoder = nil
         decoder = nil
         joint = nil
-        ctc = nil
         _isLoaded = false
     }
 

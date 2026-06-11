@@ -1,12 +1,7 @@
 import Foundation
 
-/// Decoder-time word boosting for Nemotron RNN-T greedy decoding.
-///
-/// The shipped CoreML bundle exposes an RNN-T decoder, so Speech Swift can
-/// bias token selection during greedy decoding. NVIDIA's stricter CTC-WS
-/// context-biasing path also needs CTC log probabilities from a CTC or
-/// hybrid RNN-T/CTC model; this bundle does not provide those unless an
-/// optional `ctc.mlmodelc` is added.
+/// Decoder-time word boosting for Nemotron RNN-T greedy decoding: shallow
+/// fusion that biases token selection toward configured phrases.
 public struct WordBoostingConfig: Sendable, Equatable {
     public struct Phrase: Sendable, Equatable {
         public var text: String
@@ -67,17 +62,6 @@ public struct WordBoostingTokenizerStatus: Sendable, Equatable {
 
     public let mode: Mode
     public let path: String?
-}
-
-public struct WordBoostingValidationStatus: Sendable, Equatable {
-    public enum Mode: String, Sendable {
-        case shallowFusionOnly
-        case ctcAcousticModelAvailable
-    }
-
-    public let mode: Mode
-    public let path: String?
-    public let detail: String
 }
 
 struct WordBoostingState: Sendable, Equatable {
@@ -230,9 +214,7 @@ struct WordBoostingContext: Sendable {
         from logits: UnsafeMutablePointer<Float>,
         count: Int,
         blankTokenId: Int,
-        state: inout WordBoostingState,
-        frameIndex: Int? = nil,
-        acousticValidator: CTCWordBoostingValidator? = nil
+        state: inout WordBoostingState
     ) -> Selection {
         let unboostedToken = argmax(logits, count: count)
         if unboostedToken == blankTokenId {
@@ -256,15 +238,6 @@ struct WordBoostingContext: Sendable {
 
         guard bestToken >= 0 else {
             return Selection(tokenId: blankTokenId, unboostedTokenId: unboostedToken)
-        }
-
-        if bestToken != unboostedToken,
-           let frameIndex,
-           let acousticValidator,
-           !acousticValidator.accepts(matchedTokens: tree.tokens(at: bestNode), endingAt: frameIndex)
-        {
-            state.node = tree.advance(from: currentNode, token: unboostedToken).node
-            return Selection(tokenId: unboostedToken, unboostedTokenId: unboostedToken)
         }
 
         state.node = bestNode

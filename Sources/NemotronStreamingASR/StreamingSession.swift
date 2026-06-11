@@ -10,13 +10,10 @@ public class StreamingSession {
     private let encoder: MLModel
     private let decoder: MLModel
     private let joint: MLModel
-    private let ctc: MLModel?
     private let vocabulary: NemotronVocabulary
     private let melPreprocessor: StreamingMelPreprocessor
     private let rnntDecoder: RNNTGreedyDecoder
     private var wordBoostingState: WordBoostingState?
-    private let ctcValidator: CTCWordBoostingValidator?
-    private var globalFrameOffset: Int = 0
 
     private var cacheLastChannel: MLMultiArray
     private var cacheLastTime: MLMultiArray
@@ -47,7 +44,6 @@ public class StreamingSession {
         encoder: MLModel,
         decoder: MLModel,
         joint: MLModel,
-        ctc: MLModel?,
         vocabulary: NemotronVocabulary,
         melPreprocessor: StreamingMelPreprocessor,
         wordBoosting: WordBoostingConfig?,
@@ -57,7 +53,6 @@ public class StreamingSession {
         self.encoder = encoder
         self.decoder = decoder
         self.joint = joint
-        self.ctc = ctc
         self.vocabulary = vocabulary
         self.melPreprocessor = melPreprocessor
         let wordBoostingContext = WordBoostingContext(
@@ -65,19 +60,11 @@ public class StreamingSession {
             vocabulary: vocabulary,
             tokenizer: wordBoostingTokenizer
         )
-        let ctcValidator = ctc == nil || wordBoostingContext == nil
-            ? nil
-            : CTCWordBoostingValidator(
-                classCount: config.vocabSize + 1,
-                ignoredTokenIds: vocabulary.wordBoostingAcousticIgnoredTokenIds()
-            )
-        self.ctcValidator = ctcValidator
         self.rnntDecoder = RNNTGreedyDecoder(
             config: config,
             decoder: decoder,
             joint: joint,
-            wordBoosting: wordBoostingContext,
-            ctcValidator: ctcValidator
+            wordBoosting: wordBoostingContext
         )
         self.wordBoostingState = wordBoostingContext?.initialState()
 
@@ -244,18 +231,9 @@ public class StreamingSession {
 
         guard encodedLength > 0 else { return nil }
 
-        if let ctcLogProbs = try runCTCIfAvailable(encoded: encoded) {
-            ctcValidator?.append(
-                logProbs: ctcLogProbs,
-                validFrames: encodedLength,
-                startingAt: globalFrameOffset
-            )
-        }
-
         let result = try rnntDecoder.decode(
             encoded: encoded,
             encodedLength: encodedLength,
-            frameOffset: 0,
             h: &h,
             c: &c,
             decoderOutput: &decoderOutput,
@@ -264,10 +242,8 @@ public class StreamingSession {
             tokenArray: tokenArray,
             encSlice: encSlice,
             argmaxBuf: argmaxBuf,
-            wordBoostingState: &wordBoostingState,
-            globalFrameOffset: globalFrameOffset
+            wordBoostingState: &wordBoostingState
         )
-        globalFrameOffset += encodedLength
 
         allTokens.append(contentsOf: result.tokens)
         allLogProbs.append(contentsOf: result.tokenLogProbs)
@@ -297,32 +273,6 @@ public class StreamingSession {
         let array = try MLMultiArray(shape: [1], dataType: .int32)
         array[0] = NSNumber(value: value)
         return array
-    }
-
-    private func runCTCIfAvailable(encoded: MLMultiArray) throws -> MLMultiArray? {
-        guard let ctc else { return nil }
-
-        let ctcInput: MLMultiArray
-        if encoded.dataType == .float32 {
-            ctcInput = encoded
-        } else {
-            ctcInput = try MLMultiArray(shape: encoded.shape, dataType: .float32)
-            Self.copyCastFP16ToFP32(encoded, into: ctcInput)
-        }
-
-        let input = try MLDictionaryFeatureProvider(dictionary: [
-            "encoded_output": MLFeatureValue(multiArray: ctcInput)
-        ])
-        let output = try ctc.prediction(from: input)
-        if let named = output.featureValue(for: "ctc_logprobs")?.multiArrayValue {
-            return named
-        }
-        for name in output.featureNames {
-            if let array = output.featureValue(for: name)?.multiArrayValue {
-                return array
-            }
-        }
-        return nil
     }
 
     static func copyCastFP16ToFP32(_ src: MLMultiArray, into dst: MLMultiArray) {

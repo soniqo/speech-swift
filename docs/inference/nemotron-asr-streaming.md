@@ -31,7 +31,7 @@ Nemotron word boosting biases RNN-T decoding toward caller-provided words or phr
 
 Use it for custom vocabulary that the model might otherwise miss, such as product names, speaker names, acronyms, project names, or domain terms.
 
-With the current public CoreML bundle, this is RNN-T shallow fusion over the joint logits. NVIDIA's stricter CTC-WS context-biasing method requires CTC log probabilities from a CTC or hybrid RNN-T/CTC checkpoint. If a future bundle includes `ctc.mlmodelc`, Speech Swift can load it and report CTC acoustic validation mode; without that file, the SDK reports shallow-fusion-only mode.
+This is RNN-T shallow fusion over the joint logits. NVIDIA's stricter CTC-WS context-biasing method requires CTC log probabilities from a CTC or hybrid RNN-T/CTC checkpoint; the Nemotron 3.5 streaming checkpoint is RNNT-only and has no CTC head, so that path is not available for this model.
 
 For a small list where one strength is good enough:
 
@@ -70,18 +70,17 @@ let session = try model.createSession(
 
 When a bundle includes `tokenizer.model`, word boosting uses that real SentencePiece tokenizer to produce the same canonical token path the model expects. The phrase text is treated as canonical, including casing. If no tokenizer model is present, the SDK falls back to a conservative `vocab.json` segmentation; this fallback is intentionally narrower and less reliable for fragmented custom words.
 
-Check the loaded mode at runtime:
+Check which tokenizer mode loaded at runtime:
 
 ```swift
-switch model.wordBoostingValidationStatus.mode {
-case .ctcAcousticModelAvailable:
-    // Stronger path: RNN-T boosting plus CTC acoustic validation.
+switch model.wordBoostingTokenizerStatus.mode {
+case .sentencePieceModel:
+    // tokenizer.model found; boost paths match the decoder's segmentation.
     break
-case .shallowFusionOnly:
-    // Current public bundle path: no ctc.mlmodelc in the bundle.
+case .vocabFallback:
+    // Degraded: greedy vocab.json segmentation only.
     break
 }
-print(model.wordBoostingValidationStatus.detail)
 ```
 
 ### Batch boost suggestions
@@ -146,7 +145,7 @@ Some out-of-vocabulary product names are harder than others. If a word is split 
 
 Avoid using very high boost values as a general setting. They increase the chance of forcing phonetically nearby phrases into clean audio.
 
-If the current CoreML bundle does not include `ctc.mlmodelc`, it cannot fully prevent every false acceptance. If a boosted phrase is short, acoustically close to common words, or begins with very generic tokens, keep its boost low, keep the context list small, and prefer an app-level post-processing replacement layer for heard-phrase-to-replacement workflows.
+Shallow fusion cannot fully prevent every false acceptance. If a boosted phrase is short, acoustically close to common words, or begins with very generic tokens, keep its boost low, keep the context list small, and prefer an app-level post-processing replacement layer for heard-phrase-to-replacement workflows.
 
 ### Good and bad uses
 
