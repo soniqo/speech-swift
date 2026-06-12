@@ -37,7 +37,7 @@
 - **[Qwen3.5-Chat](https://soniqo.audio/ru/guides/chat)** — Локальный чат на базе LLM (0.8B, MLX INT4 + CoreML INT8, гибрид DeltaNet, потоковая генерация токенов)
 - **[MADLAD-400](https://soniqo.audio/ru/guides/translate)** — Многоязычный перевод между 400+ языками (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
 - **[PersonaPlex](https://soniqo.audio/ru/guides/respond)** — Полнодуплексная генерация речи из речи (7B, аудио на входе → аудио на выходе, 18 голосовых пресетов)
-- **[DeepFilterNet3](https://soniqo.audio/ru/guides/denoise)** — Подавление шума в реальном времени (2.1M параметров, 48 кГц)
+- **[DeepFilterNet3](https://soniqo.audio/ru/guides/denoise)** — Подавление шума в реальном времени (2.1M параметров, 48 кГц). Длинное аудио, превышающее лимит одиночного прохода в 60 s, автоматически разбивается на чанки с crossfade — см. `enhanceChunked(...)`
 - **[Разделение источников](https://soniqo.audio/ru/guides/separate)** — Разделение музыкальных источников через HTDemucs (Demucs v4) + Open-Unmix (UMX-HQ / UMX-L, 4 стема: вокал/ударные/бас/остальное, 44,1 кГц стерео)
 - **[MAGNeT](https://soniqo.audio/ru/guides/compose)** — Генерация музыки по тексту (Meta MAGNeT Small 300M / Medium 1.5B, MLX INT4/INT8, 30-секундные клипы 32 кГц моно, маскированное параллельное декодирование)
 - **[FlashSR](https://soniqo.audio/ru/guides/upsample)** — Аудио супер-разрешение (FlashSR ICASSP 2025, MLX, 48 кГц моно, дистиллированная диффузия за 1 шаг, INT4 363 МБ / INT8 720 МБ)

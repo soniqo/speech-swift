@@ -168,7 +168,12 @@ public struct AudioServer {
 
             let enhancer = try await state.loadEnhancer()
             let audio = try decodeWAVData(audioData, targetSampleRate: 48000)
-            let enhanced = try enhancer.enhance(audio: audio, sampleRate: 48000)
+            // Auto-chunk long inputs. The body cap of 50 MB allows roughly 4-5
+            // min of 48 kHz mono PCM, which can easily exceed the model's 60 s
+            // single-shot cap. enhanceChunked() does its own short-input
+            // fast-path so we route everything through it (bit-identical to
+            // enhance() when duration ≤ 45 s).
+            let enhanced = try enhancer.enhanceChunked(audio: audio, sampleRate: 48000)
 
             let wavData = try encodeWAV(samples: enhanced, sampleRate: 48000)
             return Response(

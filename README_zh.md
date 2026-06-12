@@ -37,7 +37,7 @@
 - **[Qwen3.5-Chat](https://soniqo.audio/zh/guides/chat)** — 端侧 LLM 对话（0.8B，MLX INT4 + CoreML INT8，DeltaNet 混合架构，流式 token）
 - **[MADLAD-400](https://soniqo.audio/zh/guides/translate)** — 400+ 语言间的多对多翻译（3B，MLX INT4 + INT8，T5 v1.1，Apache 2.0）
 - **[PersonaPlex](https://soniqo.audio/zh/guides/respond)** — 全双工语音到语音（7B，音频输入 → 音频输出，18 种预设音色）
-- **[DeepFilterNet3](https://soniqo.audio/zh/guides/denoise)** — 实时噪声抑制（2.1M 参数，48 kHz）
+- **[DeepFilterNet3](https://soniqo.audio/zh/guides/denoise)** — 实时噪声抑制（2.1M 参数，48 kHz）。超过 60 s 单次处理上限的长音频会自动分块并使用 crossfade 拼接 — 参见 `enhanceChunked(...)`
 - **[音源分离](https://soniqo.audio/zh/guides/separate)** — 通过 HTDemucs (Demucs v4) + Open-Unmix 进行音乐源分离（UMX-HQ / UMX-L，4 声轨：人声/鼓/贝斯/其他，44.1 kHz 立体声）
 - **[MAGNeT](https://soniqo.audio/zh/guides/compose)** — 文本到音乐生成（Meta MAGNeT Small 300M / Medium 1.5B，MLX INT4/INT8，30 秒片段 32 kHz 单声道，掩码并行解码）
 - **[FlashSR](https://soniqo.audio/zh/guides/upsample)** — 音频超分辨率(FlashSR ICASSP 2025,MLX,48 kHz 单声道,1 步蒸馏扩散,INT4 363 MB / INT8 720 MB)
