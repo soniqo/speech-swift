@@ -21,14 +21,14 @@ The `asr-bench` tool runs each engine in a separate child process (`--isolated`)
 | Qwen3-ASR 0.6B | CoreML (ANE) | INT8 | 3.02 | 0.098 | 10.2x | 1 379 MB | 7.3s |
 | Omnilingual CTC 300M | MLX (GPU) | 4-bit | 4.26 | 0.005 | **222.1x** | **384 MB** | 1.6s |
 | Omnilingual CTC 300M | CoreML (ANE) | INT8 | 5.67 | 0.128 | 7.8x | 543 MB | 2.6s |
-| Nemotron-Speech-Streaming | CoreML (ANE) | INT8 | 12.26 | 0.107 | 9.3x | 1 459 MB | 4.6s |
+| Nemotron-Speech-Streaming | CoreML (ANE) | INT8 | 2.82 | 0.058 | 17.1x | 961 MB | 7.3s |
 
 **Headline picks:**
 - **Best WER**: Qwen3-ASR MLX 1.7B 8-bit at 1.52% — beats WhisperKit Large-v3 Turbo (1.71%) and runs 2.6x faster, at a 6x memory cost.
 - **Best WER under WhisperKit memory**: WhisperKit Large-v3 Turbo itself (1.71%, 428 MB) and Qwen3-ASR MLX 0.6B 4-bit (2.20%, 1 022 MB) for the next size class.
 - **Fastest English**: Parakeet TDT v3 INT8 — 117x real-time at 897 MB, English-only (25 European languages).
 - **Multilingual throughput leader**: Omnilingual MLX 300M 4-bit — 222x real-time, 384 MB peak, 1 672 languages, 4.26% WER on English test-clean.
-- **Streaming**: Nemotron at 12.26% on whole-utterance batch is the cost of 160 ms streaming chunks with 1-chunk right context — designed for low latency, not offline batch.
+- **Streaming**: Nemotron at 2.82% on whole-utterance batch (post-PR #304 vocab fix that strips `<en-US>`/`<ar-AR>` language tags from decoded output) — competitive with offline engines while retaining 160 ms streaming chunks with 1-chunk right context.
 
 **Reading the memory column**: Sequential-run peak RSS is much higher (4–10 GB) because MLX's Metal cache and CoreML's compiled plans don't release between engines. The `--isolated` mode spawns one child per engine, so each row is the actual per-engine cost.
 
