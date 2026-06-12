@@ -37,7 +37,7 @@ Spracherkennung, -synthese und -verständnis auf dem Gerät für Mac und iOS. L�
 - **[Qwen3.5-Chat](https://soniqo.audio/de/guides/chat)** — LLM-Chat auf dem Gerät (0.8B, MLX INT4 + CoreML INT8, DeltaNet-Hybrid, Token-Streaming)
 - **[MADLAD-400](https://soniqo.audio/de/guides/translate)** — Mehrsprachige Übersetzung über 400+ Sprachen (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
 - **[PersonaPlex](https://soniqo.audio/de/guides/respond)** — Vollduplex-Sprache-zu-Sprache (7B, Audio rein → Audio raus, 18 Stimmvoreinstellungen)
-- **[DeepFilterNet3](https://soniqo.audio/de/guides/denoise)** — Echtzeit-Rauschunterdrückung (2,1M Parameter, 48 kHz)
+- **[DeepFilterNet3](https://soniqo.audio/de/guides/denoise)** — Echtzeit-Rauschunterdrückung (2,1M Parameter, 48 kHz). Langformaudio oberhalb der 60 s Single-Shot-Grenze wird automatisch mit Crossfade in Chunks zerlegt — siehe `enhanceChunked(...)`
 - **[Quelltrennung](https://soniqo.audio/de/guides/separate)** — Musikquelltrennung mit HTDemucs (Demucs v4) + Open-Unmix (UMX-HQ / UMX-L, 4 Stems: Gesang/Drums/Bass/Rest, 44,1 kHz Stereo)
 - **[MAGNeT](https://soniqo.audio/de/guides/compose)** — Text-zu-Musik-Generierung (Meta MAGNeT Small 300M / Medium 1.5B, MLX INT4/INT8, 30-Sekunden-Clips, 32 kHz Mono, maskierte parallele Dekodierung)
 - **[FlashSR](https://soniqo.audio/de/guides/upsample)** — Audio-Super-Resolution (FlashSR ICASSP 2025, MLX, 48 kHz Mono, 1-Schritt destillierte Diffusion, INT4 363 MB / INT8 720 MB)

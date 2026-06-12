@@ -37,7 +37,7 @@ Mac और iOS के लिए ऑन-डिवाइस स्पीच रि
 - **[Qwen3.5-Chat](https://soniqo.audio/hi/guides/chat)** — ऑन-डिवाइस LLM चैट (0.8B, MLX INT4 + CoreML INT8, DeltaNet हाइब्रिड, स्ट्रीमिंग टोकन)
 - **[MADLAD-400](https://soniqo.audio/hi/guides/translate)** — 400+ भाषाओं में बहु-दिशात्मक अनुवाद (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
 - **[PersonaPlex](https://soniqo.audio/hi/guides/respond)** — फुल-डुप्लेक्स स्पीच-टू-स्पीच (7B, ऑडियो इन → ऑडियो आउट, 18 वॉयस प्रीसेट)
-- **[DeepFilterNet3](https://soniqo.audio/hi/guides/denoise)** — रियल-टाइम नॉइज़ सप्रेशन (2.1M params, 48 kHz)
+- **[DeepFilterNet3](https://soniqo.audio/hi/guides/denoise)** — रियल-टाइम नॉइज़ सप्रेशन (2.1M params, 48 kHz)। 60 s सिंगल-शॉट सीमा से अधिक लंबे ऑडियो को crossfade के साथ स्वतः चंक किया जाता है — `enhanceChunked(...)` देखें
 - **[सोर्स सेपरेशन](https://soniqo.audio/hi/guides/separate)** — HTDemucs (Demucs v4) + Open-Unmix के ज़रिए म्यूज़िक सोर्स सेपरेशन (UMX-HQ / UMX-L, 4 स्टेम: वोकल/ड्रम्स/बेस/अन्य, 44.1 kHz स्टीरियो)
 - **[MAGNeT](https://soniqo.audio/hi/guides/compose)** — टेक्स्ट से संगीत निर्माण (Meta MAGNeT Small 300M / Medium 1.5B, MLX INT4/INT8, 30 सेकंड क्लिप 32 kHz मोनो, मास्क्ड पैरलल डिकोडिंग)
 - **[FlashSR](https://soniqo.audio/hi/guides/upsample)** — ऑडियो सुपर-रेज़ोल्यूशन (FlashSR ICASSP 2025, MLX, 48 kHz मोनो, 1-स्टेप डिस्टिल्ड डिफ्यूज़न, INT4 363 MB / INT8 720 MB)
