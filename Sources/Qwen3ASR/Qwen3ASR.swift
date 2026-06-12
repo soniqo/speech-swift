@@ -10,6 +10,11 @@ import AudioCommon
 /// Defaults match the historical greedy behaviour of `transcribe(audio:)`
 /// so existing callers see zero change. Tune these when greedy decoding
 /// collapses onto a single token (typical on silence or ambiguous phonemes).
+///
+/// The struct also carries the "long-input auto-escalation" knobs used by
+/// the public `transcribe(...)` entry points to bound greedy degeneration
+/// on >15 s audio without affecting short-clip behaviour. See
+/// `adaptedFor(audioDurationSeconds:)`.
 public struct Qwen3DecodingOptions: Sendable {
     /// Cap on decoder output per chunk.
     public var maxTokens: Int = 448
@@ -33,13 +38,30 @@ public struct Qwen3DecodingOptions: Sendable {
     /// Gumbel-max. Higher = more random.
     public var temperature: Float = 0.0
 
+    /// Adaptive decoding threshold. When the input audio is longer than this
+    /// many seconds AND the caller has left `noRepeatNgramSize` at 0 (the
+    /// default greedy path), the public `transcribe(...)` entry points
+    /// auto-escalate `noRepeatNgramSize` to `longInputNoRepeatNgramSize`
+    /// before forwarding into `generateText`. This bounds the 0.6B
+    /// greedy-decode degeneration observed on long-form audio without
+    /// affecting short clips. Set to `.infinity` to disable entirely.
+    public var longInputThresholdSeconds: Double = 15.0
+
+    /// n-gram size applied by the long-input auto-escalation path. Only
+    /// used when the threshold above triggers AND the caller hasn't
+    /// already set a custom `noRepeatNgramSize`. 3 mirrors the slow-path
+    /// default in `E2EQwen3DecodingOptionsTests`.
+    public var longInputNoRepeatNgramSize: Int = 3
+
     public init(
         maxTokens: Int = 448,
         language: String? = nil,
         context: String? = nil,
         repetitionPenalty: Float = 1.0,
         noRepeatNgramSize: Int = 0,
-        temperature: Float = 0.0
+        temperature: Float = 0.0,
+        longInputThresholdSeconds: Double = 15.0,
+        longInputNoRepeatNgramSize: Int = 3
     ) {
         self.maxTokens = maxTokens
         self.language = language
@@ -47,6 +69,29 @@ public struct Qwen3DecodingOptions: Sendable {
         self.repetitionPenalty = repetitionPenalty
         self.noRepeatNgramSize = noRepeatNgramSize
         self.temperature = temperature
+        self.longInputThresholdSeconds = longInputThresholdSeconds
+        self.longInputNoRepeatNgramSize = longInputNoRepeatNgramSize
+    }
+
+    /// Length-gated auto-escalation. Returns a copy with
+    /// `noRepeatNgramSize` bumped to `longInputNoRepeatNgramSize` IFF
+    ///   1. `audioDurationSeconds > longInputThresholdSeconds`, AND
+    ///   2. the caller left `noRepeatNgramSize` at 0 (default greedy), AND
+    ///   3. `longInputNoRepeatNgramSize > 0` (escalation not disabled).
+    /// Otherwise returns `self` unchanged.
+    ///
+    /// Any caller that has explicitly tuned `noRepeatNgramSize` — including
+    /// setting it to a non-3 value — is honoured. This preserves the
+    /// fast-path / slow-path routing semantics in `isGreedyFastPath`.
+    func adaptedFor(audioDurationSeconds: Double) -> Qwen3DecodingOptions {
+        guard audioDurationSeconds > longInputThresholdSeconds,
+              noRepeatNgramSize == 0,
+              longInputNoRepeatNgramSize > 0 else {
+            return self
+        }
+        var copy = self
+        copy.noRepeatNgramSize = longInputNoRepeatNgramSize
+        return copy
     }
 }
 
@@ -79,6 +124,13 @@ public class Qwen3ASRModel {
     /// Whether the model weights are loaded and ready for inference.
     var _isLoaded = true
 
+    /// MLX cache limit captured at load time for the .large variant. Stored
+    /// per-instance so `unload()` can restore it — preventing the 4 GB cap
+    /// from leaking into co-loaded models (PersonaPlex loads ASR + LM + TTS
+    /// in the same process). `nil` when no cap was applied (small variant
+    /// or already-capped global state).
+    var savedMLXCacheLimit: Int?
+
     init(
         audioConfig: Qwen3AudioEncoderConfig = .default,
         textConfig: TextDecoderConfig = .small
@@ -104,11 +156,23 @@ public class Qwen3ASRModel {
     ///
     /// The legacy `transcribe(audio:sampleRate:language:maxTokens:context:)`
     /// overload below forwards into this path with default (greedy) options.
+    ///
+    /// Long-input adaptive decoding: before forwarding into `generateText`,
+    /// `options.adaptedFor(audioDurationSeconds:)` is applied. On audio
+    /// longer than `options.longInputThresholdSeconds` (default 15 s) AND
+    /// when the caller hasn't customized `noRepeatNgramSize`, the options
+    /// are escalated to engage the no-repeat-n-gram slow path. Short clips
+    /// are unaffected; explicit caller settings are honoured.
     public func transcribe(
         audio: [Float],
         sampleRate: Int = 16000,
         options: Qwen3DecodingOptions
     ) -> String {
+        let durationSeconds = sampleRate > 0
+            ? Double(audio.count) / Double(sampleRate)
+            : 0.0
+        let effective = options.adaptedFor(audioDurationSeconds: durationSeconds)
+
         let melFeatures = featureExtractor.process(audio, sampleRate: sampleRate)
         let batchedFeatures = melFeatures.expandedDimensions(axis: 0)
         var audioEmbeds = audioEncoder(batchedFeatures)
@@ -120,14 +184,20 @@ public class Qwen3ASRModel {
         return generateText(
             audioEmbeds: audioEmbeds,
             textDecoder: textDecoder,
-            language: options.language,
-            maxTokens: options.maxTokens,
-            context: options.context,
-            decodingOptions: options
+            language: effective.language,
+            maxTokens: effective.maxTokens,
+            context: effective.context,
+            decodingOptions: effective
         )
     }
 
     /// Transcribe audio to text
+    ///
+    /// Long-input adaptive decoding: the legacy overload constructs a
+    /// default `Qwen3DecodingOptions` and routes through the same
+    /// length-gated escalation as the options-based path. Callers who pin
+    /// `noRepeatNgramSize` via `Qwen3DecodingOptions` directly are out of
+    /// scope here (they reach the other overload).
     public func transcribe(
         audio: [Float],
         sampleRate: Int = 16000,
@@ -135,6 +205,13 @@ public class Qwen3ASRModel {
         maxTokens: Int = 448,
         context: String? = nil
     ) -> String {
+        let durationSeconds = sampleRate > 0
+            ? Double(audio.count) / Double(sampleRate)
+            : 0.0
+        let baseOptions = Qwen3DecodingOptions(
+            maxTokens: maxTokens, language: language, context: context)
+        let effective = baseOptions.adaptedFor(audioDurationSeconds: durationSeconds)
+
         // Extract mel features
         let melFeatures = featureExtractor.process(audio, sampleRate: sampleRate)
 
@@ -153,13 +230,28 @@ public class Qwen3ASRModel {
             return "[Audio encoded: \(shape)] - Text decoder not loaded"
         }
 
-        // Generate text using the text decoder
+        // Long-form audio that triggered escalation routes through the
+        // options-aware codepath (which calls `isGreedyFastPath` and falls
+        // out to `generateSlow`); short clips with default greedy take the
+        // legacy fast-path call shape, bit-identical to today.
+        // Mirror `isGreedyFastPath` exactly so the two routes stay in sync
+        // even if a fourth decoder knob is added later.
+        if !Self.isGreedyFastPath(effective) {
+            return generateText(
+                audioEmbeds: audioEmbeds,
+                textDecoder: textDecoder,
+                language: effective.language,
+                maxTokens: effective.maxTokens,
+                context: effective.context,
+                decodingOptions: effective
+            )
+        }
         return generateText(
             audioEmbeds: audioEmbeds,
             textDecoder: textDecoder,
-            language: language,
-            maxTokens: maxTokens,
-            context: context
+            language: effective.language,
+            maxTokens: effective.maxTokens,
+            context: effective.context
         )
     }
 
@@ -601,6 +693,71 @@ public enum ASRModelSize {
     }
 }
 
+// MARK: - Memory guards (Bug 4b/4f support)
+
+internal enum Qwen3ASRMemory {
+    /// Threshold below which the 1.7B variant triggers a load-time RAM
+    /// warning. Total physical memory is the pragmatic signal — observed
+    /// hangs cluster on 8/16 GB Macs with other apps open; 24 GB+ has
+    /// consistently completed inference in our benchmarks. Exposed
+    /// `internal` so unit tests can pin the threshold.
+    static let largeModelRAMWarningThresholdGB: Double = 24.0
+
+    /// MLX cache ceiling applied when loading the 1.7B variant. mlx-swift's
+    /// default tracks `recommendedMaxWorkingSetSize` which on a 16 GB Mac
+    /// can grow to several GB under sustained decoding — pushing residency
+    /// past unified-memory headroom and triggering swap. We bound the
+    /// scratch pool to `min(4 GB, 25% of physical RAM)`: well above the
+    /// per-token decoder working set, but small enough to leave room for
+    /// the OS and other apps.
+    static func cacheLimitForLarge(physicalMemoryBytes: Int) -> Int {
+        let fourGB = 4 * 1024 * 1024 * 1024
+        let quarterRAM = physicalMemoryBytes / 4
+        return max(0, min(fourGB, quarterRAM))
+    }
+
+    /// True when the 1.7B variant should print the soft RAM warning. Total
+    /// (not available) RAM is the pragmatic signal — see threshold doc.
+    static func shouldWarnForLarge(physicalMemoryBytes: UInt64) -> Bool {
+        let physicalGB = Double(physicalMemoryBytes) / 1_073_741_824.0
+        return physicalGB < largeModelRAMWarningThresholdGB
+    }
+
+    /// Emit a human-readable RAM-pressure warning to stderr (NDJSON-IPC safe).
+    /// Naming the alternative model IDs so the user can copy-paste.
+    static func emitLargeRAMWarning(physicalMemoryBytes: UInt64) {
+        let physicalGB = Double(physicalMemoryBytes) / 1_073_741_824.0
+        let msg = """
+            [Qwen3ASR] Warning: loading 1.7B variant on \(String(format: "%.0f", physicalGB)) GB Mac.
+            [Qwen3ASR]   The 1.7B model has been observed to swap and stall on <\(Int(largeModelRAMWarningThresholdGB)) GB systems
+            [Qwen3ASR]   when other apps are running. If you see a hang, consider:
+            [Qwen3ASR]     aufklarer/Qwen3-ASR-0.6B-MLX-8bit   (recommended for 8-16 GB)
+            [Qwen3ASR]     aufklarer/Qwen3-ASR-1.7B-MLX-4bit   (smaller, similar quality)
+            """
+        FileHandle.standardError.write(Data((msg + "\n").utf8))
+    }
+
+    /// Format memory readings (active / cache / peak in bytes) for
+    /// human-readable logging. Centralized so the formatting is consistent
+    /// across load-time + transcribe-time telemetry. Sizes are reported in
+    /// MB. This overload takes `Int` directly so unit tests don't depend on
+    /// `MLX.Memory.Snapshot`'s sealed initializer.
+    static func formatSnapshot(active: Int, cache: Int, peak: Int, label: String) -> String {
+        let mb: (Int) -> String = { String(format: "%.0f MB", Double($0) / 1_048_576.0) }
+        return "[Qwen3ASR][mem] \(label): "
+            + "active=\(mb(active)) "
+            + "cache=\(mb(cache)) "
+            + "peak=\(mb(peak))"
+    }
+
+    /// Production-callsite overload that adapts a live `MLX.Memory.Snapshot`.
+    static func formatSnapshot(_ s: MLX.Memory.Snapshot, label: String) -> String {
+        formatSnapshot(
+            active: s.activeMemory, cache: s.cacheMemory, peak: s.peakMemory,
+            label: label)
+    }
+}
+
 // MARK: - Model Loading
 
 public extension Qwen3ASRModel {
@@ -616,6 +773,21 @@ public extension Qwen3ASRModel {
         // Auto-detect model size and quantization bits from model ID
         let modelSize = ASRModelSize.detect(from: modelId)
         let detectedBits = ASRModelSize.detectBits(from: modelId)
+
+        // Bug 4b: soft RAM warning for the 1.7B variant. Emit BEFORE the
+        // download so users see it on the first byte, not after a 1.7 GB
+        // transfer. Routed to stderr to keep stdout clean for NDJSON-IPC
+        // consumers (speech-studio sidecar).
+        if modelSize == .large {
+            let physical = ProcessInfo.processInfo.physicalMemory
+            if Qwen3ASRMemory.shouldWarnForLarge(physicalMemoryBytes: physical) {
+                Qwen3ASRMemory.emitLargeRAMWarning(physicalMemoryBytes: physical)
+            }
+        }
+
+        // Bug 4f: pre-load memory snapshot for telemetry. Cheap to call;
+        // gives us a baseline to compare against the post-load snapshot.
+        let memBeforeLoad = MLX.Memory.snapshot()
 
         // Get cache directory
         let cacheDir = try cacheDir ?? HuggingFaceDownloader.getCacheDirectory(for: modelId)
@@ -662,6 +834,48 @@ public extension Qwen3ASRModel {
         }
 
         MetalBudget.pinMemory()
+
+        // Bug 4b: cap MLX scratch pool for the 1.7B variant. Default cache
+        // limit tracks `recommendedMaxWorkingSetSize` which on a 16 GB Mac
+        // can grow to several GB during sustained decoding and trigger
+        // swap. Bounding to `min(4 GB, 25% of physical RAM)` leaves enough
+        // headroom for per-token decoder working set while keeping the
+        // total residency under the OS jetsam threshold. 0.6B path is
+        // unchanged.
+        //
+        // Process-global cap leak fix (adversarial review): we save the
+        // prior limit on the model instance and restore it in `unload()`,
+        // so co-loaded models in the same process (e.g. PersonaPlex
+        // loading ASR + LM + TTS) inherit our cap only for the lifetime
+        // of the loaded ASR. Stacks correctly across multiple ASR
+        // instances: each save captures whatever was active when it
+        // loaded, and each unload pops its own saved value.
+        if modelSize == .large {
+            let physical = Int(ProcessInfo.processInfo.physicalMemory)
+            let newCap = Qwen3ASRMemory.cacheLimitForLarge(physicalMemoryBytes: physical)
+            // Only apply the cap if it would lower the current limit —
+            // never raise a limit a caller has already chosen for itself.
+            let currentLimit = MLX.Memory.cacheLimit
+            if newCap > 0 && newCap < currentLimit {
+                model.savedMLXCacheLimit = currentLimit
+                MLX.Memory.cacheLimit = newCap
+            }
+        }
+
+        // Bug 4f: post-load memory snapshot. Difference vs `memBeforeLoad`
+        // is the model's load-time footprint (weights + activations +
+        // metallib JIT). Useful for tuning the cache cap and for spotting
+        // load-time regressions in PRs.
+        let memAfterLoad = MLX.Memory.snapshot()
+        AudioLog.modelLoading.info("\(Qwen3ASRMemory.formatSnapshot(memBeforeLoad, label: "pre-load"))")
+        AudioLog.modelLoading.info("\(Qwen3ASRMemory.formatSnapshot(memAfterLoad, label: "post-load"))")
+        // Display max(0, delta): MLX can free cached weights between
+        // snapshots, which makes "active" go down; clamp at 0 so the
+        // load-delta label stays meaningful in logs.
+        let loadActiveDelta = max(0, memAfterLoad.activeMemory - memBeforeLoad.activeMemory)
+        AudioLog.modelLoading.info(
+            "[Qwen3ASR][mem] load delta (active): \(String(format: "%.0f MB", Double(loadActiveDelta) / 1_048_576.0))")
+
         progressHandler?(1.0, "Ready")
 
         return model
