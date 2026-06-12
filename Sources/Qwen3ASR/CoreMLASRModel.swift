@@ -24,11 +24,22 @@ public class CoreMLASRModel {
     /// Load full CoreML ASR from HuggingFace.
     ///
     /// Downloads encoder and decoder models from `aufklarer/Qwen3-ASR-CoreML`.
+    ///
+    /// Compute units are split per-component because the encoder and decoder
+    /// have different optimal backends: the encoder defaults to `.all` (the
+    /// 30 s fixed-shape graph runs well on GPU on most Macs), while the
+    /// decoder defaults to `.cpuAndNeuralEngine` (the autoregressive
+    /// MLState path is ANE-friendly and ~7× faster there than GPU per the
+    /// rebuilt-encoder PR). A single `computeUnits` parameter that
+    /// propagated into both calls silently overrode the decoder's stated
+    /// `.cpuAndNeuralEngine` default with `.all`, costing real ANE
+    /// throughput on the full-pipeline path.
     public static func fromPretrained(
         encoderModelId: String = CoreMLASREncoder.defaultModelId,
         decoderModelId: String = CoreMLASREncoder.defaultModelId,
         tokenizerModelId: String = "aufklarer/Qwen3-ASR-0.6B-MLX-4bit",
-        computeUnits: MLComputeUnits = CoreMLComputeUnitsResolver.resolved(default: .all),
+        encoderComputeUnits: MLComputeUnits = CoreMLComputeUnitsResolver.resolved(default: .all),
+        decoderComputeUnits: MLComputeUnits = CoreMLComputeUnitsResolver.resolved(default: .cpuAndNeuralEngine),
         cacheDir: URL? = nil,
         offlineMode: Bool = false,
         progressHandler: ((Double, String) -> Void)? = nil
@@ -37,7 +48,7 @@ public class CoreMLASRModel {
         progressHandler?(0.0, "Loading CoreML encoder...")
         let enc = try await CoreMLASREncoder.fromPretrained(
             modelId: encoderModelId,
-            computeUnits: computeUnits,
+            computeUnits: encoderComputeUnits,
             cacheDir: cacheDir,
             offlineMode: offlineMode
         ) { p, msg in
@@ -48,7 +59,7 @@ public class CoreMLASRModel {
         progressHandler?(0.3, "Loading CoreML decoder...")
         let dec = try await CoreMLTextDecoder.fromPretrained(
             modelId: decoderModelId,
-            computeUnits: computeUnits,
+            computeUnits: decoderComputeUnits,
             cacheDir: cacheDir,
             offlineMode: offlineMode
         ) { p, msg in

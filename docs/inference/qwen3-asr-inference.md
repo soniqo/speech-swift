@@ -115,7 +115,7 @@ M5 Pro, 48 GB; LibriSpeech test-clean n=200; isolated per-engine. See [docs/benc
 
 Qwen3-ASR operates in batch mode only. The entire audio input is processed in a single forward pass — there is no streaming or partial transcription support. The audio encoder uses block attention over the full mel spectrogram, and the text decoder generates tokens autoregressively conditioned on the complete encoder output.
 
-For real-time transcription use cases where partial results are needed, consider chunking the audio externally and running separate inference passes on each chunk.
+For long-form audio (> 15 s) and real-time transcription use cases, use [`StreamingASR.transcribeStream(...)`](https://github.com/soniqo/speech-swift/blob/main/Sources/Qwen3ASR/StreamingASR.swift) — it VAD-segments the input at silence boundaries with a `maxSegmentDuration` force-split safety net (default 10 s), so each segment hits the greedy fast path instead of the slow-path escalation that batch `transcribe(...)` engages on inputs over `longInputThresholdSeconds` (default 15 s). Streaming also avoids the per-segment encoder peak that long batch inputs incur on memory-constrained devices.
 
 ## Language Detection
 
