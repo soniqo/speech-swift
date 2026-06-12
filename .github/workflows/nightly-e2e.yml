@@ -41,6 +41,10 @@ jobs:
     # the ANE (env unset -> each loader's normal default).
     env:
       SPEECH_COREML_COMPUTE_UNITS: cpuOnly
+      # The library default stall timeout is end-user tuned (300 s — see
+      # HuggingFaceDownloader.downloadStallTimeoutSeconds). CI wants to fail
+      # fast on a wedged HF download instead of eating the shard timeout.
+      HF_DOWNLOAD_STALL_TIMEOUT: "90"
     strategy:
       fail-fast: false
       matrix:

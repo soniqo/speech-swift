@@ -191,10 +191,18 @@ public final class VoxCPM2TTSModel: Module {
                     progressHandler?(fraction * 0.8, "Refreshing tokenizer snapshot...")
                 }
             } catch {
+                // A refresh failure is only survivable when a usable snapshot
+                // is already on disk. Without one, swallowing here just defers
+                // the failure to loadTokenizer, which throws a confusing
+                // tokenizer error instead of the actionable DownloadError.
+                let fm = FileManager.default
+                let hasUsableSnapshot = fm.fileExists(
+                    atPath: tokenizerCacheDir.appendingPathComponent("tokenizer.json").path)
+                    && fm.fileExists(
+                        atPath: tokenizerCacheDir.appendingPathComponent("tokenizer_config.json").path)
+                guard hasUsableSnapshot else { throw error }
                 let warning = "VoxCPM2 tokenizer refresh failed, continuing with cached snapshot: \(error)"
-                if let data = "[VoxCPM2] \(warning)\n".data(using: .utf8) {
-                    FileHandle.standardOutput.write(data)
-                }
+                logToStderr("[VoxCPM2] \(warning)")
             }
         }
 
@@ -215,7 +223,7 @@ public final class VoxCPM2TTSModel: Module {
         if ProcessInfo.processInfo.environment["VOXCPM2_DEBUG_WLOAD"] == "1" {
             let q = model.base_lm.layers[0].selfAttn.qProj.weight
             let mAbs = q.abs().mean().item(Float.self)
-            print("[VoxCPM2 WLOAD pre-promote] base_lm L0 q_proj mean_abs=\(mAbs) dtype=\(q.dtype)")
+            logToStderr("[VoxCPM2 WLOAD pre-promote] base_lm L0 q_proj mean_abs=\(mAbs) dtype=\(q.dtype)")
         }
         // Upstream promotes low-precision VoxCPM2 runtime dtypes to float32 on
         // Apple Silicon because bf16/fp16 can glitch the diffusion loop.
@@ -227,7 +235,7 @@ public final class VoxCPM2TTSModel: Module {
         if ProcessInfo.processInfo.environment["VOXCPM2_DEBUG_WLOAD"] == "1" {
             let q = model.base_lm.layers[0].selfAttn.qProj.weight
             let mAbs = q.abs().mean().item(Float.self)
-            print("[VoxCPM2 WLOAD post-promote] base_lm L0 q_proj mean_abs=\(mAbs) dtype=\(q.dtype)")
+            logToStderr("[VoxCPM2 WLOAD post-promote] base_lm L0 q_proj mean_abs=\(mAbs) dtype=\(q.dtype)")
         }
 
         progressHandler?(0.98, "Evaluating parameters...")
@@ -338,12 +346,18 @@ public final class VoxCPM2TTSModel: Module {
             )
         } catch {
             if ProcessInfo.processInfo.environment["VOXCPM2_DEBUG_VERBOSE"] == "1" {
-                let message = "[VoxCPM2] tokenizer compatibility load failed, falling back to default loader: \(error)\n"
-                if let data = message.data(using: .utf8) {
-                    FileHandle.standardOutput.write(data)
-                }
+                logToStderr("[VoxCPM2] tokenizer compatibility load failed, falling back to default loader: \(error)")
             }
             return try await AutoTokenizer.from(modelFolder: directory, strict: false)
+        }
+    }
+
+    /// Diagnostics must NEVER go to stdout: consumers like the Speech Studio
+    /// sidecar use stdout as an NDJSON protocol channel, and a stray line
+    /// there fails the in-flight request and desyncs every one after it.
+    private static func logToStderr(_ message: String) {
+        if let data = (message + "\n").data(using: .utf8) {
+            FileHandle.standardError.write(data)
         }
     }
 
