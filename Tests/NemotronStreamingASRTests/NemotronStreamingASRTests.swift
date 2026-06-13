@@ -281,6 +281,60 @@ final class E2ENemotronStreamingASRTests: XCTestCase {
         print("Batch en-US boosted: \(text)")
     }
 
+    /// Regression canary for the boost path: when the decoder runs with
+    /// boosting configured, `wordBoostingChangedDecisions` on the streamed
+    /// partial transcripts must be > 0 — proving the trie was built, the
+    /// failure links resolved, and the per-step bonus actually got added
+    /// to at least one decision. If any of those silently no-op the
+    /// counter stays at zero.
+    ///
+    /// We deliberately do NOT assert the transcript text changes:
+    /// shallow-fusion boost correctly refuses to invent words when there
+    /// is no acoustic evidence, so a phonetically-unanchored OOV boost
+    /// does not flip the output (and rightly so). Counter > 0 is the
+    /// directly-observable evidence that the path engaged.
+    func testWordBoostingActuallyEngagesDecoder() async throws {
+        let m = try model
+
+        // Skip when the bundle lacks `tokenizer.model`. With greedy
+        // vocab fallback the phrase IDs diverge from the decoder's
+        // output IDs (the empirical 10/14 OOV divergence the PR
+        // documents), so the trie's edges don't match the model's
+        // output stream and the boost path never advances past root.
+        // That's exactly the scenario the PR fixes — but we cannot
+        // exercise the fix in a bundle that doesn't ship the file.
+        guard m.wordBoostingTokenizerStatus.mode == .sentencePieceModel else {
+            throw XCTSkip("tokenizer.model not in bundle — boost path requires the real SentencePiece tokenizer. Status=\(m.wordBoostingTokenizerStatus.mode)")
+        }
+
+        let audioURL = Bundle.module.url(forResource: "test_audio", withExtension: "wav")!
+        let audio = try AudioFileLoader.load(url: audioURL, targetSampleRate: 16000)
+
+        // Diagnostic-tier boost on phrases that are phonetically close
+        // to baseline content; the matcher should advance into them
+        // during decoding and flip at least one greedy decision.
+        let boosted = WordBoostingConfig(
+            phrases: ["replacement parts", "shipped tomorrows", "guaranteed"],
+            boost: 5.0
+        )
+        var totalChangedDecisions = 0
+        var lastText = ""
+        for await partial in m.transcribeStream(
+            audio: audio,
+            sampleRate: 16000,
+            language: "en-US",
+            wordBoosting: boosted
+        ) {
+            totalChangedDecisions = max(totalChangedDecisions, partial.wordBoostingChangedDecisions)
+            if partial.isFinal { lastText = partial.text }
+        }
+
+        XCTAssertFalse(lastText.isEmpty, "Boosted streaming transcription must produce text")
+        XCTAssertGreaterThan(totalChangedDecisions, 0,
+            "Configured boosting must change at least one decoder decision; counter=0 means the trie or decoder hook silently no-opped. Text=\(lastText.debugDescription)")
+        print("[boost-engaged] changedDecisions=\(totalChangedDecisions) text=\(lastText)")
+    }
+
     func testStreamingTranscriptionEnglish() async throws {
         let m = try model
         let audioURL = Bundle.module.url(forResource: "test_audio", withExtension: "wav")!

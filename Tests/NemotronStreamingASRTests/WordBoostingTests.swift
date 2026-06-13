@@ -60,6 +60,13 @@ final class WordBoostingTokenizerTests: XCTestCase {
         XCTAssertEqual(tokenizer.encodeForWordBoosting("Vo"), [1, 2, 4])
     }
 
+    /// Hard-coded parity against the canonical Python `sentencepiece` output
+    /// on the Nemotron 3.5 tokenizer.model. Catches normalization drift
+    /// (NFKC, whitespace marker, lowercase) when the model bundle changes.
+    ///
+    /// Regenerate the expected IDs with:
+    ///   python scripts/nemotron_spm_parity.py \\
+    ///       --tokenizer ~/Library/Caches/qwen3-speech/models/aufklarer/Nemotron-3.5-ASR-Streaming-0.6B-CoreML-INT8/tokenizer.model
     func testSentencePieceTokenizerMatchesCachedNemotronModelWhenAvailable() throws {
         let url = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Caches/qwen3-speech/models/aufklarer/Nemotron-3.5-ASR-Streaming-0.6B-CoreML-INT8/tokenizer.model")
