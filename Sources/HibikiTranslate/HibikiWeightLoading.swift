@@ -34,7 +34,21 @@ public enum HibikiWeightLoader {
         let embFile = directory.appendingPathComponent("embeddings.safetensors")
         if FileManager.default.fileExists(atPath: embFile.path) {
             let weights = try MLX.loadArrays(url: embFile)
-            let (temporalEmb, depformerEmb) = splitEmbeddingWeights(weights)
+            var (temporalEmb, depformerEmb) = splitEmbeddingWeights(weights)
+
+            // Hibiki-only EOS→PAD aliasing per upstream `loaders.py:308-312`:
+            //   model.text_emb.weight.data[2] = model.text_emb.weight.data[3]
+            // The model sometimes samples EOS (id 2) too early; aliasing its
+            // embedding onto PAD (id 3) makes early-EOS feedback a no-op so
+            // generation continues to the end of the source audio. Without
+            // this patch the model produces a short, abruptly-truncated
+            // translation (~6 intelligible words for a 3.5s source).
+            if let w = temporalEmb["text_emb.weight"], w.shape.count == 2, w.shape[0] > 3 {
+                let head = w[0..<2]               // rows 0..1 unchanged
+                let row3 = w[3..<4]               // row 3 (PAD) replaces row 2 (EOS)
+                let tail = w[3..<w.shape[0]]      // rows 3..end unchanged
+                temporalEmb["text_emb.weight"] = concatenated([head, row3, tail], axis: 0)
+            }
 
             let tParams = ModuleParameters.unflattened(temporalEmb)
             try model.temporal.update(parameters: tParams, verify: .noUnusedKeys)

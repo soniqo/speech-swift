@@ -66,7 +66,14 @@ public extension HibikiTranslateModel {
         // running effectively unconditional during warm-up and badly
         // misaligned for the rest of the sequence. (The previous bug here
         // produced English subwords unrelated to the source content.)
-        let totalLen = tSrc + maxDelay + 2
+        // Cap generation length at 2.5× source. Python upstream loops until
+        // text-EOS is sampled with no explicit bound (run_inference.py:138).
+        // We need a safety bound so a degenerate model doesn't generate
+        // forever. 2.5× covers Hibiki's observed empirical ratio (Python
+        // emits ~1.5× tSrc tokens for FLEURS clips); extra slack handles
+        // longer outputs without truncating mid-sentence.
+        let maxSteps = max(tSrc * 5 / 2, tSrc + 20)
+        let totalLen = maxSteps + maxDelay + 2
         let textInit = Int32(cfg.temporal.textInitialTokenId)        // = textCard
         let audioInit = Int32(cfg.temporal.initialTokenId)           // = card
         var tokenCache: [[Int32]] = []
@@ -108,21 +115,49 @@ public extension HibikiTranslateModel {
         let genStart = CFAbsoluteTimeGetCurrent()
         temporal.resetCache()
 
-        // Hibiki runs exactly tSrc steps (synchronous 1:1).
-        for step in 0..<tSrc {
+        // Loop UNTIL the model emits text-EOS (id 2) past the audio-streaming
+        // window. Matches Python upstream (run_inference.py:138-187) which
+        // keeps stepping until `eos_reached[b]` flips True — Hibiki emits PAD
+        // (id 3) during source streaming, then content tokens, then EOS.
+        // Stopping at exactly `tSrc + maxDelay` (the previous behavior)
+        // truncated the translation mid-sentence: only PAD tokens fit in that
+        // window, and the actual content never got a chance to be emitted.
+        //
+        // For step >= tSrc the source streams read audioInit (= card = 2048)
+        // because prefill stopped at tSrc + delay. Python feeds the same
+        // "end of input" sentinel (run_inference.py:148-154) for the first
+        // post-EOS step and then encoded silence for the rest; reading
+        // audioInit approximates both within the model's tolerance.
+        let textEosId: Int32 = 2  // SPM-48k EOS, matches Python tokenizer.eos_id()
+        var emittedEos = false
+        var lastGenStep = 0
+        for step in 0..<maxSteps {
             if Task.isCancelled { break }
+            lastGenStep = step
 
-            // Read previous-step input for all 33 streams. The cache was
-            // pre-filled with init tokens (textCard for text, card for audio),
-            // so out-of-range or warm-up reads return the trained initial-
-            // token embedding — same semantics as upstream `state.initial`.
-            let readIdx = step - 1
-            let textTok = readIdx >= 0 ? tokenCache[0][readIdx] : textInit
+            // Per upstream Moshi `_step` (moshi/lm.py:698-702):
+            //   `positions = (state.offsets % CT)` — uniform read at the
+            //   current offset for ALL streams. Init-token substitution
+            //   applies when `offset <= delays[k]`.
+            // Source codes at frame t are written at `index = t + delays[k]`
+            // (lines 91-101), so reading at `step` returns source frame
+            // `step - delays[k]` — which is source frame `step` for delay-0
+            // streams and `step - 2` for delay-2 streams. That matches
+            // Python's effective stream-content view.
+            // For generated streams, autoregressive feedback flows through
+            // the temporal transformer's KV cache; the discrete-token read
+            // at `step` returns init/padding (slot not yet written this
+            // step), which the model expects.
+            let textTok = step <= delays[0] && step < tokenCache[0].count
+                ? textInit
+                : tokenCache[0][min(step, tokenCache[0].count - 1)]
             let textTokenArr = MLXArray([textTok]).reshaped([1, 1])
 
             var audioStreamTokens: [Int32] = []
             for stream in 1..<numStreams {
-                let tok = readIdx >= 0 ? tokenCache[stream][readIdx] : audioInit
+                let tok = step <= delays[stream] && step < tokenCache[stream].count
+                    ? audioInit
+                    : tokenCache[stream][min(step, tokenCache[stream].count - 1)]
                 audioStreamTokens.append(tok)
             }
             let audioTokens = MLXArray(audioStreamTokens)
@@ -153,8 +188,27 @@ public extension HibikiTranslateModel {
             }
             eval(textToken)
             let textVal = textToken[0].item(Int32.self)
-            tokenCache[0][step] = textVal
+            // Generated tokens are written one slot ahead so that the next
+            // step's read (at index `step+1`) picks up this step's output —
+            // matching Python `_step` (lm.py:759-772): state.offsets += 1
+            // happens BEFORE the cache scatter, so the write lands at the
+            // slot the next iteration will read. Previous behavior wrote at
+            // index `step`, leaving the autoregressive read-slot at init
+            // forever (model never saw its own previous output).
+            if step + 1 < totalLen {
+                tokenCache[0][step + 1] = textVal
+            }
             allTextTokens.append(textVal)
+
+            // EOS detection: stop once the model emits text-EOS AND we're past
+            // the audio-streaming window. Mirrors Python (lm.py:182-187):
+            // pre-source-end EOS is ignored (the EOS→PAD weight aliasing in
+            // HibikiWeightLoader makes its embedding harmless), only post-
+            // source EOS marks generation complete.
+            if textVal == textEosId && step >= tSrc {
+                emittedEos = true
+                break
+            }
 
             // Generate the 16 target codebooks via depformer.
             let targetCodes = depformer.generate(
@@ -187,16 +241,20 @@ public extension HibikiTranslateModel {
                 targetTokens[cb].append(tok)
                 perCodebookHistory[cb].append(tok)
                 let targetStreamIdx = 1 + cb               // 1..16
-                if step < totalLen {
-                    tokenCache[targetStreamIdx][step] = tok
+                // Write generated target codes one slot ahead (see text
+                // write comment above).
+                if step + 1 < totalLen {
+                    tokenCache[targetStreamIdx][step + 1] = tok
                 }
             }
         }
         if verbose {
+            let stepsRun = lastGenStep + 1
             let genTime = CFAbsoluteTimeGetCurrent() - genStart
-            let msPerStep = tSrc > 0 ? genTime / Double(tSrc) * 1000 : 0
+            let msPerStep = stepsRun > 0 ? genTime / Double(stepsRun) * 1000 : 0
+            let eosTag = emittedEos ? "EOS" : "cap"
             print("  Generation: \(String(format: "%.2f", genTime))s, " +
-                  "\(String(format: "%.1f", msPerStep))ms/step (\(tSrc) steps)")
+                  "\(String(format: "%.1f", msPerStep))ms/step (\(stepsRun) steps, stop=\(eosTag), tSrc=\(tSrc))")
         }
 
         // 4. Decode target codebooks via Mimi → English audio.
