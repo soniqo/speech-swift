@@ -26,6 +26,16 @@ public final class OmnilingualASRMLXModel {
 
     public static let layerNormEpsilon: Float = 1e-5
     public static let maxAudioSeconds: Double = 40.0
+    // Bug 6 (per-chunk MLX layer-norm + 10 s windowing) was reverted after
+    // asr-bench measurement: it regressed LibriSpeech test-clean WER by
+    // +1.39 pp (4.26 → 5.65) on the same 200-utterance fixture as the
+    // canonical baseline. Per-chunk normalization was the mechanism behind
+    // both the small test_audio.wav improvement ("shiped" → "shipped") and
+    // the LibriSpeech regression — the two effects share a root cause and
+    // can't be cleanly separated. Single-pass mode is the production path.
+    // For users who specifically need chunked-encoder behavior on noisy
+    // long-form audio, the CoreML 10 s window variant
+    // (aufklarer/Omnilingual-ASR-CTC-300M-CoreML-INT8-10s) provides it.
 
     init(
         config: OmnilingualMLXConfig,
@@ -161,8 +171,13 @@ public final class OmnilingualASRMLXModel {
             return ""
         }
 
-        // Layer-norm normalise the raw waveform (matches reference apply_audio_normalization).
-        let normalized = OmnilingualASRModel.layerNormalize(samples, eps: Self.layerNormEpsilon)
+        // Single-pass mode: layer-normalize the whole utterance, run the
+        // encoder once on the full sequence. This matches the reference
+        // Python pipeline (`apply_audio_normalization` over the entire
+        // waveform) and the asr-bench LibriSpeech baseline. See the
+        // class-level docstring on `windowSeconds` for why we don't chunk.
+        let normalized = OmnilingualASRModel.layerNormalize(
+            samples, eps: Self.layerNormEpsilon)
 
         // [B=1, T, C=1]
         let input = MLXArray(normalized).reshaped([1, normalized.count, 1])
@@ -180,15 +195,14 @@ public final class OmnilingualASRMLXModel {
         let T = shape[1]
         let V = shape[2]
 
-        // Argmax → [1, T'] then collapse duplicates in Swift land.
         let argmax = logits.argMax(axis: -1)
-        // Materialise to [Int]
         let ids = argmax.reshaped([T]).asArray(Int32.self).map { Int($0) }
         let collapsed = collapseConsecutiveDuplicates(ids)
-
         let text = vocabulary.decode(collapsed)
+
         let dt = (tEnc1 - tEnc0) * 1000
-        AudioLog.inference.info("Omnilingual MLX (\(self.config.variant.rawValue), \(self.config.bits)bit): forward=\(String(format: "%.1f", dt))ms T=\(T) V=\(V)")
+        AudioLog.inference.info(
+            "Omnilingual MLX (\(self.config.variant.rawValue), \(self.config.bits)bit): forward=\(String(format: "%.1f", dt))ms T=\(T) V=\(V)")
         _ = T
         _ = V
         return text

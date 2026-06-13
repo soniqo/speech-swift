@@ -29,6 +29,10 @@ let package = Package(
             targets: ["PersonaPlex"]
         ),
         .library(
+            name: "HibikiTranslate",
+            targets: ["HibikiTranslate"]
+        ),
+        .library(
             name: "SpeechVAD",
             targets: ["SpeechVAD"]
         ),
@@ -205,6 +209,17 @@ let package = Package(
             dependencies: [
                 "AudioCommon",
                 "MLXCommon",
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXNN", package: "mlx-swift"),
+                .product(name: "MLXFast", package: "mlx-swift")
+            ]
+        ),
+        .target(
+            name: "HibikiTranslate",
+            dependencies: [
+                "AudioCommon",
+                "MLXCommon",
+                "PersonaPlex",
                 .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "MLXNN", package: "mlx-swift"),
                 .product(name: "MLXFast", package: "mlx-swift")
@@ -403,6 +418,7 @@ let package = Package(
                 "CosyVoiceTTS",
                 "Qwen3TTSCoreML",
                 "PersonaPlex",
+                "HibikiTranslate",
                 "SpeechVAD",
                 "SpeechEnhancement",
                 "SourceSeparation",
@@ -474,8 +490,18 @@ let package = Package(
             ]
         ),
         .testTarget(
+            name: "HibikiTranslateTests",
+            dependencies: ["HibikiTranslate", "AudioCommon", "ParakeetASR", "Qwen3TTS", "MADLADTranslation"],
+            resources: [
+                .copy("Resources/fleurs_fr.wav"),
+                .copy("Resources/hibiki_official_es_5s.wav"),
+                .copy("Resources/fleurs_pt.wav"),
+                .copy("Resources/fleurs_de.wav"),
+            ]
+        ),
+        .testTarget(
             name: "Qwen3ASRTests",
-            dependencies: ["Qwen3ASR", "SpeechVAD", "AudioCommon"],
+            dependencies: ["Qwen3ASR", "SpeechVAD", "AudioCommon", "KokoroTTS"],
             resources: [
                 .copy("Resources/test_audio.wav")
             ]

@@ -25,7 +25,11 @@ public enum DownloadError: Error, LocalizedError {
 /// HuggingFace model downloader — shared between ASR, TTS, VAD, etc.
 ///
 /// Uses `HubApi` from the swift-transformers `Hub` module for downloads,
-/// which provides HF token auth, metadata tracking, and resume support.
+/// which provides HF token auth and metadata tracking. Files that finished
+/// downloading are skipped on retry (etag/commit-hash check), but a file
+/// interrupted mid-transfer restarts from byte 0 — there is no usable
+/// mid-file resume in the current Hub stack, which is why the stall guard
+/// and retry ladder below favor patience over fast abort.
 public enum HuggingFaceDownloader {
 
     // MARK: - Cache Directory
@@ -95,6 +99,7 @@ public enum HuggingFaceDownloader {
         to directory: URL,
         additionalFiles: [String] = [],
         offlineMode: Bool = false,
+        retryDelaysSeconds: [Int]? = nil,
         progressHandler: ((Double) -> Void)? = nil
     ) async throws {
         // Skip network requests when weights are already cached
@@ -128,14 +133,19 @@ public enum HuggingFaceDownloader {
         let hub = makeHubApi(for: modelId, repoDir: directory, offlineMode: offlineMode)
         let repo = Hub.Repo(id: modelId)
 
-        // Retry with exponential backoff — HuggingFace can timeout on
-        // slow connections or rate-limit. 3 attempts: 0s, 5s, 15s delays.
-        // Each attempt is wrapped in a progress-stall guard so a wedged
-        // mid-transfer (which `hub.snapshot` won't surface on its own)
-        // aborts and retries instead of hanging until the CI job is killed.
-        let maxRetries = 3
+        // Retry with capped backoff — HuggingFace can timeout on slow
+        // connections or rate-limit, and flaky networks (hotspots, captive
+        // portals) drop out for minutes at a time. Each attempt is wrapped
+        // in a progress-stall guard so a wedged mid-transfer (which
+        // `hub.snapshot` won't surface on its own) aborts and retries
+        // instead of hanging until the CI job is killed.
+        //
+        // No retries in offline mode: the failure is a deterministic local
+        // cache miss, and 110 s of backoff can't change what's on disk.
+        let delays = offlineMode ? [] : (retryDelaysSeconds ?? downloadRetryDelaysSeconds)
+        let maxAttempts = delays.count + 1
         var lastError: Error?
-        for attempt in 1...maxRetries {
+        for attempt in 1...maxAttempts {
             do {
                 try await withDownloadStallGuard(modelId: modelId) { reportProgress in
                     try await hub.snapshot(from: repo, matching: globs) { progress in
@@ -146,13 +156,15 @@ public enum HuggingFaceDownloader {
                 return  // Success
             } catch {
                 lastError = error
-                if attempt < maxRetries {
-                    let delay = attempt == 1 ? 5 : 15
-                    try await Task.sleep(for: .seconds(delay))
+                if attempt < maxAttempts {
+                    try await Task.sleep(for: .seconds(delays[attempt - 1]))
                 }
             }
         }
-        throw DownloadError.failedToDownload("\(modelId): \(lastError?.localizedDescription ?? "unknown")")
+        throw DownloadError.failedToDownload(
+            "\(modelId) after \(maxAttempts) attempt\(maxAttempts == 1 ? "" : "s") "
+                + "(target: \(directory.path)): "
+                + (lastError?.localizedDescription ?? "unknown"))
     }
 
     /// Download an explicit list of files from HuggingFace without adding any
@@ -163,6 +175,7 @@ public enum HuggingFaceDownloader {
         to directory: URL,
         files: [String],
         offlineMode: Bool = false,
+        retryDelaysSeconds: [Int]? = nil,
         progressHandler: ((Double) -> Void)? = nil
     ) async throws {
         if files.isEmpty {
@@ -174,9 +187,12 @@ public enum HuggingFaceDownloader {
         let repo = Hub.Repo(id: modelId)
 
         let globs = files.map { $0 }
-        let maxRetries = 3
+        // Same retry semantics as downloadWeights, including the offline
+        // no-retry rule — keep the two loops in lockstep.
+        let delays = offlineMode ? [] : (retryDelaysSeconds ?? downloadRetryDelaysSeconds)
+        let maxAttempts = delays.count + 1
         var lastError: Error?
-        for attempt in 1...maxRetries {
+        for attempt in 1...maxAttempts {
             do {
                 try await withDownloadStallGuard(modelId: modelId) { reportProgress in
                     try await hub.snapshot(from: repo, matching: globs) { progress in
@@ -187,14 +203,30 @@ public enum HuggingFaceDownloader {
                 return
             } catch {
                 lastError = error
-                if attempt < maxRetries {
-                    let delay = attempt == 1 ? 5 : 15
-                    try await Task.sleep(for: .seconds(delay))
+                if attempt < maxAttempts {
+                    try await Task.sleep(for: .seconds(delays[attempt - 1]))
                 }
             }
         }
-        throw DownloadError.failedToDownload("\(modelId): \(lastError?.localizedDescription ?? "unknown")")
+        throw DownloadError.failedToDownload(
+            "\(modelId) after \(maxAttempts) attempt\(maxAttempts == 1 ? "" : "s") "
+                + "(target: \(directory.path)): "
+                + (lastError?.localizedDescription ?? "unknown"))
     }
+
+    // MARK: - Retry ladder
+
+    /// Delays between download attempts. One more attempt than entries:
+    /// 5 attempts with 5/15/30/60 s pauses (~110 s of backoff on top of the
+    /// per-attempt stall patience). Generous on purpose — abandoned attempts
+    /// restart files from byte 0 with the current Hub stack, so the cheap
+    /// resource here is wall-clock, not bytes. A network that's down for a
+    /// couple of minutes (AP roam, hotspot sleep, captive-portal re-auth)
+    /// should not kill a 2.75 GB first-run download.
+    static let downloadRetryDelaysSeconds = [5, 15, 30, 60]
+
+    /// Total attempts per download (retries + the initial try).
+    static var downloadMaxAttempts: Int { downloadRetryDelaysSeconds.count + 1 }
 
     // MARK: - Download stall guard
 
@@ -202,14 +234,22 @@ public enum HuggingFaceDownloader {
     /// considered wedged and aborted. `hub.snapshot` reports
     /// `fractionCompleted` continuously while bytes flow, so a healthy
     /// (even slow) transfer keeps resetting the clock; only a genuinely
-    /// stalled connection trips this. Overridable via
-    /// `HF_DOWNLOAD_STALL_TIMEOUT` for CI tuning.
+    /// stalled connection trips this.
+    ///
+    /// The default is tuned for end users, not CI: aborted attempts restart
+    /// each file from byte 0 (the Hub stack's mid-file resume never engages
+    /// on a fresh download), so firing the guard on a connection that would
+    /// have recovered throws away every byte of that attempt. Flaky networks
+    /// — AP roams, captive-portal re-auth, hotspot sleep — routinely stall
+    /// for 1–3 minutes and then recover, hence 300 s. CI pins
+    /// `HF_DOWNLOAD_STALL_TIMEOUT=90` to keep failing fast (app users can't
+    /// set env vars; CI can).
     static var downloadStallTimeoutSeconds: Int {
         if let raw = ProcessInfo.processInfo.environment["HF_DOWNLOAD_STALL_TIMEOUT"],
            let v = Int(raw), v > 0 {
             return v
         }
-        return 90
+        return 300
     }
 
     /// Thread-safe last-progress timestamp. `hub.snapshot`'s progress

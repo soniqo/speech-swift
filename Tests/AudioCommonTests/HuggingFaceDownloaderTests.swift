@@ -57,12 +57,15 @@ final class HuggingFaceDownloaderTests: XCTestCase {
         let fakeWeights = tmpDir.appendingPathComponent("model.safetensors")
         try? Data([0x00]).write(to: fakeWeights)
 
-        // offlineMode=false should attempt network (and fail for fake model)
+        // offlineMode=false should attempt network (and fail for fake model).
+        // No retry delays: a 404 is a 404 — the test only cares that the
+        // network path was attempted, not the production backoff ladder.
         do {
             try await HuggingFaceDownloader.downloadWeights(
                 modelId: "nonexistent/model-that-does-not-exist",
                 to: tmpDir,
-                offlineMode: false
+                offlineMode: false,
+                retryDelaysSeconds: []
             )
             XCTFail("Should have thrown for nonexistent model with offlineMode=false")
         } catch {
@@ -294,5 +297,30 @@ final class HuggingFaceDownloaderTests: XCTestCase {
                 reportProgress(Double(i) / 8.0)
             }
         }
+    }
+
+    /// The shipped stall default is end-user tuned: aborted attempts restart
+    /// files from byte 0, so the guard must out-wait flaky-network recovery
+    /// (AP roams, hotspot sleep), not fail fast like CI. Locks the default
+    /// so a refactor doesn't silently regress it to a CI-tuned value.
+    /// Skipped when HF_DOWNLOAD_STALL_TIMEOUT is set (the override IS the
+    /// behavior under test elsewhere; here we want the bare default).
+    func testStallTimeoutDefaultIsEndUserTuned() throws {
+        try XCTSkipIf(
+            ProcessInfo.processInfo.environment["HF_DOWNLOAD_STALL_TIMEOUT"] != nil,
+            "HF_DOWNLOAD_STALL_TIMEOUT override active; default not observable")
+        XCTAssertEqual(HuggingFaceDownloader.downloadStallTimeoutSeconds, 300)
+    }
+
+    /// Retry ladder sanity: attempts = delays + 1, delays strictly grow,
+    /// and total backoff stays bounded (≲2 min) so a hard failure still
+    /// terminates in reasonable time.
+    func testRetryLadderShape() {
+        let delays = HuggingFaceDownloader.downloadRetryDelaysSeconds
+        XCTAssertEqual(HuggingFaceDownloader.downloadMaxAttempts, delays.count + 1)
+        XCTAssertTrue(zip(delays, delays.dropFirst()).allSatisfy { $0 < $1 },
+                      "backoff should strictly grow")
+        XCTAssertLessThanOrEqual(delays.reduce(0, +), 120,
+                                 "total backoff should stay bounded")
     }
 }

@@ -2,9 +2,10 @@ import Foundation
 import AudioCommon
 
 /// SentencePiece vocabulary for Nemotron-3.5 ASR Streaming Multilingual
-/// (13087 BPE pieces + 1 blank). Punctuation, capitalization, and per-language
-/// tags (e.g. `<en-US>`) are emitted as regular BPE tokens; decode passes them
-/// through as-is — callers may strip `<lang-tag>` markers downstream.
+/// (13087 BPE pieces + 1 blank). Punctuation and capitalization render as
+/// regular BPE tokens; per-language tags (`<en-US>`, `<ar-AR>`, …) and
+/// other angle-bracket special tokens (`<unk>`, `<s>`, `</s>`, `<auto>`)
+/// are stripped during decode so they don't pollute the user-facing text.
 public struct NemotronVocabulary: Sendable {
     private let idToToken: [Int: String]
     private let tokenToId: [String: Int]
@@ -34,11 +35,24 @@ public struct NemotronVocabulary: Sendable {
         return NemotronVocabulary(idToToken: mapping)
     }
 
-    /// Decode token IDs to text. Blank is filtered upstream.
+    /// True when `token` is an angle-bracket-wrapped special marker
+    /// (`<en-US>`, `<unk>`, `<s>`, `</s>`, `<auto>`, etc.) that should be
+    /// stripped from the user-facing transcript. A token with whitespace
+    /// inside the brackets is considered ordinary text (defensive — the
+    /// SentencePiece vocab doesn't produce these, but keeps the filter
+    /// from misclassifying contrived inputs).
+    static func isSpecialToken(_ token: String) -> Bool {
+        guard token.first == "<", token.last == ">", token.count >= 3 else { return false }
+        return !token.contains(" ") && !token.contains("\t")
+    }
+
+    /// Decode token IDs to text. Blank is filtered upstream; angle-bracket
+    /// special tokens (language tags, `<unk>`, `<s>`, …) are filtered here.
     public func decode(_ tokenIds: [Int]) -> String {
         var text = ""
         for id in tokenIds {
             guard let token = idToToken[id] else { continue }
+            if Self.isSpecialToken(token) { continue }
             text += token
         }
         return text.replacingOccurrences(of: "▁", with: " ").trimmingCharacters(in: .whitespaces)
@@ -135,7 +149,9 @@ public struct NemotronVocabulary: Sendable {
         return "▁" + normalized.replacingOccurrences(of: " ", with: "▁")
     }
 
-    /// Decode with per-word confidence scores.
+    /// Decode with per-word confidence scores. Angle-bracket special tokens
+    /// are skipped so their log-probs don't contaminate adjacent words'
+    /// confidence averages.
     public func decodeWords(_ tokenIds: [Int], logProbs: [Float]) -> [WordConfidence] {
         guard tokenIds.count == logProbs.count else { return [] }
 
@@ -145,6 +161,7 @@ public struct NemotronVocabulary: Sendable {
 
         for (i, id) in tokenIds.enumerated() {
             guard let token = idToToken[id] else { continue }
+            if Self.isSpecialToken(token) { continue }
             let isWordStart = token.hasPrefix("▁") && !currentWord.isEmpty
 
             if isWordStart {

@@ -168,7 +168,12 @@ public struct AudioServer {
 
             let enhancer = try await state.loadEnhancer()
             let audio = try decodeWAVData(audioData, targetSampleRate: 48000)
-            let enhanced = try enhancer.enhance(audio: audio, sampleRate: 48000)
+            // Auto-chunk long inputs. The body cap of 50 MB allows roughly 4-5
+            // min of 48 kHz mono PCM, which can easily exceed the model's 60 s
+            // single-shot cap. enhanceChunked() does its own short-input
+            // fast-path so we route everything through it (bit-identical to
+            // enhance() when duration ≤ 45 s).
+            let enhanced = try enhancer.enhanceChunked(audio: audio, sampleRate: 48000)
 
             let wavData = try encodeWAV(samples: enhanced, sampleRate: 48000)
             return Response(
@@ -221,8 +226,11 @@ final class ModelState: @unchecked Sendable {
         let m = try await PersonaPlexModel.fromPretrained(progressHandler: logProgress)
         personaplex = m
         do {
-            let cacheDir = try HuggingFaceDownloader.getCacheDirectory(
-                for: "aufklarer/PersonaPlex-7B-MLX-4bit")
+            // Resolve the SPM tokenizer cache dir from the LOADED model's
+            // modelId — not a hardcoded 4-bit repo. Same root cause as #300:
+            // 8-bit users were silently falling back to no-decoder mode
+            // because the cache dir lookup pointed at the wrong directory.
+            let cacheDir = try HuggingFaceDownloader.getCacheDirectory(for: m.modelId)
             let spmPath = cacheDir.appendingPathComponent("tokenizer_spm_32k_3.model").path
             if FileManager.default.fileExists(atPath: spmPath) {
                 spmDecoder = try SentencePieceDecoder(modelPath: spmPath)

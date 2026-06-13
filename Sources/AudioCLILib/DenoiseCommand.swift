@@ -18,6 +18,15 @@ public struct DenoiseCommand: ParsableCommand {
     @Option(name: .shortAndLong, help: "Model ID on HuggingFace")
     public var model: String = SpeechEnhancer.defaultModelId
 
+    @Option(name: .long, help: "Window size in seconds when auto-chunking long inputs (default: 45.0)")
+    public var chunkSeconds: Double = 45.0
+
+    @Option(name: .long, help: "Crossfade overlap between chunks in milliseconds (default: 500)")
+    public var overlapMs: Int = 500
+
+    @Flag(name: .long, help: "Disable auto-chunking; error if input exceeds the model's 60s cap")
+    public var noChunk: Bool = false
+
     public init() {}
 
     public func run() throws {
@@ -34,9 +43,27 @@ public struct DenoiseCommand: ParsableCommand {
                 progressHandler: reportProgress
             )
 
-            print("Enhancing audio...")
+            // Auto-chunk inputs above the single-shot 60s cap unless the
+            // user explicitly opted out with --no-chunk. Inputs at or under
+            // chunkSeconds flow through the fast single-shot path inside
+            // enhanceChunked() and are bit-identical to plain enhance().
+            let willChunk = !noChunk && duration > chunkSeconds
+            if willChunk {
+                let chunkCount = Int(ceil((duration - Double(overlapMs) / 1000) / (chunkSeconds - Double(overlapMs) / 1000)))
+                print("Auto-chunking: \(String(format: "%.1f", duration))s → \(chunkCount) chunks of \(String(format: "%.1f", chunkSeconds))s with \(overlapMs)ms crossfade")
+            } else {
+                print("Enhancing audio...")
+            }
+
             let start = Date()
-            let enhanced = try enhancer.enhance(audio: audio, sampleRate: 48000)
+            let enhanced: [Float]
+            if noChunk {
+                enhanced = try enhancer.enhance(audio: audio, sampleRate: 48000)
+            } else {
+                enhanced = try enhancer.enhanceChunked(
+                    audio: audio, sampleRate: 48000,
+                    chunkSeconds: chunkSeconds, overlapMs: overlapMs)
+            }
             let elapsed = Date().timeIntervalSince(start)
 
             let enhancedDuration = Double(enhanced.count) / 48000.0

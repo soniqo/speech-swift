@@ -146,6 +146,21 @@ public class StreamingSession {
         let samplesPerChunk = config.streaming.melFrames * config.hopLength
         let shiftMelFrames = config.streaming.outputFrames * config.subsamplingFactor
         let shiftSamples = shiftMelFrames * config.hopLength
+        // For the multilingual config (chunkMs=320) shiftSamples ==
+        // samplesPerChunk — adjacent chunks do NOT overlap, and that IS
+        // correct for this checkpoint. The trained encoder takes exactly
+        // `chunk_size` mel frames per call; right-context is provided via
+        // the streaming caches (`cache_last_*`), not via future audio in
+        // the current call. The export script trimmed the right-context
+        // outputs at trace time (`keep_all_outputs=False`), so feeding
+        // overlapped audio here would re-process already-consumed frames
+        // and desync the RNN-T predictor's LSTM state.
+        //
+        // The chunker's correctness is regressed by
+        // `E2ENemotronHarshAudioTests.testStreamingMatchesBatchOnCleanLongUtterance`
+        // (expects ≥0.95 streaming-vs-batch recall on clean continuous
+        // speech). DO NOT introduce audio-overlap here — see
+        // Configuration.swift docstring on `rightContext`.
         var results: [NemotronStreamingASRModel.PartialTranscript] = []
 
         while sampleBuffer.count >= samplesPerChunk {

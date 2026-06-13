@@ -42,9 +42,18 @@ let max = try await OmnilingualASRMLXModel.fromPretrained(variant: .b7, bits: 4)
 let text = try model.transcribeAudio(audio, sampleRate: 16000)
 ```
 
-The MLX backend takes any input length up to the 40 s reference cap — there
-is no fixed-window CoreML graph to pad to. Quantisation is mlx-swift
-`QuantizedLinear` (group size 64, bits 4 or 8).
+The MLX backend takes any input length up to the 40 s reference cap as a
+single forward pass — there is no fixed-window CoreML graph to pad to.
+Quantisation is mlx-swift `QuantizedLinear` (group size 64, bits 4 or 8).
+
+> Note: a 10 s chunker mirroring the CoreML graph was prototyped and
+> measured against `asr-bench` on LibriSpeech test-clean (200 utterances).
+> Per-chunk layer-norm regressed WER by +1.39 pp on the canonical
+> read-speech baseline while delivering only a marginal improvement on the
+> 20 s synthetic test fixture. The chunker was reverted; users who
+> specifically need chunked-encoder behavior on noisy long-form audio can
+> use the CoreML 10 s window variant
+> (`aufklarer/Omnilingual-ASR-CTC-300M-CoreML-INT8-10s`).
 
 ## CLI
 
@@ -75,16 +84,18 @@ The Swift implementation mirrors Meta's `ASRInferencePipeline.transcribe()`:
 8. SentencePiece detokenize, skip_special_tokens=True
 ```
 
-### Why per-chunk layer_norm
+### Why per-chunk layer_norm (CoreML only)
 
 The reference pipeline normalizes the raw waveform of the **whole utterance**
 before any chunking. Because the CoreML graph is traced at a fixed window,
-this Swift port chunks first and normalizes each chunk's real content
+the CoreML port chunks first and normalizes each chunk's real content
 (before zero padding), so the mean/variance stats are computed over actual
 audio rather than silence. For sub-window inputs this matches reference
 behavior; for multi-window inputs each chunk is independently normalized
-(a small divergence from reference batch behavior, acceptable for utterances
-that already fit in one window — the typical case).
+— a small divergence from reference batch behavior, acceptable for utterances
+that already fit in one window (the typical case). The MLX backend has no
+fixed-window constraint and uses a single whole-utterance normalization,
+matching the reference more closely.
 
 ### 40 s hard cap
 

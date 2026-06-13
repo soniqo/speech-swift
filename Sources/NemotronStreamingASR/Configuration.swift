@@ -31,6 +31,26 @@ public struct NemotronStreamingConfig: Codable, Sendable {
     public struct StreamingConfig: Codable, Sendable {
         public let chunkMs: Int
         public let chunkSize: Int
+        /// Number of right-context (future) frames the encoder was trained
+        /// with. **This is model-topology metadata, not a runtime knob.**
+        ///
+        /// The CoreML encoder graph already incorporates right-context via
+        /// the streaming cache mechanism: at conversion time the export
+        /// script (`speech-models/.../convert.py:172`, `keep_all_outputs=False`)
+        /// trimmed the right-context outputs, and the encoder pulls future
+        /// context from `cache_last_channel`/`cache_last_time` filled by
+        /// the *previous* chunk. The Swift streaming session correctly
+        /// feeds exactly `chunk_size` mel frames per call with no audio
+        /// overlap — that's what the trained graph expects.
+        ///
+        /// DO NOT add audio overlap at the Swift layer (e.g. shrinking
+        /// `shiftSamples` below `samplesPerChunk` to mirror Parakeet). The
+        /// RNN-T predictor's LSTM state advances on every non-blank
+        /// emission and would be permanently desynced by re-feeding
+        /// overlapped frames. The streaming-vs-batch recall measured on
+        /// `E2ENemotronHarshAudioTests.testStreamingMatchesBatchOnCleanLongUtterance`
+        /// is the chunker's correctness signal — a regression there means
+        /// the cache I/O wiring broke, not that the chunker needs overlap.
         public let rightContext: Int
         public let melFrames: Int
         public let preCacheSize: Int

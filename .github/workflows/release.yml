@@ -62,13 +62,19 @@ jobs:
         run: |
           SHA=$(shasum -a 256 dist/speech-macos-arm64.tar.gz | awk '{print $1}')
           TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
           URL="https://github.com/${{ github.repository }}/releases/download/${TAG}/speech-macos-arm64.tar.gz"
 
           git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/soniqo/homebrew-tap.git" /tmp/homebrew-tap
           cd /tmp/homebrew-tap
 
+          # All three sed rewrites must stay in sync — previously only `url`
+          # and `sha256` were rewritten while `version` drifted, producing
+          # tap formulas that downloaded the new tarball but reported the
+          # old version (see soniqo/speech-swift#298).
           sed -i '' "s|url \".*\"|url \"${URL}\"|" Formula/speech.rb
           sed -i '' "s|sha256 \".*\"|sha256 \"${SHA}\"|" Formula/speech.rb
+          sed -i '' "s|version \".*\"|version \"${VERSION}\"|" Formula/speech.rb
 
           git config user.name "soniqo-release-bot[bot]"
           git config user.email "soniqo-release-bot[bot]@users.noreply.github.com"

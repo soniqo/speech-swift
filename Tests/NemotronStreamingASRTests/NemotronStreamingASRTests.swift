@@ -133,6 +133,43 @@ final class NemotronVocabularyTests: XCTestCase {
         XCTAssertEqual(words[0].confidence, 0.9, accuracy: 1e-4)
         XCTAssertEqual(words[1].confidence, 0.8, accuracy: 1e-4)
     }
+
+    /// Unit-level reproducer for the reported `<en-US>` leak. The vocab file
+    /// of `aufklarer/Nemotron-3.5-ASR-Streaming-0.6B-CoreML-INT8` contains
+    /// `<en-US>`, `<en-GB>`, `<ar-AR>`, `<es-ES>`, etc. as ordinary BPE
+    /// pieces (~60 language tags). `decode()` currently has no special-token
+    /// filter (see `Vocabulary.swift:31-38` — the doc comment itself admits
+    /// "callers may strip <lang-tag> markers downstream"). When the RNN-T
+    /// joint's argmax lands on a language-ID slot — which it can on
+    /// overlapped / noisy / language-ambiguous audio — that literal
+    /// `<en-US>` flows into the user-facing String.
+    ///
+    /// This test asserts the absence behaviour the fix must deliver. It
+    /// reproduces the bug at the lowest possible level: a 2-token vocab, no
+    /// model, no audio. **This test is expected to fail until decode()
+    /// gains a skip-special-tokens path.**
+    func testDecodeFiltersLanguageTagTokens() {
+        let vocab = NemotronVocabulary(idToToken: [
+            0: "<en-US>",
+            1: "▁hello",
+            2: "▁world",
+            3: "<ar-AR>",
+        ])
+        let text = vocab.decode([0, 1, 2, 3])
+        XCTAssertFalse(text.contains("<en-US>"),
+            "decode() leaked <en-US> language-tag: \"\(text)\"")
+        XCTAssertFalse(text.contains("<ar-AR>"),
+            "decode() leaked <ar-AR> language-tag: \"\(text)\"")
+        let langTagRegex = try? NSRegularExpression(pattern: "<[a-zA-Z][a-zA-Z-]*>")
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        XCTAssertEqual(
+            langTagRegex?.numberOfMatches(in: text, range: range), 0,
+            "decode() must strip <lang-tag>-style special tokens — got: \"\(text)\""
+        )
+        // The non-special tokens still render through.
+        XCTAssertTrue(text.contains("hello"))
+        XCTAssertTrue(text.contains("world"))
+    }
 }
 
 // MARK: - E2E Tests (require local CoreML bundle or HF download)
