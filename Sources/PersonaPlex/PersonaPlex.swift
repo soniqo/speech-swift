@@ -18,8 +18,22 @@ public final class PersonaPlexModel: Module {
 
     public var cfg: PersonaPlexConfig
 
-    /// Model ID used to load this instance (for resolving voice files etc.)
-    public private(set) var modelId: String = defaultModelId
+    /// Model ID used to load this instance (for resolving voice files etc.).
+    /// Setter is `internal(set)` so tests with `@testable import` can pin a
+    /// fake modelId when verifying that `modelCacheDirectory()` correctly
+    /// reflects the loaded model (regression coverage for #300, where a
+    /// hardcoded modelId silently broke the 8-bit variant).
+    public internal(set) var modelId: String = defaultModelId
+
+    /// HuggingFace cache directory for this model instance, resolved from
+    /// `modelId`. Used by every site that loads an auxiliary file co-located
+    /// with the model bundle (voice prompts, SPM tokenizer). Centralizing
+    /// the lookup eliminates the copy-paste pattern that caused #300, where
+    /// one of four voice-loading sites silently hardcoded the 4-bit repo
+    /// and broke the 8-bit variant.
+    internal func modelCacheDirectory() throws -> URL {
+        try HuggingFaceDownloader.getCacheDirectory(for: modelId)
+    }
 
     /// SentencePiece tokenizer for encoding/decoding text (loaded from model directory).
     public private(set) var tokenizer: SentencePieceDecoder?
@@ -133,7 +147,7 @@ public final class PersonaPlexModel: Module {
         let voiceEmbeddings: MLXArray?
         let voiceCache: MLXArray?  // [1, 17, CT] ring buffer with voice prompt tokens
         do {
-            let modelDir = try HuggingFaceDownloader.getCacheDirectory(for: modelId)
+            let modelDir = try modelCacheDirectory()
             let voiceDir = modelDir.appendingPathComponent("voices")
             let voiceFile = voiceDir.appendingPathComponent("\(voice.rawValue).safetensors")
             if FileManager.default.fileExists(atPath: voiceFile.path) {
@@ -622,8 +636,7 @@ public final class PersonaPlexModel: Module {
                     let voiceEmbeddings: MLXArray?
                     let voiceCache: MLXArray?
                     do {
-                        let modelDir = try HuggingFaceDownloader.getCacheDirectory(
-                            for: modelId)
+                        let modelDir = try modelCacheDirectory()
                         let voiceFile = modelDir.appendingPathComponent("voices")
                             .appendingPathComponent("\(voice.rawValue).safetensors")
                         if FileManager.default.fileExists(atPath: voiceFile.path) {
@@ -1012,8 +1025,7 @@ public final class PersonaPlexModel: Module {
                     let voiceEmbeddings: MLXArray?
                     let voiceCache: MLXArray?
                     do {
-                        let modelDir = try HuggingFaceDownloader.getCacheDirectory(
-                            for: modelId)
+                        let modelDir = try modelCacheDirectory()
                         let voiceFile = modelDir.appendingPathComponent("voices")
                             .appendingPathComponent("\(voice.rawValue).safetensors")
                         if FileManager.default.fileExists(atPath: voiceFile.path) {
@@ -1331,7 +1343,7 @@ public final class PersonaPlexModel: Module {
         let voiceEmbeddings: MLXArray?
         let voiceCache: MLXArray?
         do {
-            let modelDir = try HuggingFaceDownloader.getCacheDirectory(for: modelId)
+            let modelDir = try modelCacheDirectory()
             let voiceDir = modelDir.appendingPathComponent("voices")
             let voiceFile = voiceDir.appendingPathComponent("\(voice.rawValue).safetensors")
             if FileManager.default.fileExists(atPath: voiceFile.path) {

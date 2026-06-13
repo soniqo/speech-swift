@@ -226,8 +226,11 @@ final class ModelState: @unchecked Sendable {
         let m = try await PersonaPlexModel.fromPretrained(progressHandler: logProgress)
         personaplex = m
         do {
-            let cacheDir = try HuggingFaceDownloader.getCacheDirectory(
-                for: "aufklarer/PersonaPlex-7B-MLX-4bit")
+            // Resolve the SPM tokenizer cache dir from the LOADED model's
+            // modelId — not a hardcoded 4-bit repo. Same root cause as #300:
+            // 8-bit users were silently falling back to no-decoder mode
+            // because the cache dir lookup pointed at the wrong directory.
+            let cacheDir = try HuggingFaceDownloader.getCacheDirectory(for: m.modelId)
             let spmPath = cacheDir.appendingPathComponent("tokenizer_spm_32k_3.model").path
             if FileManager.default.fileExists(atPath: spmPath) {
                 spmDecoder = try SentencePieceDecoder(modelPath: spmPath)
