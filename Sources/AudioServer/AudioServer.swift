@@ -257,9 +257,34 @@ private func logProgress(_ progress: Double, _ status: String) {
 /// Per-connection session state for the OpenAI Realtime protocol.
 private final class RealtimeSession {
     var engine: String = "cosyvoice"
+    /// The canonical model name last set via session.update (or the default).
+    var model: String = "qwen3-speech"
     var language: String = "english"
     var inputAudioBuffer = Data()
     var inputSampleRate: Int = 24000
+}
+
+/// Map an OpenAI-style model name to the engine string used by AudioServer.
+///
+/// ASR engines: qwen3, parakeet, nemotron, omnilingual
+/// TTS engines:  qwen3, cosyvoice, voxcpm2, magpie
+///
+/// Variant names like "qwen3-0.6b" or "qwen3-0.6b-coreml" are accepted and
+/// resolve to the base engine. Unknown names are returned as-is so callers
+/// can apply forward-compatibility rules without changing the active engine.
+func resolveModelToEngine(_ model: String) -> String? {
+    let lower = model.lowercased()
+    // ASR model names
+    if lower == "qwen3" || lower.hasPrefix("qwen3-") { return "qwen3" }
+    if lower == "parakeet" || lower.hasPrefix("parakeet-") { return "parakeet" }
+    if lower == "nemotron" || lower.hasPrefix("nemotron-") { return "nemotron" }
+    if lower == "omnilingual" || lower.hasPrefix("omnilingual-") { return "omnilingual" }
+    // TTS model names (qwen3-speech/* already caught above via qwen3- prefix)
+    if lower == "cosyvoice" || lower.hasPrefix("cosyvoice-") { return "cosyvoice" }
+    if lower == "voxcpm2" || lower.hasPrefix("voxcpm2-") { return "voxcpm2" }
+    if lower == "magpie" || lower.hasPrefix("magpie-") { return "magpie" }
+    // Unknown model — signal forward-compatibility: caller keeps current engine
+    return nil
 }
 
 /// Handle /v1/realtime: OpenAI Realtime API compatible protocol.
@@ -272,12 +297,12 @@ func handleRealtimeWS(
     let session = RealtimeSession()
     let sessionId = UUID().uuidString
 
-    // Send session.created
+    // Send session.created — reflect the actual current model name.
     try await outbound.write(.text(formatJSON([
         "type": "session.created",
         "session": [
             "id": sessionId,
-            "model": "qwen3-speech",
+            "model": session.model,
             "modalities": ["audio", "text"],
             "input_audio_format": "pcm16",
             "output_audio_format": "pcm16"
@@ -297,6 +322,16 @@ func handleRealtimeWS(
 
         case "session.update":
             if let sessionConfig = json["session"] as? [String: Any] {
+                // Handle `model` field: resolve to an engine if known, or store
+                // the name unchanged and leave the active engine alone for
+                // forward-compatibility with future model names.
+                if let modelName = sessionConfig["model"] as? String {
+                    session.model = modelName
+                    if let resolved = resolveModelToEngine(modelName) {
+                        session.engine = resolved
+                    }
+                    // Unknown model name: accept and echo, engine unchanged.
+                }
                 if let engine = sessionConfig["engine"] as? String {
                     session.engine = engine
                 }
@@ -311,6 +346,7 @@ func handleRealtimeWS(
                 "type": "session.updated",
                 "session": [
                     "id": sessionId,
+                    "model": session.model,
                     "engine": session.engine,
                     "language": session.language,
                     "input_audio_format": "pcm16",
