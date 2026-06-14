@@ -6,6 +6,9 @@ import NIOCore
 import Qwen3ASR
 import Qwen3TTS
 import CosyVoiceTTS
+import ParakeetASR
+import KokoroTTS
+import VoxCPM2TTS
 import PersonaPlex
 import SpeechEnhancement
 import AudioCommon
@@ -190,8 +193,11 @@ public struct AudioServer {
 
 final class ModelState: @unchecked Sendable {
     private var asr: Qwen3ASRModel?
+    private var parakeet: ParakeetASRModel?
     private var tts: Qwen3TTSModel?
     private var cosyvoice: CosyVoiceTTSModel?
+    private var kokoro: KokoroTTSModel?
+    private var voxcpm2: VoxCPM2TTSModel?
     private var personaplex: PersonaPlexModel?
     private var enhancer: SpeechEnhancer?
     var spmDecoder: SentencePieceDecoder?
@@ -201,6 +207,14 @@ final class ModelState: @unchecked Sendable {
         print("[server] Loading Qwen3-ASR...")
         let m = try await Qwen3ASRModel.fromPretrained(progressHandler: logProgress)
         asr = m
+        return m
+    }
+
+    func loadParakeet() async throws -> ParakeetASRModel {
+        if let m = parakeet { return m }
+        print("[server] Loading Parakeet TDT v3...")
+        let m = try await ParakeetASRModel.fromPretrained(progressHandler: logProgress)
+        parakeet = m
         return m
     }
 
@@ -217,6 +231,22 @@ final class ModelState: @unchecked Sendable {
         print("[server] Loading CosyVoice...")
         let m = try await CosyVoiceTTSModel.fromPretrained(progressHandler: logProgress)
         cosyvoice = m
+        return m
+    }
+
+    func loadKokoro() async throws -> KokoroTTSModel {
+        if let m = kokoro { return m }
+        print("[server] Loading Kokoro-82M...")
+        let m = try await KokoroTTSModel.fromPretrained(progressHandler: logProgress)
+        kokoro = m
+        return m
+    }
+
+    func loadVoxCPM2() async throws -> VoxCPM2TTSModel {
+        if let m = voxcpm2 { return m }
+        print("[server] Loading VoxCPM2...")
+        let m = try await VoxCPM2TTSModel.fromPretrained(progressHandler: logProgress)
+        voxcpm2 = m
         return m
     }
 
@@ -255,35 +285,69 @@ private func logProgress(_ progress: Double, _ status: String) {
 // MARK: - OpenAI Realtime API Handler
 
 /// Per-connection session state for the OpenAI Realtime protocol.
+///
+/// ASR and TTS engines are tracked independently so a client can switch the
+/// transcription backend without disturbing synthesis (and vice versa). The
+/// `model` field is the canonical OpenAI-style name last set by the client;
+/// it does not by itself control routing — the resolved engine in
+/// `asrEngine`/`ttsEngine` does.
 private final class RealtimeSession {
-    var engine: String = "cosyvoice"
+    /// ASR backend used by `input_audio_buffer.commit`.
+    var asrEngine: String = "parakeet"
+    /// TTS backend used by `response.create`.
+    var ttsEngine: String = "kokoro"
     /// The canonical model name last set via session.update (or the default).
-    var model: String = "qwen3-speech"
+    var model: String = "kokoro"
     var language: String = "english"
+    /// Optional reference audio (PCM16 24 kHz) for voice-cloning engines (VoxCPM2).
+    var voiceCloneReferenceAudio: [Float]?
+    /// Optional reference transcript that pairs with `voiceCloneReferenceAudio`.
+    var voiceCloneReferenceText: String?
     var inputAudioBuffer = Data()
     var inputSampleRate: Int = 24000
 }
 
-/// Map an OpenAI-style model name to the engine string used by AudioServer.
+/// Map an OpenAI-style model name to the ASR engine string used by AudioServer.
 ///
-/// ASR engines: qwen3, parakeet, nemotron, omnilingual
-/// TTS engines:  qwen3, cosyvoice, voxcpm2, magpie
+/// Returns `nil` if the name does not name a known ASR engine (the caller
+/// should then try the TTS resolver before treating the name as unknown).
 ///
-/// Variant names like "qwen3-0.6b" or "qwen3-0.6b-coreml" are accepted and
-/// resolve to the base engine. Unknown names are returned as-is so callers
-/// can apply forward-compatibility rules without changing the active engine.
-func resolveModelToEngine(_ model: String) -> String? {
+/// Bare "qwen3" maps to the ASR engine; the TTS-side variant "qwen3-speech"
+/// (or "qwen3-tts*") routes through `resolveModelToTTSEngine`. Variant suffixes
+/// like "parakeet-tdt-0.6b" are accepted.
+func resolveModelToASREngine(_ model: String) -> String? {
     let lower = model.lowercased()
-    // ASR model names
-    if lower == "qwen3" || lower.hasPrefix("qwen3-") { return "qwen3" }
+    if lower == "qwen3" || lower == "qwen3-asr" || lower.hasPrefix("qwen3-asr-") { return "qwen3" }
     if lower == "parakeet" || lower.hasPrefix("parakeet-") { return "parakeet" }
-    if lower == "nemotron" || lower.hasPrefix("nemotron-") { return "nemotron" }
-    if lower == "omnilingual" || lower.hasPrefix("omnilingual-") { return "omnilingual" }
-    // TTS model names (qwen3-speech/* already caught above via qwen3- prefix)
+    return nil
+}
+
+/// Map an OpenAI-style model name to the TTS engine string used by AudioServer.
+///
+/// Returns `nil` if the name does not name a known TTS engine. Bare "qwen3"
+/// is treated as ASR (see `resolveModelToASREngine`); use "qwen3-speech" or
+/// "qwen3-tts*" to target the TTS side explicitly.
+func resolveModelToTTSEngine(_ model: String) -> String? {
+    let lower = model.lowercased()
+    if lower == "kokoro" || lower.hasPrefix("kokoro-") { return "kokoro" }
     if lower == "cosyvoice" || lower.hasPrefix("cosyvoice-") { return "cosyvoice" }
     if lower == "voxcpm2" || lower.hasPrefix("voxcpm2-") { return "voxcpm2" }
-    if lower == "magpie" || lower.hasPrefix("magpie-") { return "magpie" }
-    // Unknown model — signal forward-compatibility: caller keeps current engine
+    if lower == "qwen3-speech" || lower.hasPrefix("qwen3-speech-")
+        || lower == "qwen3-tts" || lower.hasPrefix("qwen3-tts-") { return "qwen3" }
+    return nil
+}
+
+/// Map an OpenAI-style model name to either the ASR or TTS engine string.
+///
+/// Tries ASR resolution first, then TTS. Kept for clients that want a single
+/// lookup without caring which side of the pipeline the engine drives.
+///
+/// Variant names like "qwen3-0.6b" or "qwen3-0.6b-coreml" are accepted and
+/// resolve to the base engine. Unknown names return `nil` so callers can
+/// apply forward-compatibility rules without changing the active engine.
+func resolveModelToEngine(_ model: String) -> String? {
+    if let asr = resolveModelToASREngine(model) { return asr }
+    if let tts = resolveModelToTTSEngine(model) { return tts }
     return nil
 }
 
@@ -297,17 +361,9 @@ func handleRealtimeWS(
     let session = RealtimeSession()
     let sessionId = UUID().uuidString
 
-    // Send session.created — reflect the actual current model name.
-    try await outbound.write(.text(formatJSON([
-        "type": "session.created",
-        "session": [
-            "id": sessionId,
-            "model": session.model,
-            "modalities": ["audio", "text"],
-            "input_audio_format": "pcm16",
-            "output_audio_format": "pcm16"
-        ]
-    ] as [String: Any])))
+    // session.created reflects the same fields as session.updated so clients
+    // can rely on a single shape for either event.
+    try await outbound.write(.text(formatJSON(sessionEnvelope(id: sessionId, session: session, type: "session.created"))))
 
     for try await message in inbound.messages(maxSize: 50 * 1024 * 1024) {
         guard case .text(let string) = message else { continue }
@@ -322,18 +378,31 @@ func handleRealtimeWS(
 
         case "session.update":
             if let sessionConfig = json["session"] as? [String: Any] {
-                // Handle `model` field: resolve to an engine if known, or store
-                // the name unchanged and leave the active engine alone for
-                // forward-compatibility with future model names.
-                if let modelName = sessionConfig["model"] as? String {
+                // Top-level `model`: resolve to ASR and/or TTS engine and
+                // update whichever slot(s) match. An ambiguous name like
+                // "qwen3" updates only the ASR slot (the TTS variant is
+                // "qwen3-speech"); unknown names are accepted and echoed
+                // but leave the active engines unchanged.
+                if let modelName = sessionConfig["model"] as? String, !modelName.isEmpty {
                     session.model = modelName
-                    if let resolved = resolveModelToEngine(modelName) {
-                        session.engine = resolved
+                    if let asr = resolveModelToASREngine(modelName) {
+                        session.asrEngine = asr
                     }
-                    // Unknown model name: accept and echo, engine unchanged.
+                    if let tts = resolveModelToTTSEngine(modelName) {
+                        session.ttsEngine = tts
+                    }
                 }
+                // OpenAI-standard: `input_audio_transcription.model` selects
+                // the ASR backend independently of the top-level model.
+                if let iat = sessionConfig["input_audio_transcription"] as? [String: Any],
+                   let asrModel = iat["model"] as? String,
+                   let asr = resolveModelToASREngine(asrModel) {
+                    session.asrEngine = asr
+                }
+                // Legacy `engine` field used to control TTS dispatch only;
+                // preserve that semantics so existing clients keep working.
                 if let engine = sessionConfig["engine"] as? String {
-                    session.engine = engine
+                    session.ttsEngine = engine
                 }
                 if let lang = sessionConfig["language"] as? String {
                     session.language = lang
@@ -341,18 +410,20 @@ func handleRealtimeWS(
                 if let fmt = sessionConfig["input_audio_format"] as? String, fmt == "pcm16" {
                     session.inputSampleRate = 24000
                 }
+                // Voice-cloning reference. PCM16 24 kHz, base64-encoded.
+                // Setting this routes the next response.create to VoxCPM2
+                // regardless of the active TTS engine.
+                if let vc = sessionConfig["voice_cloning"] as? [String: Any] {
+                    if let refB64 = vc["reference_audio"] as? String,
+                       let refData = Data(base64Encoded: refB64) {
+                        session.voiceCloneReferenceAudio = pcm16LEToFloat(refData)
+                    }
+                    if let refText = vc["reference_text"] as? String {
+                        session.voiceCloneReferenceText = refText
+                    }
+                }
             }
-            try await outbound.write(.text(formatJSON([
-                "type": "session.updated",
-                "session": [
-                    "id": sessionId,
-                    "model": session.model,
-                    "engine": session.engine,
-                    "language": session.language,
-                    "input_audio_format": "pcm16",
-                    "output_audio_format": "pcm16"
-                ]
-            ] as [String: Any])))
+            try await outbound.write(.text(formatJSON(sessionEnvelope(id: sessionId, session: session, type: "session.updated"))))
 
         case "input_audio_buffer.append":
             guard let audioB64 = json["audio"] as? String,
@@ -383,11 +454,23 @@ func handleRealtimeWS(
                 "item_id": itemId
             ])))
 
-            // Transcribe: PCM16 24kHz → resample to 16kHz for ASR
+            // Transcribe via the active ASR engine. All engines internally
+            // assume 16 kHz mono Float32 input; resample once and dispatch.
             let floats = pcm16LEToFloat(audioData)
             let audio16k = resample(floats, from: session.inputSampleRate, to: 16000)
-            let model = try await state.loadASR()
-            let text = model.transcribe(audio: audio16k, sampleRate: 16000)
+            let text: String
+            switch session.asrEngine {
+            case "parakeet":
+                let model = try await state.loadParakeet()
+                text = (try? model.transcribeAudio(audio16k, sampleRate: 16000, language: nil)) ?? ""
+            case "qwen3":
+                let model = try await state.loadASR()
+                text = model.transcribe(audio: audio16k, sampleRate: 16000)
+            default:
+                try await sendRealtimeError(outbound: outbound,
+                    message: "ASR engine '\(session.asrEngine)' is not enabled in this build")
+                continue
+            }
 
             let responseId = UUID().uuidString
             try await outbound.write(.text(formatJSON([
@@ -458,12 +541,31 @@ func handleRealtimeWS(
                 "response": ["id": responseId, "status": "in_progress"]
             ] as [String: Any])))
 
-            // Stream TTS audio as base64 PCM16 24kHz chunks
-            let engine = (input?["engine"] as? String) ?? session.engine
+            // Stream TTS audio as base64 PCM16 24 kHz chunks. The per-request
+            // `engine` override mirrors the session field's legacy semantics
+            // (TTS only). Voice-cloning requests are routed to VoxCPM2 even
+            // if the active engine is something else.
+            let perRequestEngine = input?["engine"] as? String
             let language = (input?["language"] as? String) ?? session.language
+            let hasCloneReference = session.voiceCloneReferenceAudio != nil
+            let engine: String
+            if hasCloneReference {
+                engine = "voxcpm2"
+            } else if let perRequestEngine, !perRequestEngine.isEmpty {
+                engine = perRequestEngine
+            } else {
+                engine = session.ttsEngine
+            }
             var totalSamples = 0
 
-            if engine == "qwen3" {
+            switch engine {
+            case "kokoro":
+                let model = try await state.loadKokoro()
+                let langCode = mapToKokoroLanguageCode(language)
+                let samples = try model.synthesize(text: text, language: langCode)
+                totalSamples += try await streamSamplesAsDeltas(
+                    samples, outbound: outbound, responseId: responseId)
+            case "qwen3":
                 let model = try await state.loadTTS()
                 let stream = model.synthesizeStream(text: text, language: language)
                 for try await chunk in stream {
@@ -477,7 +579,7 @@ func handleRealtimeWS(
                         ])))
                     }
                 }
-            } else {
+            case "cosyvoice":
                 let model = try await state.loadCosyVoice()
                 let stream = model.synthesizeStream(text: text, language: language)
                 for try await chunk in stream {
@@ -491,6 +593,29 @@ func handleRealtimeWS(
                         ])))
                     }
                 }
+            case "voxcpm2":
+                let model = try await state.loadVoxCPM2()
+                let samples: [Float]
+                if hasCloneReference {
+                    samples = try await model.generateVoxCPM2(
+                        text: text,
+                        language: language,
+                        refText: session.voiceCloneReferenceText,
+                        refAudio: session.voiceCloneReferenceAudio)
+                } else {
+                    samples = try await model.generate(text: text, language: language)
+                }
+                // VoxCPM2 runs at 48 kHz internally; downsample to the 24 kHz
+                // the Realtime protocol expects.
+                let samples24k = model.outputSampleRate == 24000
+                    ? samples
+                    : resample(samples, from: model.outputSampleRate, to: 24000)
+                totalSamples += try await streamSamplesAsDeltas(
+                    samples24k, outbound: outbound, responseId: responseId)
+            default:
+                try await sendRealtimeError(outbound: outbound,
+                    message: "TTS engine '\(engine)' is not enabled in this build")
+                continue
             }
 
             if modalities.contains("text") {
@@ -549,6 +674,72 @@ private func sendRealtimeError(outbound: WebSocketOutboundWriter, message: Strin
         "type": "error",
         "error": ["type": "invalid_request_error", "message": message]
     ] as [String: Any])))
+}
+
+/// Build a `session.created` / `session.updated` envelope.
+///
+/// Both event types share the same payload shape so clients can read either
+/// without branching on the type. Legacy clients can still read `engine`
+/// (TTS engine) without knowing about the new `asr_engine`/`tts_engine`
+/// split.
+private func sessionEnvelope(id: String, session: RealtimeSession, type: String) -> [String: Any] {
+    return [
+        "type": type,
+        "session": [
+            "id": id,
+            "model": session.model,
+            "engine": session.ttsEngine,
+            "asr_engine": session.asrEngine,
+            "tts_engine": session.ttsEngine,
+            "language": session.language,
+            "modalities": ["audio", "text"],
+            "input_audio_format": "pcm16",
+            "output_audio_format": "pcm16"
+        ] as [String: Any]
+    ]
+}
+
+/// Stream a buffer of Float32 24 kHz samples to the client as base64 PCM16
+/// `response.audio.delta` chunks. Returns the total number of samples sent.
+/// Used by non-streaming TTS engines (Kokoro, VoxCPM2) — chunks are sized
+/// for ~200 ms of audio at 24 kHz to balance time-to-first-byte against
+/// per-chunk overhead.
+private func streamSamplesAsDeltas(
+    _ samples: [Float],
+    outbound: WebSocketOutboundWriter,
+    responseId: String,
+    chunkSize: Int = 4800
+) async throws -> Int {
+    guard !samples.isEmpty else { return 0 }
+    var i = 0
+    while i < samples.count {
+        let end = min(i + chunkSize, samples.count)
+        let pcm = floatToPCM16LE(Array(samples[i..<end]))
+        try await outbound.write(.text(formatJSON([
+            "type": "response.audio.delta",
+            "response_id": responseId,
+            "delta": pcm.base64EncodedString()
+        ])))
+        i = end
+    }
+    return samples.count
+}
+
+/// Map a user-facing language name (or ISO code) to the 2-letter code
+/// Kokoro's phonemizer expects. Unknown values fall through to English.
+func mapToKokoroLanguageCode(_ language: String) -> String {
+    let lower = language.lowercased()
+    switch lower {
+    case "en", "english": return "en"
+    case "zh", "cmn", "chinese", "mandarin": return "zh"
+    case "ja", "japanese": return "ja"
+    case "fr", "french": return "fr"
+    case "es", "spanish": return "es"
+    case "pt", "portuguese": return "pt"
+    case "it", "italian": return "it"
+    case "hi", "hindi": return "hi"
+    default: return "en"
+    }
 }
 
 /// Resample audio via AVAudioConverter (delegates to AudioFileLoader).
