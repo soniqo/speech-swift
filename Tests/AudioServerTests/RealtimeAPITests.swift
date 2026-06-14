@@ -477,50 +477,137 @@ final class RealtimeAPITests: XCTestCase {
         }
     }
 
-    /// HTTP `/transcribe` returns a 400 for unknown model names rather than
-    /// silently falling back to the default — clients should learn fast.
-    func testTranscribeRejectsUnknownModel() async throws {
-        let url = URL(string: "http://127.0.0.1:\(Self.port)/transcribe")!
+    /// Shared helper that decodes the JSON error envelope so each route
+    /// test can assert on the actual error message, not just the status
+    /// code (which would pass for *any* 400 — including a misleading one
+    /// like "missing audio" when we wanted "unknown model").
+    private func postJSON(path: String, body: [String: Any]) async throws -> (status: Int, error: String?) {
+        let url = URL(string: "http://127.0.0.1:\(Self.port)\(path)")!
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        // No audio_base64 because the request should fail before audio load.
-        let body: [String: Any] = ["model": "definitely-not-a-real-model-9000"]
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
-        let (_, response) = try await URLSession.shared.data(for: req)
+        let (data, response) = try await URLSession.shared.data(for: req)
         let http = response as! HTTPURLResponse
-        XCTAssertEqual(http.statusCode, 400)
+        let errorString: String?
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            errorString = json["error"] as? String
+        } else {
+            errorString = nil
+        }
+        return (http.statusCode, errorString)
+    }
+
+    /// HTTP `/transcribe` rejects unknown model names with a model-specific
+    /// error message — proving that the model is validated BEFORE the
+    /// audio guard (otherwise the test would pass for the wrong reason).
+    func testTranscribeRejectsUnknownModel() async throws {
+        let (status, error) = try await postJSON(
+            path: "/transcribe",
+            body: ["model": "definitely-not-a-real-model-9000"])
+        XCTAssertEqual(status, 400)
+        XCTAssertTrue((error ?? "").contains("Unknown ASR model"),
+                      "Expected 'Unknown ASR model' in error, got: \(error ?? "nil")")
+    }
+
+    /// Default fall-through: omitting `model` must NOT 400. Without this,
+    /// removing the default-path branch in the route would only be caught
+    /// by an E2E test, not a unit one.
+    func testTranscribeAcceptsMissingModelButRejectsMissingAudio() async throws {
+        let (status, error) = try await postJSON(path: "/transcribe", body: [:])
+        XCTAssertEqual(status, 400)
+        XCTAssertEqual(error, "Missing audio data")
     }
 
     func testSpeakRejectsUnknownModel() async throws {
-        let url = URL(string: "http://127.0.0.1:\(Self.port)/speak")!
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let body: [String: Any] = [
-            "text": "hello",
-            "model": "totally-not-a-tts-engine"
-        ]
-        req.httpBody = try JSONSerialization.data(withJSONObject: body)
-        let (_, response) = try await URLSession.shared.data(for: req)
-        let http = response as! HTTPURLResponse
-        XCTAssertEqual(http.statusCode, 400)
+        let (status, error) = try await postJSON(
+            path: "/speak",
+            body: ["text": "hello", "model": "totally-not-a-tts-engine"])
+        XCTAssertEqual(status, 400)
+        XCTAssertTrue((error ?? "").contains("Unknown TTS model"),
+                      "Expected 'Unknown TTS model' in error, got: \(error ?? "nil")")
+    }
+
+    /// /speak accepts an unknown legacy `engine` value silently (the legacy
+    /// field has always been loose) but the new `model` field is strict.
+    func testSpeakLegacyEngineFieldFallsBackToDefault() async throws {
+        // No text — expect "Missing 'text' field" 400, proving the legacy
+        // engine value didn't 400 earlier (the model gate is what's strict).
+        let (status, error) = try await postJSON(
+            path: "/speak",
+            body: ["engine": "some-loose-legacy-value"])
+        XCTAssertEqual(status, 400)
+        XCTAssertEqual(error, "Missing 'text' field")
     }
 
     func testRespondRejectsUnknownModel() async throws {
-        let url = URL(string: "http://127.0.0.1:\(Self.port)/respond")!
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        // Even with an audio payload the unknown model should error first.
-        let body: [String: Any] = [
-            "audio_base64": "",
-            "model": "not-an-s2s-model"
-        ]
-        req.httpBody = try JSONSerialization.data(withJSONObject: body)
-        let (_, response) = try await URLSession.shared.data(for: req)
+        // Use a non-empty base64 so the audio guard doesn't fire first;
+        // model rejection must beat audio decode.
+        let (status, error) = try await postJSON(
+            path: "/respond",
+            body: ["audio_base64": "AAAA", "model": "not-an-s2s-model"])
+        XCTAssertEqual(status, 400)
+        XCTAssertTrue((error ?? "").contains("Unknown speech-to-speech model"),
+                      "Expected 'Unknown speech-to-speech model' in error, got: \(error ?? "nil")")
+    }
+
+    /// /respond's voice guard must NOT fire for engines that don't use it
+    /// (Hibiki). Adversarial regression: previously the voice was checked
+    /// before the variant resolved, so an exotic `voice` string broke
+    /// translation requests even though Hibiki doesn't read `voice`.
+    func testRespondHibikiBypassesVoiceGuard() async throws {
+        // Use a guaranteed-invalid voice name + the hibiki model. If the
+        // voice guard still gated all engines, we'd see "Unknown voice".
+        // Since variant resolution comes first AND voice is now inside the
+        // personaplex branch, we should not see that error — we'll see
+        // a "Missing audio data" instead (audio comes next).
+        let (status, error) = try await postJSON(
+            path: "/respond",
+            body: ["model": "hibiki", "voice": "::not-a-personaplex-voice::"])
+        XCTAssertEqual(status, 400)
+        XCTAssertEqual(error, "Missing audio data",
+                       "Voice guard should not gate Hibiki — saw: \(error ?? "nil")")
+    }
+
+    /// /respond default path: no `model` field → defaults to PersonaPlex.
+    /// We can't actually load the model in a unit test, but we can verify
+    /// the route makes it past variant resolution and into the audio guard.
+    func testRespondAcceptsMissingModelDefault() async throws {
+        let (status, error) = try await postJSON(path: "/respond", body: [:])
+        XCTAssertEqual(status, 400)
+        XCTAssertEqual(error, "Missing audio data")
+    }
+
+    /// `GET /v1/realtime/models` must include the full row shape per
+    /// variant (id / object / engine / kind / model_id / aliases). A
+    /// client should be able to read this and call session.update without
+    /// guessing.
+    func testRealtimeModelsEndpointRowShape() async throws {
+        let url = URL(string: "http://127.0.0.1:\(Self.port)/v1/realtime/models")!
+        let (data, response) = try await URLSession.shared.data(from: url)
         let http = response as! HTTPURLResponse
-        XCTAssertEqual(http.statusCode, 400)
+        XCTAssertEqual(http.statusCode, 200)
+        XCTAssertEqual(http.value(forHTTPHeaderField: "Content-Type"),
+                       "application/json")
+
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        let rows = json?["data"] as? [[String: Any]] ?? []
+        XCTAssertGreaterThanOrEqual(rows.count, MODEL_REGISTRY.count,
+                                    "Endpoint should expose every registered variant")
+
+        // Pin one row's shape so we catch field drift early.
+        guard let parakeet = rows.first(where: {
+            ($0["id"] as? String) == "parakeet-tdt-v3-coreml-int8-30s"
+        }) else {
+            return XCTFail("parakeet default variant missing from /v1/realtime/models")
+        }
+        XCTAssertEqual(parakeet["object"] as? String, "model")
+        XCTAssertEqual(parakeet["engine"] as? String, "parakeet")
+        XCTAssertEqual(parakeet["kind"] as? String, "asr")
+        XCTAssertEqual(parakeet["model_id"] as? String,
+                       "aufklarer/Parakeet-TDT-v3-CoreML-INT8-30s")
+        XCTAssertEqual(parakeet["aliases"] as? [String],
+                       ["parakeet", "parakeet-tdt", "parakeet-tdt-v3"])
     }
 }
 

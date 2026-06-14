@@ -101,12 +101,9 @@ public struct AudioServer {
             let body = try await request.body.collect(upTo: 50 * 1024 * 1024)
             let params = try RequestParams.parse(body, contentType: request.headers[.contentType])
 
-            guard let audioData = params.audioData else {
-                return errorResponse("Missing audio data", status: .badRequest)
-            }
-
-            // Pick the ASR variant from the request or fall back to the
-            // default Parakeet bundle. Unknown names error rather than
+            // Validate the model name BEFORE reading audio so a typo in
+            // the model field returns the actual problem, not a confusing
+            // "missing audio" error. Unknown names error rather than
             // silently fall back, so clients learn fast.
             let variant: ModelVariant
             if let modelName = params.string("model"), !modelName.isEmpty {
@@ -119,6 +116,10 @@ public struct AudioServer {
                 }
             } else {
                 variant = defaultVariant(forEngine: "parakeet", kind: .asr)
+            }
+
+            guard let audioData = params.audioData else {
+                return errorResponse("Missing audio data", status: .badRequest)
             }
 
             let sampleRate = params.int("sample_rate") ?? 16000
@@ -175,21 +176,13 @@ public struct AudioServer {
             let body = try await request.body.collect(upTo: 50 * 1024 * 1024)
             let params = try RequestParams.parse(body, contentType: request.headers[.contentType])
 
-            guard let audioData = params.audioData else {
-                return errorResponse("Missing audio data", status: .badRequest)
-            }
-
-            let voiceName = params.string("voice") ?? "NATM0"
-            let maxSteps = params.int("max_steps") ?? 200
-
-            guard let voice = PersonaPlexVoice(rawValue: voiceName) else {
-                return errorResponse("Unknown voice: \(voiceName)", status: .badRequest)
-            }
-
             // /respond is the PersonaPlex/Hibiki entry point on HTTP — same
             // S2S surface the Realtime WS uses, just request-shaped. The
             // `model` field picks which S2S engine (and which quantization
             // bundle). Default stays PersonaPlex 4-bit for back-compat.
+            //
+            // Validate the model name first so a typo doesn't trip the
+            // audio guard or the voice guard with a misleading error.
             let variant: ModelVariant
             if let modelName = params.string("model"), !modelName.isEmpty {
                 if let v = resolveModelToS2SVariant(modelName) {
@@ -203,11 +196,23 @@ public struct AudioServer {
                 variant = defaultVariant(forEngine: "personaplex", kind: .s2s)
             }
 
+            guard let audioData = params.audioData, !audioData.isEmpty else {
+                return errorResponse("Missing audio data", status: .badRequest)
+            }
+
+            let maxSteps = params.int("max_steps") ?? 200
             let audio = try decodeWAVData(audioData, targetSampleRate: 24000)
             let responseAudio: [Float]
             var responseTranscript: String?
             switch variant.engine {
             case "personaplex":
+                // PersonaPlex consumes a `voice` preset; Hibiki ignores it.
+                // Keep the voice guard inside the personaplex branch so a
+                // bad `voice` value never blocks a Hibiki translate call.
+                let voiceName = params.string("voice") ?? "NATM0"
+                guard let voice = PersonaPlexVoice(rawValue: voiceName) else {
+                    return errorResponse("Unknown voice: \(voiceName)", status: .badRequest)
+                }
                 let model = try await state.loadPersonaPlex()
                 let result = model.respond(
                     userAudio: audio,
