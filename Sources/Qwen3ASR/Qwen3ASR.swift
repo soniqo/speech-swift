@@ -111,6 +111,17 @@ public struct Qwen3ASRTokens: Sendable {
 ///
 /// - Warning: This class is not thread-safe. Create separate instances for concurrent use.
 public class Qwen3ASRModel {
+    /// Default HuggingFace model identifier — the 0.6B 4-bit MLX bundle.
+    /// Mirrors `ASRModelSize.small.modelId`; kept as a top-level constant so
+    /// the AudioServer registry and other call sites have a single SSOT.
+    public static let defaultModelId = "aufklarer/Qwen3-ASR-0.6B-MLX-4bit"
+
+    /// 1.7B 8-bit MLX bundle — higher-capacity sibling of the default.
+    public static let largeModelId = "aufklarer/Qwen3-ASR-1.7B-MLX-8bit"
+
+    /// CoreML-packaged variant for Neural Engine deployment.
+    public static let coreMLModelId = "aufklarer/Qwen3-ASR-CoreML"
+
     public let audioEncoder: Qwen3AudioEncoder
     public let featureExtractor: WhisperFeatureExtractor
     public var textDecoder: QuantizedTextModel?

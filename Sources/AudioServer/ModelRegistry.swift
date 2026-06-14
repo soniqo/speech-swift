@@ -1,4 +1,15 @@
 import Foundation
+import Qwen3ASR
+import Qwen3TTS
+import CosyVoiceTTS
+import ParakeetASR
+import NemotronStreamingASR
+import OmnilingualASR
+import KokoroTTS
+import VoxCPM2TTS
+import MagpieTTS
+import PersonaPlex
+import HibikiTranslate
 
 // MARK: - Model registry
 
@@ -29,71 +40,76 @@ public struct ModelVariant: Sendable, Equatable {
 
 /// Every model name the Realtime API accepts.
 ///
-/// Order matters only for aliases that collide — within each kind, the first
-/// row that owns a given alias wins. That lets "kokoro" → the default Kokoro
-/// variant, "qwen3" → the 0.6B INT4 default, etc.
+/// `modelId` values reference each engine module's `defaultModelId` /
+/// `largeModelId` / etc. constants — the SSOT lives with the engine,
+/// the registry just aggregates names. Adding a variant means publishing
+/// the HF slug as a constant on the engine module, then one row here.
+///
+/// Order matters only for aliases that collide — within each kind, the
+/// first row that owns a given alias wins. That lets "kokoro" → the
+/// default Kokoro variant, "qwen3" → the 0.6B INT4 default, etc.
 public let MODEL_REGISTRY: [ModelVariant] = [
     // ─── ASR ───────────────────────────────────────────────────────────────
     .init(name: "qwen3-asr-0.6b-mlx-int4",
           engine: "qwen3-asr",
-          modelId: "aufklarer/Qwen3-ASR-0.6B-MLX-4bit",
+          modelId: Qwen3ASRModel.defaultModelId,
           aliases: ["qwen3", "qwen3-asr", "qwen3-0.6b"],
           kind: .asr),
     .init(name: "qwen3-asr-1.7b-mlx-int8",
           engine: "qwen3-asr",
-          modelId: "aufklarer/Qwen3-ASR-1.7B-MLX-8bit",
+          modelId: Qwen3ASRModel.largeModelId,
           aliases: ["qwen3-1.7b", "qwen3-asr-1.7b"],
           kind: .asr),
     .init(name: "qwen3-asr-coreml",
           engine: "qwen3-asr",
-          modelId: "aufklarer/Qwen3-ASR-CoreML",
+          modelId: Qwen3ASRModel.coreMLModelId,
           aliases: ["qwen3-coreml", "qwen3-asr-0.6b-coreml"],
           kind: .asr),
     .init(name: "parakeet-tdt-v3-coreml-int8-30s",
           engine: "parakeet",
-          modelId: "aufklarer/Parakeet-TDT-v3-CoreML-INT8-30s",
+          modelId: ParakeetASRModel.defaultModelId,
           aliases: ["parakeet", "parakeet-tdt", "parakeet-tdt-v3"],
           kind: .asr),
     .init(name: "parakeet-tdt-v3-coreml-int8-ios-5s",
           engine: "parakeet",
-          modelId: "aufklarer/Parakeet-TDT-v3-CoreML-INT8-iOS-5s",
+          modelId: ParakeetASRModel.iosModelId,
           aliases: ["parakeet-ios", "parakeet-5s"],
           kind: .asr),
     .init(name: "nemotron-3.5-asr-streaming-0.6b-coreml-int8",
           engine: "nemotron",
-          modelId: "aufklarer/Nemotron-3.5-ASR-Streaming-0.6B-CoreML-INT8",
+          modelId: NemotronStreamingASRModel.defaultModelId,
           aliases: ["nemotron", "nemotron-3.5", "nemotron-streaming"],
           kind: .asr),
     .init(name: "omnilingual-asr-ctc-300m-coreml-int8-10s",
           engine: "omnilingual",
-          modelId: "aufklarer/Omnilingual-ASR-CTC-300M-CoreML-INT8-10s",
+          modelId: OmnilingualASRModel.defaultModelId,
           aliases: ["omnilingual", "omnilingual-300m", "omnilingual-coreml"],
           kind: .asr),
 
     // ─── TTS ───────────────────────────────────────────────────────────────
     .init(name: "kokoro-82m-coreml",
           engine: "kokoro",
-          modelId: "aufklarer/Kokoro-82M-CoreML",
+          modelId: KokoroTTSModel.defaultModelId,
           aliases: ["kokoro", "kokoro-82m"],
           kind: .tts),
     .init(name: "cosyvoice-3-0.5b-mlx-int4",
           engine: "cosyvoice",
-          modelId: "aufklarer/CosyVoice3-0.5B-MLX-4bit",
+          modelId: CosyVoiceTTSModel.defaultModelId,
           aliases: ["cosyvoice", "cosyvoice-3", "cosyvoice-0.5b"],
           kind: .tts),
     .init(name: "voxcpm2-mlx-bf16",
           engine: "voxcpm2",
-          modelId: "aufklarer/VoxCPM2-MLX-bf16",
+          modelId: VoxCPM2TTSModel.defaultModelId,
           aliases: ["voxcpm2", "voxcpm2-bf16"],
           kind: .tts),
     .init(name: "voxcpm2-mlx-int8",
           engine: "voxcpm2",
-          modelId: "aufklarer/VoxCPM2-MLX-int8",
+          modelId: VoxCPM2TTSModel.int8ModelId,
           aliases: ["voxcpm2-int8"],
           kind: .tts),
     .init(name: "qwen3-tts-0.6b-mlx-int4",
           engine: "qwen3-tts",
-          modelId: "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-4bit",
+          modelId: Qwen3TTSModel.defaultModelId,
           // "qwen3" is shared with the ASR variant — bare "qwen3" lands in
           // both slots so naming the family pairs ASR + TTS in one update.
           aliases: ["qwen3", "qwen3-tts", "qwen3-speech", "qwen3-tts-0.6b"],
@@ -111,22 +127,22 @@ public let MODEL_REGISTRY: [ModelVariant] = [
     // ─── Speech-to-speech (input audio → output audio in one shot) ─────────
     .init(name: "personaplex-7b-mlx-4bit",
           engine: "personaplex",
-          modelId: "aufklarer/PersonaPlex-7B-MLX-4bit",
+          modelId: PersonaPlexModel.defaultModelId,
           aliases: ["personaplex", "personaplex-7b"],
           kind: .s2s),
     .init(name: "personaplex-7b-mlx-8bit",
           engine: "personaplex",
-          modelId: "aufklarer/PersonaPlex-7B-MLX-8bit",
+          modelId: PersonaPlexModel.modelId8bit,
           aliases: ["personaplex-8bit"],
           kind: .s2s),
     .init(name: "hibiki-zero-3b-mlx-4bit",
           engine: "hibiki",
-          modelId: "aufklarer/Hibiki-Zero-3B-MLX-4bit",
+          modelId: HibikiTranslateModel.defaultModelId,
           aliases: ["hibiki", "hibiki-zero", "hibiki-3b"],
           kind: .s2s),
     .init(name: "hibiki-zero-3b-mlx-8bit",
           engine: "hibiki",
-          modelId: "aufklarer/Hibiki-Zero-3B-MLX-8bit",
+          modelId: HibikiTranslateModel.modelId8bit,
           aliases: ["hibiki-8bit"],
           kind: .s2s),
 ]

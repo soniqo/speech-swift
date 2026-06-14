@@ -518,9 +518,11 @@ func handleRealtimeWS(
                     }
                     // S2S is exclusive — picking a recognized ASR/TTS-only
                     // model turns S2S off so the user gets the compose
-                    // path back.
+                    // path back. Also drop any pending S2S input audio so
+                    // the next response.create starts clean.
                     if pickedS2S == nil && !variants.isEmpty {
                         session.s2sVariant = nil
+                        session.lastCommittedAudio = nil
                     }
                 }
                 // OpenAI-standard: `input_audio_transcription.model` selects
@@ -550,13 +552,18 @@ func handleRealtimeWS(
                 }
                 // Voice-cloning reference. PCM16 24 kHz, base64-encoded.
                 // Setting this routes the next response.create to VoxCPM2
-                // regardless of the active TTS engine.
+                // regardless of the active TTS engine. Guard against empty
+                // / malformed payloads so we never hand VoxCPM2 a zero-
+                // length reference that the model can't condition on.
                 if let vc = sessionConfig["voice_cloning"] as? [String: Any] {
                     if let refB64 = vc["reference_audio"] as? String,
-                       let refData = Data(base64Encoded: refB64) {
-                        session.voiceCloneReferenceAudio = pcm16LEToFloat(refData)
+                       let refData = Data(base64Encoded: refB64), !refData.isEmpty {
+                        let samples = pcm16LEToFloat(refData)
+                        if !samples.isEmpty {
+                            session.voiceCloneReferenceAudio = samples
+                        }
                     }
-                    if let refText = vc["reference_text"] as? String {
+                    if let refText = vc["reference_text"] as? String, !refText.isEmpty {
                         session.voiceCloneReferenceText = refText
                     }
                 }
@@ -768,7 +775,15 @@ func handleRealtimeWS(
             let hasCloneReference = session.voiceCloneReferenceAudio != nil
             let ttsVariant: ModelVariant
             if hasCloneReference {
-                ttsVariant = resolveModelToTTSVariant("voxcpm2") ?? session.ttsVariant
+                // Cloning forces VoxCPM2. If the session already has a
+                // VoxCPM2 variant selected (bf16, int8, etc.), keep that
+                // exact bundle — the user picked it for a reason.
+                // Otherwise fall back to the default VoxCPM2 variant.
+                if session.ttsVariant.engine == "voxcpm2" {
+                    ttsVariant = session.ttsVariant
+                } else {
+                    ttsVariant = resolveModelToTTSVariant("voxcpm2") ?? session.ttsVariant
+                }
             } else if let perRequestEngine, !perRequestEngine.isEmpty,
                       let v = resolveModelToTTSVariant(perRequestEngine) {
                 ttsVariant = v
