@@ -41,6 +41,10 @@ let package = Package(
             targets: ["SpeechEnhancement"]
         ),
         .library(
+            name: "SpeechRestoration",
+            targets: ["SpeechRestoration"]
+        ),
+        .library(
             name: "SourceSeparation",
             targets: ["SourceSeparation"]
         ),
@@ -242,6 +246,12 @@ let package = Package(
             ]
         ),
         .target(
+            name: "SpeechRestoration",
+            dependencies: [
+                "AudioCommon",
+            ]
+        ),
+        .target(
             name: "SourceSeparation",
             dependencies: [
                 "AudioCommon",
@@ -421,6 +431,7 @@ let package = Package(
                 "HibikiTranslate",
                 "SpeechVAD",
                 "SpeechEnhancement",
+                "SpeechRestoration",
                 "SourceSeparation",
                 "ParakeetASR",
                 "ParakeetStreamingASR",
@@ -580,6 +591,13 @@ let package = Package(
                 "SpeechEnhancement",
                 "AudioCommon",
                 .product(name: "MLX", package: "mlx-swift"),
+            ]
+        ),
+        .testTarget(
+            name: "SpeechRestorationTests",
+            dependencies: [
+                "SpeechRestoration",
+                "AudioCommon",
             ]
         ),
         .testTarget(

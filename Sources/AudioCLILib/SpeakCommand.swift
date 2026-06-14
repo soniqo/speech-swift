@@ -8,6 +8,7 @@ import VoxCPM2TTS
 import MagpieTTS
 import MagpieTTSCoreML
 import AudioCommon
+import SpeechRestoration
 
 public struct SpeakCommand: ParsableCommand {
     public static let configuration = CommandConfiguration(
@@ -43,6 +44,12 @@ public struct SpeakCommand: ParsableCommand {
 
     @Option(name: .long, help: "Reference audio file for voice cloning (qwen3 Base, cosyvoice, or voxcpm2)")
     public var voiceSample: String?
+
+    @Flag(name: .long, help: "Restore (denoise + dereverb) the voice-cloning reference with Sidon before cloning. Opt-in; preserves speaker identity. Applies to qwen3/cosyvoice/voxcpm2 references.")
+    public var cleanReference: Bool = false
+
+    @Option(name: .long, help: "Sidon variant for --clean-reference: fp16 (default) or int8")
+    public var cleanReferenceVariant: String = "fp16"
 
     @Option(name: .long, help: "[qwen3] Model variant: base (default), base-8bit, 1.7b, 1.7b-8bit, customVoice, or full HF model ID. Note: --speaker requires customVoice.")
     public var model: String = "base"
@@ -257,6 +264,53 @@ public struct SpeakCommand: ParsableCommand {
         default:
             try runQwen3()
         }
+    }
+
+    // MARK: - Reference cleanup (opt-in, Sidon)
+
+    /// Load a voice-cloning reference and, when `--clean-reference` is set, run
+    /// it through Sidon (denoise + dereverb) before returning it at
+    /// `targetSampleRate`. When the flag is off this is a plain load — same
+    /// behaviour as before.
+    ///
+    /// Sidon's pipeline is 16 kHz in / 48 kHz out; this loads at 16 kHz, restores,
+    /// then resamples the 48 kHz result to whatever the engine wants. Implemented
+    /// synchronously (semaphore bridge) so it slots into both the sync Qwen3 path
+    /// and the async VoxCPM2 / CosyVoice paths without signature churn.
+    func loadReference(path: String, targetSampleRate: Int) throws -> [Float] {
+        guard cleanReference else {
+            return try AudioFileLoader.load(
+                url: URL(fileURLWithPath: path), targetSampleRate: targetSampleRate)
+        }
+        guard let variantEnum = SidonVariant(rawValue: cleanReferenceVariant) else {
+            throw ValidationError(
+                "--clean-reference-variant must be one of: "
+                + SidonVariant.allCases.map { $0.rawValue }.joined(separator: ", "))
+        }
+        let raw16k = try AudioFileLoader.load(
+            url: URL(fileURLWithPath: path),
+            targetSampleRate: SpeechRestorer.inputSampleRate)
+        print("  Cleaning reference with Sidon (\(cleanReferenceVariant))…")
+
+        var restored48k: [Float] = []
+        var thrown: Error?
+        let sema = DispatchSemaphore(value: 0)
+        Task {
+            do {
+                let restorer = try await SpeechRestorer.fromPretrained(variant: variantEnum)
+                restored48k = try restorer.restore(
+                    audio: raw16k, sampleRate: SpeechRestorer.inputSampleRate)
+            } catch {
+                thrown = error
+            }
+            sema.signal()
+        }
+        sema.wait()
+        if let thrown { throw thrown }
+
+        if targetSampleRate == SpeechRestorer.outputSampleRate { return restored48k }
+        return AudioFileLoader.resample(
+            restored48k, from: SpeechRestorer.outputSampleRate, to: targetSampleRate)
     }
 
     // MARK: - Magpie engine
@@ -635,8 +689,7 @@ public struct SpeakCommand: ParsableCommand {
         let audio: [Float]
         if let voiceSamplePath = voiceSample {
             // Voice cloning mode
-            let refURL = URL(fileURLWithPath: voiceSamplePath)
-            let refSamples = try AudioFileLoader.load(url: refURL, targetSampleRate: 24000)
+            let refSamples = try loadReference(path: voiceSamplePath, targetSampleRate: 24000)
             print("  Reference audio: \(refSamples.count) samples, \(String(format: "%.1f", Double(refSamples.count) / 24000.0))s")
 
             audio = model.synthesizeWithVoiceClone(
@@ -707,12 +760,10 @@ public struct SpeakCommand: ParsableCommand {
 
                 let referenceAudio: [Float]?
                 if let refPath = voxcpm2RefAudio {
-                    let refURL = URL(fileURLWithPath: refPath)
-                    referenceAudio = try AudioFileLoader.load(url: refURL, targetSampleRate: 16000)
+                    referenceAudio = try loadReference(path: refPath, targetSampleRate: 16000)
                     print("  Reference audio: \(referenceAudio?.count ?? 0) samples")
                 } else if let fallbackVoiceSample = voiceSample {
-                    let refURL = URL(fileURLWithPath: fallbackVoiceSample)
-                    referenceAudio = try AudioFileLoader.load(url: refURL, targetSampleRate: 16000)
+                    referenceAudio = try loadReference(path: fallbackVoiceSample, targetSampleRate: 16000)
                     print("  Reference audio: \(referenceAudio?.count ?? 0) samples")
                 } else {
                     referenceAudio = nil
@@ -826,8 +877,7 @@ public struct SpeakCommand: ParsableCommand {
             var defaultEmbedding: [Float]?
             var defaultVoiceProfile: CosyVoiceVoiceProfile?
             if let voiceSamplePath = voiceSample, speakerFiles.isEmpty {
-                let refURL = URL(fileURLWithPath: voiceSamplePath)
-                let refSamples16k = try AudioFileLoader.load(url: refURL, targetSampleRate: 16000)
+                let refSamples16k = try loadReference(path: voiceSamplePath, targetSampleRate: 16000)
                 print("  Reference audio: \(refSamples16k.count) samples (\(String(format: "%.1f", Double(refSamples16k.count) / 16000.0))s)")
 
                 print("Loading CAM++ speaker encoder...")
