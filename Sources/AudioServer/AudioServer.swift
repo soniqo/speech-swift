@@ -13,6 +13,7 @@ import KokoroTTS
 import VoxCPM2TTS
 import MagpieTTS
 import PersonaPlex
+import HibikiTranslate
 import SpeechEnhancement
 import AudioCommon
 
@@ -195,88 +196,120 @@ public struct AudioServer {
 // MARK: - Lazy Model State
 
 final class ModelState: @unchecked Sendable {
-    private var asr: Qwen3ASRModel?
-    private var parakeet: ParakeetASRModel?
-    private var nemotron: NemotronStreamingASRModel?
-    private var omnilingual: OmnilingualASRModel?
-    private var tts: Qwen3TTSModel?
-    private var cosyvoice: CosyVoiceTTSModel?
-    private var kokoro: KokoroTTSModel?
-    private var voxcpm2: VoxCPM2TTSModel?
+    // Per-modelId caches: switching variants of the same engine (e.g.
+    // qwen3-asr-0.6b → qwen3-asr-1.7b) keeps both loaded so flipping back
+    // is instant. The typical session picks one variant and sticks, but
+    // multi-tenant servers benefit from holding the small set warm.
+    private var qwen3ASR: [String: Qwen3ASRModel] = [:]
+    private var parakeet: [String: ParakeetASRModel] = [:]
+    private var nemotron: [String: NemotronStreamingASRModel] = [:]
+    private var omnilingual: [String: OmnilingualASRModel] = [:]
+    private var qwen3TTS: [String: Qwen3TTSModel] = [:]
+    private var cosyvoice: [String: CosyVoiceTTSModel] = [:]
+    private var kokoro: [String: KokoroTTSModel] = [:]
+    private var voxcpm2: [String: VoxCPM2TTSModel] = [:]
     private var magpie: MagpieTTS?
     private var personaplex: PersonaPlexModel?
+    private var hibikiByModelId: [String: HibikiTranslateModel] = [:]
     private var enhancer: SpeechEnhancer?
     var spmDecoder: SentencePieceDecoder?
 
+    func loadQwen3ASR(modelId: String) async throws -> Qwen3ASRModel {
+        if let m = qwen3ASR[modelId] { return m }
+        print("[server] Loading Qwen3-ASR (\(modelId))...")
+        let m = try await Qwen3ASRModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
+        qwen3ASR[modelId] = m
+        return m
+    }
+
+    /// Back-compat shim for the HTTP routes that still want the default
+    /// Qwen3-ASR build without naming a variant.
     func loadASR() async throws -> Qwen3ASRModel {
-        if let m = asr { return m }
-        print("[server] Loading Qwen3-ASR...")
-        let m = try await Qwen3ASRModel.fromPretrained(progressHandler: logProgress)
-        asr = m
+        try await loadQwen3ASR(modelId: "aufklarer/Qwen3-ASR-0.6B-MLX-4bit")
+    }
+
+    func loadParakeet(modelId: String) async throws -> ParakeetASRModel {
+        if let m = parakeet[modelId] { return m }
+        print("[server] Loading Parakeet (\(modelId))...")
+        let m = try await ParakeetASRModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
+        parakeet[modelId] = m
         return m
     }
 
-    func loadParakeet() async throws -> ParakeetASRModel {
-        if let m = parakeet { return m }
-        print("[server] Loading Parakeet TDT v3...")
-        let m = try await ParakeetASRModel.fromPretrained(progressHandler: logProgress)
-        parakeet = m
+    func loadNemotron(modelId: String) async throws -> NemotronStreamingASRModel {
+        if let m = nemotron[modelId] { return m }
+        print("[server] Loading Nemotron Streaming ASR (\(modelId))...")
+        let m = try await NemotronStreamingASRModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
+        nemotron[modelId] = m
         return m
     }
 
-    func loadNemotron() async throws -> NemotronStreamingASRModel {
-        if let m = nemotron { return m }
-        print("[server] Loading Nemotron Streaming ASR...")
-        let m = try await NemotronStreamingASRModel.fromPretrained(progressHandler: logProgress)
-        nemotron = m
+    func loadOmnilingual(modelId: String) async throws -> OmnilingualASRModel {
+        if let m = omnilingual[modelId] { return m }
+        print("[server] Loading Omnilingual ASR (\(modelId))...")
+        let m = try await OmnilingualASRModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
+        omnilingual[modelId] = m
         return m
     }
 
-    func loadOmnilingual() async throws -> OmnilingualASRModel {
-        if let m = omnilingual { return m }
-        print("[server] Loading Omnilingual ASR...")
-        let m = try await OmnilingualASRModel.fromPretrained(progressHandler: logProgress)
-        omnilingual = m
+    func loadQwen3TTS(modelId: String) async throws -> Qwen3TTSModel {
+        if let m = qwen3TTS[modelId] { return m }
+        print("[server] Loading Qwen3-TTS (\(modelId))...")
+        let m = try await Qwen3TTSModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
+        qwen3TTS[modelId] = m
         return m
     }
 
+    /// Back-compat shim — default Qwen3-TTS bundle.
     func loadTTS() async throws -> Qwen3TTSModel {
-        if let m = tts { return m }
-        print("[server] Loading Qwen3-TTS...")
-        let m = try await Qwen3TTSModel.fromPretrained(progressHandler: logProgress)
-        tts = m
+        try await loadQwen3TTS(modelId: "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-4bit")
+    }
+
+    func loadCosyVoice(modelId: String) async throws -> CosyVoiceTTSModel {
+        if let m = cosyvoice[modelId] { return m }
+        print("[server] Loading CosyVoice (\(modelId))...")
+        let m = try await CosyVoiceTTSModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
+        cosyvoice[modelId] = m
         return m
     }
 
+    /// Back-compat shim — default CosyVoice bundle for HTTP routes.
     func loadCosyVoice() async throws -> CosyVoiceTTSModel {
-        if let m = cosyvoice { return m }
-        print("[server] Loading CosyVoice...")
-        let m = try await CosyVoiceTTSModel.fromPretrained(progressHandler: logProgress)
-        cosyvoice = m
+        try await loadCosyVoice(modelId: "aufklarer/CosyVoice3-0.5B-MLX-4bit")
+    }
+
+    func loadKokoro(modelId: String) async throws -> KokoroTTSModel {
+        if let m = kokoro[modelId] { return m }
+        print("[server] Loading Kokoro (\(modelId))...")
+        let m = try await KokoroTTSModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
+        kokoro[modelId] = m
         return m
     }
 
-    func loadKokoro() async throws -> KokoroTTSModel {
-        if let m = kokoro { return m }
-        print("[server] Loading Kokoro-82M...")
-        let m = try await KokoroTTSModel.fromPretrained(progressHandler: logProgress)
-        kokoro = m
+    func loadVoxCPM2(modelId: String) async throws -> VoxCPM2TTSModel {
+        if let m = voxcpm2[modelId] { return m }
+        print("[server] Loading VoxCPM2 (\(modelId))...")
+        let m = try await VoxCPM2TTSModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
+        voxcpm2[modelId] = m
         return m
     }
 
-    func loadVoxCPM2() async throws -> VoxCPM2TTSModel {
-        if let m = voxcpm2 { return m }
-        print("[server] Loading VoxCPM2...")
-        let m = try await VoxCPM2TTSModel.fromPretrained(progressHandler: logProgress)
-        voxcpm2 = m
-        return m
-    }
-
+    /// Magpie ships as a single fixed bundle today — `fromPretrained` takes
+    /// a `MagpieTTSVariant` enum, not an HF slug. The registry's modelId is
+    /// informational; the loader uses the variant default.
     func loadMagpie() async throws -> MagpieTTS {
         if let m = magpie { return m }
         print("[server] Loading Magpie-TTS Multilingual...")
         let m = try await MagpieTTS.fromPretrained()
         magpie = m
+        return m
+    }
+
+    func loadHibiki(modelId: String) async throws -> HibikiTranslateModel {
+        if let m = hibikiByModelId[modelId] { return m }
+        print("[server] Loading Hibiki (\(modelId))...")
+        let m = try await HibikiTranslateModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
+        hibikiByModelId[modelId] = m
         return m
     }
 
@@ -316,68 +349,124 @@ private func logProgress(_ progress: Double, _ status: String) {
 
 /// Per-connection session state for the OpenAI Realtime protocol.
 ///
-/// ASR and TTS engines are tracked independently so a client can switch the
-/// transcription backend without disturbing synthesis (and vice versa). The
-/// `model` field is the canonical OpenAI-style name last set by the client;
-/// it does not by itself control routing — the resolved engine in
-/// `asrEngine`/`ttsEngine` does.
+/// Three engine slots tracked independently:
+///   - `asrVariant` for the input transcription stage
+///   - `ttsVariant` for the output synthesis stage
+///   - `s2sVariant` for true speech-to-speech models (PersonaPlex, Hibiki)
+///
+/// When `s2sVariant` is non-nil it takes precedence — `input_audio_buffer.commit`
+/// captures the audio for the S2S model and `response.create` runs the model
+/// over that audio in one shot, bypassing the ASR→TTS compose path.
+///
+/// The `model` field is the canonical name last set by the client; it does
+/// not control routing on its own — the resolved variants do.
 private final class RealtimeSession {
-    /// ASR backend used by `input_audio_buffer.commit`.
-    var asrEngine: String = "parakeet"
-    /// TTS backend used by `response.create`.
-    var ttsEngine: String = "kokoro"
-    /// The canonical model name last set via session.update (or the default).
-    var model: String = "kokoro"
+    /// ASR variant used by `input_audio_buffer.commit` when no S2S is active.
+    var asrVariant: ModelVariant
+    /// TTS variant used by `response.create` when no S2S is active.
+    var ttsVariant: ModelVariant
+    /// Optional speech-to-speech variant. When non-nil, the S2S path is
+    /// active and the ASR/TTS slots are bypassed for both events.
+    var s2sVariant: ModelVariant?
+    /// Canonical model name last set via session.update (or the default).
+    /// Stored verbatim — may be a registered name, an alias, or a forward-
+    /// compat name we accept-and-echo without dispatching.
+    var model: String
+    /// Legacy `engine` field — last value the client sent. Echoed back as
+    /// `session.engine` for back-compat with clients that don't read the
+    /// new `asr_engine` / `tts_engine` / `s2s_engine` fields.
+    var legacyEngine: String?
     var language: String = "english"
-    /// Optional reference audio (PCM16 24 kHz) for voice-cloning engines (VoxCPM2).
+    /// PersonaPlex voice preset (e.g. "NATM0"). Only consulted when the
+    /// active S2S engine is PersonaPlex.
+    var voice: String?
+    /// Optional reference audio (PCM16 24 kHz) for voice-cloning engines
+    /// (VoxCPM2). Setting this forces the next response.create to VoxCPM2.
     var voiceCloneReferenceAudio: [Float]?
-    /// Optional reference transcript that pairs with `voiceCloneReferenceAudio`.
+    /// Optional reference transcript that pairs with the cloning audio.
     var voiceCloneReferenceText: String?
     var inputAudioBuffer = Data()
     var inputSampleRate: Int = 24000
+    /// Audio captured by the last `input_audio_buffer.commit`, kept at the
+    /// protocol sample rate (24 kHz mono Float32). The S2S path reads from
+    /// here on the following `response.create`. Cleared after use.
+    var lastCommittedAudio: [Float]?
+
+    init() {
+        let defaultASR = defaultVariant(forEngine: "parakeet", kind: .asr)
+        let defaultTTS = defaultVariant(forEngine: "kokoro", kind: .tts)
+        self.asrVariant = defaultASR
+        self.ttsVariant = defaultTTS
+        self.s2sVariant = nil
+        // Canonical model defaults to the TTS variant name — that's what
+        // the user hears, and matches the OpenAI convention of `model`
+        // naming the user-facing output side.
+        self.model = defaultTTS.name
+    }
+
+    /// Echo value for the legacy `engine` field. If the client set it
+    /// explicitly we round-trip the raw string; otherwise we derive it from
+    /// the active TTS variant's engine slot.
+    var engineEcho: String {
+        return legacyEngine ?? ttsVariant.engine
+    }
 }
 
-/// Map an OpenAI-style model name to the ASR engine string used by AudioServer.
+/// Resolve a model name to its ASR variant, if any.
 ///
-/// Returns `nil` if the name does not name a known ASR engine (the caller
-/// should then try the TTS resolver before treating the name as unknown).
-///
-/// Bare "qwen3" maps to the ASR engine; the TTS-side variant "qwen3-speech"
-/// (or "qwen3-tts*") routes through `resolveModelToTTSEngine`. Variant suffixes
-/// like "parakeet-tdt-0.6b" are accepted.
+/// Convenience over `resolveAllVariants` for callers that only care about
+/// one slot (e.g. the OpenAI-standard `input_audio_transcription.model`
+/// field, which explicitly targets ASR).
+func resolveModelToASRVariant(_ model: String) -> ModelVariant? {
+    return resolveAllVariants(model).first(where: { $0.kind == .asr })
+}
+
+/// Resolve a model name to its TTS variant, if any.
+func resolveModelToTTSVariant(_ model: String) -> ModelVariant? {
+    return resolveAllVariants(model).first(where: { $0.kind == .tts })
+}
+
+/// Resolve a model name to its S2S variant, if any.
+func resolveModelToS2SVariant(_ model: String) -> ModelVariant? {
+    return resolveAllVariants(model).first(where: { $0.kind == .s2s })
+}
+
+/// Look up a name across every kind. A single name can match more than one
+/// kind (e.g. "qwen3" hits both an ASR variant and a TTS variant), in which
+/// case all matches are returned — used by the top-level `model` field on
+/// session.update so a paired family name updates both slots in one step.
+func resolveAllVariants(_ name: String) -> [ModelVariant] {
+    let lower = name.lowercased()
+    guard !lower.isEmpty else { return [] }
+    // Exact canonical-name match short-circuits everything else.
+    if let exact = MODEL_REGISTRY.first(where: { $0.name == lower }) {
+        return [exact]
+    }
+    // Alias match — collect one per kind so paired names update every
+    // slot they fit.
+    var hits: [ModelVariant] = []
+    for kind in [ModelVariant.Kind.asr, .tts, .s2s] {
+        if let v = MODEL_REGISTRY.first(where: { $0.kind == kind && $0.aliases.contains(lower) }) {
+            hits.append(v)
+        }
+    }
+    return hits
+}
+
+// MARK: - Legacy resolver shims
+//
+// These keep the original `resolveModelToASREngine` / `resolveModelToTTSEngine`
+// / `resolveModelToEngine` surface for tests and any external callers that
+// pinned to it. The body just walks the registry.
+
 func resolveModelToASREngine(_ model: String) -> String? {
-    let lower = model.lowercased()
-    if lower == "qwen3" || lower == "qwen3-asr" || lower.hasPrefix("qwen3-asr-") { return "qwen3" }
-    if lower == "parakeet" || lower.hasPrefix("parakeet-") { return "parakeet" }
-    if lower == "nemotron" || lower.hasPrefix("nemotron-") { return "nemotron" }
-    if lower == "omnilingual" || lower.hasPrefix("omnilingual-") { return "omnilingual" }
-    return nil
+    return resolveModelToASRVariant(model)?.engine
 }
 
-/// Map an OpenAI-style model name to the TTS engine string used by AudioServer.
-///
-/// Returns `nil` if the name does not name a known TTS engine. Bare "qwen3"
-/// is treated as ASR (see `resolveModelToASREngine`); use "qwen3-speech" or
-/// "qwen3-tts*" to target the TTS side explicitly.
 func resolveModelToTTSEngine(_ model: String) -> String? {
-    let lower = model.lowercased()
-    if lower == "kokoro" || lower.hasPrefix("kokoro-") { return "kokoro" }
-    if lower == "cosyvoice" || lower.hasPrefix("cosyvoice-") { return "cosyvoice" }
-    if lower == "voxcpm2" || lower.hasPrefix("voxcpm2-") { return "voxcpm2" }
-    if lower == "magpie" || lower.hasPrefix("magpie-") { return "magpie" }
-    if lower == "qwen3-speech" || lower.hasPrefix("qwen3-speech-")
-        || lower == "qwen3-tts" || lower.hasPrefix("qwen3-tts-") { return "qwen3" }
-    return nil
+    return resolveModelToTTSVariant(model)?.engine
 }
 
-/// Map an OpenAI-style model name to either the ASR or TTS engine string.
-///
-/// Tries ASR resolution first, then TTS. Kept for clients that want a single
-/// lookup without caring which side of the pipeline the engine drives.
-///
-/// Variant names like "qwen3-0.6b" or "qwen3-0.6b-coreml" are accepted and
-/// resolve to the base engine. Unknown names return `nil` so callers can
-/// apply forward-compatibility rules without changing the active engine.
 func resolveModelToEngine(_ model: String) -> String? {
     if let asr = resolveModelToASREngine(model) { return asr }
     if let tts = resolveModelToTTSEngine(model) { return tts }
@@ -411,34 +500,50 @@ func handleRealtimeWS(
 
         case "session.update":
             if let sessionConfig = json["session"] as? [String: Any] {
-                // Top-level `model`: resolve to ASR and/or TTS engine and
-                // update whichever slot(s) match. An ambiguous name like
-                // "qwen3" updates only the ASR slot (the TTS variant is
-                // "qwen3-speech"); unknown names are accepted and echoed
-                // but leave the active engines unchanged.
+                // Top-level `model`: walk the registry, update whichever
+                // slots match. Bare "qwen3" updates both ASR and TTS
+                // (they share the alias); "voxcpm2" updates only TTS;
+                // "hibiki" updates only S2S. Unknown names are accepted
+                // and echoed without touching any slot.
                 if let modelName = sessionConfig["model"] as? String, !modelName.isEmpty {
                     session.model = modelName
-                    if let asr = resolveModelToASREngine(modelName) {
-                        session.asrEngine = asr
+                    let variants = resolveAllVariants(modelName)
+                    let pickedS2S = variants.first(where: { $0.kind == .s2s })
+                    for v in variants {
+                        switch v.kind {
+                        case .asr: session.asrVariant = v
+                        case .tts: session.ttsVariant = v
+                        case .s2s: session.s2sVariant = v
+                        }
                     }
-                    if let tts = resolveModelToTTSEngine(modelName) {
-                        session.ttsEngine = tts
+                    // S2S is exclusive — picking a recognized ASR/TTS-only
+                    // model turns S2S off so the user gets the compose
+                    // path back.
+                    if pickedS2S == nil && !variants.isEmpty {
+                        session.s2sVariant = nil
                     }
                 }
                 // OpenAI-standard: `input_audio_transcription.model` selects
                 // the ASR backend independently of the top-level model.
                 if let iat = sessionConfig["input_audio_transcription"] as? [String: Any],
                    let asrModel = iat["model"] as? String,
-                   let asr = resolveModelToASREngine(asrModel) {
-                    session.asrEngine = asr
+                   let asr = resolveModelToASRVariant(asrModel) {
+                    session.asrVariant = asr
                 }
-                // Legacy `engine` field used to control TTS dispatch only;
-                // preserve that semantics so existing clients keep working.
+                // Legacy `engine` field used to control TTS dispatch only.
+                // Preserve that — store the raw string for the echo and
+                // update the TTS variant if the name resolves.
                 if let engine = sessionConfig["engine"] as? String {
-                    session.ttsEngine = engine
+                    session.legacyEngine = engine
+                    if let tts = resolveModelToTTSVariant(engine) {
+                        session.ttsVariant = tts
+                    }
                 }
                 if let lang = sessionConfig["language"] as? String {
                     session.language = lang
+                }
+                if let v = sessionConfig["voice"] as? String, !v.isEmpty {
+                    session.voice = v
                 }
                 if let fmt = sessionConfig["input_audio_format"] as? String, fmt == "pcm16" {
                     session.inputSampleRate = 24000
@@ -487,27 +592,38 @@ func handleRealtimeWS(
                 "item_id": itemId
             ])))
 
-            // Transcribe via the active ASR engine. All engines internally
-            // assume 16 kHz mono Float32 input; resample once and dispatch.
-            let floats = pcm16LEToFloat(audioData)
-            let audio16k = resample(floats, from: session.inputSampleRate, to: 16000)
+            let floats24k = pcm16LEToFloat(audioData)
+
+            // S2S precedence: when an S2S variant is active, commit stores
+            // the audio at the protocol rate (24 kHz mono) for the next
+            // response.create to consume. No transcription is emitted —
+            // the S2S model produces text as part of generation.
+            if session.s2sVariant != nil {
+                session.lastCommittedAudio = floats24k
+                continue
+            }
+
+            // Compose path: transcribe via the active ASR variant. Every
+            // ASR engine expects 16 kHz mono Float32; resample once.
+            let audio16k = resample(floats24k, from: session.inputSampleRate, to: 16000)
+            let asr = session.asrVariant
             let text: String
-            switch session.asrEngine {
+            switch asr.engine {
             case "parakeet":
-                let model = try await state.loadParakeet()
+                let model = try await state.loadParakeet(modelId: asr.modelId)
                 text = (try? model.transcribeAudio(audio16k, sampleRate: 16000, language: nil)) ?? ""
             case "nemotron":
-                let model = try await state.loadNemotron()
+                let model = try await state.loadNemotron(modelId: asr.modelId)
                 text = (try? model.transcribeAudio(audio16k, sampleRate: 16000, language: session.language)) ?? ""
             case "omnilingual":
-                let model = try await state.loadOmnilingual()
+                let model = try await state.loadOmnilingual(modelId: asr.modelId)
                 text = (try? model.transcribeAudio(audio16k, sampleRate: 16000, language: session.language)) ?? ""
-            case "qwen3":
-                let model = try await state.loadASR()
+            case "qwen3-asr":
+                let model = try await state.loadQwen3ASR(modelId: asr.modelId)
                 text = model.transcribe(audio: audio16k, sampleRate: 16000)
             default:
                 try await sendRealtimeError(outbound: outbound,
-                    message: "ASR engine '\(session.asrEngine)' is not enabled in this build")
+                    message: "ASR engine '\(asr.engine)' is not enabled in this build")
                 continue
             }
 
@@ -570,6 +686,69 @@ func handleRealtimeWS(
                 textToSpeak = text
             }
 
+            // S2S precedence: when an S2S variant is active AND a prior
+            // `input_audio_buffer.commit` left audio on the session, run
+            // the S2S model on that audio. Text input is ignored — S2S
+            // is audio-driven and produces its own transcript as part of
+            // generation.
+            if let s2s = session.s2sVariant, let userAudio = session.lastCommittedAudio {
+                session.lastCommittedAudio = nil
+                try await outbound.write(.text(formatJSON([
+                    "type": "response.created",
+                    "response": ["id": responseId, "status": "in_progress"]
+                ] as [String: Any])))
+                var s2sTotalSamples = 0
+                switch s2s.engine {
+                case "personaplex":
+                    let model = try await state.loadPersonaPlex()
+                    let voice = PersonaPlexVoice(rawValue: session.voice ?? "")
+                        ?? .NATM0
+                    let stream = model.respondStream(
+                        userAudio: userAudio,
+                        voice: voice,
+                        systemPromptTokens: nil)
+                    for try await chunk in stream {
+                        if !chunk.samples.isEmpty {
+                            s2sTotalSamples += chunk.samples.count
+                            let pcm = floatToPCM16LE(chunk.samples)
+                            try await outbound.write(.text(formatJSON([
+                                "type": "response.audio.delta",
+                                "response_id": responseId,
+                                "delta": pcm.base64EncodedString()
+                            ])))
+                        }
+                    }
+                case "hibiki":
+                    let model = try await state.loadHibiki(modelId: s2s.modelId)
+                    let sourceLang = HibikiSourceLanguage(
+                        rawValue: mapToHibikiSourceLanguage(session.language)) ?? .fr
+                    let result = model.translate(sourceAudio: userAudio, sourceLanguage: sourceLang)
+                    s2sTotalSamples += try await streamSamplesAsDeltas(
+                        result.audio, outbound: outbound, responseId: responseId)
+                default:
+                    try await sendRealtimeError(outbound: outbound,
+                        message: "S2S engine '\(s2s.engine)' is not enabled in this build")
+                    continue
+                }
+                try await outbound.write(.text(formatJSON([
+                    "type": "response.audio.done",
+                    "response_id": responseId
+                ])))
+                let duration = Double(s2sTotalSamples) / 24000.0
+                try await outbound.write(.text(formatJSON([
+                    "type": "response.done",
+                    "response": [
+                        "id": responseId,
+                        "status": "completed",
+                        "usage": ["total_tokens": 0, "output_tokens": 0],
+                        "output": [
+                            ["type": "audio", "duration": round(duration * 100) / 100, "sample_rate": 24000]
+                        ]
+                    ]
+                ] as [String: Any])))
+                continue
+            }
+
             guard let text = textToSpeak else {
                 try await sendRealtimeError(outbound: outbound, message: "No text to synthesize")
                 continue
@@ -587,25 +766,26 @@ func handleRealtimeWS(
             let perRequestEngine = input?["engine"] as? String
             let language = (input?["language"] as? String) ?? session.language
             let hasCloneReference = session.voiceCloneReferenceAudio != nil
-            let engine: String
+            let ttsVariant: ModelVariant
             if hasCloneReference {
-                engine = "voxcpm2"
-            } else if let perRequestEngine, !perRequestEngine.isEmpty {
-                engine = perRequestEngine
+                ttsVariant = resolveModelToTTSVariant("voxcpm2") ?? session.ttsVariant
+            } else if let perRequestEngine, !perRequestEngine.isEmpty,
+                      let v = resolveModelToTTSVariant(perRequestEngine) {
+                ttsVariant = v
             } else {
-                engine = session.ttsEngine
+                ttsVariant = session.ttsVariant
             }
             var totalSamples = 0
 
-            switch engine {
+            switch ttsVariant.engine {
             case "kokoro":
-                let model = try await state.loadKokoro()
+                let model = try await state.loadKokoro(modelId: ttsVariant.modelId)
                 let langCode = mapToKokoroLanguageCode(language)
                 let samples = try model.synthesize(text: text, language: langCode)
                 totalSamples += try await streamSamplesAsDeltas(
                     samples, outbound: outbound, responseId: responseId)
-            case "qwen3":
-                let model = try await state.loadTTS()
+            case "qwen3-tts":
+                let model = try await state.loadQwen3TTS(modelId: ttsVariant.modelId)
                 let stream = model.synthesizeStream(text: text, language: language)
                 for try await chunk in stream {
                     if !chunk.samples.isEmpty {
@@ -619,7 +799,7 @@ func handleRealtimeWS(
                     }
                 }
             case "cosyvoice":
-                let model = try await state.loadCosyVoice()
+                let model = try await state.loadCosyVoice(modelId: ttsVariant.modelId)
                 let stream = model.synthesizeStream(text: text, language: language)
                 for try await chunk in stream {
                     if !chunk.samples.isEmpty {
@@ -633,7 +813,7 @@ func handleRealtimeWS(
                     }
                 }
             case "voxcpm2":
-                let model = try await state.loadVoxCPM2()
+                let model = try await state.loadVoxCPM2(modelId: ttsVariant.modelId)
                 let samples: [Float]
                 if hasCloneReference {
                     samples = try await model.generateVoxCPM2(
@@ -662,7 +842,7 @@ func handleRealtimeWS(
                     samples24k, outbound: outbound, responseId: responseId)
             default:
                 try await sendRealtimeError(outbound: outbound,
-                    message: "TTS engine '\(engine)' is not enabled in this build")
+                    message: "TTS engine '\(ttsVariant.engine)' is not enabled in this build")
                 continue
             }
 
@@ -731,19 +911,32 @@ private func sendRealtimeError(outbound: WebSocketOutboundWriter, message: Strin
 /// (TTS engine) without knowing about the new `asr_engine`/`tts_engine`
 /// split.
 private func sessionEnvelope(id: String, session: RealtimeSession, type: String) -> [String: Any] {
+    var payload: [String: Any] = [
+        "id": id,
+        "model": session.model,
+        "engine": session.engineEcho,
+        "asr_engine": session.asrVariant.engine,
+        "tts_engine": session.ttsVariant.engine,
+        "asr_model": session.asrVariant.name,
+        "tts_model": session.ttsVariant.name,
+        "language": session.language,
+        "modalities": ["audio", "text"],
+        "input_audio_format": "pcm16",
+        "output_audio_format": "pcm16"
+    ]
+    if let s2s = session.s2sVariant {
+        payload["s2s_engine"] = s2s.engine
+        payload["s2s_model"] = s2s.name
+    } else {
+        payload["s2s_engine"] = NSNull()
+        payload["s2s_model"] = NSNull()
+    }
+    if let v = session.voice {
+        payload["voice"] = v
+    }
     return [
         "type": type,
-        "session": [
-            "id": id,
-            "model": session.model,
-            "engine": session.ttsEngine,
-            "asr_engine": session.asrEngine,
-            "tts_engine": session.ttsEngine,
-            "language": session.language,
-            "modalities": ["audio", "text"],
-            "input_audio_format": "pcm16",
-            "output_audio_format": "pcm16"
-        ] as [String: Any]
+        "session": payload
     ]
 }
 
@@ -806,6 +999,22 @@ func mapToMagpieLanguageCode(_ language: String) -> String {
     case "hi", "hindi": return "hi"
     case "ja", "japanese": return "ja"
     default: return "en"
+    }
+}
+
+/// Map a language name to the 2-letter Hibiki source-language code.
+/// Hibiki Zero-3B supports French / Spanish / Portuguese / German as
+/// source. Unknown values default to French (the model's strongest
+/// language); Hibiki auto-detects in practice so the code is a hint
+/// rather than a hard constraint.
+func mapToHibikiSourceLanguage(_ language: String) -> String {
+    let lower = language.lowercased()
+    switch lower {
+    case "fr", "french": return "fr"
+    case "es", "spanish": return "es"
+    case "pt", "portuguese": return "pt"
+    case "de", "german": return "de"
+    default: return "fr"
     }
 }
 

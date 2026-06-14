@@ -471,6 +471,7 @@ let package = Package(
                 "VoxCPM2TTS",
                 "MagpieTTS",
                 "PersonaPlex",
+                "HibikiTranslate",
                 "SpeechEnhancement",
                 "AudioCommon",
                 .product(name: "Hummingbird", package: "hummingbird"),
