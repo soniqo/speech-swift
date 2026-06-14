@@ -7,8 +7,11 @@ import Qwen3ASR
 import Qwen3TTS
 import CosyVoiceTTS
 import ParakeetASR
+import NemotronStreamingASR
+import OmnilingualASR
 import KokoroTTS
 import VoxCPM2TTS
+import MagpieTTS
 import PersonaPlex
 import SpeechEnhancement
 import AudioCommon
@@ -194,10 +197,13 @@ public struct AudioServer {
 final class ModelState: @unchecked Sendable {
     private var asr: Qwen3ASRModel?
     private var parakeet: ParakeetASRModel?
+    private var nemotron: NemotronStreamingASRModel?
+    private var omnilingual: OmnilingualASRModel?
     private var tts: Qwen3TTSModel?
     private var cosyvoice: CosyVoiceTTSModel?
     private var kokoro: KokoroTTSModel?
     private var voxcpm2: VoxCPM2TTSModel?
+    private var magpie: MagpieTTS?
     private var personaplex: PersonaPlexModel?
     private var enhancer: SpeechEnhancer?
     var spmDecoder: SentencePieceDecoder?
@@ -215,6 +221,22 @@ final class ModelState: @unchecked Sendable {
         print("[server] Loading Parakeet TDT v3...")
         let m = try await ParakeetASRModel.fromPretrained(progressHandler: logProgress)
         parakeet = m
+        return m
+    }
+
+    func loadNemotron() async throws -> NemotronStreamingASRModel {
+        if let m = nemotron { return m }
+        print("[server] Loading Nemotron Streaming ASR...")
+        let m = try await NemotronStreamingASRModel.fromPretrained(progressHandler: logProgress)
+        nemotron = m
+        return m
+    }
+
+    func loadOmnilingual() async throws -> OmnilingualASRModel {
+        if let m = omnilingual { return m }
+        print("[server] Loading Omnilingual ASR...")
+        let m = try await OmnilingualASRModel.fromPretrained(progressHandler: logProgress)
+        omnilingual = m
         return m
     }
 
@@ -247,6 +269,14 @@ final class ModelState: @unchecked Sendable {
         print("[server] Loading VoxCPM2...")
         let m = try await VoxCPM2TTSModel.fromPretrained(progressHandler: logProgress)
         voxcpm2 = m
+        return m
+    }
+
+    func loadMagpie() async throws -> MagpieTTS {
+        if let m = magpie { return m }
+        print("[server] Loading Magpie-TTS Multilingual...")
+        let m = try await MagpieTTS.fromPretrained()
+        magpie = m
         return m
     }
 
@@ -319,6 +349,8 @@ func resolveModelToASREngine(_ model: String) -> String? {
     let lower = model.lowercased()
     if lower == "qwen3" || lower == "qwen3-asr" || lower.hasPrefix("qwen3-asr-") { return "qwen3" }
     if lower == "parakeet" || lower.hasPrefix("parakeet-") { return "parakeet" }
+    if lower == "nemotron" || lower.hasPrefix("nemotron-") { return "nemotron" }
+    if lower == "omnilingual" || lower.hasPrefix("omnilingual-") { return "omnilingual" }
     return nil
 }
 
@@ -332,6 +364,7 @@ func resolveModelToTTSEngine(_ model: String) -> String? {
     if lower == "kokoro" || lower.hasPrefix("kokoro-") { return "kokoro" }
     if lower == "cosyvoice" || lower.hasPrefix("cosyvoice-") { return "cosyvoice" }
     if lower == "voxcpm2" || lower.hasPrefix("voxcpm2-") { return "voxcpm2" }
+    if lower == "magpie" || lower.hasPrefix("magpie-") { return "magpie" }
     if lower == "qwen3-speech" || lower.hasPrefix("qwen3-speech-")
         || lower == "qwen3-tts" || lower.hasPrefix("qwen3-tts-") { return "qwen3" }
     return nil
@@ -463,6 +496,12 @@ func handleRealtimeWS(
             case "parakeet":
                 let model = try await state.loadParakeet()
                 text = (try? model.transcribeAudio(audio16k, sampleRate: 16000, language: nil)) ?? ""
+            case "nemotron":
+                let model = try await state.loadNemotron()
+                text = (try? model.transcribeAudio(audio16k, sampleRate: 16000, language: session.language)) ?? ""
+            case "omnilingual":
+                let model = try await state.loadOmnilingual()
+                text = (try? model.transcribeAudio(audio16k, sampleRate: 16000, language: session.language)) ?? ""
             case "qwen3":
                 let model = try await state.loadASR()
                 text = model.transcribe(audio: audio16k, sampleRate: 16000)
@@ -612,6 +651,15 @@ func handleRealtimeWS(
                     : resample(samples, from: model.outputSampleRate, to: 24000)
                 totalSamples += try await streamSamplesAsDeltas(
                     samples24k, outbound: outbound, responseId: responseId)
+            case "magpie":
+                let model = try await state.loadMagpie()
+                let magpieLang = MagpieLanguage(code: mapToMagpieLanguageCode(language))
+                    ?? .english
+                let samples22k = try model.synthesize(text: text, language: magpieLang)
+                // Magpie emits 22.05 kHz; resample to the 24 kHz protocol rate.
+                let samples24k = resample(samples22k, from: MagpieTTS.sampleRate, to: 24000)
+                totalSamples += try await streamSamplesAsDeltas(
+                    samples24k, outbound: outbound, responseId: responseId)
             default:
                 try await sendRealtimeError(outbound: outbound,
                     message: "TTS engine '\(engine)' is not enabled in this build")
@@ -738,6 +786,25 @@ func mapToKokoroLanguageCode(_ language: String) -> String {
     case "pt", "portuguese": return "pt"
     case "it", "italian": return "it"
     case "hi", "hindi": return "hi"
+    default: return "en"
+    }
+}
+
+/// Map a user-facing language name (or ISO code) to the 2-letter code
+/// Magpie's `MagpieLanguage(code:)` initialiser expects. Magpie ships
+/// 9 languages — anything else falls through to English.
+func mapToMagpieLanguageCode(_ language: String) -> String {
+    let lower = language.lowercased()
+    switch lower {
+    case "en", "english": return "en"
+    case "es", "spanish": return "es"
+    case "de", "german": return "de"
+    case "fr", "french": return "fr"
+    case "it", "italian": return "it"
+    case "vi", "vietnamese": return "vi"
+    case "zh", "cmn", "chinese", "mandarin": return "zh"
+    case "hi", "hindi": return "hi"
+    case "ja", "japanese": return "ja"
     default: return "en"
     }
 }

@@ -352,9 +352,14 @@ final class ResolveModelToEngineTests: XCTestCase {
         XCTAssertEqual(resolveModelToASREngine("qwen3-asr-3b"), "qwen3")
         XCTAssertEqual(resolveModelToASREngine("parakeet"), "parakeet")
         XCTAssertEqual(resolveModelToASREngine("parakeet-tdt-0.6b"), "parakeet")
+        XCTAssertEqual(resolveModelToASREngine("nemotron"), "nemotron")
+        XCTAssertEqual(resolveModelToASREngine("nemotron-3.5-streaming"), "nemotron")
+        XCTAssertEqual(resolveModelToASREngine("omnilingual"), "omnilingual")
+        XCTAssertEqual(resolveModelToASREngine("omnilingual-ctc-300m"), "omnilingual")
         // TTS-only and unknown names return nil.
         XCTAssertNil(resolveModelToASREngine("kokoro"))
         XCTAssertNil(resolveModelToASREngine("voxcpm2"))
+        XCTAssertNil(resolveModelToASREngine("magpie"))
         XCTAssertNil(resolveModelToASREngine("qwen3-speech"))
         XCTAssertNil(resolveModelToASREngine("future-model-v9"))
     }
@@ -365,11 +370,15 @@ final class ResolveModelToEngineTests: XCTestCase {
         XCTAssertEqual(resolveModelToTTSEngine("cosyvoice"), "cosyvoice")
         XCTAssertEqual(resolveModelToTTSEngine("cosyvoice-v2"), "cosyvoice")
         XCTAssertEqual(resolveModelToTTSEngine("voxcpm2"), "voxcpm2")
+        XCTAssertEqual(resolveModelToTTSEngine("magpie"), "magpie")
+        XCTAssertEqual(resolveModelToTTSEngine("magpie-multi"), "magpie")
         XCTAssertEqual(resolveModelToTTSEngine("qwen3-speech"), "qwen3")
         XCTAssertEqual(resolveModelToTTSEngine("qwen3-tts"), "qwen3")
         XCTAssertEqual(resolveModelToTTSEngine("qwen3-speech-0.6b"), "qwen3")
         // ASR-only and unknown names return nil.
         XCTAssertNil(resolveModelToTTSEngine("parakeet"))
+        XCTAssertNil(resolveModelToTTSEngine("nemotron"))
+        XCTAssertNil(resolveModelToTTSEngine("omnilingual"))
         XCTAssertNil(resolveModelToTTSEngine("qwen3"))
         XCTAssertNil(resolveModelToTTSEngine("future-model-v9"))
     }
@@ -377,8 +386,11 @@ final class ResolveModelToEngineTests: XCTestCase {
     func testLegacyResolverFallsThroughASRThenTTS() {
         // Names that exist on only one side route there.
         XCTAssertEqual(resolveModelToEngine("parakeet"), "parakeet")
+        XCTAssertEqual(resolveModelToEngine("nemotron"), "nemotron")
+        XCTAssertEqual(resolveModelToEngine("omnilingual"), "omnilingual")
         XCTAssertEqual(resolveModelToEngine("kokoro"), "kokoro")
         XCTAssertEqual(resolveModelToEngine("voxcpm2"), "voxcpm2")
+        XCTAssertEqual(resolveModelToEngine("magpie"), "magpie")
         XCTAssertEqual(resolveModelToEngine("cosyvoice"), "cosyvoice")
         // Ambiguous bare "qwen3" resolves to ASR first (the side the resolver
         // checks before TTS).
@@ -396,12 +408,13 @@ final class ResolveModelToEngineTests: XCTestCase {
         XCTAssertNil(resolveModelToEngine("future-model-v9"))
         XCTAssertNil(resolveModelToEngine("gpt-4o-realtime"))
         XCTAssertNil(resolveModelToEngine(""))
-        // Engines that were advertised by the previous resolver but aren't
-        // wired into dispatch yet — keep them out of the resolver so we don't
-        // hand clients an engine name the server can't actually launch.
-        XCTAssertNil(resolveModelToEngine("nemotron"))
-        XCTAssertNil(resolveModelToEngine("omnilingual"))
-        XCTAssertNil(resolveModelToEngine("magpie"))
+        // True speech-to-speech models (PersonaPlex, Hibiki translation)
+        // intentionally don't resolve through this surface — they need
+        // their own protocol entry point because they consume input audio
+        // and produce output audio in one shot, rather than fitting the
+        // ASR-then-TTS compose path the Realtime handlers use today.
+        XCTAssertNil(resolveModelToEngine("personaplex"))
+        XCTAssertNil(resolveModelToEngine("hibiki"))
     }
 
     func testKokoroLanguageCodeMapping() {
