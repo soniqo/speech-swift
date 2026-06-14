@@ -445,6 +445,83 @@ final class RealtimeAPITests: XCTestCase {
         XCTAssertEqual(session?["s2s_engine"] as? String, "hibiki")
         XCTAssertEqual(session?["s2s_model"] as? String, "hibiki-zero-3b-mlx-8bit")
     }
+
+    // MARK: - HTTP surface
+
+    /// `GET /v1/realtime/models` dumps the registry. Clients use this to
+    /// discover what names `session.update` accepts.
+    func testRealtimeModelsEndpoint() async throws {
+        let url = URL(string: "http://127.0.0.1:\(Self.port)/v1/realtime/models")!
+        let (data, response) = try await URLSession.shared.data(from: url)
+        let http = response as! HTTPURLResponse
+        XCTAssertEqual(http.statusCode, 200)
+
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        XCTAssertEqual(json?["object"] as? String, "list")
+        let models = json?["data"] as? [[String: Any]]
+        XCTAssertNotNil(models)
+        // At least every must-be-reachable engine has at least one row.
+        let engines = Set((models ?? []).compactMap { $0["engine"] as? String })
+        XCTAssertTrue(engines.contains("parakeet"))
+        XCTAssertTrue(engines.contains("kokoro"))
+        XCTAssertTrue(engines.contains("voxcpm2"))
+        XCTAssertTrue(engines.contains("hibiki"))
+        XCTAssertTrue(engines.contains("personaplex"))
+        XCTAssertTrue(engines.contains("vibevoice"))
+        // Every row has the contract fields set.
+        for row in models ?? [] {
+            XCTAssertEqual(row["object"] as? String, "model")
+            XCTAssertNotNil(row["id"])
+            XCTAssertNotNil(row["model_id"])
+            XCTAssertNotNil(row["kind"])
+        }
+    }
+
+    /// HTTP `/transcribe` returns a 400 for unknown model names rather than
+    /// silently falling back to the default — clients should learn fast.
+    func testTranscribeRejectsUnknownModel() async throws {
+        let url = URL(string: "http://127.0.0.1:\(Self.port)/transcribe")!
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        // No audio_base64 because the request should fail before audio load.
+        let body: [String: Any] = ["model": "definitely-not-a-real-model-9000"]
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (_, response) = try await URLSession.shared.data(for: req)
+        let http = response as! HTTPURLResponse
+        XCTAssertEqual(http.statusCode, 400)
+    }
+
+    func testSpeakRejectsUnknownModel() async throws {
+        let url = URL(string: "http://127.0.0.1:\(Self.port)/speak")!
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body: [String: Any] = [
+            "text": "hello",
+            "model": "totally-not-a-tts-engine"
+        ]
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (_, response) = try await URLSession.shared.data(for: req)
+        let http = response as! HTTPURLResponse
+        XCTAssertEqual(http.statusCode, 400)
+    }
+
+    func testRespondRejectsUnknownModel() async throws {
+        let url = URL(string: "http://127.0.0.1:\(Self.port)/respond")!
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        // Even with an audio payload the unknown model should error first.
+        let body: [String: Any] = [
+            "audio_base64": "",
+            "model": "not-an-s2s-model"
+        ]
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (_, response) = try await URLSession.shared.data(for: req)
+        let http = response as! HTTPURLResponse
+        XCTAssertEqual(http.statusCode, 400)
+    }
 }
 
 // MARK: - Unit tests for the model→engine resolvers (no server required)
@@ -547,6 +624,34 @@ final class ResolveModelToEngineTests: XCTestCase {
                        "aufklarer/Qwen3-ASR-0.6B-MLX-4bit")
         XCTAssertEqual(resolveModelVariant("qwen3-1.7b")?.modelId,
                        "aufklarer/Qwen3-ASR-1.7B-MLX-8bit")
+    }
+
+    func testStreamingAndCoreMLVariantsRegistered() {
+        // Variants added in the registry-expansion pass.
+        XCTAssertEqual(resolveModelVariant("parakeet-streaming")?.engine, "parakeet-streaming")
+        XCTAssertEqual(resolveModelVariant("parakeet-eou")?.modelId,
+                       "aufklarer/Parakeet-EOU-120M-CoreML-INT8")
+        XCTAssertEqual(resolveModelVariant("vibevoice")?.engine, "vibevoice")
+        XCTAssertEqual(resolveModelVariant("vibevoice-1.5b")?.engine, "vibevoice-1.5b")
+        XCTAssertEqual(resolveModelVariant("qwen3-tts-coreml")?.engine, "qwen3-tts-coreml")
+        XCTAssertEqual(resolveModelVariant("magpie-coreml")?.engine, "magpie-coreml")
+    }
+
+    func testRegistryHasAtLeastOneVariantPerWiredEngine() {
+        // Every engine the WS dispatch can launch must be reachable via at
+        // least one registered variant. Catches the case where a dispatch
+        // arm gets added but the registry row is forgotten.
+        let registeredEngines = Set(MODEL_REGISTRY.map { $0.engine })
+        let mustBeReachable: Set<String> = [
+            "qwen3-asr", "parakeet", "parakeet-streaming", "nemotron", "omnilingual",
+            "kokoro", "qwen3-tts", "qwen3-tts-coreml", "cosyvoice", "voxcpm2",
+            "magpie", "magpie-coreml", "vibevoice", "vibevoice-1.5b",
+            "personaplex", "hibiki",
+        ]
+        for engine in mustBeReachable {
+            XCTAssertTrue(registeredEngines.contains(engine),
+                          "Engine '\(engine)' has a dispatch arm but no registry row")
+        }
     }
 
     func testCaseInsensitive() {

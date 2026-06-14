@@ -16,6 +16,9 @@ import Tokenizers
 /// )
 /// ```
 public final class VibeVoice15BTTSModel {
+    /// Default HuggingFace model identifier — the 1.5B INT4 bundle.
+    public static let defaultModelId = "aufklarer/VibeVoice-1.5B-MLX-INT4"
+
     public struct Configuration: Sendable {
         public var modelId: String
         public var tokenizerModelId: String

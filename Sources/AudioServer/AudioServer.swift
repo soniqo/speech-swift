@@ -5,13 +5,17 @@ import HummingbirdWebSocket
 import NIOCore
 import Qwen3ASR
 import Qwen3TTS
+import Qwen3TTSCoreML
 import CosyVoiceTTS
 import ParakeetASR
+import ParakeetStreamingASR
 import NemotronStreamingASR
 import OmnilingualASR
 import KokoroTTS
 import VoxCPM2TTS
 import MagpieTTS
+import MagpieTTSCoreML
+import VibeVoiceTTS
 import PersonaPlex
 import HibikiTranslate
 import SpeechEnhancement
@@ -68,6 +72,27 @@ public struct AudioServer {
                 body: .init(byteBuffer: .init(string: "{\"status\":\"ok\"}")))
         }
 
+        router.get("/v1/realtime/models") { _, _ in
+            // OpenAI-style list-models payload. Clients can introspect the
+            // protocol surface without trying names blindly. Same registry
+            // backs the WS dispatch, so the names here are exactly what
+            // session.update will accept.
+            let modelList: [[String: Any]] = MODEL_REGISTRY.map { v in
+                [
+                    "id": v.name,
+                    "object": "model",
+                    "engine": v.engine,
+                    "kind": v.kind.rawValue,
+                    "model_id": v.modelId,
+                    "aliases": v.aliases
+                ]
+            }
+            return jsonResponse([
+                "object": "list",
+                "data": modelList
+            ] as [String: Any])
+        }
+
         router.post("/v1/audio/transcriptions") { request, _ in
             try await handleOpenAITranscriptions(request: request, state: state)
         }
@@ -80,13 +105,32 @@ public struct AudioServer {
                 return errorResponse("Missing audio data", status: .badRequest)
             }
 
+            // Pick the ASR variant from the request or fall back to the
+            // default Parakeet bundle. Unknown names error rather than
+            // silently fall back, so clients learn fast.
+            let variant: ModelVariant
+            if let modelName = params.string("model"), !modelName.isEmpty {
+                if let v = resolveModelToASRVariant(modelName) {
+                    variant = v
+                } else {
+                    return errorResponse(
+                        "Unknown ASR model: \(modelName)",
+                        status: .badRequest)
+                }
+            } else {
+                variant = defaultVariant(forEngine: "parakeet", kind: .asr)
+            }
+
             let sampleRate = params.int("sample_rate") ?? 16000
-            let model = try await state.loadASR()
             let audio = try decodeWAVData(audioData, targetSampleRate: sampleRate)
-            let text = model.transcribe(audio: audio, sampleRate: sampleRate)
+            let language = params.string("language")
+            let text = try await dispatchTranscribe(
+                audio: audio, sampleRate: sampleRate,
+                variant: variant, language: language, state: state)
 
             return jsonResponse([
                 "text": text,
+                "model": variant.name,
                 "duration": round(Double(audio.count) / Double(sampleRate) * 100) / 100
             ] as [String: Any])
         }
@@ -99,18 +143,26 @@ public struct AudioServer {
                 return errorResponse("Missing 'text' field", status: .badRequest)
             }
 
-            let engine = params.string("engine") ?? "cosyvoice"
-            let language = params.string("language") ?? "english"
-
-            let samples: [Float]
-
-            if engine == "qwen3" {
-                let model = try await state.loadTTS()
-                samples = model.synthesize(text: text, language: language)
+            // Variant precedence: model > legacy engine > default Kokoro.
+            // Legacy engine field kept so old callers don't break.
+            let variant: ModelVariant
+            if let modelName = params.string("model"), !modelName.isEmpty {
+                if let v = resolveModelToTTSVariant(modelName) {
+                    variant = v
+                } else {
+                    return errorResponse(
+                        "Unknown TTS model: \(modelName)",
+                        status: .badRequest)
+                }
+            } else if let engineName = params.string("engine"), !engineName.isEmpty {
+                variant = resolveModelToTTSVariant(engineName)
+                    ?? defaultVariant(forEngine: "kokoro", kind: .tts)
             } else {
-                let model = try await state.loadCosyVoice()
-                samples = model.synthesize(text: text, language: language)
+                variant = defaultVariant(forEngine: "kokoro", kind: .tts)
             }
+            let language = params.string("language") ?? "english"
+            let samples = try await dispatchSynthesize(
+                text: text, variant: variant, language: language, state: state)
 
             let wavData = try encodeWAV(samples: samples, sampleRate: 24000)
             return Response(
@@ -134,27 +186,59 @@ public struct AudioServer {
                 return errorResponse("Unknown voice: \(voiceName)", status: .badRequest)
             }
 
-            let model = try await state.loadPersonaPlex()
-            let audio = try decodeWAVData(audioData, targetSampleRate: 24000)
-            let result = model.respond(
-                userAudio: audio,
-                voice: voice,
-                maxSteps: maxSteps)
-
-            var transcript: String?
-            if let dec = state.spmDecoder, !result.textTokens.isEmpty {
-                transcript = dec.decode(result.textTokens)
+            // /respond is the PersonaPlex/Hibiki entry point on HTTP — same
+            // S2S surface the Realtime WS uses, just request-shaped. The
+            // `model` field picks which S2S engine (and which quantization
+            // bundle). Default stays PersonaPlex 4-bit for back-compat.
+            let variant: ModelVariant
+            if let modelName = params.string("model"), !modelName.isEmpty {
+                if let v = resolveModelToS2SVariant(modelName) {
+                    variant = v
+                } else {
+                    return errorResponse(
+                        "Unknown speech-to-speech model: \(modelName)",
+                        status: .badRequest)
+                }
+            } else {
+                variant = defaultVariant(forEngine: "personaplex", kind: .s2s)
             }
 
-            let wavData = try encodeWAV(samples: result.audio, sampleRate: 24000)
-            let duration = Double(result.audio.count) / 24000.0
+            let audio = try decodeWAVData(audioData, targetSampleRate: 24000)
+            let responseAudio: [Float]
+            var responseTranscript: String?
+            switch variant.engine {
+            case "personaplex":
+                let model = try await state.loadPersonaPlex()
+                let result = model.respond(
+                    userAudio: audio,
+                    voice: voice,
+                    maxSteps: maxSteps)
+                responseAudio = result.audio
+                if let dec = state.spmDecoder, !result.textTokens.isEmpty {
+                    responseTranscript = dec.decode(result.textTokens)
+                }
+            case "hibiki":
+                let model = try await state.loadHibiki(modelId: variant.modelId)
+                let lang = params.string("language") ?? "french"
+                let sourceLang = HibikiSourceLanguage(
+                    rawValue: mapToHibikiSourceLanguage(lang)) ?? .fr
+                let result = model.translate(sourceAudio: audio, sourceLanguage: sourceLang)
+                responseAudio = result.audio
+            default:
+                return errorResponse(
+                    "S2S engine '\(variant.engine)' not enabled in this build",
+                    status: .badRequest)
+            }
+
+            let wavData = try encodeWAV(samples: responseAudio, sampleRate: 24000)
+            let duration = Double(responseAudio.count) / 24000.0
 
             if params.string("format") == "json" {
                 var json: [String: Any] = [
                     "duration": round(duration * 100) / 100,
-                    "text_tokens": result.textTokens.count
+                    "model": variant.name
                 ]
-                if let t = transcript { json["transcript"] = t }
+                if let t = responseTranscript { json["transcript"] = t }
                 json["audio_base64"] = wavData.base64EncodedString()
                 return jsonResponse(json)
             }
@@ -202,13 +286,18 @@ final class ModelState: @unchecked Sendable {
     // multi-tenant servers benefit from holding the small set warm.
     private var qwen3ASR: [String: Qwen3ASRModel] = [:]
     private var parakeet: [String: ParakeetASRModel] = [:]
+    private var parakeetStreaming: [String: ParakeetStreamingASRModel] = [:]
     private var nemotron: [String: NemotronStreamingASRModel] = [:]
     private var omnilingual: [String: OmnilingualASRModel] = [:]
     private var qwen3TTS: [String: Qwen3TTSModel] = [:]
+    private var qwen3TTSCoreML: [String: Qwen3TTSCoreMLModel] = [:]
     private var cosyvoice: [String: CosyVoiceTTSModel] = [:]
     private var kokoro: [String: KokoroTTSModel] = [:]
     private var voxcpm2: [String: VoxCPM2TTSModel] = [:]
     private var magpie: MagpieTTS?
+    private var magpieCoreML: MagpieTTSCoreML?
+    private var vibevoice: [String: VibeVoiceTTSModel] = [:]
+    private var vibevoice15B: [String: VibeVoice15BTTSModel] = [:]
     private var personaplex: PersonaPlexModel?
     private var hibikiByModelId: [String: HibikiTranslateModel] = [:]
     private var enhancer: SpeechEnhancer?
@@ -233,6 +322,14 @@ final class ModelState: @unchecked Sendable {
         print("[server] Loading Parakeet (\(modelId))...")
         let m = try await ParakeetASRModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
         parakeet[modelId] = m
+        return m
+    }
+
+    func loadParakeetStreaming(modelId: String) async throws -> ParakeetStreamingASRModel {
+        if let m = parakeetStreaming[modelId] { return m }
+        print("[server] Loading Parakeet EOU Streaming (\(modelId))...")
+        let m = try await ParakeetStreamingASRModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
+        parakeetStreaming[modelId] = m
         return m
     }
 
@@ -302,6 +399,44 @@ final class ModelState: @unchecked Sendable {
         print("[server] Loading Magpie-TTS Multilingual...")
         let m = try await MagpieTTS.fromPretrained()
         magpie = m
+        return m
+    }
+
+    /// MagpieTTSCoreML uses a fixed CoreML bundle; like MLX-Magpie, no
+    /// per-modelId caching — there's one variant.
+    func loadMagpieCoreML() async throws -> MagpieTTSCoreML {
+        if let m = magpieCoreML { return m }
+        print("[server] Loading Magpie-TTS CoreML...")
+        let m = try await MagpieTTSCoreML.fromPretrained()
+        magpieCoreML = m
+        return m
+    }
+
+    func loadQwen3TTSCoreML(modelId: String) async throws -> Qwen3TTSCoreMLModel {
+        if let m = qwen3TTSCoreML[modelId] { return m }
+        print("[server] Loading Qwen3-TTS CoreML (\(modelId))...")
+        let m = try await Qwen3TTSCoreMLModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
+        qwen3TTSCoreML[modelId] = m
+        return m
+    }
+
+    func loadVibeVoice(modelId: String) async throws -> VibeVoiceTTSModel {
+        if let m = vibevoice[modelId] { return m }
+        print("[server] Loading VibeVoice Realtime (\(modelId))...")
+        var cfg = VibeVoiceTTSModel.Configuration()
+        cfg.modelId = modelId
+        let m = try await VibeVoiceTTSModel.fromPretrained(configuration: cfg, progressHandler: logProgress)
+        vibevoice[modelId] = m
+        return m
+    }
+
+    func loadVibeVoice15B(modelId: String) async throws -> VibeVoice15BTTSModel {
+        if let m = vibevoice15B[modelId] { return m }
+        print("[server] Loading VibeVoice 1.5B (\(modelId))...")
+        var cfg = VibeVoice15BTTSModel.Configuration()
+        cfg.modelId = modelId
+        let m = try await VibeVoice15BTTSModel.fromPretrained(configuration: cfg, progressHandler: logProgress)
+        vibevoice15B[modelId] = m
         return m
     }
 
@@ -619,6 +754,9 @@ func handleRealtimeWS(
             case "parakeet":
                 let model = try await state.loadParakeet(modelId: asr.modelId)
                 text = (try? model.transcribeAudio(audio16k, sampleRate: 16000, language: nil)) ?? ""
+            case "parakeet-streaming":
+                let model = try await state.loadParakeetStreaming(modelId: asr.modelId)
+                text = (try? model.transcribeAudio(audio16k, sampleRate: 16000, language: session.language)) ?? ""
             case "nemotron":
                 let model = try await state.loadNemotron(modelId: asr.modelId)
                 text = (try? model.transcribeAudio(audio16k, sampleRate: 16000, language: session.language)) ?? ""
@@ -855,6 +993,29 @@ func handleRealtimeWS(
                 let samples24k = resample(samples22k, from: MagpieTTS.sampleRate, to: 24000)
                 totalSamples += try await streamSamplesAsDeltas(
                     samples24k, outbound: outbound, responseId: responseId)
+            case "magpie-coreml":
+                let model = try await state.loadMagpieCoreML()
+                let magpieLang = MagpieCoreMLLanguage(rawValue: mapToMagpieLanguageCode(language))
+                    ?? .english
+                let samples22k = try model.synthesize(text: text, language: magpieLang)
+                let samples24k = resample(samples22k, from: MagpieTTSCoreML.sampleRate, to: 24000)
+                totalSamples += try await streamSamplesAsDeltas(
+                    samples24k, outbound: outbound, responseId: responseId)
+            case "qwen3-tts-coreml":
+                let model = try await state.loadQwen3TTSCoreML(modelId: ttsVariant.modelId)
+                let samples = try model.synthesize(text: text, language: language)
+                totalSamples += try await streamSamplesAsDeltas(
+                    samples, outbound: outbound, responseId: responseId)
+            case "vibevoice":
+                let model = try await state.loadVibeVoice(modelId: ttsVariant.modelId)
+                let samples = try await model.generate(text: text, language: language)
+                totalSamples += try await streamSamplesAsDeltas(
+                    samples, outbound: outbound, responseId: responseId)
+            case "vibevoice-1.5b":
+                let model = try await state.loadVibeVoice15B(modelId: ttsVariant.modelId)
+                let samples = try await model.generate(text: text, language: language)
+                totalSamples += try await streamSamplesAsDeltas(
+                    samples, outbound: outbound, responseId: responseId)
             default:
                 try await sendRealtimeError(outbound: outbound,
                     message: "TTS engine '\(ttsVariant.engine)' is not enabled in this build")
@@ -979,6 +1140,121 @@ private func streamSamplesAsDeltas(
         i = end
     }
     return samples.count
+}
+
+// MARK: - Shared dispatch (registry-driven)
+
+/// Transcribe audio via the engine + modelId named by `variant`. Used by
+/// both the WS `input_audio_buffer.commit` handler and the HTTP routes so
+/// the routing is single-sourced — a new ASR variant only has to be added
+/// to one place.
+///
+/// Returns an empty string on engine-level errors (matching the WS path's
+/// `try?` shape) so the calling route can return an empty transcript
+/// rather than a 500.
+func dispatchTranscribe(
+    audio: [Float],
+    sampleRate: Int,
+    variant: ModelVariant,
+    language: String?,
+    state: ModelState
+) async throws -> String {
+    let audio16k: [Float] = sampleRate == 16000
+        ? audio
+        : resample(audio, from: sampleRate, to: 16000)
+    switch variant.engine {
+    case "parakeet":
+        let model = try await state.loadParakeet(modelId: variant.modelId)
+        return (try? model.transcribeAudio(audio16k, sampleRate: 16000, language: language)) ?? ""
+    case "parakeet-streaming":
+        let model = try await state.loadParakeetStreaming(modelId: variant.modelId)
+        return (try? model.transcribeAudio(audio16k, sampleRate: 16000, language: language)) ?? ""
+    case "nemotron":
+        let model = try await state.loadNemotron(modelId: variant.modelId)
+        return (try? model.transcribeAudio(audio16k, sampleRate: 16000, language: language)) ?? ""
+    case "omnilingual":
+        let model = try await state.loadOmnilingual(modelId: variant.modelId)
+        return (try? model.transcribeAudio(audio16k, sampleRate: 16000, language: language)) ?? ""
+    case "qwen3-asr":
+        let model = try await state.loadQwen3ASR(modelId: variant.modelId)
+        return model.transcribe(audio: audio16k, sampleRate: 16000)
+    default:
+        throw RealtimeDispatchError.engineNotEnabled(kind: "ASR", engine: variant.engine)
+    }
+}
+
+/// Synthesize text into 24 kHz Float32 PCM via the engine named by
+/// `variant`. Non-streaming — accumulates the full waveform. The WS path
+/// keeps its own per-chunk streaming dispatch for engines that support it
+/// (qwen3, cosyvoice); the HTTP routes use this helper since they return
+/// a complete WAV body. Engines that emit at a different sample rate
+/// (Magpie 22.05 kHz, VoxCPM2 48 kHz) are resampled here.
+func dispatchSynthesize(
+    text: String,
+    variant: ModelVariant,
+    language: String,
+    state: ModelState,
+    cloneReferenceAudio: [Float]? = nil,
+    cloneReferenceText: String? = nil
+) async throws -> [Float] {
+    switch variant.engine {
+    case "kokoro":
+        let model = try await state.loadKokoro(modelId: variant.modelId)
+        return try model.synthesize(text: text, language: mapToKokoroLanguageCode(language))
+    case "qwen3-tts":
+        let model = try await state.loadQwen3TTS(modelId: variant.modelId)
+        return model.synthesize(text: text, language: language)
+    case "qwen3-tts-coreml":
+        let model = try await state.loadQwen3TTSCoreML(modelId: variant.modelId)
+        return try model.synthesize(text: text, language: language)
+    case "cosyvoice":
+        let model = try await state.loadCosyVoice(modelId: variant.modelId)
+        return model.synthesize(text: text, language: language)
+    case "voxcpm2":
+        let model = try await state.loadVoxCPM2(modelId: variant.modelId)
+        let samples: [Float]
+        if let refAudio = cloneReferenceAudio, !refAudio.isEmpty {
+            samples = try await model.generateVoxCPM2(
+                text: text, language: language,
+                refText: cloneReferenceText, refAudio: refAudio)
+        } else {
+            samples = try await model.generate(text: text, language: language)
+        }
+        return model.outputSampleRate == 24000
+            ? samples
+            : resample(samples, from: model.outputSampleRate, to: 24000)
+    case "magpie":
+        let model = try await state.loadMagpie()
+        let lang = MagpieLanguage(code: mapToMagpieLanguageCode(language)) ?? .english
+        let samples22k = try model.synthesize(text: text, language: lang)
+        return resample(samples22k, from: MagpieTTS.sampleRate, to: 24000)
+    case "magpie-coreml":
+        let model = try await state.loadMagpieCoreML()
+        let lang = MagpieCoreMLLanguage(rawValue: mapToMagpieLanguageCode(language)) ?? .english
+        let samples22k = try model.synthesize(text: text, language: lang)
+        return resample(samples22k, from: MagpieTTSCoreML.sampleRate, to: 24000)
+    case "vibevoice":
+        let model = try await state.loadVibeVoice(modelId: variant.modelId)
+        return try await model.generate(text: text, language: language)
+    case "vibevoice-1.5b":
+        let model = try await state.loadVibeVoice15B(modelId: variant.modelId)
+        return try await model.generate(text: text, language: language)
+    default:
+        throw RealtimeDispatchError.engineNotEnabled(kind: "TTS", engine: variant.engine)
+    }
+}
+
+/// Errors raised by the registry-driven dispatchers when an engine is
+/// named but not wired into the build.
+enum RealtimeDispatchError: Error, CustomStringConvertible {
+    case engineNotEnabled(kind: String, engine: String)
+
+    var description: String {
+        switch self {
+        case .engineNotEnabled(let kind, let engine):
+            return "\(kind) engine '\(engine)' is not enabled in this build"
+        }
+    }
 }
 
 /// Map a user-facing language name (or ISO code) to the 2-letter code

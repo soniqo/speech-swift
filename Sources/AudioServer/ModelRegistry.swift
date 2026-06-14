@@ -1,13 +1,17 @@
 import Foundation
 import Qwen3ASR
 import Qwen3TTS
+import Qwen3TTSCoreML
 import CosyVoiceTTS
 import ParakeetASR
+import ParakeetStreamingASR
 import NemotronStreamingASR
 import OmnilingualASR
 import KokoroTTS
 import VoxCPM2TTS
 import MagpieTTS
+import MagpieTTSCoreML
+import VibeVoiceTTS
 import PersonaPlex
 import HibikiTranslate
 
@@ -75,6 +79,11 @@ public let MODEL_REGISTRY: [ModelVariant] = [
           modelId: ParakeetASRModel.iosModelId,
           aliases: ["parakeet-ios", "parakeet-5s"],
           kind: .asr),
+    .init(name: "parakeet-eou-120m-coreml-int8",
+          engine: "parakeet-streaming",
+          modelId: ParakeetStreamingASRModel.defaultModelId,
+          aliases: ["parakeet-streaming", "parakeet-eou", "parakeet-120m"],
+          kind: .asr),
     .init(name: "nemotron-3.5-asr-streaming-0.6b-coreml-int8",
           engine: "nemotron",
           modelId: NemotronStreamingASRModel.defaultModelId,
@@ -122,6 +131,26 @@ public let MODEL_REGISTRY: [ModelVariant] = [
           engine: "magpie",
           modelId: "aufklarer/Magpie-TTS-Multilingual-MLX-4bit",
           aliases: ["magpie", "magpie-tts"],
+          kind: .tts),
+    .init(name: "magpie-tts-multilingual-357m-coreml-int8",
+          engine: "magpie-coreml",
+          modelId: MagpieCoreMLConstants.huggingFaceRepo,
+          aliases: ["magpie-coreml", "magpie-357m-coreml"],
+          kind: .tts),
+    .init(name: "qwen3-tts-coreml",
+          engine: "qwen3-tts-coreml",
+          modelId: Qwen3TTSCoreMLModel.defaultModelId,
+          aliases: ["qwen3-tts-coreml", "qwen3-speech-coreml"],
+          kind: .tts),
+    .init(name: "vibevoice-realtime-0.5b-mlx-int4",
+          engine: "vibevoice",
+          modelId: VibeVoiceTTSModel.defaultModelId,
+          aliases: ["vibevoice", "vibevoice-realtime", "vibevoice-0.5b"],
+          kind: .tts),
+    .init(name: "vibevoice-1.5b-mlx-int4",
+          engine: "vibevoice-1.5b",
+          modelId: VibeVoice15BTTSModel.defaultModelId,
+          aliases: ["vibevoice-1.5b", "vibevoice-large"],
           kind: .tts),
 
     // ─── Speech-to-speech (input audio → output audio in one shot) ─────────
