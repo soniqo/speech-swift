@@ -14,6 +14,12 @@ import MagpieTTSCoreML
 import VibeVoiceTTS
 import PersonaPlex
 import HibikiTranslate
+import SpeechEnhancement
+import SpeechVAD
+import SourceSeparation
+import FlashSR
+import MAGNeTMusicGen
+import StableAudio3MusicGen
 
 // MARK: - Model registry
 
@@ -35,10 +41,27 @@ public struct ModelVariant: Sendable, Equatable {
     public let aliases: [String]
     public let kind: Kind
 
-    public enum Kind: String, Sendable, Equatable {
+    public enum Kind: String, Sendable, Equatable, CaseIterable {
+        /// Speech recognition (audio → text).
         case asr
+        /// Speech synthesis (text → audio).
         case tts
+        /// Speech-to-speech (audio → audio in one shot).
         case s2s
+        /// Speech enhancement / noise suppression (audio → cleaned audio).
+        case enhance
+        /// Music or sound-effect generation (text → audio).
+        case music
+        /// Voice activity detection (audio → speech/silence timeline).
+        case vad
+        /// Speaker diarization (audio → speaker-labelled segments).
+        case diarize
+        /// Speaker-embedding extractor (audio → fixed-size vector).
+        case speaker
+        /// Source separation (audio → per-stem audio).
+        case separate
+        /// Speech super-resolution (low-rate audio → high-rate audio).
+        case sr
     }
 }
 
@@ -174,6 +197,135 @@ public let MODEL_REGISTRY: [ModelVariant] = [
           modelId: HibikiTranslateModel.modelId8bit,
           aliases: ["hibiki-8bit"],
           kind: .s2s),
+
+    // ─── Enhance (noise suppression / cleanup) ─────────────────────────────
+    .init(name: "deepfilternet3-coreml",
+          engine: "deepfilternet3",
+          modelId: SpeechEnhancer.defaultModelId,
+          aliases: ["deepfilternet3", "denoise", "dfn3"],
+          kind: .enhance),
+
+    // ─── Music / SFX generation ────────────────────────────────────────────
+    .init(name: "magnet-small-30s-mlx-int4",
+          engine: "magnet",
+          modelId: MAGNeTVariant.smallInt4.huggingFaceRepoId,
+          aliases: ["magnet", "magnet-small", "magnet-small-int4"],
+          kind: .music),
+    .init(name: "magnet-small-30s-mlx-int8",
+          engine: "magnet",
+          modelId: MAGNeTVariant.smallInt8.huggingFaceRepoId,
+          aliases: ["magnet-small-int8"],
+          kind: .music),
+    .init(name: "magnet-medium-30s-mlx-int4",
+          engine: "magnet",
+          modelId: MAGNeTVariant.mediumInt4.huggingFaceRepoId,
+          aliases: ["magnet-medium", "magnet-medium-int4"],
+          kind: .music),
+    .init(name: "magnet-medium-30s-mlx-int8",
+          engine: "magnet",
+          modelId: MAGNeTVariant.mediumInt8.huggingFaceRepoId,
+          aliases: ["magnet-medium-int8"],
+          kind: .music),
+    .init(name: "stable-audio-3-dit-medium-mlx-int4",
+          engine: "stable-audio-3",
+          modelId: StableAudio3Variant.mediumInt4.huggingFaceRepoId,
+          aliases: ["stable-audio-3", "sa3", "sa3-medium"],
+          kind: .music),
+    .init(name: "stable-audio-3-dit-medium-mlx-int8",
+          engine: "stable-audio-3",
+          modelId: StableAudio3Variant.mediumInt8.huggingFaceRepoId,
+          aliases: ["sa3-medium-int8"],
+          kind: .music),
+    .init(name: "stable-audio-3-dit-small-music-mlx-int4",
+          engine: "stable-audio-3",
+          modelId: StableAudio3Variant.smallMusicInt4.huggingFaceRepoId,
+          aliases: ["sa3-small-music"],
+          kind: .music),
+    .init(name: "stable-audio-3-dit-small-music-mlx-int8",
+          engine: "stable-audio-3",
+          modelId: StableAudio3Variant.smallMusicInt8.huggingFaceRepoId,
+          aliases: ["sa3-small-music-int8"],
+          kind: .music),
+    .init(name: "stable-audio-3-dit-small-sfx-mlx-int4",
+          engine: "stable-audio-3",
+          modelId: StableAudio3Variant.smallSFXInt4.huggingFaceRepoId,
+          aliases: ["sa3-small-sfx"],
+          kind: .music),
+    .init(name: "stable-audio-3-dit-small-sfx-mlx-int8",
+          engine: "stable-audio-3",
+          modelId: StableAudio3Variant.smallSFXInt8.huggingFaceRepoId,
+          aliases: ["sa3-small-sfx-int8"],
+          kind: .music),
+
+    // ─── Voice activity detection ──────────────────────────────────────────
+    .init(name: "silero-vad-v5-mlx",
+          engine: "silero-vad",
+          modelId: SileroVADModel.defaultModelId,
+          aliases: ["silero", "silero-vad"],
+          kind: .vad),
+    .init(name: "silero-vad-v5-coreml",
+          engine: "silero-vad",
+          modelId: SileroVADModel.defaultCoreMLModelId,
+          aliases: ["silero-coreml", "silero-vad-coreml"],
+          kind: .vad),
+    .init(name: "pyannote-segmentation-mlx",
+          engine: "pyannote-segmentation",
+          modelId: PyannoteVADModel.defaultModelId,
+          aliases: ["pyannote", "pyannote-segmentation"],
+          kind: .vad),
+    .init(name: "firered-vad-coreml",
+          engine: "firered-vad",
+          modelId: FireRedVADModel.defaultModelId,
+          aliases: ["firered", "firered-vad"],
+          kind: .vad),
+
+    // ─── Diarization ───────────────────────────────────────────────────────
+    .init(name: "sortformer-diarization-coreml",
+          engine: "sortformer",
+          modelId: SortformerDiarizer.defaultModelId,
+          aliases: ["sortformer", "sortformer-diarization"],
+          kind: .diarize),
+
+    // ─── Speaker embedding ─────────────────────────────────────────────────
+    .init(name: "wespeaker-resnet34-lm-mlx",
+          engine: "wespeaker",
+          modelId: WeSpeakerModel.defaultModelId,
+          aliases: ["wespeaker", "wespeaker-mlx"],
+          kind: .speaker),
+    .init(name: "wespeaker-resnet34-lm-coreml",
+          engine: "wespeaker",
+          modelId: WeSpeakerModel.defaultCoreMLModelId,
+          aliases: ["wespeaker-coreml"],
+          kind: .speaker),
+
+    // ─── Source separation (vocals / drums / bass / other) ─────────────────
+    .init(name: "openunmix-hq-mlx",
+          engine: "openunmix",
+          modelId: SourceSeparator.defaultModelId,
+          aliases: ["openunmix", "openunmix-hq"],
+          kind: .separate),
+    .init(name: "openunmix-l-mlx",
+          engine: "openunmix",
+          modelId: SourceSeparator.largeModelId,
+          aliases: ["openunmix-l", "openunmix-large"],
+          kind: .separate),
+    .init(name: "htdemucs-ft-mlx",
+          engine: "htdemucs",
+          modelId: HTDemucsSeparator.defaultModelId,
+          aliases: ["htdemucs", "demucs"],
+          kind: .separate),
+
+    // ─── Speech super-resolution ───────────────────────────────────────────
+    .init(name: "flashsr-mlx-int4",
+          engine: "flashsr",
+          modelId: FlashSRVariant.int4.huggingFaceRepoId,
+          aliases: ["flashsr", "flashsr-int4"],
+          kind: .sr),
+    .init(name: "flashsr-mlx-int8",
+          engine: "flashsr",
+          modelId: FlashSRVariant.int8.huggingFaceRepoId,
+          aliases: ["flashsr-int8"],
+          kind: .sr),
 ]
 
 /// Look up a model name (canonical or alias) in the registry.

@@ -72,24 +72,41 @@ public struct AudioServer {
                 body: .init(byteBuffer: .init(string: "{\"status\":\"ok\"}")))
         }
 
-        router.get("/v1/realtime/models") { _, _ in
-            // OpenAI-style list-models payload. Clients can introspect the
-            // protocol surface without trying names blindly. Same registry
-            // backs the WS dispatch, so the names here are exactly what
-            // session.update will accept.
-            let modelList: [[String: Any]] = MODEL_REGISTRY.map { v in
-                [
-                    "id": v.name,
-                    "object": "model",
-                    "engine": v.engine,
-                    "kind": v.kind.rawValue,
-                    "model_id": v.modelId,
-                    "aliases": v.aliases
-                ]
-            }
+        // Shared row builder so the two model-list endpoints can't drift
+        // apart in shape.
+        func modelRow(_ v: ModelVariant) -> [String: Any] {
+            return [
+                "id": v.name,
+                "object": "model",
+                "engine": v.engine,
+                "kind": v.kind.rawValue,
+                "model_id": v.modelId,
+                "aliases": v.aliases
+            ]
+        }
+
+        router.get("/v1/models") { _, _ in
+            // The complete model catalog — every model the server can run,
+            // across every kind (ASR, TTS, S2S, enhance, music, VAD,
+            // diarize, speaker, separate, SR). Clients can introspect
+            // what's selectable across both the Realtime WS and the HTTP
+            // routes without trying names blindly.
             return jsonResponse([
                 "object": "list",
-                "data": modelList
+                "data": MODEL_REGISTRY.map(modelRow)
+            ] as [String: Any])
+        }
+
+        router.get("/v1/realtime/models") { _, _ in
+            // The Realtime-protocol subset — only kinds that the WS
+            // session.update model field actually dispatches to (ASR,
+            // TTS, S2S). Convenience filter for clients that only care
+            // about the WS surface; same registry backs both endpoints.
+            let realtime: Set<ModelVariant.Kind> = [.asr, .tts, .s2s]
+            let filtered = MODEL_REGISTRY.filter { realtime.contains($0.kind) }
+            return jsonResponse([
+                "object": "list",
+                "data": filtered.map(modelRow)
             ] as [String: Any])
         }
 
@@ -258,11 +275,27 @@ public struct AudioServer {
             let body = try await request.body.collect(upTo: 50 * 1024 * 1024)
             let params = try RequestParams.parse(body, contentType: request.headers[.contentType])
 
+            // Variant precedence: model > default. Same pattern as the
+            // other registry-driven routes — typos return 400 with a
+            // specific message rather than silently using the default.
+            let variant: ModelVariant
+            if let modelName = params.string("model"), !modelName.isEmpty {
+                if let v = resolveModelVariant(modelName), v.kind == .enhance {
+                    variant = v
+                } else {
+                    return errorResponse(
+                        "Unknown enhance model: \(modelName)",
+                        status: .badRequest)
+                }
+            } else {
+                variant = defaultVariant(forEngine: "deepfilternet3", kind: .enhance)
+            }
+
             guard let audioData = params.audioData else {
                 return errorResponse("Missing audio data", status: .badRequest)
             }
 
-            let enhancer = try await state.loadEnhancer()
+            let enhancer = try await state.loadEnhancer(modelId: variant.modelId)
             let audio = try decodeWAVData(audioData, targetSampleRate: 48000)
             // Auto-chunk long inputs. The body cap of 50 MB allows roughly 4-5
             // min of 48 kHz mono PCM, which can easily exceed the model's 60 s
@@ -472,12 +505,22 @@ final class ModelState: @unchecked Sendable {
         return m
     }
 
-    func loadEnhancer() async throws -> SpeechEnhancer {
-        if let m = enhancer { return m }
-        print("[server] Loading DeepFilterNet3...")
-        let m = try await SpeechEnhancer.fromPretrained(progressHandler: logProgress)
+    private var enhancerByModelId: [String: SpeechEnhancer] = [:]
+
+    func loadEnhancer(modelId: String) async throws -> SpeechEnhancer {
+        if let m = enhancerByModelId[modelId] { return m }
+        print("[server] Loading DeepFilterNet3 (\(modelId))...")
+        let m = try await SpeechEnhancer.fromPretrained(modelId: modelId, progressHandler: logProgress)
+        enhancerByModelId[modelId] = m
+        // Mirror to the legacy slot too so back-compat callers see the
+        // last-loaded enhancer.
         enhancer = m
         return m
+    }
+
+    /// Back-compat shim — default DeepFilterNet3 bundle.
+    func loadEnhancer() async throws -> SpeechEnhancer {
+        try await loadEnhancer(modelId: SpeechEnhancer.defaultModelId)
     }
 }
 
@@ -654,6 +697,14 @@ func handleRealtimeWS(
                         case .asr: session.asrVariant = v
                         case .tts: session.ttsVariant = v
                         case .s2s: session.s2sVariant = v
+                        case .enhance, .music, .vad, .diarize,
+                             .speaker, .separate, .sr:
+                            // Cataloged in the registry for discovery via
+                            // /v1/models, but the Realtime session protocol
+                            // has no slot for these — they're routed via
+                            // dedicated HTTP endpoints (/enhance, /compose,
+                            // /diarize, …). No-op on session.update.
+                            break
                         }
                     }
                     // S2S is exclusive — picking a recognized ASR/TTS-only

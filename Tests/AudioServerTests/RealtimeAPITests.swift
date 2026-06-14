@@ -578,10 +578,70 @@ final class RealtimeAPITests: XCTestCase {
         XCTAssertEqual(error, "Missing audio data")
     }
 
-    /// `GET /v1/realtime/models` must include the full row shape per
-    /// variant (id / object / engine / kind / model_id / aliases). A
-    /// client should be able to read this and call session.update without
-    /// guessing.
+    /// `GET /v1/models` is the comprehensive catalog — every kind the
+    /// server can run. Used by clients that want to introspect both the
+    /// Realtime WS surface and the HTTP routes in one call.
+    func testFullModelsEndpointListsEveryKind() async throws {
+        let url = URL(string: "http://127.0.0.1:\(Self.port)/v1/models")!
+        let (data, response) = try await URLSession.shared.data(from: url)
+        let http = response as! HTTPURLResponse
+        XCTAssertEqual(http.statusCode, 200)
+
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        let rows = json?["data"] as? [[String: Any]] ?? []
+        XCTAssertEqual(rows.count, MODEL_REGISTRY.count,
+                       "Endpoint should expose every registered variant")
+
+        let kindsInResponse = Set(rows.compactMap { $0["kind"] as? String })
+        for kind in ModelVariant.Kind.allCases {
+            XCTAssertTrue(kindsInResponse.contains(kind.rawValue),
+                          "Kind '\(kind.rawValue)' missing from /v1/models")
+        }
+    }
+
+    /// `GET /v1/realtime/models` filters to ASR / TTS / S2S only — the
+    /// kinds the WS session.update model field actually dispatches to.
+    /// Clients building Realtime-only UIs use this filtered shape.
+    func testRealtimeModelsEndpointFiltersToWSKinds() async throws {
+        let url = URL(string: "http://127.0.0.1:\(Self.port)/v1/realtime/models")!
+        let (data, response) = try await URLSession.shared.data(from: url)
+        XCTAssertEqual((response as! HTTPURLResponse).statusCode, 200)
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        let rows = json?["data"] as? [[String: Any]] ?? []
+        XCTAssertGreaterThan(rows.count, 0)
+        let allowed: Set<String> = ["asr", "tts", "s2s"]
+        for row in rows {
+            let kind = (row["kind"] as? String) ?? ""
+            XCTAssertTrue(allowed.contains(kind),
+                          "/v1/realtime/models leaked a non-conversational kind: \(kind)")
+        }
+    }
+
+    /// `/enhance` accepts a `model` field through the registry too.
+    /// Unknown enhance models return 400 with a specific error message
+    /// so a typo on this surface gets the same treatment as the rest.
+    func testEnhanceRejectsUnknownModel() async throws {
+        let (status, error) = try await postJSON(
+            path: "/enhance",
+            body: ["audio_base64": "AAAA", "model": "not-a-real-enhance-model"])
+        XCTAssertEqual(status, 400)
+        XCTAssertTrue((error ?? "").contains("Unknown enhance model"),
+                      "Expected 'Unknown enhance model' in error, got: \(error ?? "nil")")
+    }
+
+    /// `/enhance` rejects an ASR/TTS variant on the wrong surface — the
+    /// resolver finds the name but the kind check blocks it. A future
+    /// change that drops the kind check would be caught here.
+    func testEnhanceRejectsWrongKindModel() async throws {
+        let (status, error) = try await postJSON(
+            path: "/enhance",
+            body: ["audio_base64": "AAAA", "model": "parakeet"])
+        XCTAssertEqual(status, 400)
+        XCTAssertTrue((error ?? "").contains("Unknown enhance model"),
+                      "Expected kind-aware rejection, got: \(error ?? "nil")")
+    }
+
+    /// /v1/realtime/models retains the per-row shape that clients depend on.
     func testRealtimeModelsEndpointRowShape() async throws {
         let url = URL(string: "http://127.0.0.1:\(Self.port)/v1/realtime/models")!
         let (data, response) = try await URLSession.shared.data(from: url)
@@ -592,8 +652,13 @@ final class RealtimeAPITests: XCTestCase {
 
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         let rows = json?["data"] as? [[String: Any]] ?? []
-        XCTAssertGreaterThanOrEqual(rows.count, MODEL_REGISTRY.count,
-                                    "Endpoint should expose every registered variant")
+        // /v1/realtime/models is filtered to ASR/TTS/S2S — at minimum
+        // every ASR + TTS + S2S variant in the registry must appear.
+        let realtimeRegistry = MODEL_REGISTRY.filter {
+            [.asr, .tts, .s2s].contains($0.kind)
+        }
+        XCTAssertEqual(rows.count, realtimeRegistry.count,
+                       "Endpoint should expose every conversational variant")
 
         // Pin one row's shape so we catch field drift early.
         guard let parakeet = rows.first(where: {
@@ -738,6 +803,56 @@ final class ResolveModelToEngineTests: XCTestCase {
         for engine in mustBeReachable {
             XCTAssertTrue(registeredEngines.contains(engine),
                           "Engine '\(engine)' has a dispatch arm but no registry row")
+        }
+    }
+
+    func testRegistryCoversEveryKind() {
+        // Each ModelVariant.Kind must have at least one variant in the
+        // registry — otherwise the kind is dead code on the protocol
+        // surface. Catches future kinds added without a corresponding
+        // model entry.
+        let kindsInRegistry = Set(MODEL_REGISTRY.map { $0.kind })
+        for kind in ModelVariant.Kind.allCases {
+            XCTAssertTrue(kindsInRegistry.contains(kind),
+                          "Kind '\(kind.rawValue)' has no registered variants")
+        }
+    }
+
+    func testNonConversationalEnginesAreSelectable() {
+        // The new kinds added to support the full server catalog must
+        // resolve via the standard helper. Catches the case where a row
+        // is added to the registry with an alias that doesn't actually
+        // hit the resolver.
+        XCTAssertEqual(resolveModelVariant("deepfilternet3")?.engine, "deepfilternet3")
+        XCTAssertEqual(resolveModelVariant("magnet")?.engine, "magnet")
+        XCTAssertEqual(resolveModelVariant("sa3")?.engine, "stable-audio-3")
+        XCTAssertEqual(resolveModelVariant("silero")?.engine, "silero-vad")
+        XCTAssertEqual(resolveModelVariant("sortformer")?.engine, "sortformer")
+        XCTAssertEqual(resolveModelVariant("wespeaker")?.engine, "wespeaker")
+        XCTAssertEqual(resolveModelVariant("htdemucs")?.engine, "htdemucs")
+        XCTAssertEqual(resolveModelVariant("flashsr")?.engine, "flashsr")
+    }
+
+    func testNonConversationalNamesDoNotUpdateRealtimeSlots() {
+        // session.update with `model: "deepfilternet3"` resolves the
+        // variant but must NOT mutate any of the three Realtime slots —
+        // enhance/music/vad/etc. don't fit the protocol's conversational
+        // shape, so they're cataloged for discovery only.
+        let kindsInScope: [ModelVariant.Kind] = [.enhance, .music, .vad,
+                                                 .diarize, .speaker,
+                                                 .separate, .sr]
+        for kind in kindsInScope {
+            guard let v = MODEL_REGISTRY.first(where: { $0.kind == kind }) else {
+                XCTFail("Kind \(kind.rawValue) missing from registry")
+                continue
+            }
+            let allHits = resolveAllVariants(v.aliases.first ?? v.name)
+            for hit in allHits {
+                XCTAssertFalse(
+                    [.asr, .tts, .s2s].contains(hit.kind),
+                    "Alias '\(v.aliases.first ?? "")' on a \(kind.rawValue) variant accidentally matches a Realtime variant"
+                )
+            }
         }
     }
 
