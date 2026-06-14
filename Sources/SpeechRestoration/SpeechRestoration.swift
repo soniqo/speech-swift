@@ -43,15 +43,17 @@ public final class SpeechRestorer {
     var _isLoaded = true
 
     init(
-        predictor: SidonPredictorModel,
-        vocoder: SidonVocoderModel,
+        predictor: SidonPredictorModel?,
+        vocoder: SidonVocoderModel?,
         config: SidonConfig,
-        variant: SidonVariant
+        variant: SidonVariant,
+        loaded: Bool = true
     ) {
         self.predictor = predictor
         self.vocoder = vocoder
         self.config = config
         self.variant = variant
+        self._isLoaded = loaded
     }
 
     // MARK: - Loading
@@ -125,6 +127,31 @@ public final class SpeechRestorer {
             config: .default, variant: variant)
     }
 
+    // MARK: - Window planning
+
+    /// How `restore` chunks and trims a given number of 16 kHz input samples.
+    /// Pure arithmetic (no model), exposed so the window/trim contract can be
+    /// unit-tested without loading the CoreML graphs.
+    public struct WindowPlan: Equatable, Sendable {
+        /// Number of fixed windows the input is split into.
+        public let windows: Int
+        /// Raw vocoder output length before trimming (`windows * perWindow`).
+        public let rawOutputLength: Int
+        /// Final output length after trimming to the input's 48 kHz duration.
+        public let outputLength: Int
+    }
+
+    /// Compute the window plan for `inputSamples` of 16 kHz audio under `config`.
+    public static func windowPlan(inputSamples: Int, config: SidonConfig = .default) -> WindowPlan {
+        guard inputSamples > 0 else { return WindowPlan(windows: 0, rawOutputLength: 0, outputLength: 0) }
+        let win = config.windowSamples
+        let windows = (inputSamples + win - 1) / win
+        let raw = windows * config.outputSamplesPerWindow
+        let ratio = Double(config.outputSampleRate) / Double(config.inputSampleRate)
+        let target = Int((Double(inputSamples) * ratio).rounded())
+        return WindowPlan(windows: windows, rawOutputLength: raw, outputLength: Swift.min(raw, target))
+    }
+
     // MARK: - Inference
 
     /// Restore arbitrary-length audio. Input is resampled to 16 kHz; output is
@@ -143,11 +170,11 @@ public final class SpeechRestorer {
         guard !samples.isEmpty else { return [] }
 
         let win = config.windowSamples
-        let nWindows = (samples.count + win - 1) / win
+        let plan = Self.windowPlan(inputSamples: samples.count, config: config)
         var out = [Float]()
-        out.reserveCapacity(nWindows * config.outputSamplesPerWindow)
+        out.reserveCapacity(plan.rawOutputLength)
 
-        for w in 0..<nWindows {
+        for w in 0..<plan.windows {
             let start = w * win
             let end = Swift.min(start + win, samples.count)
             let chunk = Array(samples[start..<end])
@@ -159,9 +186,7 @@ public final class SpeechRestorer {
         // (Each fixed window emits a fixed number of output samples regardless
         // of how much of it was real audio, so a partial final window is padded
         // with vocoded silence we don't want to keep.)
-        let ratio = Double(config.outputSampleRate) / Double(config.inputSampleRate)
-        let targetLen = Int((Double(samples.count) * ratio).rounded())
-        if out.count > targetLen { out.removeLast(out.count - targetLen) }
+        if out.count > plan.outputLength { out.removeLast(out.count - plan.outputLength) }
         return out
     }
 

@@ -145,6 +145,7 @@ Aşağıda kompakt bir görünüm. **[Boyutlar, kuantizasyonlar, indirme URL'ler
 | [Pyannote](https://soniqo.audio/guides/diarize) | VAD + Konuşmacı Ayrımı | MLX | 1.5M | Bağımsız |
 | [Sortformer](https://soniqo.audio/guides/diarize) | Konuşmacı Ayrımı (E2E) | CoreML (ANE) | — | Bağımsız |
 | [DeepFilterNet3](https://soniqo.audio/guides/denoise) | Konuşma İyileştirme | CoreML | 2.1M | Bağımsız |
+| [Sidon](https://soniqo.audio/guides/restore) | Konuşma Onarımı (gürültü bastırma + yankı giderme, 48 kHz) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | Bağımsız |
 | [HTDemucs (Demucs v4)](https://soniqo.audio/guides/separate) | Kaynak Ayrıştırma | MLX | 168M | Bağımsız |
 | [Open-Unmix](https://soniqo.audio/guides/separate) | Kaynak Ayrıştırma | MLX | 8.6M | Bağımsız |
 | [MAGNeT](https://soniqo.audio/guides/compose) | Metin → Müzik (30s @ 32 kHz) | MLX | 300M / 1.5B (int4/int8) | EN prompt'ları |
@@ -202,6 +203,7 @@ import HibikiTranslate      // Akışlı konuşmadan konuşmaya çeviri (FR/ES/P
 import PersonaPlex          // Tam çift yönlü konuşmadan konuşmaya
 import SpeechVAD            // VAD + konuşmacı ayrımı + gömmeler
 import SpeechEnhancement    // Gürültü bastırma
+import SpeechRestoration    // Konuşma onarımı — gürültü bastırma + yankı giderme (Sidon, CoreML, 48 kHz)
 import SourceSeparation     // Müzik kaynak ayrıştırma (Open-Unmix, 4 katman)
 import SpeechUI             // Akış transkriptleri için SwiftUI bileşenleri
 import AudioCommon          // Paylaşılan protokoller ve yardımcılar
@@ -351,6 +353,27 @@ import SpeechEnhancement
 
 let denoiser = try await DeepFilterNet3Model.fromPretrained()
 let clean = try denoiser.enhance(audio: noisySamples, sampleRate: 48000)
+```
+
+### Konuşma Onarımı — [tam rehber →](https://soniqo.audio/guides/restore)
+
+[Sidon](https://arxiv.org/abs/2509.17052) ile birlikte gürültü bastırma **ve** yankı giderme (w2v-BERT 2.0 tahmincisi + DAC vokoderi, Core ML). Genel bir gürültü bastırıcının aksine, Sidon konuşmacı kimliğini koruyacak şekilde eğitilmiştir; bu nedenle TTS öncesinde gürültülü veya yankılı bir ses klonlama referansını temizlemek için çok uygundur. Giriş 16 kHz; çıkış 48 kHz mono'dur.
+
+```swift
+import SpeechRestoration
+
+let restorer = try await SpeechRestorer.fromPretrained()          // .fp16 (default) or .int8
+let clean = try restorer.restore(audio: noisySamples, sampleRate: 16000)  // → 48 kHz
+```
+
+CLI'dan:
+
+```bash
+speech restore noisy.wav -o clean.wav            # denoise + dereverb, 48 kHz output
+speech restore noisy.wav --variant int8          # smaller, lower peak RAM
+
+# Clean a voice-cloning reference before TTS (opt-in; preserves speaker identity):
+speech speak "Hello" --engine voxcpm2 --voice-sample ref.wav --clean-reference
 ```
 
 ### Ses Pipeline'ı (ASR → LLM → TTS) — [tam rehber →](https://soniqo.audio/voice-agents)

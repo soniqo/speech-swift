@@ -145,6 +145,7 @@ Kompakte Übersicht unten. **[Vollständiger Modellkatalog mit Größen, Quantis
 | [Pyannote](https://soniqo.audio/de/guides/diarize) | VAD + Diarisierung | MLX | 1.5M | Sprachunabhängig |
 | [Sortformer](https://soniqo.audio/de/guides/diarize) | Diarisierung (E2E) | CoreML (ANE) | — | Sprachunabhängig |
 | [DeepFilterNet3](https://soniqo.audio/de/guides/denoise) | Sprachverbesserung | CoreML | 2.1M | Sprachunabhängig |
+| [Sidon](https://soniqo.audio/de/guides/restore) | Sprachwiederherstellung (Rauschunterdrückung + Enthallung, 48 kHz) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | Sprachunabhängig |
 | [HTDemucs (Demucs v4)](https://soniqo.audio/de/guides/separate) | Quelltrennung | MLX | 168M | Agnostic |
 | [Open-Unmix](https://soniqo.audio/de/guides/separate) | Quelltrennung | MLX | 8.6M | Agnostic |
 | [MAGNeT](https://soniqo.audio/de/guides/compose) | Text → Musik (30 s @ 32 kHz) | MLX | 300M / 1.5B (int4/int8) | EN-Prompts |
@@ -202,6 +203,7 @@ import HibikiTranslate      // Streaming-Sprache-zu-Sprache-Übersetzung (FR/ES/
 import PersonaPlex          // Vollduplex-Sprache-zu-Sprache
 import SpeechVAD            // VAD + Sprecherdiarisierung + Einbettungen
 import SpeechEnhancement    // Rauschunterdrückung
+import SpeechRestoration    // Sprachwiederherstellung — Rauschunterdrückung + Enthallung (Sidon, CoreML, 48 kHz)
 import SourceSeparation     // Musikquelltrennung (Open-Unmix, 4 Stems)
 import MAGNeTMusicGen      // Text-zu-Musik-Generierung (30 s, 32 kHz)
 import FlashSR             // Audio-Super-Resolution (48 kHz, 1-Schritt-Diffusion)
@@ -353,6 +355,27 @@ import SpeechEnhancement
 
 let denoiser = try await DeepFilterNet3Model.fromPretrained()
 let clean = try denoiser.enhance(audio: noisySamples, sampleRate: 48000)
+```
+
+### Sprachwiederherstellung — [vollständige Anleitung →](https://soniqo.audio/de/guides/restore)
+
+Gemeinsame Rauschunterdrückung **und** Enthallung mit [Sidon](https://arxiv.org/abs/2509.17052) (w2v-BERT-2.0-Prädiktor + DAC-Vocoder, Core ML). Anders als ein generischer Rauschunterdrücker ist Sidon darauf trainiert, die Sprecheridentität zu bewahren, und eignet sich daher gut, um eine verrauschte oder verhallte Referenz fürs Stimmklonen vor der TTS zu säubern. Die Eingabe ist 16 kHz, die Ausgabe 48 kHz Mono.
+
+```swift
+import SpeechRestoration
+
+let restorer = try await SpeechRestorer.fromPretrained()          // .fp16 (default) or .int8
+let clean = try restorer.restore(audio: noisySamples, sampleRate: 16000)  // → 48 kHz
+```
+
+Über die CLI:
+
+```bash
+speech restore noisy.wav -o clean.wav            # denoise + dereverb, 48 kHz output
+speech restore noisy.wav --variant int8          # smaller, lower peak RAM
+
+# Clean a voice-cloning reference before TTS (opt-in; preserves speaker identity):
+speech speak "Hello" --engine voxcpm2 --voice-sample ref.wav --clean-reference
 ```
 
 ### Voice Pipeline (ASR → LLM → TTS) — [vollständige Anleitung →](https://soniqo.audio/de/voice-agents)

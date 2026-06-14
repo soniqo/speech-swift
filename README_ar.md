@@ -189,6 +189,7 @@ struct DictateView: View {
 | [Pyannote](https://soniqo.audio/ar/guides/diarize) | VAD + تمييز | MLX | 1.5M | محايد للغة |
 | [Sortformer](https://soniqo.audio/ar/guides/diarize) | تمييز (E2E) | CoreML (ANE) | — | محايد للغة |
 | [DeepFilterNet3](https://soniqo.audio/ar/guides/denoise) | تحسين الكلام | CoreML | 2.1M | محايد للغة |
+| [Sidon](https://soniqo.audio/ar/guides/restore) | استعادة الكلام (إزالة الضوضاء + إزالة الصدى، 48 kHz) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | محايد للغة |
 | [HTDemucs (Demucs v4)](https://soniqo.audio/ar/guides/separate) | فصل المصادر | MLX | 168M | محايد للغة |
 | [Open-Unmix](https://soniqo.audio/ar/guides/separate) | فصل المصادر | MLX | 8.6M | محايد للغة |
 | [MAGNeT](https://soniqo.audio/ar/guides/compose) | نص → موسيقى (30 ث @ 32 كيلوهرتز) | MLX | 300M / 1.5B (int4/int8) | أوامر بالإنجليزية |
@@ -262,6 +263,7 @@ import HibikiTranslate      // ترجمة تدفقية من كلام إلى كل
 import PersonaPlex          // تحويل صوت إلى صوت ثنائي الاتجاه
 import SpeechVAD            // VAD + تمييز + تضمينات
 import SpeechEnhancement    // قمع الضوضاء
+import SpeechRestoration    // استعادة الكلام — إزالة الضوضاء + إزالة الصدى (Sidon، CoreML، 48 kHz)
 import SourceSeparation     // فصل المصادر الموسيقية (Open-Unmix، 4 طبقات)
 import SpeechUI             // مكونات SwiftUI للنسخ النصي التدفقي
 import AudioCommon          // البروتوكولات والمرافق المشتركة
@@ -435,6 +437,27 @@ import SpeechEnhancement
 
 let denoiser = try await DeepFilterNet3Model.fromPretrained()
 let clean = try denoiser.enhance(audio: noisySamples, sampleRate: 48000)
+```
+
+### استعادة الكلام — [الدليل الكامل →](https://soniqo.audio/ar/guides/restore)
+
+إزالة الضوضاء **و** إزالة الصدى معاً باستخدام [Sidon](https://arxiv.org/abs/2509.17052) (متنبئ w2v-BERT 2.0 + مرمّز صوتي DAC، Core ML). على عكس مكبِّت الضوضاء العام، دُرِّب Sidon على الحفاظ على هوية المتحدث، لذا فهو مناسب تماماً لتنظيف عينة مرجعية صاخبة أو ذات صدى لاستنساخ الصوت قبل تحويل النص إلى كلام. المُدخل بتردد 16 كيلوهرتز؛ والمُخرج أحادي بتردد 48 كيلوهرتز.
+
+```swift
+import SpeechRestoration
+
+let restorer = try await SpeechRestorer.fromPretrained()          // .fp16 (الافتراضي) أو .int8
+let clean = try restorer.restore(audio: noisySamples, sampleRate: 16000)  // ← 48 كيلوهرتز
+```
+
+من سطر الأوامر:
+
+```bash
+speech restore noisy.wav -o clean.wav            # إزالة الضوضاء + إزالة الصدى، مُخرج بتردد 48 كيلوهرتز
+speech restore noisy.wav --variant int8          # أصغر، وذاكرة ذروة أقل
+
+# تنظيف عينة مرجعية لاستنساخ الصوت قبل تحويل النص إلى كلام (اختياري؛ يحافظ على هوية المتحدث):
+speech speak "Hello" --engine voxcpm2 --voice-sample ref.wav --clean-reference
 ```
 
 ### خط أنابيب الصوت (ASR → LLM → TTS) — [الدليل الكامل →](https://soniqo.audio/ar/voice-agents)

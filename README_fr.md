@@ -145,6 +145,7 @@ Vue compacte ci-dessous. **[Catalogue complet des modeles avec tailles, quantifi
 | [Pyannote](https://soniqo.audio/fr/guides/diarize) | VAD + Diarisation | MLX | 1.5M | Agnostique |
 | [Sortformer](https://soniqo.audio/fr/guides/diarize) | Diarisation (E2E) | CoreML (ANE) | — | Agnostique |
 | [DeepFilterNet3](https://soniqo.audio/fr/guides/denoise) | Amelioration de la parole | CoreML | 2.1M | Agnostique |
+| [Sidon](https://soniqo.audio/fr/guides/restore) | Restauration de la parole (debruitage + dereverberation, 48 kHz) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | Agnostique |
 | [HTDemucs (Demucs v4)](https://soniqo.audio/fr/guides/separate) | Séparation de sources | MLX | 168M | Agnostic |
 | [Open-Unmix](https://soniqo.audio/fr/guides/separate) | Séparation de sources | MLX | 8.6M | Agnostic |
 | [MAGNeT](https://soniqo.audio/fr/guides/compose) | Texte → Musique (30 s @ 32 kHz) | MLX | 300M / 1.5B (int4/int8) | Prompts EN |
@@ -202,6 +203,7 @@ import HibikiTranslate      // Traduction parole-a-parole en streaming (FR/ES/PT
 import PersonaPlex          // Parole-a-parole full-duplex
 import SpeechVAD            // VAD + diarisation + empreintes
 import SpeechEnhancement    // Suppression de bruit
+import SpeechRestoration    // Restauration de la parole — debruitage + dereverberation (Sidon, CoreML, 48 kHz)
 import SourceSeparation     // Séparation de sources musicales (Open-Unmix, 4 stems)
 import MAGNeTMusicGen      // Génération de musique depuis du texte (30 s, 32 kHz)
 import FlashSR             // Super-résolution audio (48 kHz, diffusion en 1 étape)
@@ -353,6 +355,27 @@ import SpeechEnhancement
 
 let denoiser = try await DeepFilterNet3Model.fromPretrained()
 let clean = try denoiser.enhance(audio: noisySamples, sampleRate: 48000)
+```
+
+### Restauration de la parole -- [guide complet →](https://soniqo.audio/fr/guides/restore)
+
+Debruitage **et** dereverberation conjoints avec [Sidon](https://arxiv.org/abs/2509.17052) (predicteur w2v-BERT 2.0 + vocodeur DAC, Core ML). Contrairement a un suppresseur de bruit generique, Sidon est entraine pour preserver l'identite du locuteur, ce qui le rend bien adapte au nettoyage d'une voix de reference bruitee ou reverberee pour le clonage vocal avant la synthese TTS. L'entree est en 16 kHz ; la sortie en 48 kHz mono.
+
+```swift
+import SpeechRestoration
+
+let restorer = try await SpeechRestorer.fromPretrained()          // .fp16 (defaut) ou .int8
+let clean = try restorer.restore(audio: noisySamples, sampleRate: 16000)  // → 48 kHz
+```
+
+Depuis la CLI :
+
+```bash
+speech restore noisy.wav -o clean.wav            # debruitage + dereverberation, sortie 48 kHz
+speech restore noisy.wav --variant int8          # plus compact, pic de RAM plus faible
+
+# Nettoyer une voix de reference pour le clonage vocal avant la synthese TTS (optionnel ; preserve l'identite du locuteur) :
+speech speak "Hello" --engine voxcpm2 --voice-sample ref.wav --clean-reference
 ```
 
 ### Voice Pipeline (ASR → LLM → TTS) -- [guide complet →](https://soniqo.audio/fr/voice-agents)

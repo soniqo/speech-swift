@@ -145,6 +145,7 @@ struct DictateView: View {
 | [Pyannote](https://soniqo.audio/ja/guides/diarize) | VAD + ダイアライゼーション | MLX | 1.5M | 言語非依存 |
 | [Sortformer](https://soniqo.audio/ja/guides/diarize) | ダイアライゼーション（E2E） | CoreML (ANE) | — | 言語非依存 |
 | [DeepFilterNet3](https://soniqo.audio/ja/guides/denoise) | 音声強調 | CoreML | 2.1M | 言語非依存 |
+| [Sidon](https://soniqo.audio/ja/guides/restore) | 音声修復（ノイズ抑制 + 残響除去、48 kHz） | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | 言語非依存 |
 | [HTDemucs (Demucs v4)](https://soniqo.audio/ja/guides/separate) | 音源分離 | MLX | 168M | Agnostic |
 | [Open-Unmix](https://soniqo.audio/ja/guides/separate) | 音源分離 | MLX | 8.6M | Agnostic |
 | [MAGNeT](https://soniqo.audio/ja/guides/compose) | テキスト → 音楽 (30 秒 @ 32 kHz) | MLX | 300M / 1.5B (int4/int8) | 英語プロンプト |
@@ -202,6 +203,7 @@ import HibikiTranslate      // ストリーミング音声間翻訳（FR/ES/PT/D
 import PersonaPlex          // 全二重音声間変換
 import SpeechVAD            // VAD + 話者ダイアライゼーション + 埋め込み
 import SpeechEnhancement    // ノイズ抑制
+import SpeechRestoration    // 音声修復 — ノイズ抑制 + 残響除去（Sidon、CoreML、48 kHz）
 import SourceSeparation     // 音楽音源分離（Open-Unmix、4 ステム）
 import MAGNeTMusicGen      // テキスト→音楽生成（30 秒、32 kHz）
 import FlashSR             // オーディオ超解像（48 kHz、1 ステップ拡散）
@@ -353,6 +355,27 @@ import SpeechEnhancement
 
 let denoiser = try await DeepFilterNet3Model.fromPretrained()
 let clean = try denoiser.enhance(audio: noisySamples, sampleRate: 48000)
+```
+
+### 音声修復 — [完全ガイド →](https://soniqo.audio/ja/guides/restore)
+
+[Sidon](https://arxiv.org/abs/2509.17052)（w2v-BERT 2.0 予測器 + DAC ボコーダー、Core ML）によるノイズ抑制**と**残響除去の同時処理。汎用のノイズサプレッサーと異なり、Sidon は話者の同一性を保持するよう訓練されているため、TTS の前にノイズや残響のある音声クローン用リファレンスをクリーンにする用途に適しています。入力は 16 kHz、出力は 48 kHz モノラルです。
+
+```swift
+import SpeechRestoration
+
+let restorer = try await SpeechRestorer.fromPretrained()          // .fp16（デフォルト）または .int8
+let clean = try restorer.restore(audio: noisySamples, sampleRate: 16000)  // → 48 kHz
+```
+
+CLI から：
+
+```bash
+speech restore noisy.wav -o clean.wav            # ノイズ抑制 + 残響除去、48 kHz 出力
+speech restore noisy.wav --variant int8          # より小型、ピーク RAM 削減
+
+# TTS の前に音声クローン用リファレンスをクリーンにする（オプトイン、話者の同一性を保持）：
+speech speak "Hello" --engine voxcpm2 --voice-sample ref.wav --clean-reference
 ```
 
 ### 音声パイプライン（ASR → LLM → TTS）— [完全ガイド →](https://soniqo.audio/ja/voice-agents)

@@ -145,6 +145,7 @@ Compact view below. **[Full model catalogue with sizes, quantisations, download 
 | [Pyannote](https://soniqo.audio/guides/diarize) | VAD + Diarization | MLX | 1.5M | Agnostic |
 | [Sortformer](https://soniqo.audio/guides/diarize) | Diarization (E2E) | CoreML (ANE) | — | Agnostic |
 | [DeepFilterNet3](https://soniqo.audio/guides/denoise) | Speech Enhancement | CoreML | 2.1M | Agnostic |
+| [Sidon](https://soniqo.audio/guides/restore) | Speech Restoration (denoise + dereverb, 48 kHz) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | Agnostic |
 | [HTDemucs (Demucs v4)](https://soniqo.audio/guides/separate) | Source Separation | MLX | 168M | Agnostic |
 | [Open-Unmix](https://soniqo.audio/guides/separate) | Source Separation | MLX | 8.6M | Agnostic |
 | [MAGNeT](https://soniqo.audio/guides/compose) | Text → Music (30s @ 32 kHz) | MLX | 300M / 1.5B (int4/int8) | EN prompts |
@@ -202,6 +203,7 @@ import HibikiTranslate      // Streaming speech-to-speech translation (FR/ES/PT/
 import PersonaPlex          // Full-duplex speech-to-speech
 import SpeechVAD            // VAD + speaker diarization + embeddings
 import SpeechEnhancement    // Noise suppression
+import SpeechRestoration    // Speech restoration — denoise + dereverb (Sidon, CoreML, 48 kHz)
 import SourceSeparation     // Music source separation (Open-Unmix, 4 stems)
 import SpeechUI             // SwiftUI components for streaming transcripts
 import AudioCommon          // Shared protocols and utilities
@@ -351,6 +353,27 @@ import SpeechEnhancement
 
 let denoiser = try await DeepFilterNet3Model.fromPretrained()
 let clean = try denoiser.enhance(audio: noisySamples, sampleRate: 48000)
+```
+
+### Speech Restoration — [full guide →](https://soniqo.audio/guides/restore)
+
+Joint denoise **and** dereverb with [Sidon](https://arxiv.org/abs/2509.17052) (w2v-BERT 2.0 predictor + DAC vocoder, Core ML). Unlike a generic noise suppressor, Sidon is trained to preserve speaker identity, so it is well suited to cleaning a noisy or reverberant voice-cloning reference before TTS. Input is 16 kHz; output is 48 kHz mono.
+
+```swift
+import SpeechRestoration
+
+let restorer = try await SpeechRestorer.fromPretrained()          // .fp16 (default) or .int8
+let clean = try restorer.restore(audio: noisySamples, sampleRate: 16000)  // → 48 kHz
+```
+
+From the CLI:
+
+```bash
+speech restore noisy.wav -o clean.wav            # denoise + dereverb, 48 kHz output
+speech restore noisy.wav --variant int8          # smaller, lower peak RAM
+
+# Clean a voice-cloning reference before TTS (opt-in; preserves speaker identity):
+speech speak "Hello" --engine voxcpm2 --voice-sample ref.wav --clean-reference
 ```
 
 ### Voice Pipeline (ASR → LLM → TTS) — [full guide →](https://soniqo.audio/voice-agents)

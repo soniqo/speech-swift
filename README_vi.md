@@ -145,6 +145,7 @@ Xem tổng quan gọn bên dưới. **[Danh mục mô hình đầy đủ với k
 | [Pyannote](https://soniqo.audio/guides/diarize) | VAD + Phân tách người nói | MLX | 1.5M | Không phụ thuộc ngôn ngữ |
 | [Sortformer](https://soniqo.audio/guides/diarize) | Phân tách người nói (E2E) | CoreML (ANE) | — | Không phụ thuộc ngôn ngữ |
 | [DeepFilterNet3](https://soniqo.audio/guides/denoise) | Cải thiện chất lượng giọng nói | CoreML | 2.1M | Không phụ thuộc ngôn ngữ |
+| [Sidon](https://soniqo.audio/guides/restore) | Phục hồi giọng nói (khử nhiễu + khử vang, 48 kHz) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | Không phụ thuộc ngôn ngữ |
 | [HTDemucs (Demucs v4)](https://soniqo.audio/guides/separate) | Tách nguồn | MLX | 168M | Không phụ thuộc ngôn ngữ |
 | [Open-Unmix](https://soniqo.audio/guides/separate) | Tách nguồn | MLX | 8.6M | Không phụ thuộc ngôn ngữ |
 | [MAGNeT](https://soniqo.audio/guides/compose) | Văn bản → Nhạc (30s @ 32 kHz) | MLX | 300M / 1.5B (int4/int8) | Prompt EN |
@@ -202,6 +203,7 @@ import HibikiTranslate      // Dịch giọng nói sang giọng nói streaming (
 import PersonaPlex          // Giọng nói sang giọng nói full-duplex
 import SpeechVAD            // VAD + phân tách người nói + embedding
 import SpeechEnhancement    // Khử nhiễu
+import SpeechRestoration    // Phục hồi giọng nói — khử nhiễu + khử vang (Sidon, CoreML, 48 kHz)
 import SourceSeparation     // Tách nguồn âm thanh nhạc (Open-Unmix, 4 stem)
 import SpeechUI             // Component SwiftUI cho bản phiên âm streaming
 import AudioCommon          // Giao thức và tiện ích dùng chung
@@ -351,6 +353,27 @@ import SpeechEnhancement
 
 let denoiser = try await DeepFilterNet3Model.fromPretrained()
 let clean = try denoiser.enhance(audio: noisySamples, sampleRate: 48000)
+```
+
+### Phục hồi giọng nói — [hướng dẫn đầy đủ →](https://soniqo.audio/guides/restore)
+
+Khử nhiễu **và** khử vang đồng thời với [Sidon](https://arxiv.org/abs/2509.17052) (bộ dự đoán w2v-BERT 2.0 + bộ vocoder DAC, Core ML). Khác với một bộ khử nhiễu thông thường, Sidon được huấn luyện để giữ nguyên đặc điểm nhận dạng người nói, nên rất phù hợp để làm sạch một mẫu tham chiếu nhân bản giọng nói bị nhiễu hoặc bị vang trước khi TTS. Đầu vào là 16 kHz; đầu ra là 48 kHz mono.
+
+```swift
+import SpeechRestoration
+
+let restorer = try await SpeechRestorer.fromPretrained()          // .fp16 (default) or .int8
+let clean = try restorer.restore(audio: noisySamples, sampleRate: 16000)  // → 48 kHz
+```
+
+Từ CLI:
+
+```bash
+speech restore noisy.wav -o clean.wav            # denoise + dereverb, 48 kHz output
+speech restore noisy.wav --variant int8          # smaller, lower peak RAM
+
+# Clean a voice-cloning reference before TTS (opt-in; preserves speaker identity):
+speech speak "Hello" --engine voxcpm2 --voice-sample ref.wav --clean-reference
 ```
 
 ### Voice Pipeline (ASR → LLM → TTS) — [hướng dẫn đầy đủ →](https://soniqo.audio/voice-agents)
