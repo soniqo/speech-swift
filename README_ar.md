@@ -46,6 +46,7 @@
 - **[Magpie TTS](https://soniqo.audio/ar/guides/magpie)** — تحويل النص إلى كلام متعدد اللغات (NVIDIA Magpie-TTS Multilingual 357M، MLX INT4 247 ميغابايت / INT8 411 ميغابايت أو CoreML INT8 342 ميغابايت، 9 لغات، 5 متحدثين جاهزين، تدفق على MLX)
 - **[Qwen3.5-Chat](https://soniqo.audio/ar/guides/chat)** — محادثة LLM على الجهاز (0.8B، MLX INT4 + CoreML INT8، DeltaNet هجين، رموز تدفقية)
 - **[MADLAD-400](https://soniqo.audio/ar/guides/translate)** — ترجمة متعددة الاتجاهات عبر أكثر من 400 لغة (3B، MLX INT4 + INT8، T5 v1.1، Apache 2.0)
+- **[Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate)** — ترجمة تدفقية من كلام إلى كلام (FR/ES/PT/DE → EN، MLX INT4 + INT8، حزمة Kyutai Moshi/Mimi، CC-BY-4.0)
 - **[PersonaPlex](https://soniqo.audio/ar/guides/respond)** — تحويل صوت إلى صوت ثنائي الاتجاه الكامل (7B، صوت داخل → صوت خارج، 18 إعداداً صوتياً مسبقاً)
 - **[DeepFilterNet3](https://soniqo.audio/ar/guides/denoise)** — قمع الضوضاء في الزمن الحقيقي (2.1M معامل، 48 كيلوهرتز) الصوت الطويل الذي يتجاوز حد اللقطة الواحدة البالغ 60 s يُقسَّم تلقائيًا إلى أجزاء مع crossfade — راجع `enhanceChunked(...)`
 - **[فصل المصادر](https://soniqo.audio/ar/guides/separate)** — فصل المصادر الموسيقية عبر HTDemucs (Demucs v4) + Open-Unmix (UMX-HQ / UMX-L، 4 طبقات: غناء/طبول/باس/أخرى، 44.1 كيلوهرتز ستيريو)
@@ -58,7 +59,7 @@
 
 </div>
 
-الأوراق البحثية: [Qwen3-ASR](https://arxiv.org/abs/2601.21337) (Alibaba) · [Qwen3-TTS](https://arxiv.org/abs/2601.15621) (Alibaba) · [Omnilingual ASR](https://arxiv.org/abs/2511.09690) (Meta) · [Parakeet TDT](https://arxiv.org/abs/2304.06795) (NVIDIA) · [CosyVoice 3](https://arxiv.org/abs/2505.17589) (Alibaba) · [Kokoro](https://arxiv.org/abs/2301.01695) (StyleTTS 2) · [PersonaPlex](https://arxiv.org/abs/2602.06053) (NVIDIA) · [Mimi](https://arxiv.org/abs/2410.00037) (Kyutai) · [Sortformer](https://arxiv.org/abs/2409.06656) (NVIDIA)
+الأوراق البحثية: [Qwen3-ASR](https://arxiv.org/abs/2601.21337) (Alibaba) · [Qwen3-TTS](https://arxiv.org/abs/2601.15621) (Alibaba) · [Omnilingual ASR](https://arxiv.org/abs/2511.09690) (Meta) · [Parakeet TDT](https://arxiv.org/abs/2304.06795) (NVIDIA) · [CosyVoice 3](https://arxiv.org/abs/2505.17589) (Alibaba) · [Kokoro](https://arxiv.org/abs/2301.01695) (StyleTTS 2) · [PersonaPlex](https://arxiv.org/abs/2602.06053) (NVIDIA) · [Mimi](https://arxiv.org/abs/2410.00037) (Kyutai) · [Hibiki](https://arxiv.org/abs/2502.03382) (Kyutai) · [Sortformer](https://arxiv.org/abs/2409.06656) (NVIDIA)
 
 ## الأخبار
 
@@ -152,7 +153,7 @@ struct DictateView: View {
 
 تشحن `SpeechUI` فقط `TranscriptionView` (النهائيات + الجزئيات) و `TranscriptionStore` (محول ASR تدفقي). استخدم AVFoundation لتصور الصوت وتشغيله.
 
-منتجات SPM المتاحة: `Qwen3ASR`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `KokoroTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `MagpieTTS`, `MagpieTTSCoreML`, `MAGNeTMusicGen`, `FlashSR`, `PersonaPlex`, `SpeechVAD`, `SpeechEnhancement`, `SourceSeparation`, `Qwen3Chat`, `SpeechCore`, `SpeechUI`, `AudioCommon`.
+منتجات SPM المتاحة: `Qwen3ASR`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `KokoroTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `MagpieTTS`, `MagpieTTSCoreML`, `MAGNeTMusicGen`, `FlashSR`, `PersonaPlex`, `HibikiTranslate`, `SpeechVAD`, `SpeechEnhancement`, `SourceSeparation`, `Qwen3Chat`, `SpeechCore`, `SpeechUI`, `AudioCommon`.
 
 </div>
 
@@ -182,6 +183,7 @@ struct DictateView: View {
 | [Magpie-TTS Multilingual](https://soniqo.audio/ar/guides/magpie) | نص → كلام (5 متحدثين جاهزين، تدفق) | MLX / CoreML | 357M (MLX INT4/INT8, CoreML INT8) | 9 (CoreML يستثني JA) |
 | [Qwen3.5-Chat](https://soniqo.audio/ar/guides/chat) | نص → نص (LLM) | MLX, CoreML | 0.8B | متعدد |
 | [MADLAD-400](https://soniqo.audio/ar/guides/translate) | نص → نص (ترجمة) | MLX | 3B | **أكثر من 400** |
+| [Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate) | كلام → كلام (ترجمة) | MLX | 3B | FR/ES/PT/DE → EN |
 | [PersonaPlex](https://soniqo.audio/ar/guides/respond) | كلام → كلام | MLX | 7B | EN |
 | [Silero VAD](https://soniqo.audio/ar/guides/vad) | اكتشاف النشاط الصوتي | MLX, CoreML | 309K | محايد للغة |
 | [Pyannote](https://soniqo.audio/ar/guides/diarize) | VAD + تمييز | MLX | 1.5M | محايد للغة |
@@ -256,6 +258,7 @@ import MagpieTTS            // TTS متعدد اللغات (NVIDIA Magpie 357M،
 import MagpieTTSCoreML      // واجهة CoreML الخلفية لـ Magpie (هجين CoreML + MLX، 8 لغات)
 import Qwen3Chat            // محادثة LLM على الجهاز
 import MADLADTranslation    // ترجمة متعددة الاتجاهات عبر أكثر من 400 لغة
+import HibikiTranslate      // ترجمة تدفقية من كلام إلى كلام (FR/ES/PT/DE → EN)
 import PersonaPlex          // تحويل صوت إلى صوت ثنائي الاتجاه
 import SpeechVAD            // VAD + تمييز + تضمينات
 import SpeechEnhancement    // قمع الضوضاء
@@ -391,6 +394,20 @@ let es = try translator.translate("Hello, how are you?", to: "es")
 // → "Hola, ¿cómo estás?"
 ```
 
+### ترجمة الكلام — [الدليل الكامل →](https://soniqo.audio/guides/audio-translate)
+
+```swift
+import HibikiTranslate
+import AudioCommon
+
+let model = try await HibikiTranslateModel.fromPretrained()
+let pcm = try AudioFileLoader.load(url: input, targetSampleRate: 24000)
+let (englishAudio, textTokens) = model.translate(
+    sourceAudio: pcm, sourceLanguage: .fr
+)
+// Hibiki Zero-3B — FR/ES/PT/DE → EN، على الجهاز، ترميز Mimi تدفقي
+```
+
 ### اكتشاف النشاط الصوتي — [الدليل الكامل →](https://soniqo.audio/ar/guides/vad)
 
 ```swift
@@ -463,8 +480,8 @@ speech-swift مقسم إلى هدف SPM واحد لكل نموذج بحيث يد
 **[مخطط الهيكلة الكامل مع الواجهات الخلفية وجداول الذاكرة وخريطة الوحدات → soniqo.audio/architecture](https://soniqo.audio/ar/architecture)** · **[مرجع API → soniqo.audio/api](https://soniqo.audio/ar/api)** · **[الاختبارات → soniqo.audio/benchmarks](https://soniqo.audio/ar/benchmarks)**
 
 الوثائق المحلية (المستودع):
-- **النماذج:** [Qwen3-ASR](docs/models/asr-model.md) · [Qwen3-TTS](docs/models/tts-model.md) · [CosyVoice](docs/models/cosyvoice-tts.md) · [Kokoro](docs/models/kokoro-tts.md) · [VibeVoice](docs/models/vibevoice.md) · [Parakeet TDT](docs/models/parakeet-asr.md) · [Parakeet Streaming](docs/models/parakeet-streaming-asr.md) · [Nemotron Streaming](docs/models/nemotron-asr-streaming.md) · [Omnilingual ASR](docs/models/omnilingual-asr.md) · [PersonaPlex](docs/models/personaplex.md) · [FireRedVAD](docs/models/fireredvad.md) · [Source Separation](docs/models/source-separation.md) · [HTDemucs](docs/models/htdemucs.md) · [MAGNeT](docs/models/magnet-music-gen.md) · [FlashSR](docs/models/flashsr.md)
-- **الاستدلال:** [Qwen3-ASR](docs/inference/qwen3-asr-inference.md) · [Parakeet TDT](docs/inference/parakeet-asr-inference.md) · [Parakeet Streaming](docs/inference/parakeet-streaming-asr-inference.md) · [Nemotron Streaming](docs/inference/nemotron-asr-streaming.md) · [Omnilingual ASR](docs/inference/omnilingual-asr-inference.md) · [TTS](docs/inference/qwen3-tts-inference.md) · [VibeVoice](docs/inference/vibevoice-inference.md) · [MAGNeT](docs/inference/magnet-music-gen.md) · [FlashSR](docs/inference/flashsr.md) · [Forced Aligner](docs/inference/forced-aligner.md) · [Silero VAD](docs/inference/silero-vad.md) · [تمييز المتحدثين](docs/inference/speaker-diarization.md) · [تحسين الكلام](docs/inference/speech-enhancement.md)
+- **النماذج:** [Qwen3-ASR](docs/models/asr-model.md) · [Qwen3-TTS](docs/models/tts-model.md) · [CosyVoice](docs/models/cosyvoice-tts.md) · [Kokoro](docs/models/kokoro-tts.md) · [VibeVoice](docs/models/vibevoice.md) · [Parakeet TDT](docs/models/parakeet-asr.md) · [Parakeet Streaming](docs/models/parakeet-streaming-asr.md) · [Nemotron Streaming](docs/models/nemotron-asr-streaming.md) · [Omnilingual ASR](docs/models/omnilingual-asr.md) · [PersonaPlex](docs/models/personaplex.md) · [Hibiki](docs/models/hibiki.md) · [FireRedVAD](docs/models/fireredvad.md) · [Source Separation](docs/models/source-separation.md) · [HTDemucs](docs/models/htdemucs.md) · [MAGNeT](docs/models/magnet-music-gen.md) · [FlashSR](docs/models/flashsr.md)
+- **الاستدلال:** [Qwen3-ASR](docs/inference/qwen3-asr-inference.md) · [Parakeet TDT](docs/inference/parakeet-asr-inference.md) · [Parakeet Streaming](docs/inference/parakeet-streaming-asr-inference.md) · [Nemotron Streaming](docs/inference/nemotron-asr-streaming.md) · [Omnilingual ASR](docs/inference/omnilingual-asr-inference.md) · [TTS](docs/inference/qwen3-tts-inference.md) · [VibeVoice](docs/inference/vibevoice-inference.md) · [Hibiki](docs/inference/hibiki-inference.md) · [MAGNeT](docs/inference/magnet-music-gen.md) · [FlashSR](docs/inference/flashsr.md) · [Forced Aligner](docs/inference/forced-aligner.md) · [Silero VAD](docs/inference/silero-vad.md) · [تمييز المتحدثين](docs/inference/speaker-diarization.md) · [تحسين الكلام](docs/inference/speech-enhancement.md)
 - **المرجع:** [البروتوكولات المشتركة](docs/shared-protocols.md)
 
 </div>

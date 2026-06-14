@@ -29,6 +29,10 @@ let package = Package(
             targets: ["PersonaPlex"]
         ),
         .library(
+            name: "HibikiTranslate",
+            targets: ["HibikiTranslate"]
+        ),
+        .library(
             name: "SpeechVAD",
             targets: ["SpeechVAD"]
         ),
@@ -205,6 +209,17 @@ let package = Package(
             dependencies: [
                 "AudioCommon",
                 "MLXCommon",
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXNN", package: "mlx-swift"),
+                .product(name: "MLXFast", package: "mlx-swift")
+            ]
+        ),
+        .target(
+            name: "HibikiTranslate",
+            dependencies: [
+                "AudioCommon",
+                "MLXCommon",
+                "PersonaPlex",
                 .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "MLXNN", package: "mlx-swift"),
                 .product(name: "MLXFast", package: "mlx-swift")
@@ -403,6 +418,7 @@ let package = Package(
                 "CosyVoiceTTS",
                 "Qwen3TTSCoreML",
                 "PersonaPlex",
+                "HibikiTranslate",
                 "SpeechVAD",
                 "SpeechEnhancement",
                 "SourceSeparation",
@@ -477,6 +493,16 @@ let package = Package(
             dependencies: ["PersonaPlex", "AudioCommon", "Qwen3ASR"],
             resources: [
                 .copy("Resources/test_audio.wav")
+            ]
+        ),
+        .testTarget(
+            name: "HibikiTranslateTests",
+            dependencies: ["HibikiTranslate", "AudioCommon", "ParakeetASR", "Qwen3TTS", "MADLADTranslation"],
+            resources: [
+                .copy("Resources/fleurs_fr.wav"),
+                .copy("Resources/hibiki_official_es_5s.wav"),
+                .copy("Resources/fleurs_pt.wav"),
+                .copy("Resources/fleurs_de.wav"),
             ]
         ),
         .testTarget(

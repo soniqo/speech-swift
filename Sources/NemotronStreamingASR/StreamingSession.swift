@@ -13,6 +13,7 @@ public class StreamingSession {
     private let vocabulary: NemotronVocabulary
     private let melPreprocessor: StreamingMelPreprocessor
     private let rnntDecoder: RNNTGreedyDecoder
+    private var wordBoostingState: WordBoostingState?
 
     private var cacheLastChannel: MLMultiArray
     private var cacheLastTime: MLMultiArray
@@ -35,6 +36,7 @@ public class StreamingSession {
     private var allLogProbs: [Float] = []
     private var sampleBuffer: [Float] = []
     private var segmentIndex: Int = 0
+    internal private(set) var wordBoostingChangedDecisions: Int = 0
 
     init(
         config: NemotronStreamingConfig,
@@ -43,7 +45,9 @@ public class StreamingSession {
         decoder: MLModel,
         joint: MLModel,
         vocabulary: NemotronVocabulary,
-        melPreprocessor: StreamingMelPreprocessor
+        melPreprocessor: StreamingMelPreprocessor,
+        wordBoosting: WordBoostingConfig?,
+        wordBoostingTokenizer: NemotronSentencePieceUnigramTokenizer?
     ) throws {
         self.config = config
         self.encoder = encoder
@@ -51,7 +55,18 @@ public class StreamingSession {
         self.joint = joint
         self.vocabulary = vocabulary
         self.melPreprocessor = melPreprocessor
-        self.rnntDecoder = RNNTGreedyDecoder(config: config, decoder: decoder, joint: joint)
+        let wordBoostingContext = WordBoostingContext(
+            config: wordBoosting,
+            vocabulary: vocabulary,
+            tokenizer: wordBoostingTokenizer
+        )
+        self.rnntDecoder = RNNTGreedyDecoder(
+            config: config,
+            decoder: decoder,
+            joint: joint,
+            wordBoosting: wordBoostingContext
+        )
+        self.wordBoostingState = wordBoostingContext?.initialState()
 
         let layers = config.encoderLayers
         let hidden = config.encoderHidden
@@ -183,7 +198,8 @@ public class StreamingSession {
             text: text,
             isFinal: true,
             confidence: confidence,
-            segmentIndex: segmentIndex
+            segmentIndex: segmentIndex,
+            wordBoostingChangedDecisions: wordBoostingChangedDecisions
         )]
     }
 
@@ -233,7 +249,6 @@ public class StreamingSession {
         let result = try rnntDecoder.decode(
             encoded: encoded,
             encodedLength: encodedLength,
-            frameOffset: 0,
             h: &h,
             c: &c,
             decoderOutput: &decoderOutput,
@@ -241,11 +256,13 @@ public class StreamingSession {
             jointProvider: jointProvider,
             tokenArray: tokenArray,
             encSlice: encSlice,
-            argmaxBuf: argmaxBuf
+            argmaxBuf: argmaxBuf,
+            wordBoostingState: &wordBoostingState
         )
 
         allTokens.append(contentsOf: result.tokens)
         allLogProbs.append(contentsOf: result.tokenLogProbs)
+        wordBoostingChangedDecisions += result.wordBoostingChangedDecisions
 
         let text = vocabulary.decode(allTokens)
         guard !text.isEmpty else { return nil }
@@ -262,7 +279,8 @@ public class StreamingSession {
             text: text,
             isFinal: false,
             confidence: confidence,
-            segmentIndex: segmentIndex
+            segmentIndex: segmentIndex,
+            wordBoostingChangedDecisions: wordBoostingChangedDecisions
         )
     }
 

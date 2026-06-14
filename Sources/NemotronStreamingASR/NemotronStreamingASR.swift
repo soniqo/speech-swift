@@ -28,6 +28,8 @@ public class NemotronStreamingASRModel {
     var decoder: MLModel?
     var joint: MLModel?
     private let vocabulary: NemotronVocabulary
+    private let wordBoostingTokenizer: NemotronSentencePieceUnigramTokenizer?
+    public let wordBoostingTokenizerStatus: WordBoostingTokenizerStatus
 
     private init(
         config: NemotronStreamingConfig,
@@ -35,7 +37,9 @@ public class NemotronStreamingASRModel {
         encoder: MLModel?,
         decoder: MLModel?,
         joint: MLModel?,
-        vocabulary: NemotronVocabulary
+        vocabulary: NemotronVocabulary,
+        wordBoostingTokenizer: NemotronSentencePieceUnigramTokenizer?,
+        wordBoostingTokenizerStatus: WordBoostingTokenizerStatus
     ) {
         self.config = config
         self.languages = languages
@@ -44,6 +48,8 @@ public class NemotronStreamingASRModel {
         self.decoder = decoder
         self.joint = joint
         self.vocabulary = vocabulary
+        self.wordBoostingTokenizer = wordBoostingTokenizer
+        self.wordBoostingTokenizerStatus = wordBoostingTokenizerStatus
     }
 
     /// A partial transcript from streaming recognition.
@@ -52,11 +58,16 @@ public class NemotronStreamingASRModel {
         public let isFinal: Bool
         public let confidence: Float
         public let segmentIndex: Int
+        public let wordBoostingChangedDecisions: Int
     }
 
     /// Create a streaming session. `language` is a BCP-47 tag (e.g. `"en-US"`,
     /// `"ja-JP"`); `nil` or unknown falls back to the model's `"auto"` slot.
-    public func createSession(language: String? = nil) throws -> StreamingSession {
+    /// `wordBoosting` biases RNN-T decoding toward the provided phrases.
+    public func createSession(
+        language: String? = nil,
+        wordBoosting: WordBoostingConfig? = nil
+    ) throws -> StreamingSession {
         guard _isLoaded, let encoder, let decoder, let joint else {
             throw AudioModelError.inferenceFailed(operation: "createSession", reason: "Model not loaded")
         }
@@ -68,7 +79,19 @@ public class NemotronStreamingASRModel {
             decoder: decoder,
             joint: joint,
             vocabulary: vocabulary,
-            melPreprocessor: melPreprocessor
+            melPreprocessor: melPreprocessor,
+            wordBoosting: wordBoosting,
+            wordBoostingTokenizer: wordBoostingTokenizer
+        )
+    }
+
+    /// Analyze phrases with the loaded Nemotron vocabulary and suggest a
+    /// conservative boost strength for each one.
+    public func wordBoostingSuggestions(for phrases: [String]) -> [WordBoostingSuggestion] {
+        WordBoostingContext.suggestions(
+            for: phrases,
+            vocabulary: vocabulary,
+            tokenizer: wordBoostingTokenizer
         )
     }
 
@@ -77,7 +100,8 @@ public class NemotronStreamingASRModel {
         audio: [Float],
         sampleRate: Int,
         language: String? = nil,
-        chunkDuration: Float? = nil
+        chunkDuration: Float? = nil,
+        wordBoosting: WordBoostingConfig? = nil
     ) -> AsyncStream<PartialTranscript> {
         let chunkMs = chunkDuration.map { Int($0 * 1000) } ?? config.streaming.chunkMs
 
@@ -91,7 +115,7 @@ public class NemotronStreamingASRModel {
                         samples = audio
                     }
                     let actualSamplesPerChunk = chunkMs * self.config.sampleRate / 1000
-                    let session = try self.createSession(language: language)
+                    let session = try self.createSession(language: language, wordBoosting: wordBoosting)
                     var offset = 0
                     while offset < samples.count {
                         let end = min(offset + actualSamplesPerChunk, samples.count)
@@ -125,7 +149,8 @@ public class NemotronStreamingASRModel {
         _ audio: [Float],
         sampleRate: Int,
         language: String? = nil,
-        padSilence: Bool = true
+        padSilence: Bool = true,
+        wordBoosting: WordBoostingConfig? = nil
     ) throws -> String {
         var samples: [Float]
         if sampleRate != config.sampleRate {
@@ -138,7 +163,7 @@ public class NemotronStreamingASRModel {
             samples = [Float](repeating: 0, count: padSamples) + samples + [Float](repeating: 0, count: padSamples)
         }
 
-        let session = try createSession(language: language)
+        let session = try createSession(language: language, wordBoosting: wordBoosting)
         var allPartials = try session.pushAudio(samples)
         allPartials.append(contentsOf: try session.finalize())
         if let lastFinal = allPartials.last(where: { $0.isFinal }) {
@@ -180,6 +205,10 @@ public class NemotronStreamingASRModel {
                     "decoder.mlmodelc/**",
                     "joint.mlmodelc/**",
                     "vocab.json",
+                    "tokenizer.model",
+                    "*_tokenizer.model",
+                    "vocab.txt",
+                    "*_vocab.txt",
                     "languages.json",
                     "config.json",
                 ]
@@ -234,6 +263,24 @@ public class NemotronStreamingASRModel {
             languages = NemotronLanguages(promptDictionary: ["en-US": 0, "en": 0, "auto": 0])
         }
 
+        progressHandler?(0.79, "Loading word boosting tokenizer...")
+        let loadedWordBoostingTokenizer = try loadWordBoostingTokenizer(from: cacheDir)
+        let wordBoostingTokenizer = loadedWordBoostingTokenizer?.tokenizer
+        let wordBoostingTokenizerStatus = WordBoostingTokenizerStatus(
+            mode: loadedWordBoostingTokenizer == nil ? .vocabFallback : .sentencePieceModel,
+            path: loadedWordBoostingTokenizer?.url.path
+        )
+        if loadedWordBoostingTokenizer == nil {
+            // Surface the degraded path explicitly — silent fallback to greedy
+            // vocab segmentation has been measured to disagree with real SPM
+            // tokenization on ~10/14 OOV terms (e.g. brand names, technical
+            // jargon), causing the boost trie to never fire on the divergent
+            // phrases.
+            AudioLog.modelLoading.warning(
+                "Nemotron word boosting tokenizer.model missing in cache; falling back to greedy vocab segmentation. Boost suggestions for OOV terms may diverge from the decoder's actual tokenization."
+            )
+        }
+
         // `.all` lets CoreML schedule the encoder onto the ANE (which is what
         // Python coremltools' `ComputeUnit.ALL` does). Encoder gains ~40% RTF
         // over `.cpuAndGPU`. Decoder + joint are tiny enough that ANE vs CPU
@@ -255,8 +302,26 @@ public class NemotronStreamingASRModel {
             encoder: encoder,
             decoder: decoder,
             joint: joint,
-            vocabulary: vocabulary
+            vocabulary: vocabulary,
+            wordBoostingTokenizer: wordBoostingTokenizer,
+            wordBoostingTokenizerStatus: wordBoostingTokenizerStatus
         )
+    }
+
+    private static func loadWordBoostingTokenizer(
+        from directory: URL
+    ) throws -> (tokenizer: NemotronSentencePieceUnigramTokenizer, url: URL)? {
+        let fm = FileManager.default
+        let direct = directory.appendingPathComponent("tokenizer.model")
+        if fm.fileExists(atPath: direct.path) {
+            return (try NemotronSentencePieceUnigramTokenizer(modelURL: direct), direct)
+        }
+
+        let contents = (try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
+        guard let hashed = contents.first(where: { $0.lastPathComponent.hasSuffix("_tokenizer.model") }) else {
+            return nil
+        }
+        return (try NemotronSentencePieceUnigramTokenizer(modelURL: hashed), hashed)
     }
 
     private static func loadCoreMLModel(
@@ -273,4 +338,5 @@ public class NemotronStreamingASRModel {
         mlConfig.computeUnits = CoreMLComputeUnitsResolver.resolved(default: computeUnits)
         return try MLModel(contentsOf: modelURL, configuration: mlConfig)
     }
+
 }
