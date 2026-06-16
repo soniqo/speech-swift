@@ -13,10 +13,12 @@ import AudioCommon
 /// JSON bodies with `audio_base64` are also accepted for parity with
 /// `/transcribe`, since some clients prefer JSON over multipart.
 ///
-/// Like the `/v1/realtime` handler, transcription always runs on the single
-/// local ASR backend (Qwen3-ASR). The `model` field (`whisper-1`,
-/// `gpt-4o-transcribe`, …) is accepted for client compatibility but does not
-/// select a backend — there is only one.
+/// The `model` field is routed through the AudioServer registry — names
+/// like `parakeet`, `qwen3`, `nemotron`, `omnilingual`, or any registered
+/// variant alias select a specific ASR bundle. OpenAI-side names
+/// (`whisper-1`, `gpt-4o-transcribe`, …) and any unknown value fall back
+/// to the default (Parakeet) so existing OpenAI SDK clients keep working
+/// without code changes.
 func handleOpenAITranscriptions(
     request: Request,
     state: ModelState
@@ -27,6 +29,7 @@ func handleOpenAITranscriptions(
     let audioData: Data
     let language: String?
     let responseFormat: String
+    let modelName: String?
 
     if contentType.contains("multipart/form-data") {
         guard let boundary = parseBoundary(contentType) else {
@@ -45,6 +48,7 @@ func handleOpenAITranscriptions(
         audioData = filePart.body
         language = formFields["language"]?.stringValue
         responseFormat = formFields["response_format"]?.stringValue ?? "json"
+        modelName = formFields["model"]?.stringValue
     } else {
         // Fallback: reuse the existing JSON / raw-WAV parsing used by /transcribe.
         let params = try RequestParams.parse(body, contentType: contentType)
@@ -54,10 +58,23 @@ func handleOpenAITranscriptions(
         audioData = data
         language = params.string("language")
         responseFormat = params.string("response_format") ?? "json"
+        modelName = params.string("model")
     }
 
-    let asr = try await state.loadASR()
-    let sampleRate = asr.inputSampleRate
+    // Resolve the model to an ASR variant. Unknown / OpenAI-side names
+    // silently fall back to the Parakeet default so existing clients
+    // that send "whisper-1" or "gpt-4o-transcribe" still work.
+    let variant: ModelVariant
+    if let modelName, !modelName.isEmpty,
+       let v = resolveModelToASRVariant(modelName) {
+        variant = v
+    } else {
+        variant = defaultVariant(forEngine: "parakeet", kind: .asr)
+    }
+
+    // Decode at the protocol's 16 kHz; resampling happens inside
+    // dispatchTranscribe if needed.
+    let sampleRate = 16000
     let audio: [Float]
     do {
         audio = try decodeWAVData(audioData, targetSampleRate: sampleRate)
@@ -67,8 +84,16 @@ func handleOpenAITranscriptions(
             status: .badRequest)
     }
 
-    let result = asr.transcribeWithLanguage(
-        audio: audio, sampleRate: sampleRate, language: language)
+    let text: String
+    do {
+        text = try await dispatchTranscribe(
+            audio: audio, sampleRate: sampleRate,
+            variant: variant, language: language, state: state)
+    } catch {
+        return openAIErrorResponse(
+            "Transcription failed: \(error.localizedDescription)",
+            status: .internalServerError)
+    }
     let duration = Double(audio.count) / Double(sampleRate)
     let durationRounded = round(duration * 100) / 100
 
@@ -77,7 +102,7 @@ func handleOpenAITranscriptions(
         return Response(
             status: .ok,
             headers: [.contentType: "text/plain; charset=utf-8"],
-            body: .init(byteBuffer: .init(string: result.text)))
+            body: .init(byteBuffer: .init(string: text)))
 
     case "verbose_json":
         // Minimal verbose_json: a single segment covering the whole utterance.
@@ -87,7 +112,7 @@ func handleOpenAITranscriptions(
             "seek": 0,
             "start": 0.0,
             "end": durationRounded,
-            "text": result.text,
+            "text": text,
             "tokens": [],
             "temperature": 0.0,
             "avg_logprob": 0.0,
@@ -96,23 +121,24 @@ func handleOpenAITranscriptions(
         ]
         var json: [String: Any] = [
             "task": "transcribe",
-            "language": result.language ?? language ?? "english",
+            "language": language ?? "english",
             "duration": durationRounded,
-            "text": result.text,
+            "text": text,
+            "model": variant.name,
             "segments": [segment]
         ]
         if (json["language"] as? String)?.isEmpty ?? true { json["language"] = "english" }
         return jsonResponse(json)
 
     case "srt":
-        let srt = formatSRT(text: result.text, duration: duration)
+        let srt = formatSRT(text: text, duration: duration)
         return Response(
             status: .ok,
             headers: [.contentType: "application/x-subrip; charset=utf-8"],
             body: .init(byteBuffer: .init(string: srt)))
 
     case "vtt":
-        let vtt = formatVTT(text: result.text, duration: duration)
+        let vtt = formatVTT(text: text, duration: duration)
         return Response(
             status: .ok,
             headers: [.contentType: "text/vtt; charset=utf-8"],
@@ -122,7 +148,7 @@ func handleOpenAITranscriptions(
         // OpenAI's plain `json` returns only {"text": "..."} — keep the shape
         // strict so typed deserializers in the openai-* SDKs don't reject it.
         // Rich metadata (duration, language, segments) belongs in verbose_json.
-        return jsonResponse(["text": result.text])
+        return jsonResponse(["text": text])
     }
 }
 

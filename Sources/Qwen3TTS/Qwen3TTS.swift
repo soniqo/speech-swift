@@ -24,6 +24,10 @@ public enum TTSError: Error, LocalizedError {
 ///
 /// - Warning: This class is not thread-safe. Create separate instances for concurrent use.
 public class Qwen3TTSModel {
+    /// Default HuggingFace model identifier — the 12 Hz 0.6B Base 4-bit MLX
+    /// bundle. Single SSOT for the registry and other call sites.
+    public static let defaultModelId = "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-4bit"
+
     /// Default instruct text applied automatically for CustomVoice models when no explicit
     /// `--instruct` is provided. Prevents rambling output for short texts.
     public static let defaultInstruct = "Speak naturally."

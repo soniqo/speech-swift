@@ -27,6 +27,12 @@ public final class ScalarQuantizationLayer: Module {
 }
 
 public final class VoxCPM2TTSModel: Module {
+    /// Default HuggingFace model identifier — bf16 MLX bundle.
+    public static let defaultModelId = "aufklarer/VoxCPM2-MLX-bf16"
+
+    /// INT8 MLX bundle — smaller footprint at a small quality cost.
+    public static let int8ModelId = "aufklarer/VoxCPM2-MLX-int8"
+
     public let args: ModelArgs
     public let outputSampleRate: Int
     private static let officialTokenizerModelId = "openbmb/VoxCPM2"

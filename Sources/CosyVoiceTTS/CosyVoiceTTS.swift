@@ -30,6 +30,10 @@ public enum CosyVoiceTTSError: Error, LocalizedError {
 ///
 /// - Warning: This class is not thread-safe. Create separate instances for concurrent use.
 public final class CosyVoiceTTSModel {
+    /// Default HuggingFace model identifier — the 0.5B 4-bit MLX bundle.
+    /// Single SSOT for the registry and other call sites.
+    public static let defaultModelId = "aufklarer/CosyVoice3-0.5B-MLX-4bit"
+
     public let config: CosyVoiceConfig
 
     let llm: CosyVoiceLLM

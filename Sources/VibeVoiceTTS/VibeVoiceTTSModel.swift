@@ -15,6 +15,9 @@ import Tokenizers
 /// let pcm = try await tts.generate(text: "Hello world.", language: nil)
 /// ```
 public final class VibeVoiceTTSModel {
+    /// Default HuggingFace model identifier — the 0.5B INT4 Realtime bundle.
+    public static let defaultModelId = "aufklarer/VibeVoice-Realtime-0.5B-MLX-INT4"
+
 
     public struct Configuration: Sendable {
         /// HuggingFace model id for the VibeVoice weights (MLX-compatible).
