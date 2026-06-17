@@ -50,6 +50,29 @@ let _ = try model.transcribe(audio: silentBuffer, sampleRate: 16000)
 // Subsequent calls: ~0.6s for 20s audio
 ```
 
+## Encoder Variant Selection (multi-encoder repo)
+
+`aufklarer/Parakeet-TDT-v3-CoreML-INT8` ships multiple single-shape encoders in one repo (`encoder.mlmodelc` = 30s, `encoder_5s.mlmodelc`, `encoder_15s.mlmodelc`). Pick the variant matching your typical input length to cut per-call ANE bandwidth:
+
+```swift
+// Short voice-pipeline chunks (≤5s): ~6× less weight bandwidth per call than the 30s encoder
+let model = try await ParakeetASRModel.fromPretrained(
+    modelId: "aufklarer/Parakeet-TDT-v3-CoreML-INT8",
+    encoderVariant: "5s")
+```
+
+`encoderVariant: nil` (default) loads `encoder.mlmodelc`, so the single-shape `-30s` and `-iOS-5s` repos work unchanged.
+
+## Compute Units
+
+| Platform | Default | Fallback |
+|----------|---------|----------|
+| iOS Simulator | `.cpuOnly` | — (only path that returns non-zero tokens; the simulator's Espresso lacks an MPSGraph backend) |
+| iOS device | `.cpuAndNeuralEngine` | `.cpuAndGPU` |
+| macOS | `.cpuAndNeuralEngine` | `.cpuAndGPU` |
+
+macOS was historically pinned to `.cpuAndGPU` because the iOS17-target INT8 encoder SIGSEGV'd in `bnns::GraphCompile` on Mac ANE (surfaced on M5, see issue #313). The iOS18-target single-shape encoders ship today, so macOS now prefers ANE and falls back to GPU only if loading throws.
+
 ## CLI
 
 ```bash

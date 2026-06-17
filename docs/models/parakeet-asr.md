@@ -46,6 +46,29 @@ The model is split into 3 CoreML sub-models for optimal compute unit placement:
 Default model (`aufklarer/Parakeet-TDT-v3-CoreML-INT8-30s`):
 - **INT8** palettized encoder — ~50% size reduction, best quality/speed balance
 - **Single fixed shape** (3000 mel frames = 30s), not EnumeratedShapes — so it loads on any CoreML compute unit (CPU-only, GPU, or Neural Engine) without the heavy multi-shape compile. Audio longer than 30s is window-chunked in `transcribeAudio`. The `aufklarer/Parakeet-TDT-v3-CoreML-INT8-iOS-5s` variant (fixed 500 frames = 5s) trades a smaller window for lower runtime memory on iOS.
+- **iOS18 / macOS15 deployment target**: the converter uses `ct.target.iOS18`. iOS17-target builds SIGSEGV in `bnns::GraphCompile` when loaded on M5 ANE with `.cpuAndNeuralEngine`; iOS18 emits MIL ops the M5 BNNS compiler accepts.
+
+The legacy multi-encoder repo `aufklarer/Parakeet-TDT-v3-CoreML-INT8` ships three single-shape encoders in one directory:
+
+| File | Shape | Use |
+|------|-------|-----|
+| `encoder.mlmodelc` | 3000 frames (30s) | default — same shape as `-30s` |
+| `encoder_5s.mlmodelc` | 500 frames (5s) | shortest window, smallest per-call cost |
+| `encoder_15s.mlmodelc` | 1500 frames (15s) | mid window for conversational chunks |
+
+Pick via `encoderVariant:` on `fromPretrained`:
+
+```swift
+// default encoder.mlmodelc (30s)
+let model = try await ParakeetASRModel.fromPretrained(modelId: "aufklarer/Parakeet-TDT-v3-CoreML-INT8")
+
+// shape-specific variant
+let m5 = try await ParakeetASRModel.fromPretrained(
+    modelId: "aufklarer/Parakeet-TDT-v3-CoreML-INT8",
+    encoderVariant: "5s")
+```
+
+EnumeratedShapes is no longer used: iOS18's MIL validator rejects the dynamic `tile` reps that the FastConformer pad-mask emits when the time dim is symbolic. Single-shape variants side-step that.
 
 Mel preprocessing (pre-emphasis, STFT, mel filterbank, normalization) is done in Swift using Accelerate/vDSP — no CoreML preprocessor model needed. Decoder and joint are small enough that quantization isn't necessary.
 
@@ -81,6 +104,7 @@ On Apple Silicon with Neural Engine (M2 Max, 20s audio):
 
 - [aufklarer/Parakeet-TDT-v3-CoreML-INT8-30s](https://huggingface.co/aufklarer/Parakeet-TDT-v3-CoreML-INT8-30s) — default (single fixed 30s shape)
 - [aufklarer/Parakeet-TDT-v3-CoreML-INT8-iOS-5s](https://huggingface.co/aufklarer/Parakeet-TDT-v3-CoreML-INT8-iOS-5s) — iOS (single fixed 5s shape, lower memory)
+- [aufklarer/Parakeet-TDT-v3-CoreML-INT8](https://huggingface.co/aufklarer/Parakeet-TDT-v3-CoreML-INT8) — multi-encoder repo (`encoder.mlmodelc` 30s, `encoder_5s.mlmodelc`, `encoder_15s.mlmodelc`)
 
 ## Thread Safety
 

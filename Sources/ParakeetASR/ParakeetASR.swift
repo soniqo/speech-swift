@@ -283,12 +283,19 @@ public class ParakeetASRModel {
     ///
     /// - Parameters:
     ///   - modelId: HuggingFace model identifier
+    ///   - encoderVariant: For multi-encoder repos (e.g.
+    ///     `aufklarer/Parakeet-TDT-v3-CoreML-INT8` after the M5 fix), the
+    ///     shape suffix to pick: `"5s"`, `"15s"`, etc. Selects
+    ///     `encoder_{variant}.mlmodelc`. `nil` (default) picks the repo's
+    ///     `encoder.mlmodelc`, which is what single-shape repos
+    ///     (`-30s`, `-iOS-5s`) ship.
     ///   - progressHandler: Optional callback for download/load progress `(fraction, status)`
     /// - Returns: Initialized model ready for transcription
     public static func fromPretrained(
         modelId: String? = nil,
         cacheDir: URL? = nil,
         offlineMode: Bool = false,
+        encoderVariant: String? = nil,
         progressHandler: ((Double, String) -> Void)? = nil
     ) async throws -> ParakeetASRModel {
         let effectiveModelId: String
@@ -302,7 +309,10 @@ public class ParakeetASRModel {
             #endif
         }
 
-        AudioLog.modelLoading.info("Loading Parakeet model: \(effectiveModelId)")
+        let encoderFileName: String = encoderVariant.map { "encoder_\($0).mlmodelc" }
+            ?? "encoder.mlmodelc"
+
+        AudioLog.modelLoading.info("Loading Parakeet model: \(effectiveModelId) (encoder: \(encoderFileName))")
 
         // Step 1: Get/create cache directory
         let resolvedCacheDir: URL
@@ -320,7 +330,7 @@ public class ParakeetASRModel {
                 modelId: effectiveModelId,
                 to: resolvedCacheDir,
                 additionalFiles: [
-                    "encoder.mlmodelc/**",
+                    "\(encoderFileName)/**",
                     "decoder.mlmodelc/**",
                     "joint.mlmodelc/**",
                     "vocab.json",
@@ -367,24 +377,23 @@ public class ParakeetASRModel {
         //     backend ("Espresso compiled without MPSGraph engine") — any
         //     other choice silently falls back to a partial CPU/GPU mix
         //     that returns 0 tokens for the INT8-quantized encoder.
-        //   iOS device: prefer `.cpuAndNeuralEngine` (3-10× faster +
-        //     more power-efficient when ANE picks up the model), fall
-        //     back to `.cpuAndGPU` if loading throws — some devices
-        //     report `numANECores: Unknown aneSubType` and ANE
-        //     compilation fails for INT8 encoders on those.
-        //   macOS: pin `.cpuAndGPU`. Mac ANE has a different generation
-        //     than iOS A-series and SIGSEGVs when loading this INT8
-        //     encoder (observed in E2E tests). Sticking with the
-        //     established GPU path keeps test runs reliable.
+        //   iOS device + macOS: prefer `.cpuAndNeuralEngine` for the
+        //     3-10× ANE speedup, fall back to `.cpuAndGPU` if loading
+        //     throws. macOS was historically pinned to `.cpuAndGPU`
+        //     because the iOS17-target INT8 encoder SIGSEGV'd in
+        //     bnns::GraphCompile on Mac ANE (issue #313 surfaced this on
+        //     M5). The iOS18-target single-shape encoders shipped in
+        //     `Parakeet-TDT-v3-CoreML-INT8-30s`, `-iOS-5s`, and the
+        //     multi-encoder `Parakeet-TDT-v3-CoreML-INT8` repos fix
+        //     that, so macOS now also tries ANE first.
         #if targetEnvironment(simulator)
         let computeUnitsToTry: [MLComputeUnits] = [.cpuOnly]
-        #elseif os(iOS)
-        let computeUnitsToTry: [MLComputeUnits] = [.cpuAndNeuralEngine, .cpuAndGPU]
         #else
-        let computeUnitsToTry: [MLComputeUnits] = [.cpuAndGPU]
+        let computeUnitsToTry: [MLComputeUnits] = [.cpuAndNeuralEngine, .cpuAndGPU]
         #endif
         let (encoder, encoderUnits) = try loadCoreMLModelWithFallback(
-            name: "encoder", from: resolvedCacheDir, computeUnitsToTry: computeUnitsToTry)
+            name: encoderFileName.replacingOccurrences(of: ".mlmodelc", with: ""),
+            from: resolvedCacheDir, computeUnitsToTry: computeUnitsToTry)
         progressHandler?(0.90, "Loading decoder...")
         let (decoder, _) = try loadCoreMLModelWithFallback(
             name: "decoder", from: resolvedCacheDir, computeUnitsToTry: computeUnitsToTry)
