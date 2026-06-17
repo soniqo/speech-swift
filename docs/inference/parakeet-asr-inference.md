@@ -71,7 +71,7 @@ let model = try await ParakeetASRModel.fromPretrained(
 | iOS device | `.cpuAndNeuralEngine` | `.cpuAndGPU` |
 | macOS | `.cpuAndNeuralEngine` | `.cpuAndGPU` |
 
-macOS was historically pinned to `.cpuAndGPU` because the iOS17-target INT8 encoder SIGSEGV'd in `bnns::GraphCompile` on Mac ANE (surfaced on M5, see issue #313). The iOS18-target single-shape encoders ship today, so macOS now prefers ANE and falls back to GPU only if loading throws.
+macOS was historically pinned to `.cpuAndGPU` because the iOS17-target **EnumeratedShapes** INT8 encoder SIGSEGV'd in `bnns::GraphCompile` on Mac ANE (surfaced on M5, see issue #313). Single-shape builds aren't affected: the shipped `-30s` and `-iOS-5s` repos (iOS17 single-shape) ANE-compile cleanly on M5; the legacy multi-encoder `-INT8` repo was rebuilt with iOS18 single-shape variants since EnumeratedShapes can't be re-emitted on iOS18 either (MIL validator rejects the dynamic `tile` reps). So macOS now defaults to ANE and falls back to GPU only if loading throws.
 
 ## CLI
 
@@ -83,14 +83,19 @@ macOS was historically pinned to `.cpuAndGPU` because the iOS17-target INT8 enco
 .build/release/speech transcribe recording.wav
 ```
 
-## Performance (M2 Max)
+## Performance (M5 Pro, macOS 26.5)
 
-| Metric | Value |
-|--------|-------|
-| RTF (after warmup) | ~0.03 |
-| Cold start | ~3s (CoreML compilation) |
-| Warm inference (20s audio) | ~0.6s |
-| Backend | Neural Engine (CoreML) |
+Encoder-only forward, warm best of 5, swift JIT process:
+
+| Shape | Compute | Warm encode | Encoder RTF | Peak RSS |
+|-------|---------|------|-----|----------|
+| 3000 (30s) | ANE | 74 ms | 0.0025 | 820 MB |
+| 1500 (15s) | ANE | 24 ms | 0.0016 | 784 MB |
+| 500  (5s)  | ANE |  8 ms | 0.0016 | 765 MB |
+
+End-to-end with TDT decode (release build of `speech transcribe` on the bundled 20s fixture, default `-30s` model, ANE): warm transcribe 0.10 s (RTF 0.005), peak memory footprint 857 MB.
+
+Cold start (first call) includes BNNS graph compile on ANE — 5 s for the 5s variant, ~11 s for 30s. CoreML caches the compile to disk so subsequent process launches skip it.
 
 ## Model Architecture Reference
 
