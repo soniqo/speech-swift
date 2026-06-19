@@ -495,6 +495,11 @@ Client request errors use `invalid_request_error`. Failures thrown while
 processing a valid realtime event use `server_error` and include `event_type`
 so clients can associate the error with the message that failed.
 
+Long-running realtime model loads and generations emit lightweight
+`realtime.keepalive` events and websocket pong control frames periodically
+while no model output is ready. Clients can ignore these events or treat them
+as cold-start activity indicators.
+
 ### AudioModelError
 
 Unified error type in `AudioCommon` for cross-module error reporting:

@@ -928,20 +928,30 @@ func handleRealtimeWS(
                 let text: String
                 switch asr.engine {
                 case "parakeet":
-                    let model = try await state.loadParakeet(modelId: asr.modelId)
-                    text = (try? model.transcribeAudio(audio16k, sampleRate: 16000, language: nil)) ?? ""
+                    text = try await withRealtimeKeepalive(outbound: outbound) {
+                        let model = try await state.loadParakeet(modelId: asr.modelId)
+                        return (try? model.transcribeAudio(audio16k, sampleRate: 16000, language: nil)) ?? ""
+                    }
                 case "parakeet-streaming":
-                    let model = try await state.loadParakeetStreaming(modelId: asr.modelId)
-                    text = (try? model.transcribeAudio(audio16k, sampleRate: 16000, language: session.language)) ?? ""
+                    text = try await withRealtimeKeepalive(outbound: outbound) {
+                        let model = try await state.loadParakeetStreaming(modelId: asr.modelId)
+                        return (try? model.transcribeAudio(audio16k, sampleRate: 16000, language: session.language)) ?? ""
+                    }
                 case "nemotron":
-                    let model = try await state.loadNemotron(modelId: asr.modelId)
-                    text = (try? model.transcribeAudio(audio16k, sampleRate: 16000, language: session.language)) ?? ""
+                    text = try await withRealtimeKeepalive(outbound: outbound) {
+                        let model = try await state.loadNemotron(modelId: asr.modelId)
+                        return (try? model.transcribeAudio(audio16k, sampleRate: 16000, language: session.language)) ?? ""
+                    }
                 case "omnilingual":
-                    let model = try await state.loadOmnilingual(modelId: asr.modelId)
-                    text = (try? model.transcribeAudio(audio16k, sampleRate: 16000, language: session.language)) ?? ""
+                    text = try await withRealtimeKeepalive(outbound: outbound) {
+                        let model = try await state.loadOmnilingual(modelId: asr.modelId)
+                        return (try? model.transcribeAudio(audio16k, sampleRate: 16000, language: session.language)) ?? ""
+                    }
                 case "qwen3-asr":
-                    let model = try await state.loadQwen3ASR(modelId: asr.modelId)
-                    text = model.transcribe(audio: audio16k, sampleRate: 16000)
+                    text = try await withRealtimeKeepalive(outbound: outbound) {
+                        let model = try await state.loadQwen3ASR(modelId: asr.modelId)
+                        return model.transcribe(audio: audio16k, sampleRate: 16000)
+                    }
                 default:
                     try await sendRealtimeError(outbound: outbound,
                         message: "ASR engine '\(asr.engine)' is not enabled in this build")
@@ -1021,21 +1031,25 @@ func handleRealtimeWS(
                     var s2sTotalSamples = 0
                     switch s2s.engine {
                     case "personaplex":
-                        let model = try await state.loadPersonaPlex()
-                        let voice = PersonaPlexVoice(rawValue: session.voice ?? "")
-                            ?? .NATM0
-                        let result = model.respond(
-                            userAudio: userAudio,
-                            voice: voice,
-                            systemPromptTokens: nil,
-                            maxSteps: 200)
+                        let result = try await withRealtimeKeepalive(outbound: outbound) {
+                            let model = try await state.loadPersonaPlex()
+                            let voice = PersonaPlexVoice(rawValue: session.voice ?? "")
+                                ?? .NATM0
+                            return model.respond(
+                                userAudio: userAudio,
+                                voice: voice,
+                                systemPromptTokens: nil,
+                                maxSteps: 200)
+                        }
                         s2sTotalSamples += try await streamSamplesAsDeltas(
                             result.audio, outbound: outbound, responseId: responseId)
                     case "hibiki":
-                        let model = try await state.loadHibiki(modelId: s2s.modelId)
-                        let sourceLang = HibikiSourceLanguage(
-                            rawValue: mapToHibikiSourceLanguage(session.language)) ?? .fr
-                        let result = model.translate(sourceAudio: userAudio, sourceLanguage: sourceLang)
+                        let result = try await withRealtimeKeepalive(outbound: outbound) {
+                            let model = try await state.loadHibiki(modelId: s2s.modelId)
+                            let sourceLang = HibikiSourceLanguage(
+                                rawValue: mapToHibikiSourceLanguage(session.language)) ?? .fr
+                            return model.translate(sourceAudio: userAudio, sourceLanguage: sourceLang)
+                        }
                         s2sTotalSamples += try await streamSamplesAsDeltas(
                             result.audio, outbound: outbound, responseId: responseId)
                     default:
@@ -1100,13 +1114,17 @@ func handleRealtimeWS(
 
                 switch ttsVariant.engine {
                 case "kokoro":
-                    let model = try await state.loadKokoro(modelId: ttsVariant.modelId)
-                    let langCode = mapToKokoroLanguageCode(language)
-                    let samples = try model.synthesize(text: text, language: langCode)
+                    let samples = try await withRealtimeKeepalive(outbound: outbound) {
+                        let model = try await state.loadKokoro(modelId: ttsVariant.modelId)
+                        let langCode = mapToKokoroLanguageCode(language)
+                        return try model.synthesize(text: text, language: langCode)
+                    }
                     totalSamples += try await streamSamplesAsDeltas(
                         samples, outbound: outbound, responseId: responseId)
                 case "qwen3-tts":
-                    let model = try await state.loadQwen3TTS(modelId: ttsVariant.modelId)
+                    let model = try await withRealtimeKeepalive(outbound: outbound) {
+                        try await state.loadQwen3TTS(modelId: ttsVariant.modelId)
+                    }
                     let stream = model.synthesizeStream(text: text, language: language)
                     for try await chunk in stream {
                         if !chunk.samples.isEmpty {
@@ -1120,7 +1138,9 @@ func handleRealtimeWS(
                         }
                     }
                 case "cosyvoice":
-                    let model = try await state.loadCosyVoice(modelId: ttsVariant.modelId)
+                    let model = try await withRealtimeKeepalive(outbound: outbound) {
+                        try await state.loadCosyVoice(modelId: ttsVariant.modelId)
+                    }
                     let stream = model.synthesizeStream(text: text, language: language)
                     for try await chunk in stream {
                         if !chunk.samples.isEmpty {
@@ -1134,16 +1154,19 @@ func handleRealtimeWS(
                         }
                     }
                 case "voxcpm2":
-                    let model = try await state.loadVoxCPM2(modelId: ttsVariant.modelId)
-                    let samples: [Float]
-                    if hasCloneReference {
-                        samples = try await model.generateVoxCPM2(
-                            text: text,
-                            language: language,
-                            refText: session.voiceCloneReferenceText,
-                            refAudio: session.voiceCloneReferenceAudio)
-                    } else {
-                        samples = try await model.generate(text: text, language: language)
+                    let (model, samples) = try await withRealtimeKeepalive(outbound: outbound) {
+                        let model = try await state.loadVoxCPM2(modelId: ttsVariant.modelId)
+                        let samples: [Float]
+                        if hasCloneReference {
+                            samples = try await model.generateVoxCPM2(
+                                text: text,
+                                language: language,
+                                refText: session.voiceCloneReferenceText,
+                                refAudio: session.voiceCloneReferenceAudio)
+                        } else {
+                            samples = try await model.generate(text: text, language: language)
+                        }
+                        return (model, samples)
                     }
                     // VoxCPM2 runs at 48 kHz internally; downsample to the 24 kHz
                     // the Realtime protocol expects.
@@ -1153,35 +1176,45 @@ func handleRealtimeWS(
                     totalSamples += try await streamSamplesAsDeltas(
                         samples24k, outbound: outbound, responseId: responseId)
                 case "magpie":
-                    let model = try await state.loadMagpie()
-                    let magpieLang = MagpieLanguage(code: mapToMagpieLanguageCode(language))
-                        ?? .english
-                    let samples22k = try model.synthesize(text: text, language: magpieLang)
+                    let samples22k = try await withRealtimeKeepalive(outbound: outbound) {
+                        let model = try await state.loadMagpie()
+                        let magpieLang = MagpieLanguage(code: mapToMagpieLanguageCode(language))
+                            ?? .english
+                        return try model.synthesize(text: text, language: magpieLang)
+                    }
                     // Magpie emits 22.05 kHz; resample to the 24 kHz protocol rate.
                     let samples24k = resample(samples22k, from: MagpieTTS.sampleRate, to: 24000)
                     totalSamples += try await streamSamplesAsDeltas(
                         samples24k, outbound: outbound, responseId: responseId)
                 case "magpie-coreml":
-                    let model = try await state.loadMagpieCoreML()
-                    let magpieLang = MagpieCoreMLLanguage(rawValue: mapToMagpieLanguageCode(language))
-                        ?? .english
-                    let samples22k = try model.synthesize(text: text, language: magpieLang)
+                    let samples22k = try await withRealtimeKeepalive(outbound: outbound) {
+                        let model = try await state.loadMagpieCoreML()
+                        let magpieLang = MagpieCoreMLLanguage(rawValue: mapToMagpieLanguageCode(language))
+                            ?? .english
+                        return try model.synthesize(text: text, language: magpieLang)
+                    }
                     let samples24k = resample(samples22k, from: MagpieTTSCoreML.sampleRate, to: 24000)
                     totalSamples += try await streamSamplesAsDeltas(
                         samples24k, outbound: outbound, responseId: responseId)
                 case "qwen3-tts-coreml":
-                    let model = try await state.loadQwen3TTSCoreML(modelId: ttsVariant.modelId)
-                    let samples = try model.synthesize(text: text, language: language)
+                    let samples = try await withRealtimeKeepalive(outbound: outbound) {
+                        let model = try await state.loadQwen3TTSCoreML(modelId: ttsVariant.modelId)
+                        return try model.synthesize(text: text, language: language)
+                    }
                     totalSamples += try await streamSamplesAsDeltas(
                         samples, outbound: outbound, responseId: responseId)
                 case "vibevoice":
-                    let model = try await state.loadVibeVoice(modelId: ttsVariant.modelId)
-                    let samples = try await model.generate(text: text, language: language)
+                    let samples = try await withRealtimeKeepalive(outbound: outbound) {
+                        let model = try await state.loadVibeVoice(modelId: ttsVariant.modelId)
+                        return try await model.generate(text: text, language: language)
+                    }
                     totalSamples += try await streamSamplesAsDeltas(
                         samples, outbound: outbound, responseId: responseId)
                 case "vibevoice-1.5b":
-                    let model = try await state.loadVibeVoice15B(modelId: ttsVariant.modelId)
-                    let samples = try await model.generate(text: text, language: language)
+                    let samples = try await withRealtimeKeepalive(outbound: outbound) {
+                        let model = try await state.loadVibeVoice15B(modelId: ttsVariant.modelId)
+                        return try await model.generate(text: text, language: language)
+                    }
                     totalSamples += try await streamSamplesAsDeltas(
                         samples, outbound: outbound, responseId: responseId)
                 default:
@@ -1285,6 +1318,40 @@ private func sendRealtimeError(
         "type": "error",
         "error": errorBody
     ] as [String: Any])))
+}
+
+private let realtimeKeepaliveIntervalNanoseconds: UInt64 = 15_000_000_000
+private let realtimeKeepaliveEvent = "realtime.keepalive"
+
+private func withRealtimeKeepalive<T>(
+    outbound: WebSocketOutboundWriter,
+    operation: () async throws -> T
+) async throws -> T {
+    let keepalive = Task {
+        while !Task.isCancelled {
+            do {
+                try await Task.sleep(nanoseconds: realtimeKeepaliveIntervalNanoseconds)
+                try Task.checkCancellation()
+                try await outbound.write(.text(formatJSON([
+                    "type": realtimeKeepaliveEvent
+                ])))
+                try await outbound.write(.pong)
+            } catch {
+                return
+            }
+        }
+    }
+
+    do {
+        let value = try await operation()
+        keepalive.cancel()
+        await keepalive.value
+        return value
+    } catch {
+        keepalive.cancel()
+        await keepalive.value
+        throw error
+    }
 }
 
 /// Build a `session.created` / `session.updated` envelope.
