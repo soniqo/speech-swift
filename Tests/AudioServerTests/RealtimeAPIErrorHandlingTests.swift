@@ -101,7 +101,7 @@ final class RealtimeAPIKeepaliveTests: XCTestCase {
                 host: "127.0.0.1",
                 port: port,
                 realtimeState: FailingRealtimeModelLoading(
-                    beforeFailure: { Thread.sleep(forTimeInterval: 16) }))
+                    beforeFailure: { Thread.sleep(forTimeInterval: 61) }))
             try await server.run()
         }
         Thread.sleep(forTimeInterval: 1.5)
@@ -149,10 +149,19 @@ final class RealtimeAPIKeepaliveTests: XCTestCase {
         let created = try await receiveJSON(ws)
         XCTAssertEqual(created["type"] as? String, "response.created")
 
-        let keepalive = try await receiveJSON(ws)
-        XCTAssertEqual(keepalive["type"] as? String, "realtime.keepalive")
-
-        let failure = try await receiveJSON(ws)
-        XCTAssertEqual(failure["type"] as? String, "error")
+        var keepaliveCount = 0
+        while true {
+            let message = try await receiveJSON(ws)
+            switch message["type"] as? String {
+            case "realtime.keepalive":
+                keepaliveCount += 1
+            case "error":
+                XCTAssertGreaterThanOrEqual(keepaliveCount, 4)
+                return
+            default:
+                XCTFail("Unexpected realtime message: \(message)")
+                return
+            }
+        }
     }
 }

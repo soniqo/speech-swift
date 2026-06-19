@@ -52,7 +52,7 @@ public struct AudioServer {
     public func run() async throws {
         let router = buildRouter()
         let realtimeState = self.realtimeState
-        let wsConfig = WebSocketServerConfiguration(maxFrameSize: 1 << 24)  // 16 MB max frame
+        let wsConfig = realtimeWebSocketServerConfiguration()
         let wsServer: HTTPServerBuilder = .http1WebSocketUpgrade(configuration: wsConfig) { head, _, _ in
             let path = head.path ?? ""
             guard path == "/v1/realtime" else { return .dontUpgrade }
@@ -329,6 +329,15 @@ public struct AudioServer {
 
         return router
     }
+}
+
+func realtimeWebSocketServerConfiguration() -> WebSocketServerConfiguration {
+    // Long-running model work emits application-level keepalive events. Hummingbird's
+    // automatic ping watchdog expects a matching control-frame pong, which URLSession
+    // does not reliably surface while a receive is pending.
+    WebSocketServerConfiguration(
+        maxFrameSize: 1 << 24,
+        autoPing: .disabled)
 }
 
 // MARK: - Lazy Model State
@@ -1342,7 +1351,6 @@ private func withRealtimeKeepalive<T: Sendable>(
                 try await outbound.write(.text(formatJSON([
                     "type": realtimeKeepaliveEvent
                 ])))
-                try await outbound.write(.pong)
             } catch {
                 return
             }
