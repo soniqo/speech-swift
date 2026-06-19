@@ -238,15 +238,24 @@ public final class CosyVoiceTTSModel {
         //    instruction. Upstream: `min_len = (text_len - prompt_text_len) * ratio`.
         let contentTokens = tokenizer.encode(text).map { Int32($0) }
 
-        // For zero-shot voice cloning, upstream's text input is literally
+        // For an unstyled zero-shot clone, upstream's text input is literally
         //   concat(transcript_tokens + [<|endofprompt|>], content_tokens)
-        // with NO "You are a helpful assistant. " system frame. Adding the
-        // system frame puts the LLM off the training distribution and it
-        // reads back the tail of the transcript instead of synthesising the
-        // user text. So when promptText is set we bypass tokenizeText entirely
-        // and build the sequence directly.
+        // with the reference speech tokens included in the LLM prefix. This
+        // is the highest-fidelity identity path.
+        //
+        // A non-default instruction selects CosyVoice's `instruct2` layout:
+        // the framed instruction becomes the LLM text prefix and the reference
+        // speech tokens are withheld from the LLM. The Flow model still gets
+        // promptToken + promptFeat, retaining the cloned-voice anchor while
+        // allowing the LLM to follow the requested emotion or style.
+        let useInstructionConditionedClone = Self.usesInstructionConditionedClone(
+            promptText: promptText,
+            instruction: instruction
+        )
         let textTokens: [Int32]
-        if let pt = promptText, !pt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if useInstructionConditionedClone {
+            textTokens = tokenizeText(text, language: language, instruction: instruction)
+        } else if let pt = promptText, !pt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let promptTextTokens = tokenizer.encode(pt).map { Int32($0) }
             textTokens = promptTextTokens + [Self.endOfPromptToken] + contentTokens
         } else {
@@ -260,9 +269,11 @@ public final class CosyVoiceTTSModel {
         //    the LLM emits "neutral default voice" tokens that conflict with
         //    the flow's prompt_token + prompt_feat anchors and the cloned
         //    output drifts to a different voice (see PR #247).
-        let promptSpeechTokensArr: [Int32]? = promptToken.map { pt in
-            pt.reshaped(-1).asArray(Int32.self)
-        }
+        let promptSpeechTokensArr: [Int32]? = useInstructionConditionedClone
+            ? nil
+            : promptToken.map { pt in
+                pt.reshaped(-1).asArray(Int32.self)
+            }
         // Cap maxTokens proportionally to the content length. With prompt
         // conditioning the LLM is biased to "keep speaking" — a fixed cap of
         // 500 lets a 5-word phrase generate 20 s of repeats. Scale to 10×
@@ -398,6 +409,21 @@ public final class CosyVoiceTTSModel {
     /// Custom style instructions are *appended* to this frame, not substituted
     /// for it — otherwise the model treats the instruction as content to speak.
     static let assistantPrefix = "You are a helpful assistant."
+
+    /// Whether a voice profile with a reference transcript needs the upstream
+    /// `instruct2` layout. Default instructions stay on the transcript-led
+    /// zero-shot path; custom style instructions need the dedicated layout or
+    /// are otherwise ignored by the clone path.
+    static func usesInstructionConditionedClone(
+        promptText: String?,
+        instruction: String
+    ) -> Bool {
+        guard let promptText, !promptText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return false
+        }
+        let trimmedInstruction = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !trimmedInstruction.isEmpty && trimmedInstruction != assistantPrefix
+    }
 
     /// Format and tokenize text for CosyVoice3 LLM.
     ///

@@ -48,6 +48,11 @@ Three-stage pipeline: LLM → DiT Flow Matching → HiFi-GAN Vocoder → 24kHz a
 - Unknown tags pass through as freeform instructions: `(Speak like a pirate)`
 - `--cosy-instruct` sets the global default instruction (replaces "You are a helpful assistant.")
 - Text format: `{instruction}<|endofprompt|>(token 151646){text_to_synthesize}`
+- For zero-shot cloning, a non-default instruction uses CosyVoice's `instruct2`
+  layout: the LLM receives the framed instruction and target text, while the
+  reference audio remains attached to the Flow model as the voice anchor. The
+  unstyled path continues to use the reference transcript plus speech-token
+  context for maximum speaker fidelity.
 
 ## Streaming
 - Chunk-aware causal masking in DiT

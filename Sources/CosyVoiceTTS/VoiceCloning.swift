@@ -21,7 +21,10 @@ import AudioCommon
 ///     content-incorrect speech (in the right voice).
 ///
 /// Build once per reference clip with `CosyVoiceTTSModel.extractVoiceProfile`
-/// and reuse across as many `synthesize(...)` calls as you need.
+/// and reuse across as many `synthesize(...)` calls as you need. A
+/// non-default instruction selects CosyVoice's `instruct2` clone layout:
+/// the LLM follows the instruction while `promptToken` and `promptFeat`
+/// continue to anchor the Flow model to the reference voice.
 public struct CosyVoiceVoiceProfile: Sendable {
     public let speakerEmbedding: [Float]?
     public let promptToken: MLXArray?
