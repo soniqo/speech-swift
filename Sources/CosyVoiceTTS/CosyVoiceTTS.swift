@@ -410,10 +410,31 @@ public final class CosyVoiceTTSModel {
     /// for it — otherwise the model treats the instruction as content to speak.
     static let assistantPrefix = "You are a helpful assistant."
 
-    /// Whether a voice profile with a reference transcript needs the upstream
-    /// `instruct2` layout. Default instructions stay on the transcript-led
-    /// zero-shot path; custom style instructions need the dedicated layout or
-    /// are otherwise ignored by the clone path.
+    /// Single source of truth for "is a style instruction present?".
+    /// `instruction` defaults to `assistantPrefix`, so anything trimmed-equal to
+    /// that (or empty) means "no style". This is the one place that knows the
+    /// default sentinel — both the clone dispatch and the LLM framing defer to
+    /// it instead of re-comparing the magic string.
+    static func hasCustomStyleInstruction(_ instruction: String) -> Bool {
+        let trimmed = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !trimmed.isEmpty && trimmed != assistantPrefix
+    }
+
+    /// Frame an instruction for the LLM. CosyVoice3 was trained with the
+    /// `"You are a helpful assistant. {style}"` system frame; a bare style is
+    /// read aloud as content, so a custom style is prefixed with the frame while
+    /// the default/empty case collapses to the frame alone.
+    static func framedInstruction(_ instruction: String) -> String {
+        guard hasCustomStyleInstruction(instruction) else { return assistantPrefix }
+        let trimmed = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.hasPrefix(assistantPrefix) ? trimmed : "\(assistantPrefix) \(trimmed)"
+    }
+
+    /// Whether a cloned voice (one carrying a reference transcript) should use
+    /// CosyVoice's `instruct2` layout instead of the transcript-led zero-shot
+    /// path: only when a reference transcript is present *and* a custom style
+    /// instruction was supplied. Otherwise the higher-fidelity transcript-led
+    /// path is kept.
     static func usesInstructionConditionedClone(
         promptText: String?,
         instruction: String
@@ -421,32 +442,19 @@ public final class CosyVoiceTTSModel {
         guard let promptText, !promptText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return false
         }
-        let trimmedInstruction = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !trimmedInstruction.isEmpty && trimmedInstruction != assistantPrefix
+        return hasCustomStyleInstruction(instruction)
     }
 
-    /// Format and tokenize text for CosyVoice3 LLM.
-    ///
-    /// Upstream training format: `"You are a helpful assistant. {style}<|endofprompt|>{text}"`.
-    /// Stripping the assistant prefix pushes the model out of distribution and it
-    /// reads the style instruction aloud instead of using it as conditioning.
+    /// Format and tokenize text for CosyVoice3 LLM: framed instruction, the
+    /// `<|endofprompt|>` boundary, then the content tokens. Framing keeps the
+    /// model in distribution — stripping the assistant prefix makes it read the
+    /// style aloud instead of using it as conditioning.
     func tokenizeText(
         _ text: String, language: String,
         instruction: String = "You are a helpful assistant."
     ) -> [Int32] {
-        let framedInstruction: String
-        let trimmed = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty || trimmed == Self.assistantPrefix {
-            framedInstruction = Self.assistantPrefix
-        } else if trimmed.hasPrefix(Self.assistantPrefix) {
-            framedInstruction = trimmed
-        } else {
-            framedInstruction = "\(Self.assistantPrefix) \(trimmed)"
-        }
-
-        let instructionTokens = tokenizer.encode(framedInstruction).map { Int32($0) }
+        let instructionTokens = tokenizer.encode(Self.framedInstruction(instruction)).map { Int32($0) }
         let textTokens = tokenizer.encode(text).map { Int32($0) }
-
         return instructionTokens + [Self.endOfPromptToken] + textTokens
     }
 }

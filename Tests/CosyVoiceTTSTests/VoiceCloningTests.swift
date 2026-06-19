@@ -65,6 +65,24 @@ final class VoiceCloningTests: XCTestCase {
         ))
     }
 
+    func testInstructionFramingAndStyleDetection() {
+        // hasCustomStyleInstruction is the single dispatch predicate.
+        XCTAssertFalse(CosyVoiceTTSModel.hasCustomStyleInstruction(""))
+        XCTAssertFalse(CosyVoiceTTSModel.hasCustomStyleInstruction("You are a helpful assistant."))
+        XCTAssertFalse(CosyVoiceTTSModel.hasCustomStyleInstruction("  You are a helpful assistant.  "))
+        XCTAssertTrue(CosyVoiceTTSModel.hasCustomStyleInstruction("Speak excitedly."))
+
+        // framedInstruction: default collapses to the frame; a custom style is
+        // prefixed with it; an already-framed style is left unchanged.
+        XCTAssertEqual(CosyVoiceTTSModel.framedInstruction(""), "You are a helpful assistant.")
+        XCTAssertEqual(CosyVoiceTTSModel.framedInstruction("You are a helpful assistant."),
+                       "You are a helpful assistant.")
+        XCTAssertEqual(CosyVoiceTTSModel.framedInstruction("Speak excitedly."),
+                       "You are a helpful assistant. Speak excitedly.")
+        XCTAssertEqual(CosyVoiceTTSModel.framedInstruction("You are a helpful assistant. Speak excitedly."),
+                       "You are a helpful assistant. Speak excitedly.")
+    }
+
     /// Helper: load a `CosyVoiceTTSModel` so we have a tokenizer available.
     /// Falls back to skipping the test if HF is unreachable.
     private func loadModel() async throws -> CosyVoiceTTSModel {
