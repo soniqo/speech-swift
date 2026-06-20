@@ -90,12 +90,18 @@ public final class SortformerDiarizer {
         }
 
         let mlConfig = MLModelConfiguration()
-        // Match FluidAudio reference: `.all` lets CoreML schedule across
-        // ANE+GPU+CPU as it sees fit and `allowLowPrecisionAccumulationOnGPU`
-        // permits fp16 accumulators on the GPU paths that share work with
-        // ANE-resident layers. Measured ~12% RTF improvement on M5 Pro vs
-        // pinning to .cpuAndNeuralEngine.
-        mlConfig.computeUnits = CoreMLComputeUnitsResolver.resolved(default: .all)
+        // `.cpuAndNeuralEngine` skips the GPU/MPSGraph backend during model
+        // load validation. `.all` is ~12% faster on some configurations but
+        // forces CoreML to validate the pipeline against MPSGraph as well,
+        // and that validation fails on chip+OS combos where MPSGraph rejects
+        // ops our pipeline emits (reported on M5 Max with macOS 26 in #319:
+        // "Espresso compiled without MPSGraph enabled"). Matches the default
+        // every other VAD loader in this package uses (Silero, FireRed,
+        // WeSpeaker, CAM++).
+        mlConfig.computeUnits = CoreMLComputeUnitsResolver.resolved(default: .cpuAndNeuralEngine)
+        // Hint only honored when the runtime actually schedules GPU work
+        // (e.g. user opts back in with SPEECH_COREML_COMPUTE_UNITS=all). No
+        // effect on the default ANE-only path.
         mlConfig.allowLowPrecisionAccumulationOnGPU = true
 
         let mlModel: MLModel
