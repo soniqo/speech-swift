@@ -1135,7 +1135,7 @@ final class E2ETTS17BTests: XCTestCase {
     /// 1.7B bf16: model loads with correct config
     func testModelLoading17BBf16() async throws {
         let model = try await loadBf16Model()
-        XCTAssertEqual(model.config.talker.bits, 4, "Should load as 4-bit model")
+        XCTAssertEqual(model.config.talker.bits, 0, "Should load as bf16 (no quantization)")
         XCTAssertEqual(model.config.talker.hiddenSize, 2048, "Should be 1.7B (hidden=2048)")
         XCTAssertEqual(model.config.talker.intermediateSize, 6144, "1.7B intermediate size")
     }
