@@ -2,6 +2,9 @@ import Foundation
 import ArgumentParser
 import SpeechVAD
 import AudioCommon
+#if canImport(CoreML)
+import CoreML
+#endif
 
 public struct DiarizeCommand: ParsableCommand {
     public static let configuration = CommandConfiguration(
@@ -18,8 +21,11 @@ public struct DiarizeCommand: ParsableCommand {
     @Option(name: .long, help: "Diarization engine: pyannote (default) or sortformer")
     public var engine: String = "pyannote"
 
-    @Option(name: .long, help: "Sortformer variant: default (offline, ~125x RTF) or streaming (low-latency)")
+    @Option(name: .long, help: "Sortformer variant: default (offline, ~125x RTF), balanced (faster first-load, ~hundreds-x RTF), or streaming (low-latency)")
     public var sortformerVariant: String = "default"
+
+    @Option(name: .long, help: "Sortformer CoreML compute units: ane (default, ANE+CPU), cpu (instant first-load, ~20x RTF), gpu (cpu+gpu), all (every backend; rarely needed)")
+    public var sortformerComputeUnits: String = "ane"
 
     @Option(name: .long, help: "Speaker embedding engine: mlx (default) or coreml")
     public var embeddingEngine: String = "mlx"
@@ -79,14 +85,32 @@ public struct DiarizeCommand: ParsableCommand {
         let sortformerConfig: SortformerConfig
         switch sortformerVariant.lowercased() {
         case "default":   sortformerConfig = .default
+        case "balanced":  sortformerConfig = .balanced
         case "streaming": sortformerConfig = .streaming
         default:
-            print("Error: unknown sortformer variant '\(sortformerVariant)'. Use 'default' or 'streaming'.")
+            print("Error: unknown sortformer variant '\(sortformerVariant)'. Use 'default', 'balanced', or 'streaming'.")
             return
         }
-        print("Loading Sortformer model (variant: \(sortformerVariant.lowercased()), chunk=\(sortformerConfig.coreMLInputFrames) mel frames)...")
+
+        let computeUnits: MLComputeUnits
+        switch sortformerComputeUnits.lowercased() {
+        case "ane", "cpuandneuralengine", "neuralengine":
+            computeUnits = .cpuAndNeuralEngine
+        case "cpu", "cpuonly":
+            computeUnits = .cpuOnly
+        case "gpu", "cpuandgpu":
+            computeUnits = .cpuAndGPU
+        case "all":
+            computeUnits = .all
+        default:
+            print("Error: unknown sortformer compute units '\(sortformerComputeUnits)'. Use 'ane', 'cpu', 'gpu', or 'all'.")
+            return
+        }
+
+        print("Loading Sortformer model (variant: \(sortformerVariant.lowercased()), chunk=\(sortformerConfig.coreMLInputFrames) mel frames, compute units: \(sortformerComputeUnits.lowercased()))...")
         let diarizer = try await SortformerDiarizer.fromPretrained(
             config: sortformerConfig,
+            computeUnits: computeUnits,
             progressHandler: reportProgress
         )
 

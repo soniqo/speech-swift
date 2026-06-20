@@ -56,6 +56,15 @@ public final class SortformerDiarizer {
     ///
     /// - Parameters:
     ///   - modelId: HuggingFace model ID
+    ///   - cacheDir: optional override for the local cache directory
+    ///   - offlineMode: if true, only consult the local cache
+    ///   - config: chunk-shape preset (`.default`, `.balanced`, `.streaming`)
+    ///   - computeUnits: which CoreML backends to enable. Defaults to
+    ///     `.cpuAndNeuralEngine` (ANE-only, no GPU/MPSGraph validation).
+    ///     Set to `.cpuOnly` for instant first-load at the cost of ~10–50×
+    ///     RTF instead of ~125–750× (useful during onboarding / on
+    ///     simulator / on weak devices). `SPEECH_COREML_COMPUTE_UNITS` env
+    ///     var overrides this when set.
     ///   - progressHandler: callback for download progress
     /// - Returns: ready-to-use diarizer
     public static func fromPretrained(
@@ -63,6 +72,7 @@ public final class SortformerDiarizer {
         cacheDir: URL? = nil,
         offlineMode: Bool = false,
         config: SortformerConfig = .default,
+        computeUnits: MLComputeUnits = .cpuAndNeuralEngine,
         progressHandler: ((Double, String) -> Void)? = nil
     ) async throws -> SortformerDiarizer {
         progressHandler?(0.0, "Downloading Sortformer model...")
@@ -91,17 +101,10 @@ public final class SortformerDiarizer {
 
         let mlConfig = MLModelConfiguration()
         // `.cpuAndNeuralEngine` skips the GPU/MPSGraph backend during model
-        // load validation. `.all` is ~12% faster on some configurations but
-        // forces CoreML to validate the pipeline against MPSGraph as well,
-        // and that validation fails on chip+OS combos where MPSGraph rejects
-        // ops our pipeline emits (reported on M5 Max with macOS 26 in #319:
-        // "Espresso compiled without MPSGraph enabled"). Matches the default
-        // every other VAD loader in this package uses (Silero, FireRed,
-        // WeSpeaker, CAM++).
-        mlConfig.computeUnits = CoreMLComputeUnitsResolver.resolved(default: .cpuAndNeuralEngine)
-        // Hint only honored when the runtime actually schedules GPU work
-        // (e.g. user opts back in with SPEECH_COREML_COMPUTE_UNITS=all). No
-        // effect on the default ANE-only path.
+        // load validation — see #319 (M5 Max + macOS 26) and #328. The
+        // caller can override via the `computeUnits` parameter or by
+        // setting SPEECH_COREML_COMPUTE_UNITS in the environment.
+        mlConfig.computeUnits = CoreMLComputeUnitsResolver.resolved(default: computeUnits)
         mlConfig.allowLowPrecisionAccumulationOnGPU = true
 
         let mlModel: MLModel
@@ -118,6 +121,46 @@ public final class SortformerDiarizer {
 
         progressHandler?(1.0, "Ready")
         return SortformerDiarizer(model: coremlModel, config: config)
+    }
+
+    /// Prime the on-device CoreML cache without holding a diarizer instance.
+    ///
+    /// The first time a Sortformer `.mlmodelc` loads on a given device,
+    /// CoreML compiles its MIL into ANE bytecode via the BNNS compiler.
+    /// For `.default` (chunk_len=340) this can take minutes on cold cache;
+    /// subsequent loads pull from `~/Library/Caches/com.apple.modelcompiler/`
+    /// in seconds. Call this from a background task at app launch (or any
+    /// non-interactive moment) so the user pays the compile cost during
+    /// onboarding instead of on the first diarize call.
+    ///
+    /// The compiled artifact persists in the system cache after this
+    /// returns; the temporary `MLModel` instance is discarded.
+    ///
+    /// - Parameters:
+    ///   - modelId: HuggingFace model ID
+    ///   - cacheDir: optional override for the local cache directory
+    ///   - offlineMode: if true, only consult the local cache
+    ///   - config: chunk-shape preset to warm
+    ///   - computeUnits: backends to compile for (defaults to `.cpuAndNeuralEngine`)
+    ///   - progressHandler: callback for download + load progress
+    public static func preload(
+        modelId: String = defaultModelId,
+        cacheDir: URL? = nil,
+        offlineMode: Bool = false,
+        config: SortformerConfig = .default,
+        computeUnits: MLComputeUnits = .cpuAndNeuralEngine,
+        progressHandler: ((Double, String) -> Void)? = nil
+    ) async throws {
+        // Reuses fromPretrained so the load path is identical to what the
+        // app would later hit; the diarizer is allowed to deallocate as
+        // soon as this function returns — the BNNS compile cache survives.
+        _ = try await fromPretrained(
+            modelId: modelId,
+            cacheDir: cacheDir,
+            offlineMode: offlineMode,
+            config: config,
+            computeUnits: computeUnits,
+            progressHandler: progressHandler)
     }
 
     // MARK: - Diarization

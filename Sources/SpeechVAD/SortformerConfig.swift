@@ -128,9 +128,9 @@ public struct SortformerConfig: Sendable {
     /// Default configuration — high-throughput offline diarization.
     /// `chunk_len=340` encoder frames → ~30 s of audio per CoreML call,
     /// measured ~125–750× RTF on M-series ANE depending on input length.
-    /// This is what every Swift API and the `speech diarize` CLI use today;
-    /// the small-chunk streaming preset below is held in reserve for a
-    /// future realtime API.
+    /// First-load BNNS codegen on a cold device cache can take minutes
+    /// because the compiled ANE graph is large; use `.balanced` if that
+    /// matters more than peak RTF.
     public static let `default` = SortformerConfig(
         nMels: 128,
         nFFT: 400,
@@ -150,6 +150,33 @@ public struct SortformerConfig: Sendable {
         minSilenceDuration: 0.15,
         spkcacheUpdatePeriod: 188,
         variantName: ""
+    )
+
+    /// Balanced configuration — same checkpoint, ~3× smaller attention
+    /// cost in the compiled graph (188+40+121 vs 188+40+381 tokens).
+    /// First-load BNNS codegen is correspondingly faster, while RTF stays
+    /// in the hundreds of × on M-series ANE. Use this when first-launch
+    /// UX matters more than peak throughput (iOS apps amortizing the
+    /// compile cost during onboarding).
+    public static let balanced = SortformerConfig(
+        nMels: 128,
+        nFFT: 400,
+        hopLength: 160,
+        sampleRate: 16000,
+        chunkLenSeconds: 100.0,
+        leftContextSeconds: 1.0,
+        rightContextSeconds: 20.0,
+        subsamplingFactor: 8,
+        spkcacheLen: 188,
+        fifoLen: 40,
+        fcDModel: 512,
+        maxSpeakers: 4,
+        onset: 0.5,
+        offset: 0.3,
+        minSpeechDuration: 0.3,
+        minSilenceDuration: 0.15,
+        spkcacheUpdatePeriod: 100,
+        variantName: "balanced"
     )
 
     /// Streaming / low-latency configuration. `chunk_len=6` encoder frames
