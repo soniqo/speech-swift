@@ -46,6 +46,43 @@ final class VoiceCloningTests: XCTestCase {
 
     // MARK: - tokenizeText: system-frame rules
 
+    func testStyleInstructionSelectsInstruct2CloneLayout() {
+        XCTAssertTrue(CosyVoiceTTSModel.usesInstructionConditionedClone(
+            promptText: "A reference transcript.",
+            instruction: "Speak excitedly and quickly."
+        ))
+        XCTAssertFalse(CosyVoiceTTSModel.usesInstructionConditionedClone(
+            promptText: "A reference transcript.",
+            instruction: "You are a helpful assistant."
+        ))
+        XCTAssertFalse(CosyVoiceTTSModel.usesInstructionConditionedClone(
+            promptText: "A reference transcript.",
+            instruction: "  You are a helpful assistant.  "
+        ))
+        XCTAssertFalse(CosyVoiceTTSModel.usesInstructionConditionedClone(
+            promptText: nil,
+            instruction: "Speak excitedly and quickly."
+        ))
+    }
+
+    func testInstructionFramingAndStyleDetection() {
+        // hasCustomStyleInstruction is the single dispatch predicate.
+        XCTAssertFalse(CosyVoiceTTSModel.hasCustomStyleInstruction(""))
+        XCTAssertFalse(CosyVoiceTTSModel.hasCustomStyleInstruction("You are a helpful assistant."))
+        XCTAssertFalse(CosyVoiceTTSModel.hasCustomStyleInstruction("  You are a helpful assistant.  "))
+        XCTAssertTrue(CosyVoiceTTSModel.hasCustomStyleInstruction("Speak excitedly."))
+
+        // framedInstruction: default collapses to the frame; a custom style is
+        // prefixed with it; an already-framed style is left unchanged.
+        XCTAssertEqual(CosyVoiceTTSModel.framedInstruction(""), "You are a helpful assistant.")
+        XCTAssertEqual(CosyVoiceTTSModel.framedInstruction("You are a helpful assistant."),
+                       "You are a helpful assistant.")
+        XCTAssertEqual(CosyVoiceTTSModel.framedInstruction("Speak excitedly."),
+                       "You are a helpful assistant. Speak excitedly.")
+        XCTAssertEqual(CosyVoiceTTSModel.framedInstruction("You are a helpful assistant. Speak excitedly."),
+                       "You are a helpful assistant. Speak excitedly.")
+    }
+
     /// Helper: load a `CosyVoiceTTSModel` so we have a tokenizer available.
     /// Falls back to skipping the test if HF is unreachable.
     private func loadModel() async throws -> CosyVoiceTTSModel {
@@ -123,7 +160,9 @@ final class VoiceCloningTests: XCTestCase {
         let transcript = ProcessInfo.processInfo.environment["COSY_TEST_VOICE_TRANSCRIPT"]
             ?? "This is a reference audio recording used for voice cloning."
 
-        let model = try await CosyVoiceTTSModel.fromPretrained()
+        let modelId = ProcessInfo.processInfo.environment["COSY_TEST_MODEL_ID"]
+            ?? "aufklarer/CosyVoice3-0.5B-MLX-4bit"
+        let model = try await CosyVoiceTTSModel.fromPretrained(modelId: modelId)
 
         // Locate speech_tokenizer.safetensors — the test prefers an explicit
         // override, otherwise tries the same cache directory the model used.
@@ -167,5 +206,22 @@ final class VoiceCloningTests: XCTestCase {
         let peak = samples.map { abs($0) }.max() ?? 0
         XCTAssertGreaterThan(peak, 0.01, "Cloned output must not be silence")
         XCTAssertLessThan(peak, 1.0001, "Cloned output must not overflow")
+
+        // A style instruction selects the instruct2 clone layout. It must
+        // still produce a valid, bounded render while preserving the Flow
+        // model's reference-audio anchor.
+        let styledSamples = model.synthesize(
+            text: "Welcome to the demo.",
+            voiceProfile: profile,
+            language: "english",
+            instruction: "Speak warmly with restrained excitement."
+        )
+        XCTAssertFalse(styledSamples.isEmpty, "Instructed clone must produce audio")
+        let styledDuration = Double(styledSamples.count) / 24_000.0
+        XCTAssertGreaterThan(styledDuration, 0.4, "Instructed clone should be > 0.4 s")
+        XCTAssertLessThan(styledDuration, 12.0, "Instructed clone should not run on for >12 s")
+        let styledPeak = styledSamples.map { abs($0) }.max() ?? 0
+        XCTAssertGreaterThan(styledPeak, 0.01, "Instructed clone must not be silence")
+        XCTAssertLessThan(styledPeak, 1.0001, "Instructed clone must not overflow")
     }
 }

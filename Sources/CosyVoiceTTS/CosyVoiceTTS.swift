@@ -238,15 +238,24 @@ public final class CosyVoiceTTSModel {
         //    instruction. Upstream: `min_len = (text_len - prompt_text_len) * ratio`.
         let contentTokens = tokenizer.encode(text).map { Int32($0) }
 
-        // For zero-shot voice cloning, upstream's text input is literally
+        // For an unstyled zero-shot clone, upstream's text input is literally
         //   concat(transcript_tokens + [<|endofprompt|>], content_tokens)
-        // with NO "You are a helpful assistant. " system frame. Adding the
-        // system frame puts the LLM off the training distribution and it
-        // reads back the tail of the transcript instead of synthesising the
-        // user text. So when promptText is set we bypass tokenizeText entirely
-        // and build the sequence directly.
+        // with the reference speech tokens included in the LLM prefix. This
+        // is the highest-fidelity identity path.
+        //
+        // A non-default instruction selects CosyVoice's `instruct2` layout:
+        // the framed instruction becomes the LLM text prefix and the reference
+        // speech tokens are withheld from the LLM. The Flow model still gets
+        // promptToken + promptFeat, retaining the cloned-voice anchor while
+        // allowing the LLM to follow the requested emotion or style.
+        let useInstructionConditionedClone = Self.usesInstructionConditionedClone(
+            promptText: promptText,
+            instruction: instruction
+        )
         let textTokens: [Int32]
-        if let pt = promptText, !pt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if useInstructionConditionedClone {
+            textTokens = tokenizeText(text, language: language, instruction: instruction)
+        } else if let pt = promptText, !pt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let promptTextTokens = tokenizer.encode(pt).map { Int32($0) }
             textTokens = promptTextTokens + [Self.endOfPromptToken] + contentTokens
         } else {
@@ -260,9 +269,11 @@ public final class CosyVoiceTTSModel {
         //    the LLM emits "neutral default voice" tokens that conflict with
         //    the flow's prompt_token + prompt_feat anchors and the cloned
         //    output drifts to a different voice (see PR #247).
-        let promptSpeechTokensArr: [Int32]? = promptToken.map { pt in
-            pt.reshaped(-1).asArray(Int32.self)
-        }
+        let promptSpeechTokensArr: [Int32]? = useInstructionConditionedClone
+            ? nil
+            : promptToken.map { pt in
+                pt.reshaped(-1).asArray(Int32.self)
+            }
         // Cap maxTokens proportionally to the content length. With prompt
         // conditioning the LLM is biased to "keep speaking" — a fixed cap of
         // 500 lets a 5-word phrase generate 20 s of repeats. Scale to 10×
@@ -399,28 +410,51 @@ public final class CosyVoiceTTSModel {
     /// for it — otherwise the model treats the instruction as content to speak.
     static let assistantPrefix = "You are a helpful assistant."
 
-    /// Format and tokenize text for CosyVoice3 LLM.
-    ///
-    /// Upstream training format: `"You are a helpful assistant. {style}<|endofprompt|>{text}"`.
-    /// Stripping the assistant prefix pushes the model out of distribution and it
-    /// reads the style instruction aloud instead of using it as conditioning.
+    /// Single source of truth for "is a style instruction present?".
+    /// `instruction` defaults to `assistantPrefix`, so anything trimmed-equal to
+    /// that (or empty) means "no style". This is the one place that knows the
+    /// default sentinel — both the clone dispatch and the LLM framing defer to
+    /// it instead of re-comparing the magic string.
+    static func hasCustomStyleInstruction(_ instruction: String) -> Bool {
+        let trimmed = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !trimmed.isEmpty && trimmed != assistantPrefix
+    }
+
+    /// Frame an instruction for the LLM. CosyVoice3 was trained with the
+    /// `"You are a helpful assistant. {style}"` system frame; a bare style is
+    /// read aloud as content, so a custom style is prefixed with the frame while
+    /// the default/empty case collapses to the frame alone.
+    static func framedInstruction(_ instruction: String) -> String {
+        guard hasCustomStyleInstruction(instruction) else { return assistantPrefix }
+        let trimmed = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.hasPrefix(assistantPrefix) ? trimmed : "\(assistantPrefix) \(trimmed)"
+    }
+
+    /// Whether a cloned voice (one carrying a reference transcript) should use
+    /// CosyVoice's `instruct2` layout instead of the transcript-led zero-shot
+    /// path: only when a reference transcript is present *and* a custom style
+    /// instruction was supplied. Otherwise the higher-fidelity transcript-led
+    /// path is kept.
+    static func usesInstructionConditionedClone(
+        promptText: String?,
+        instruction: String
+    ) -> Bool {
+        guard let promptText, !promptText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return false
+        }
+        return hasCustomStyleInstruction(instruction)
+    }
+
+    /// Format and tokenize text for CosyVoice3 LLM: framed instruction, the
+    /// `<|endofprompt|>` boundary, then the content tokens. Framing keeps the
+    /// model in distribution — stripping the assistant prefix makes it read the
+    /// style aloud instead of using it as conditioning.
     func tokenizeText(
         _ text: String, language: String,
         instruction: String = "You are a helpful assistant."
     ) -> [Int32] {
-        let framedInstruction: String
-        let trimmed = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty || trimmed == Self.assistantPrefix {
-            framedInstruction = Self.assistantPrefix
-        } else if trimmed.hasPrefix(Self.assistantPrefix) {
-            framedInstruction = trimmed
-        } else {
-            framedInstruction = "\(Self.assistantPrefix) \(trimmed)"
-        }
-
-        let instructionTokens = tokenizer.encode(framedInstruction).map { Int32($0) }
+        let instructionTokens = tokenizer.encode(Self.framedInstruction(instruction)).map { Int32($0) }
         let textTokens = tokenizer.encode(text).map { Int32($0) }
-
         return instructionTokens + [Self.endOfPromptToken] + textTokens
     }
 }
