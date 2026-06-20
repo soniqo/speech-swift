@@ -100,7 +100,7 @@ final class Qwen3TTSConfigTests: XCTestCase {
 
     func testTTSModelSizeDetection() {
         XCTAssertEqual(TTSModelSize.detect(from: "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-4bit"), .small)
-        XCTAssertEqual(TTSModelSize.detect(from: "aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-4bit"), .large)
+        XCTAssertEqual(TTSModelSize.detect(from: "aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-bf16"), .large)
         XCTAssertEqual(TTSModelSize.detect(from: "some/custom-1.7b-model"), .large)
         XCTAssertEqual(TTSModelSize.detect(from: "some/custom-model"), .small)
     }
@@ -191,8 +191,8 @@ final class Qwen3TTSConfigTests: XCTestCase {
     func testTTSModelVariants() {
         XCTAssertEqual(TTSModelVariant.base.rawValue, "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-4bit")
         XCTAssertEqual(TTSModelVariant.base8bit.rawValue, "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-8bit")
-        XCTAssertEqual(TTSModelVariant.base17B.rawValue, "aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-4bit")
         XCTAssertEqual(TTSModelVariant.base17B8bit.rawValue, "aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-8bit")
+        XCTAssertEqual(TTSModelVariant.base17Bbf16.rawValue, "aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-bf16")
         XCTAssertEqual(TTSModelVariant.customVoice.rawValue, "aufklarer/Qwen3-TTS-12Hz-0.6B-CustomVoice-MLX-4bit")
     }
 
@@ -1124,17 +1124,17 @@ final class E2ETTS8bitTests: XCTestCase {
 
 final class E2ETTS17BTests: XCTestCase {
 
-    static let ttsModelId4bit = "aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-4bit"
+    static let ttsModelIdBf16 = "aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-bf16"
     static let ttsModelId8bit = "aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-8bit"
     static let ttsTokenizerModelId = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
     static let asrModelId = "aufklarer/Qwen3-ASR-0.6B-MLX-4bit"
-    private static var _shared4bitModel: Qwen3TTSModel?
+    private static var _sharedBf16Model: Qwen3TTSModel?
     private static var _shared8bitModel: Qwen3TTSModel?
     private static var _sharedASRModel: Qwen3ASRModel?
 
-    /// 1.7B 4-bit: model loads with correct config
-    func testModelLoading17B4bit() async throws {
-        let model = try await load4bitModel()
+    /// 1.7B bf16: model loads with correct config
+    func testModelLoading17BBf16() async throws {
+        let model = try await loadBf16Model()
         XCTAssertEqual(model.config.talker.bits, 4, "Should load as 4-bit model")
         XCTAssertEqual(model.config.talker.hiddenSize, 2048, "Should be 1.7B (hidden=2048)")
         XCTAssertEqual(model.config.talker.intermediateSize, 6144, "1.7B intermediate size")
@@ -1147,17 +1147,17 @@ final class E2ETTS17BTests: XCTestCase {
         XCTAssertEqual(model.config.talker.hiddenSize, 2048, "Should be 1.7B (hidden=2048)")
     }
 
-    /// 1.7B 4-bit -> ASR round-trip
-    func testRoundTrip17B4bit() async throws {
-        let ttsModel = try await load4bitModel()
+    /// 1.7B bf16 -> ASR round-trip
+    func testRoundTrip17BBf16() async throws {
+        let ttsModel = try await loadBf16Model()
         let asrModel = try await loadASRModel()
 
         let inputText = "Hello world, this is a test."
         let samples = ttsModel.synthesize(text: inputText, language: "english")
         let transcription = asrModel.transcribe(audio: samples, sampleRate: 24000)
 
-        print("1.7B 4-bit Input:  \"\(inputText)\"")
-        print("1.7B 4-bit Output: \"\(transcription)\"")
+        print("1.7B bf16 Input:  \"\(inputText)\"")
+        print("1.7B bf16 Output: \"\(transcription)\"")
 
         let lowerTranscription = transcription.lowercased()
         let expectedWords = ["hello", "world", "test"]
@@ -1187,16 +1187,16 @@ final class E2ETTS17BTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private func load4bitModel() async throws -> Qwen3TTSModel {
-        if let model = Self._shared4bitModel { return model }
-        print("Loading 1.7B 4-bit TTS model...")
+    private func loadBf16Model() async throws -> Qwen3TTSModel {
+        if let model = Self._sharedBf16Model { return model }
+        print("Loading 1.7B bf16 TTS model...")
         let model = try await Qwen3TTSModel.fromPretrained(
-            modelId: Self.ttsModelId4bit,
+            modelId: Self.ttsModelIdBf16,
             tokenizerModelId: Self.ttsTokenizerModelId
         ) { progress, status in
-            print("[TTS-1.7B-4bit \(Int(progress * 100))%] \(status)")
+            print("[TTS-1.7B-bf16 \(Int(progress * 100))%] \(status)")
         }
-        Self._shared4bitModel = model
+        Self._sharedBf16Model = model
         return model
     }
 

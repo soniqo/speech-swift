@@ -51,7 +51,7 @@ public struct SpeakCommand: ParsableCommand {
     @Option(name: .long, help: "Sidon variant for --clean-reference: fp16 (default) or int8")
     public var cleanReferenceVariant: String = "fp16"
 
-    @Option(name: .long, help: "[qwen3] Model variant: base (default), base-8bit, 1.7b, 1.7b-8bit, customVoice, or full HF model ID. Note: --speaker requires customVoice.")
+    @Option(name: .long, help: "[qwen3] Model variant: base (default), base-8bit, 1.7b (bf16), 1.7b-8bit, customVoice, or full HF model ID. Note: --speaker requires customVoice.")
     public var model: String = "base"
 
     @Flag(name: .long, help: "[qwen3] List available speakers and exit")
@@ -512,8 +512,8 @@ public struct SpeakCommand: ParsableCommand {
                 resolvedModelId = TTSModelVariant.base.rawValue
             case "base-8bit", "base8bit":
                 resolvedModelId = TTSModelVariant.base8bit.rawValue
-            case "1.7b", "large":
-                resolvedModelId = TTSModelVariant.base17B.rawValue
+            case "1.7b", "large", "1.7b-bf16", "large-bf16":
+                resolvedModelId = TTSModelVariant.base17Bbf16.rawValue
             case "1.7b-8bit", "large-8bit":
                 resolvedModelId = TTSModelVariant.base17B8bit.rawValue
             case "customvoice", "custom_voice", "custom-voice":
