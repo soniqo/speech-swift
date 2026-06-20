@@ -35,6 +35,7 @@
 - **[VibeVoice TTS](https://soniqo.audio/guides/vibevoice)** — TTS แบบยาว / หลายผู้พูด (Microsoft VibeVoice Realtime-0.5B + 1.5B, MLX สังเคราะห์พอดแคสต์/หนังสือเสียงได้นานสูงสุด 90 นาที, EN/ZH)
 - **[Magpie TTS](https://soniqo.audio/guides/magpie)** — TTS หลายภาษา (NVIDIA Magpie-TTS Multilingual 357M, MLX INT4 247 MB / INT8 411 MB หรือ CoreML INT8 342 MB, 9 ภาษา, 5 ผู้พูดสำเร็จรูป สตรีมมิ่งบน MLX)
 - **[Qwen3.5-Chat](https://soniqo.audio/guides/chat)** — แชท LLM บนอุปกรณ์ (0.8B, MLX INT4 + CoreML INT8, DeltaNet ไฮบริด สตรีมมิ่งโทเค็น)
+- **[FunctionGemma](https://soniqo.audio/guides/function-calls)** — LLM บนอุปกรณ์สำหรับการเรียกฟังก์ชัน / เครื่องมือแบบมีโครงสร้าง (Gemma 3 270M, CoreML 8-bit palettize, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/guides/translate)** — การแปลแบบหลายต่อหลายระหว่างกว่า 400 ภาษา (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
 - **[Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate)** — การแปลเสียงพูดสู่เสียงพูดแบบสตรีมมิ่ง (FR/ES/PT/DE → EN, MLX INT4 + INT8, สแต็ก Kyutai Moshi/Mimi, CC-BY-4.0)
 - **[PersonaPlex](https://soniqo.audio/guides/respond)** — เสียงพูดสู่เสียงพูดแบบ full-duplex (7B, เสียงเข้า → เสียงออก, 18 พรีเซ็ตเสียง)
@@ -138,6 +139,7 @@ struct DictateView: View {
 | [VibeVoice 1.5B](https://soniqo.audio/guides/vibevoice) | ข้อความ → เสียงพูด (พอดแคสต์ยาวสุด 90 นาที) | MLX | 1.5B | EN/ZH |
 | [Magpie-TTS Multilingual](https://soniqo.audio/guides/magpie) | ข้อความ → เสียงพูด (5 ผู้พูดสำเร็จรูป สตรีมมิ่ง) | MLX / CoreML | 357M (MLX INT4/INT8, CoreML INT8) | 9 (CoreML ไม่รวม JA) |
 | [Qwen3.5-Chat](https://soniqo.audio/guides/chat) | ข้อความ → ข้อความ (LLM) | MLX, CoreML | 0.8B | หลายภาษา |
+| [FunctionGemma](https://soniqo.audio/guides/function-calls) | ข้อความ → การเรียกเครื่องมือ (LLM) | CoreML | 270M | EN |
 | [MADLAD-400](https://soniqo.audio/guides/translate) | ข้อความ → ข้อความ (การแปล) | MLX | 3B | **400+** |
 | [Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate) | เสียงพูด → เสียงพูด (การแปล) | MLX | 3B | FR/ES/PT/DE → EN |
 | [PersonaPlex](https://soniqo.audio/guides/respond) | เสียงพูด → เสียงพูด | MLX | 7B | EN |
@@ -198,6 +200,7 @@ import VibeVoiceTTS         // TTS รูปแบบยาว / หลายผ
 import MagpieTTS            // TTS หลายภาษา (NVIDIA Magpie 357M, MLX, 9 ภาษา)
 import MagpieTTSCoreML      // Backend CoreML ของ Magpie (ไฮบริด CoreML + MLX, 8 ภาษา)
 import Qwen3Chat            // แชท LLM บนอุปกรณ์
+import FunctionGemma    // LLM บนอุปกรณ์สำหรับการเรียกเครื่องมือ
 import MADLADTranslation    // การแปลแบบหลายต่อหลายระหว่างกว่า 400 ภาษา
 import HibikiTranslate      // การแปลเสียงพูดสู่เสียงพูดแบบสตรีมมิ่ง (FR/ES/PT/DE → EN)
 import PersonaPlex          // เสียงพูดสู่เสียงพูดแบบ full-duplex
@@ -295,6 +298,7 @@ let responseAudio = model.respond(userAudio: userSamples)
 
 ```swift
 import Qwen3Chat
+import FunctionGemma
 
 let chat = try await Qwen35MLXChat.fromPretrained()
 chat.chat(messages: [(.user, "Explain MLX in one sentence")]) { token, isFinal in

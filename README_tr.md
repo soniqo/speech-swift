@@ -35,6 +35,7 @@ Mac ve iOS için cihaz üzerinde konuşma tanıma, sentezleme ve anlama. Apple S
 - **[VibeVoice TTS](https://soniqo.audio/guides/vibevoice)** — Uzun biçimli / çok konuşmacılı TTS (Microsoft VibeVoice Realtime-0.5B + 1.5B, MLX, 90 dakikaya kadar podcast/sesli kitap sentezi, EN/ZH)
 - **[Magpie TTS](https://soniqo.audio/guides/magpie)** — Çok dilli TTS (NVIDIA Magpie-TTS Multilingual 357M, MLX INT4 247 MB / INT8 411 MB veya CoreML INT8 342 MB, 9 dil, 5 hazır konuşmacı, MLX'te akış)
 - **[Qwen3.5-Chat](https://soniqo.audio/guides/chat)** — Cihaz üzerinde LLM sohbet (0.8B, MLX INT4 + CoreML INT8, DeltaNet hibrit, akış token'ları)
+- **[FunctionGemma](https://soniqo.audio/guides/function-calls)** — Cihaz üzerinde yapılandırılmış fonksiyon / araç çağrıları için LLM (Gemma 3 270M, CoreML 8-bit paletleme, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/guides/translate)** — 400+ dil arasında çoktan-çoğa çeviri (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
 - **[Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate)** — Akışlı konuşmadan konuşmaya çeviri (FR/ES/PT/DE → EN, MLX INT4 + INT8, Kyutai Moshi/Mimi yığını, CC-BY-4.0)
 - **[PersonaPlex](https://soniqo.audio/guides/respond)** — Tam çift yönlü (full-duplex) konuşmadan konuşmaya (7B, ses girişi → ses çıkışı, 18 ses ön ayarı)
@@ -138,6 +139,7 @@ Aşağıda kompakt bir görünüm. **[Boyutlar, kuantizasyonlar, indirme URL'ler
 | [VibeVoice 1.5B](https://soniqo.audio/guides/vibevoice) | Metin → Konuşma (90 dakikaya kadar podcast) | MLX | 1.5B | EN/ZH |
 | [Magpie-TTS Multilingual](https://soniqo.audio/guides/magpie) | Metin → Konuşma (5 hazır konuşmacı, akış) | MLX / CoreML | 357M (MLX INT4/INT8, CoreML INT8) | 9 (CoreML, JA hariç) |
 | [Qwen3.5-Chat](https://soniqo.audio/guides/chat) | Metin → Metin (LLM) | MLX, CoreML | 0.8B | Çoklu |
+| [FunctionGemma](https://soniqo.audio/guides/function-calls) | Metin → Araç çağrıları (LLM) | CoreML | 270M | EN |
 | [MADLAD-400](https://soniqo.audio/guides/translate) | Metin → Metin (Çeviri) | MLX | 3B | **400+** |
 | [Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate) | Konuşma → Konuşma (Çeviri) | MLX | 3B | FR/ES/PT/DE → EN |
 | [PersonaPlex](https://soniqo.audio/guides/respond) | Konuşma → Konuşma | MLX | 7B | EN |
@@ -198,6 +200,7 @@ import VibeVoiceTTS         // Uzun biçimli / çok konuşmacılı TTS (EN/ZH)
 import MagpieTTS            // Çok dilli TTS (NVIDIA Magpie 357M, MLX, 9 dil)
 import MagpieTTSCoreML      // Magpie CoreML backend'i (hibrit CoreML + MLX, 8 dil)
 import Qwen3Chat            // Cihaz üzerinde LLM sohbet
+import FunctionGemma    // Cihaz üzerinde araç çağrı LLM'i
 import MADLADTranslation    // 400+ dil arasında çoktan-çoğa çeviri
 import HibikiTranslate      // Akışlı konuşmadan konuşmaya çeviri (FR/ES/PT/DE → EN)
 import PersonaPlex          // Tam çift yönlü konuşmadan konuşmaya
@@ -295,6 +298,7 @@ let responseAudio = model.respond(userAudio: userSamples)
 
 ```swift
 import Qwen3Chat
+import FunctionGemma
 
 let chat = try await Qwen35MLXChat.fromPretrained()
 chat.chat(messages: [(.user, "Explain MLX in one sentence")]) { token, isFinal in

@@ -35,6 +35,7 @@ Nhận dạng, tổng hợp và hiểu giọng nói trên thiết bị cho Mac v
 - **[VibeVoice TTS](https://soniqo.audio/guides/vibevoice)** — TTS định dạng dài / nhiều người nói (Microsoft VibeVoice Realtime-0.5B + 1.5B, MLX, tổng hợp podcast/sách nói lên đến 90 phút, EN/ZH)
 - **[Magpie TTS](https://soniqo.audio/guides/magpie)** — TTS đa ngôn ngữ (NVIDIA Magpie-TTS Multilingual 357M, MLX INT4 247 MB / INT8 411 MB hoặc CoreML INT8 342 MB, 9 ngôn ngữ, 5 giọng nói có sẵn, streaming trên MLX)
 - **[Qwen3.5-Chat](https://soniqo.audio/guides/chat)** — Chat LLM trên thiết bị (0.8B, MLX INT4 + CoreML INT8, DeltaNet hybrid, token streaming)
+- **[FunctionGemma](https://soniqo.audio/guides/function-calls)** — LLM trên thiết bị cho các lệnh gọi hàm / công cụ có cấu trúc (Gemma 3 270M, CoreML palette hóa 8-bit, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/guides/translate)** — Dịch nhiều-sang-nhiều giữa hơn 400 ngôn ngữ (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
 - **[Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate)** — Dịch giọng nói sang giọng nói streaming (FR/ES/PT/DE → EN, MLX INT4 + INT8, stack Kyutai Moshi/Mimi, CC-BY-4.0)
 - **[PersonaPlex](https://soniqo.audio/guides/respond)** — Giọng nói sang giọng nói full-duplex (7B, audio vào → audio ra, 18 preset giọng nói)
@@ -138,6 +139,7 @@ Xem tổng quan gọn bên dưới. **[Danh mục mô hình đầy đủ với k
 | [VibeVoice 1.5B](https://soniqo.audio/guides/vibevoice) | Văn bản → Giọng nói (podcast đến 90 phút) | MLX | 1.5B | EN/ZH |
 | [Magpie-TTS Multilingual](https://soniqo.audio/guides/magpie) | Văn bản → Giọng nói (5 giọng có sẵn, streaming) | MLX / CoreML | 357M (MLX INT4/INT8, CoreML INT8) | 9 (CoreML loại trừ JA) |
 | [Qwen3.5-Chat](https://soniqo.audio/guides/chat) | Văn bản → Văn bản (LLM) | MLX, CoreML | 0.8B | Đa ngôn ngữ |
+| [FunctionGemma](https://soniqo.audio/guides/function-calls) | Văn bản → Lệnh gọi công cụ (LLM) | CoreML | 270M | EN |
 | [MADLAD-400](https://soniqo.audio/guides/translate) | Văn bản → Văn bản (Dịch) | MLX | 3B | **400+** |
 | [Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate) | Giọng nói → Giọng nói (Dịch) | MLX | 3B | FR/ES/PT/DE → EN |
 | [PersonaPlex](https://soniqo.audio/guides/respond) | Giọng nói → Giọng nói | MLX | 7B | EN |
@@ -198,6 +200,7 @@ import VibeVoiceTTS         // TTS định dạng dài / nhiều người nói (
 import MagpieTTS            // TTS đa ngôn ngữ (NVIDIA Magpie 357M, MLX, 9 ngôn ngữ)
 import MagpieTTSCoreML      // Backend CoreML của Magpie (hybrid CoreML + MLX, 8 ngôn ngữ)
 import Qwen3Chat            // Chat LLM trên thiết bị
+import FunctionGemma    // LLM trên thiết bị cho lệnh gọi công cụ
 import MADLADTranslation    // Dịch nhiều-sang-nhiều giữa hơn 400 ngôn ngữ
 import HibikiTranslate      // Dịch giọng nói sang giọng nói streaming (FR/ES/PT/DE → EN)
 import PersonaPlex          // Giọng nói sang giọng nói full-duplex
@@ -295,6 +298,7 @@ let responseAudio = model.respond(userAudio: userSamples)
 
 ```swift
 import Qwen3Chat
+import FunctionGemma
 
 let chat = try await Qwen35MLXChat.fromPretrained()
 chat.chat(messages: [(.user, "Explain MLX in one sentence")]) { token, isFinal in

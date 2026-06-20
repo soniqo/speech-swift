@@ -109,6 +109,10 @@ let package = Package(
             targets: ["Qwen3Chat"]
         ),
         .library(
+            name: "FunctionGemma",
+            targets: ["FunctionGemma"]
+        ),
+        .library(
             name: "MADLADTranslation",
             targets: ["MADLADTranslation"]
         ),
@@ -402,6 +406,14 @@ let package = Package(
             ]
         ),
         .target(
+            name: "FunctionGemma",
+            dependencies: [
+                "AudioCommon",
+                .product(name: "Hub", package: "swift-transformers"),
+                .product(name: "Tokenizers", package: "swift-transformers"),
+            ]
+        ),
+        .target(
             name: "MADLADTranslation",
             dependencies: [
                 "AudioCommon",
@@ -691,6 +703,13 @@ let package = Package(
             name: "Qwen3ChatTests",
             dependencies: [
                 "Qwen3Chat",
+                "AudioCommon",
+            ]
+        ),
+        .testTarget(
+            name: "FunctionGemmaTests",
+            dependencies: [
+                "FunctionGemma",
                 "AudioCommon",
             ]
         ),
