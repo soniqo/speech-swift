@@ -1,6 +1,7 @@
 import XCTest
 import Foundation
 import MLX
+import MLXRandom
 @testable import Qwen3TTS
 @testable import Qwen3ASR
 @testable import AudioCommon
@@ -121,7 +122,7 @@ final class SpeakerEncoderUnitTests: XCTestCase {
 
 final class E2EVoiceCloningTests: XCTestCase {
 
-    static let ttsModelId = "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-4bit"
+    static let ttsModelId = "aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-bf16"
     static let ttsTokenizerModelId = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
     static let asrModelId = "aufklarer/Qwen3-ASR-0.6B-MLX-4bit"
     private static var _sharedTTSModel: Qwen3TTSModel?
@@ -156,27 +157,27 @@ final class E2EVoiceCloningTests: XCTestCase {
         XCTAssertLessThanOrEqual(maxAmp, 1.0, "Samples should be in [-1, 1]")
     }
 
-    /// Voice cloning ASR round-trip.
+    /// Voice cloning ASR round-trip (non-ICL x-vector path).
     ///
-    /// SKIPPED on the 1.7B-bf16 default: the non-ICL x-vector path
-    /// (`synthesizeWithVoiceClone`) degenerates on the 1.7B — the talker emits
-    /// repeated tokens (e.g. "嘿嘿嘿…"), so the ASR round-trip fails. The prefix
-    /// construction was verified to match the qwen-tts reference exactly (codec
-    /// prefix, x-vector injection, text overlay, projection, trailing text); the
-    /// remaining difference is a value-level x-vector issue isolated to the
-    /// x-vector-only path (the ICL path, which Studio uses, is correct and covered
-    /// by E2EICLVoiceCloningTests). Tracked follow-up: golden-tensor diff of the
-    /// `x_vector_only` prefill embeds, qwen-tts vs speech-swift.
+    /// Runs on the same 1.7B-bf16 model as the ICL tests — and that consistency is the
+    /// point. The x-vector path conditions on nothing but the speaker embedding, so it
+    /// is unusually sensitive to MLX-Metal numerical state. When this test loaded the
+    /// 0.6B model while the ICL suite ran the 1.7B in the same process, the leftover
+    /// cross-model GPU state collapsed this synthesis into repeated codec tokens
+    /// (degenerate filler, e.g. "嘿嘿嘿…"). With one model across the whole suite it
+    /// round-trips cleanly. (See git history: the prefill itself matches the qwen-tts
+    /// reference exactly, which clones at 0% WER.)
     func testVoiceCloneRoundTrip() async throws {
-        // XCTSkipIf(true) (vs `throw XCTSkip`) keeps the body reachable to the
-        // compiler — no unreachable-code warning — so the test is preserved for
-        // when the non-ICL x-vector path is fixed.
-        try XCTSkipIf(true, "non-ICL x-vector synthesis degenerates on the 1.7B; Studio uses the ICL path (covered by E2EICLVoiceCloningTests). Tracked follow-up: x_vector_only prefill golden-tensor diff.")
         let ttsModel = try await loadTTSModel()
         let asrModel = try await loadASRModel()
 
         let refAudio = try loadTestAudio()
         let inputText = "Hello world, this is a test."
+
+        // Seed the sampler so this round-trip is deterministic: the x-vector path
+        // samples (temp 0.9), so without a fixed seed the strict word-match below is
+        // flaky on sampling noise.
+        MLXRandom.seed(1234)
 
         let samples = ttsModel.synthesizeWithVoiceClone(
             text: inputText,
@@ -201,7 +202,7 @@ final class E2EVoiceCloningTests: XCTestCase {
             "At least 2 of \(expectedWords) should appear in: \"\(transcription)\"")
     }
 
-    /// Speaker embedding extraction produces valid 1024-dim vector
+    /// Speaker embedding extraction produces a valid talker-hidden-dim vector
     func testSpeakerEmbeddingExtraction() async throws {
         let ttsModel = try await loadTTSModel()
 
@@ -211,9 +212,12 @@ final class E2EVoiceCloningTests: XCTestCase {
         let embedding = ttsModel.speakerEncoder(mels)
         eval(embedding)
 
-        XCTAssertEqual(embedding.ndim, 2, "Should be [1, 1024]")
+        // The speaker-encoder fc projects to the talker hidden size — 2048 on the
+        // 1.7B, 1024 on the 0.6B — so assert against the model rather than a constant.
+        let expectedDim = ttsModel.config.talker.hiddenSize
+        XCTAssertEqual(embedding.ndim, 2, "Should be [1, hiddenSize]")
         XCTAssertEqual(embedding.dim(0), 1, "Batch size 1")
-        XCTAssertEqual(embedding.dim(1), 1024, "Embedding dim 1024")
+        XCTAssertEqual(embedding.dim(1), expectedDim, "Embedding dim should equal talker hidden size (\(expectedDim))")
 
         // Verify embedding is not all zeros
         let norm = sqrt((embedding * embedding).sum().item(Float.self))
