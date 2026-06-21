@@ -264,7 +264,11 @@ public enum HuggingFaceDownloader {
     /// when the variable is unset, blank, or not a valid `http(s)://host` URL.
     /// The validation mirrors `HubApi`'s own guard so a malformed value falls
     /// back to the default instead of breaking downloads.
-    static func resolvedEndpoint() -> String? {
+    ///
+    /// Public so modules that construct `HubApi` directly (e.g.
+    /// `FunctionGemma.loadFromHub`, which calls `snapshot(from:)` instead of
+    /// going through `downloadWeights`) can still honor the mirror.
+    public static func resolvedEndpoint() -> String? {
         guard let raw = ProcessInfo.processInfo.environment["HF_ENDPOINT"]?
             .trimmingCharacters(in: .whitespacesAndNewlines),
               !raw.isEmpty,
