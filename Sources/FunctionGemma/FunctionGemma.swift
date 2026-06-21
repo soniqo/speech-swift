@@ -1,3 +1,4 @@
+import AudioCommon
 import CoreML
 import Foundation
 import Hub
@@ -89,9 +90,13 @@ public final class FunctionGemma: @unchecked Sendable {
 
     /// Download the published HuggingFace repo into a local Hub cache and
     /// load it. Defaults to ``defaultModelId``.
+    ///
+    /// Honors the `HF_ENDPOINT` env var (China mirror support) via
+    /// `HuggingFaceDownloader.resolvedEndpoint()` — keeps this loader in sync
+    /// with every other `fromPretrained` path in the package.
     public static func loadFromHub(_ repoId: String = defaultModelId,
                                    computeUnits: MLComputeUnits = .cpuAndNeuralEngine) async throws -> FunctionGemma {
-        let hub = HubApi()
+        let hub = HubApi(endpoint: HuggingFaceDownloader.resolvedEndpoint())
         let folder = try await hub.snapshot(from: repoId)
         return try await load(from: folder, computeUnits: computeUnits)
     }
