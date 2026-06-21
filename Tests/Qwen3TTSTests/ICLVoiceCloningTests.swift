@@ -35,23 +35,25 @@ final class ICLVoiceCloningTests: XCTestCase {
         XCTAssertEqual(reEncoded[0, 2].item(Int32.self), 100)
     }
 
-    // MARK: - SpeechTokenizerEncoder construction
+    // MARK: - SpeechTokenizerEncoder construction (Mimi)
 
     func testEncoderConstruction() {
         let config = SpeechTokenizerDecoderConfig()
         let encoder = SpeechTokenizerEncoder(config: config)
-        // Verify expected structure
-        XCTAssertEqual(encoder.encoderBlocks.count, 4, "Should have 4 downsample blocks")
-        XCTAssertEqual(encoder.config.numQuantizers, 16, "Should have 16 codebooks")
+        // Mimi SEANet: 4 downsample stages (ratios 8/6/5/4) + transformer + split RVQ.
+        XCTAssertEqual(encoder.seanet.layers.count, 4, "SEANet should have 4 downsample stages")
+        XCTAssertEqual(encoder.transformer.layers.count, 8, "Encoder transformer should have 8 layers")
+        // Split RVQ: 1 semantic + 15 acoustic = 16 valid quantizers.
+        XCTAssertEqual(encoder.quantizer.semanticRVQ.codebooks.count, 1)
+        XCTAssertEqual(encoder.quantizer.acousticRVQ.codebooks.count, 15)
     }
 
     func testEncoderBlockDimensions() {
         let config = SpeechTokenizerDecoderConfig()
         let encoder = SpeechTokenizerEncoder(config: config)
-        // Input conv: 1 → 96 channels
-        XCTAssertNotNil(encoder.inputConv)
-        // Post conv: latentDim → hiddenSize
-        XCTAssertNotNil(encoder.postConv)
+        // Each SEANet stage has a single residual block (nResidualLayers = 1).
+        XCTAssertEqual(encoder.seanet.layers[0].residuals.count, 1)
+        XCTAssertEqual(encoder.cfg.validNumQuantizers, 16)
     }
 
     // MARK: - ResidualVectorQuantizer encode
@@ -84,63 +86,6 @@ final class ICLVoiceCloningTests: XCTestCase {
         XCTAssertNotNil(method)
     }
 
-    // MARK: - Reference echo trim (unit tests, no model load)
-
-    func testTrimICLReferenceByFrames_normalTrim() {
-        // Reproduction ≈ referenceFrames, target well above the floor: the exact
-        // frame estimate governs, dropping (referenceFrames + 1) frames.
-        let referenceFrames = 10
-        let wave = [Float](repeating: 1.0, count: 80 * 1920)
-        let trimmed = Qwen3TTSModel.trimICLReferenceByFrames(
-            wave, referenceFrames: referenceFrames, targetTokenCount: 10)
-        XCTAssertEqual(trimmed.count, wave.count - (referenceFrames + 1) * 1920,
-            "Should drop ~(referenceFrames + 1) frames when the floor is not binding")
-        XCTAssertEqual(trimmed.first, 1.0, "Remaining samples should be the waveform tail")
-    }
-
-    func testTrimICLReferenceByFrames_zeroFramesPassesThrough() {
-        let wave = [Float](repeating: 1.0, count: 60 * 1920)
-        let trimmed = Qwen3TTSModel.trimICLReferenceByFrames(
-            wave, referenceFrames: 0, targetTokenCount: 5)
-        XCTAssertEqual(trimmed.count, wave.count,
-            "referenceFrames == 0 should return the waveform unchanged")
-    }
-
-    func testTrimICLReferenceByFrames_subFloorPassesThrough() {
-        // Whole take shorter than the target floor (degenerate generation): trim
-        // collapses to 0 and the untrimmed waveform is returned for the grader.
-        let minTarget = 10 * 2 * 1920  // targetTokenCount 10 → 20-frame floor
-        let wave = [Float](repeating: 1.0, count: minTarget - 1920)
-        let trimmed = Qwen3TTSModel.trimICLReferenceByFrames(
-            wave, referenceFrames: 10, targetTokenCount: 10)
-        XCTAssertEqual(trimmed.count, wave.count,
-            "Output below the target floor should be returned untrimmed for the grader to reject")
-    }
-
-    func testTrimICLReferenceByFrames_floorClampsOverTrim() {
-        // Reproduction came out much shorter than referenceFrames, so the frame
-        // estimate would over-trim into the target — the floor caps the trim and
-        // preserves exactly minTarget samples of audio.
-        let referenceFrames = 100
-        let targetTokenCount = 5
-        let minTarget = max(4 * 1920, targetTokenCount * 2 * 1920)  // 19200
-        let wave = [Float](repeating: 1.0, count: 95 * 1920)
-        let trimmed = Qwen3TTSModel.trimICLReferenceByFrames(
-            wave, referenceFrames: referenceFrames, targetTokenCount: targetTokenCount)
-        XCTAssertEqual(trimmed.count, minTarget,
-            "Floor should cap the trim so at least minTarget target samples survive")
-    }
-
-    func testTrimICLReferenceByFrames_absoluteFloorForTinyTarget() {
-        // Tiny target (1 token): the 2-frames/token floor (3840) is below the
-        // absolute 4-frame floor (7680), so the absolute floor governs.
-        let referenceFrames = 100
-        let wave = [Float](repeating: 1.0, count: 90 * 1920)
-        let trimmed = Qwen3TTSModel.trimICLReferenceByFrames(
-            wave, referenceFrames: referenceFrames, targetTokenCount: 1)
-        XCTAssertEqual(trimmed.count, 4 * 1920,
-            "Absolute 4-frame floor should govern when the per-token floor is smaller")
-    }
 }
 
 // MARK: - E2E Tests
@@ -152,16 +97,25 @@ final class E2EICLVoiceCloningTests: XCTestCase {
         let (tts, encoder) = try await Qwen3TTSModel.fromPretrainedWithEncoder()
 
         // Verify encoder loaded
-        XCTAssertEqual(encoder.encoderBlocks.count, 4)
+        XCTAssertEqual(encoder.seanet.layers.count, 4)
 
-        // Quick forward pass with silence
-        let silence = [Float](repeating: 0, count: 24000)  // 1s at 24kHz
-        let codes = encoder.encode(samples: silence)
+        // Encode real speech: a correctly-loaded Mimi encoder must produce codec
+        // that VARIES frame-to-frame. The previous (wrong-architecture, unloaded)
+        // encoder emitted the same index on every frame — the bug that made ICL
+        // re-speak the reference. Guard against its return.
+        let refAudio = try AudioFileLoader.load(
+            url: URL(fileURLWithPath: "Tests/Qwen3ASRTests/Resources/test_audio.wav"),
+            targetSampleRate: 24000)
+        let speech = Array(refAudio[Int(5.17 * 24000)..<min(Int(8.37 * 24000), refAudio.count)])
+        let codes = encoder.encode(samples: speech)
         eval(codes)
         XCTAssertEqual(codes.dim(0), 1, "Batch size should be 1")
         XCTAssertEqual(codes.dim(1), 16, "Should have 16 codebooks")
         XCTAssertGreaterThan(codes.dim(2), 0, "Should produce at least 1 frame")
-        print("Encoder: 1s silence → \(codes.dim(2)) codec frames")
+        let cb0 = codes[0, 0, 0...].asArray(Int32.self)
+        XCTAssertGreaterThan(Set(cb0).count, 1,
+            "Codebook 0 must vary across frames — constant codes indicate an unloaded/wrong encoder")
+        print("Encoder: \(speech.count) samples → \(codes.dim(2)) frames, codebook0 distinct=\(Set(cb0).count)")
     }
 
     func testE2EICLRoundTrip() async throws {

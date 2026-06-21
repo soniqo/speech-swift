@@ -35,12 +35,16 @@ extension Qwen3TTSModel {
         let tts = try await Qwen3TTSModel.fromPretrained(
             modelId: modelId, cacheDir: cacheDir, offlineMode: offlineMode, progressHandler: progressHandler)
 
-        let weightsDir = try cacheDir ?? HuggingFaceDownloader.getCacheDirectory(for: modelId)
+        // The codec encoder (Mimi) lives in the speech-tokenizer bundle, NOT the
+        // talker bundle — the talker bundle has no `encoder.*`/`decoder.*` keys.
+        // `fromPretrained` already downloaded the tokenizer (same dir the decoder
+        // loads from), so just resolve its cache dir.
+        let tokenizerModelId = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
+        let tokenizerDir = try HuggingFaceDownloader.getCacheDirectory(for: tokenizerModelId)
 
-        // Build encoder with same config as decoder
         let encoderConfig = tts.config.speechTokenizerDecoder
         let encoder = SpeechTokenizerEncoder(config: encoderConfig)
-        try TTSWeightLoader.loadSpeechTokenizerEncoderWeights(into: encoder, from: weightsDir)
+        try TTSWeightLoader.loadSpeechTokenizerEncoderWeights(into: encoder, from: tokenizerDir)
 
         return (tts, encoder)
     }
@@ -51,11 +55,11 @@ extension Qwen3TTSModel {
     /// into codec tokens and prepends them with their transcript into the autoregressive
     /// context. This produces correct EOS and higher voice fidelity.
     ///
-    /// Because the model is conditioned on `[reference_text + target_text]` and trained to
-    /// produce codec for the entire text sequence, the raw decoded waveform contains a
-    /// regeneration of the reference audio followed by the target. By default this method
-    /// returns only the target portion; pass `trimReference: false` to receive the full
-    /// waveform (useful for debugging the model's reference reproduction).
+    /// The reference codec (from the encoder) is supplied as in-context conditioning, so
+    /// the model generates the TARGET codec only. For decoding, the reference codec is
+    /// prepended (the causal Mimi decoder needs left context) and then cut back off by the
+    /// exact `refFrames / totalFrames` audio ratio — leaving clean target audio. Pass
+    /// `trimReference: false` to receive the full decoded waveform (reference + target).
     ///
     /// - Parameters:
     ///   - text: Target text to synthesize
@@ -65,10 +69,9 @@ extension Qwen3TTSModel {
     ///   - language: Language hint (e.g. "english", "german")
     ///   - sampling: Sampling config
     ///   - codecEncoder: SpeechTokenizerEncoder from fromPretrainedWithEncoder()
-    ///   - trimReference: When `true` (default), strip the reference-text portion from the
-    ///                    start of the output, returning only the target audio. The trim
-    ///                    point is estimated from the reference duration (codec runs at
-    ///                    12.5 fps, 1920 samples per frame at 24 kHz). Set `false` to
+    ///   - trimReference: When `true` (default), prepend the reference codec for the decode
+    ///                    and cut the reference portion (`refFrames / totalFrames` of the
+    ///                    audio) off the front, returning only the target audio. Set `false` to
     ///                    receive the raw decoded waveform.
     public func synthesizeWithVoiceCloneICL(
         text: String,
@@ -154,17 +157,13 @@ extension Qwen3TTSModel {
         if iclSampling.temperature > 0 && iclSampling.repetitionPenalty < 1.5 {
             iclSampling.repetitionPenalty = 1.5
         }
-        // Cap maxTokens so under-EOS runaway outputs can't exhaust GPU memory.
-        // ICL generates [ref reproduction + target], so the budget must cover
-        // BOTH: ref-codec-frames (from the encoded reference) plus a per-target-
-        // text allowance. 6 codec frames per text token is a loose upper bound
-        // on natural speech rate (~12.5 fps / ~2 tok/s). Extra 1.5× safety
-        // margin on the reference portion handles model speech-rate variance.
-        let refCodecFrames = refCodes.dim(2)
+        // Cap maxTokens so an under-EOS runaway can't exhaust GPU memory. The
+        // model generates the TARGET codec only (the reference is provided as
+        // context, not regenerated), so the budget is purely a per-target-text
+        // allowance: 8 codec frames per BPE token is a loose upper bound on
+        // natural speech rate (~12.5 fps), with a floor for very short lines.
         let targetTokenCount = tokenizer.encode(text).count
-        let refBudget = refCodecFrames + refCodecFrames / 2  // 1.5x of ref frames
-        let targetBudget = max(75, targetTokenCount * 6)
-        let textDerivedCap = refBudget + targetBudget
+        let textDerivedCap = max(96, targetTokenCount * 8)
         iclSampling.maxTokens = min(iclSampling.maxTokens, textDerivedCap)
         let (allCodebooks, numFrames) = generateWithCodePredictor(
             prefillEmbeds: prefillEmbeds,
@@ -180,34 +179,32 @@ extension Qwen3TTSModel {
             return []
         }
 
-        // Step 6: Decode codec tokens → waveform
-        let outputSamples = numFrames * 1920
-        iclLog("  ICL: decoding \(numFrames) frames → \(outputSamples) samples...")
-        let waveform = codecDecoder.decode(codes: allCodebooks)
+        // Step 6+7: Decode, prepending the reference codec, then cut the reference
+        // portion off the front (matches the qwen-tts reference decode path).
+        //
+        // The talker now generates the TARGET codec only (the encoder produces the
+        // correct reference codec, so the model continues past it instead of re-
+        // speaking it). The Mimi decoder is causal and needs left context, so we
+        // prepend the exact reference codec for the decode and then cut the leading
+        // `refFrames / totalFrames` fraction of audio — the part the reference
+        // codec produced — leaving clean target audio with no echo and no clipping.
+        let refFrames = refCodes.dim(2)
+        let codesForDecode = trimReference
+            ? concatenated([refCodes, allCodebooks], axis: 2)   // [1, 16, refFrames + numFrames]
+            : allCodebooks
+        let totalFrames = codesForDecode.dim(2)
+        iclLog("  ICL: decoding \(numFrames) target frames (+ \(trimReference ? refFrames : 0) ref ctx) → \(totalFrames) frames...")
+        let fullWaveform = codecDecoder.decode(codes: codesForDecode)
         let t3 = CFAbsoluteTimeGetCurrent()
 
-        // Step 7: Optionally trim the reference echo from the start of the waveform.
-        // The model is conditioned on [ref_text + target_text] and produces codec
-        // for both, so the raw decoded waveform begins with a regeneration of the
-        // reference. Trim by the reference's known codec-frame count: the model
-        // re-speaks the reference at ~its own encoded length (refCodes.dim(2)
-        // frames), which we know exactly — far more reliable than the old token-
-        // ratio estimate, whose generous floor clamped the trim and leaked seconds
-        // of reference echo.
         let trimmedWaveform: [Float]
-        if trimReference {
-            let targetTokenCount = tokenizer.encode(text).count
-            let refFrames = refCodes.dim(2)
-            trimmedWaveform = Qwen3TTSModel.trimICLReferenceByFrames(
-                waveform,
-                referenceFrames: refFrames,
-                targetTokenCount: targetTokenCount)
-            let removed = waveform.count - trimmedWaveform.count
-            if removed > 0 {
-                iclLog("  ICL: trimmed \(removed) reference samples (~\(String(format: "%.2f", Double(removed)/24000.0))s, refFrames=\(refFrames) tgtTok=\(targetTokenCount)) from output start")
-            }
+        if trimReference && totalFrames > 0 {
+            let cut = refFrames * fullWaveform.count / totalFrames
+            trimmedWaveform = (cut > 0 && cut < fullWaveform.count)
+                ? Array(fullWaveform.dropFirst(cut)) : fullWaveform
+            iclLog("  ICL: cut \(cut) reference samples (~\(String(format: "%.2f", Double(cut)/24000.0))s, \(refFrames)/\(totalFrames) frames) from output start")
         } else {
-            trimmedWaveform = waveform
+            trimmedWaveform = fullWaveform
         }
 
         let audioDur = Double(trimmedWaveform.count) / 24000.0
@@ -221,50 +218,6 @@ extension Qwen3TTSModel {
         iclLog("  ICL timing: encode=\(encTime)s | generate=\(genTime)s (\(numFrames) steps, \(msPerStep)ms/step) | decode=\(decTime)s | total=\(totTime)s | audio=\(audDur)s | RTF=\(rtf)")
 
         return trimmedWaveform
-    }
-
-    // MARK: - Reference echo trim
-
-    /// Trim the reference reproduction by its known codec-frame count.
-    ///
-    /// ICL output is `[reference reproduction + target]`. The model re-speaks the
-    /// reference transcript at ~its original rate, so the reproduction occupies
-    /// about `referenceFrames` codec frames (1920 samples each at 24 kHz) — the
-    /// same length as the encoded reference, which we know exactly. That makes the
-    /// frame count a far better trim point than the old token-ratio estimate,
-    /// whose over-generous `6 frames/token` target floor clamped the trim and left
-    /// seconds of reference echo (the seed-ladder leak that failed the grader's
-    /// prefix check).
-    ///
-    /// The reproduction length still varies run-to-run, so the trim is a best
-    /// estimate, not exact: a longer-than-encoded reproduction leaves a short tail
-    /// (a leading word or two), a shorter one risks clipping the target's first
-    /// word. Both are caught by the caller's ASR grader + seed ladder.
-    static func trimICLReferenceByFrames(
-        _ waveform: [Float],
-        referenceFrames: Int,
-        targetTokenCount: Int
-    ) -> [Float] {
-        guard referenceFrames > 0 else { return waveform }
-        let samplesPerFrame = 1920
-        // ~ the reproduction length + 1 frame for the ref→target boundary word.
-        let estimate = (referenceFrames + 1) * samplesPerFrame
-        // Safety floor against pathological over-trim: if the reproduction came out
-        // much shorter than its encoded length, `estimate` would eat into the
-        // target, so cap the trim to keep at least this many target samples. The
-        // cap only binds when the reproduction is well under `referenceFrames`; in
-        // the normal regime the exact frame `estimate` governs. Keep it loose
-        // (~2 frames/token) so it stays a last-resort net and doesn't displace the
-        // known-frame estimate with a coarser token-length guess (a higher floor
-        // would bind in the common case and re-introduce reference-echo leak).
-        let minTarget = max(samplesPerFrame * 4, targetTokenCount * 2 * samplesPerFrame)
-        // When the whole take is shorter than the floor (a degenerate/repetitive
-        // generation), `trim` collapses to 0 and the untrimmed waveform — reference
-        // echo included — is returned for the grader to reject and the seed ladder
-        // to retry.
-        let trim = min(estimate, max(0, waveform.count - minTarget))
-        guard trim > 0, trim < waveform.count else { return waveform }
-        return Array(waveform.dropFirst(trim))
     }
 
     // MARK: - ICL Prefill Construction
