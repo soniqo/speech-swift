@@ -24,9 +24,10 @@ public enum TTSError: Error, LocalizedError {
 ///
 /// - Warning: This class is not thread-safe. Create separate instances for concurrent use.
 public class Qwen3TTSModel {
-    /// Default HuggingFace model identifier — the 12 Hz 0.6B Base 4-bit MLX
-    /// bundle. Single SSOT for the registry and other call sites.
-    public static let defaultModelId = "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-4bit"
+    /// Default HuggingFace model identifier — the 12 Hz 1.7B Base bf16 MLX bundle
+    /// (the production model; int4 was decommissioned for TTS). Single SSOT for the
+    /// registry and other call sites.
+    public static let defaultModelId = "aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-bf16"
 
     /// Default instruct text applied automatically for CustomVoice models when no explicit
     /// `--instruct` is provided. Prevents rambling output for short texts.
@@ -1598,7 +1599,7 @@ public class Qwen3TTSModel {
 public extension Qwen3TTSModel {
     /// Load model from HuggingFace hub
     static func fromPretrained(
-        modelId: String = "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-4bit",
+        modelId: String = Qwen3TTSModel.defaultModelId,
         tokenizerModelId: String = "Qwen/Qwen3-TTS-Tokenizer-12Hz",
         cacheDir: URL? = nil,
         offlineMode: Bool = false,

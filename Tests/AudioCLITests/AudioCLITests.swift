@@ -348,9 +348,10 @@ final class SpeakCommandTests: XCTestCase {
         let cmd = try AudioCLI.parseAsRoot(["speak", "Hello"])
         let speak = try XCTUnwrap(cmd as? SpeakCommand)
         // --model-id is now opt-in; the runtime resolves the default through
-        // --cosyvoice-variant (4bit by default → aufklarer/CosyVoice3-0.5B-MLX-4bit).
+        // --cosyvoice-variant (bf16 by default → aufklarer/CosyVoice3-0.5B-MLX-bf16;
+        // int4 was decommissioned).
         XCTAssertNil(speak.modelId)
-        XCTAssertEqual(speak.cosyvoiceVariant, "4bit")
+        XCTAssertEqual(speak.cosyvoiceVariant, "bf16")
     }
 
     func testCosyVoiceVariantBf16() throws {

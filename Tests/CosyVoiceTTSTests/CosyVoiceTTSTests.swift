@@ -132,7 +132,7 @@ final class CosyVoiceTTSConfigTests: XCTestCase {
 //      on first run.
 // CI's `--skip E2E` filter excludes these classes via the E2E prefix.
 private enum CosyVoiceTestWeights {
-    static let modelId = "aufklarer/CosyVoice3-0.5B-MLX-4bit"
+    static let modelId = "aufklarer/CosyVoice3-0.5B-MLX-bf16"
     static let files = [
         "llm.safetensors", "flow.safetensors", "hifigan.safetensors",
         "vocab.json", "merges.txt", "tokenizer_config.json", "config.json",

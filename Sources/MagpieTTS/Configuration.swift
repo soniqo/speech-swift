@@ -1,22 +1,19 @@
 import Foundation
 
-/// Magpie-TTS Multilingual 357M variant. Both bundles share the architecture;
-/// only the on-disk storage quantisation differs (INT4 vs INT8). Weights are
-/// dequantised to FP at load time — runtime is FP32 everywhere.
+/// Magpie-TTS Multilingual 357M variant. Weights are dequantised to FP at load
+/// time — runtime is FP32 everywhere. int4 was decommissioned for TTS (too much
+/// quality loss); INT8 is the floor (no bf16 bundle exists for Magpie).
 public enum MagpieTTSVariant: String, Sendable, CaseIterable {
-    case int4
     case int8
 
     public var huggingFaceRepoId: String {
         switch self {
-        case .int4: return "aufklarer/Magpie-TTS-Multilingual-357M-MLX-4bit"
         case .int8: return "aufklarer/Magpie-TTS-Multilingual-357M-MLX-8bit"
         }
     }
 
     public var bits: Int {
         switch self {
-        case .int4: return 4
         case .int8: return 8
         }
     }

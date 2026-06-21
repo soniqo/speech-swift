@@ -52,7 +52,7 @@ public final class MagpieTTS {
     // MARK: - Loading
 
     public static func fromPretrained(
-        variant: MagpieTTSVariant = .int4,
+        variant: MagpieTTSVariant = .int8,
         progressHandler: ((Double) -> Void)? = nil
     ) async throws -> MagpieTTS {
         let paths = try await MagpieTTSDownloader.ensureDownloaded(

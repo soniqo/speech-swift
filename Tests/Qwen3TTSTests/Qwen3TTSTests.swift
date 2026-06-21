@@ -122,12 +122,13 @@ final class Qwen3TTSConfigTests: XCTestCase {
         XCTAssertEqual(config.numLayers, 28)
     }
 
-    func testTalkerLarge4bit() {
-        let config = TalkerConfig.large4bit
+    func testTalkerLarge() {
+        // 1.7B base dims; int4 decommissioned, so the base precision is bf16 (bits 0).
+        let config = TalkerConfig.large
         XCTAssertEqual(config.hiddenSize, 2048)
         XCTAssertEqual(config.intermediateSize, 6144)
         XCTAssertEqual(config.textHiddenSize, 2048)
-        XCTAssertEqual(config.bits, 4)
+        XCTAssertEqual(config.bits, 0)
         XCTAssertEqual(config.numLayers, 28)
     }
 
@@ -144,12 +145,13 @@ final class Qwen3TTSConfigTests: XCTestCase {
         XCTAssertEqual(config.bits, 8)
     }
 
-    func testCodePredictorLarge4bit() {
-        let config = CodePredictorConfig.large4bit
+    func testCodePredictorLarge() {
+        // 1.7B base dims; bf16 (bits 0) after int4 decommission.
+        let config = CodePredictorConfig.large
         XCTAssertEqual(config.hiddenSize, 1024)
         XCTAssertEqual(config.embeddingDim, 2048)
         XCTAssertTrue(config.needsProjection)
-        XCTAssertEqual(config.bits, 4)
+        XCTAssertEqual(config.bits, 0)
     }
 
     func testCodePredictorLarge8bit() {
@@ -189,10 +191,11 @@ final class Qwen3TTSConfigTests: XCTestCase {
     // MARK: - Model Variants
 
     func testTTSModelVariants() {
-        XCTAssertEqual(TTSModelVariant.base.rawValue, "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-4bit")
-        XCTAssertEqual(TTSModelVariant.base8bit.rawValue, "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-8bit")
+        // int4 decommissioned: the 0.6B Base floor is 8bit (no bf16 bundle); 1.7B is bf16.
+        XCTAssertEqual(TTSModelVariant.base.rawValue, "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-8bit")
         XCTAssertEqual(TTSModelVariant.base17B8bit.rawValue, "aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-8bit")
         XCTAssertEqual(TTSModelVariant.base17Bbf16.rawValue, "aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-bf16")
+        // CustomVoice ships only as int4 (no non-int4 bundle exists yet — tracked TODO).
         XCTAssertEqual(TTSModelVariant.customVoice.rawValue, "aufklarer/Qwen3-TTS-12Hz-0.6B-CustomVoice-MLX-4bit")
     }
 
@@ -279,7 +282,7 @@ final class SpeakerConfigTests: XCTestCase {
     }
 
     func testTTSModelVariant() {
-        XCTAssertEqual(TTSModelVariant.base.rawValue, "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-4bit")
+        XCTAssertEqual(TTSModelVariant.base.rawValue, "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-8bit")
         XCTAssertEqual(TTSModelVariant.customVoice.rawValue, "aufklarer/Qwen3-TTS-12Hz-0.6B-CustomVoice-MLX-4bit")
     }
 
@@ -299,7 +302,7 @@ final class SpeakerConfigTests: XCTestCase {
 
 final class E2EInstructTokenTests: XCTestCase {
 
-    static let ttsModelId = "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-4bit"
+    static let ttsModelId = "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-8bit"
     private static var _sharedModel: Qwen3TTSModel?
 
     /// Verify instruct token format: <|im_start|>user\n{text}<|im_end|>\n
@@ -741,7 +744,7 @@ final class E2ESpeakerTokenPositionTests: XCTestCase {
 /// Requires TTS model weights (~1.7 GB). Tests are grouped by language.
 final class E2ETTSTests: XCTestCase {
 
-    static let ttsModelId = "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-4bit"
+    static let ttsModelId = "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-8bit"
     static let ttsTokenizerModelId = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
     static let asrModelId = "aufklarer/Qwen3-ASR-0.6B-MLX-4bit"
     private static var _sharedTTSModel: Qwen3TTSModel?
@@ -1234,7 +1237,7 @@ final class E2ETTSLongTextTests: XCTestCase {
     /// Before the chunkedDecode eval fix, this peaked at 17+ GB and crashed on 16 GB Macs.
     func testLongTextDoesNotOOM() async throws {
         let model = try await Qwen3TTSModel.fromPretrained(
-            modelId: "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-4bit"
+            modelId: "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-8bit"
         ) { _, _ in }
 
         let longText = "In the beginning of a new era of artificial intelligence, " +
@@ -1257,7 +1260,7 @@ final class E2ETTSLongTextTests: XCTestCase {
 
 final class E2ETTSBatchTests: XCTestCase {
 
-    static let ttsModelId = "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-4bit"
+    static let ttsModelId = "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-8bit"
     static let ttsTokenizerModelId = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
     static let asrModelId = "aufklarer/Qwen3-ASR-0.6B-MLX-4bit"
     private static var _sharedTTSModel: Qwen3TTSModel?
@@ -1454,7 +1457,7 @@ final class E2ETTSBatchTests: XCTestCase {
 /// Requires TTS model weights (~1.7 GB).
 final class E2ETTSStreamingTests: XCTestCase {
 
-    static let ttsModelId = "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-4bit"
+    static let ttsModelId = "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-8bit"
     static let ttsTokenizerModelId = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
     static let asrModelId = "aufklarer/Qwen3-ASR-0.6B-MLX-4bit"
     private static var _sharedTTSModel: Qwen3TTSModel?

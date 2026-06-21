@@ -83,8 +83,8 @@ public struct SpeakCommand: ParsableCommand {
     @Option(name: .long, help: "[cosyvoice] HuggingFace model ID. Set explicitly to bypass --cosyvoice-variant resolution.")
     public var modelId: String?
 
-    @Option(name: .long, help: "[cosyvoice] Quantization variant: 4bit (default), 8bit, 8bit-full, bf16. Resolves to aufklarer/CosyVoice3-0.5B-MLX-<variant>. Ignored when --model-id is set.")
-    public var cosyvoiceVariant: String = "4bit"
+    @Option(name: .long, help: "[cosyvoice] Quantization variant: bf16 (default), 8bit, 8bit-full (int4 was decommissioned). Resolves to aufklarer/CosyVoice3-0.5B-MLX-<variant>. Ignored when --model-id is set.")
+    public var cosyvoiceVariant: String = "bf16"
 
     @Option(name: .long, help: "[cosyvoice] Speaker mapping: s1=alice.wav,s2=bob.wav")
     public var speakers: String?
@@ -112,7 +112,7 @@ public struct SpeakCommand: ParsableCommand {
 
     // MARK: - VoxCPM2-specific options
 
-    @Option(name: .long, help: "[voxcpm2] Quantization variant: bf16 (default), int8, int4. Resolves to aufklarer/VoxCPM2-MLX-<variant>.")
+    @Option(name: .long, help: "[voxcpm2] Quantization variant: bf16 (default), int8 (int4 was decommissioned). Resolves to aufklarer/VoxCPM2-MLX-<variant>.")
     public var voxcpm2Variant: String = "bf16"
 
     @Option(name: .long, help: "[voxcpm2] Style instruction")
@@ -147,8 +147,8 @@ public struct SpeakCommand: ParsableCommand {
 
     // MARK: - Magpie-specific options
 
-    @Option(name: .long, help: "[magpie] Quantization variant: int4 (default) or int8. Resolves to aufklarer/Magpie-TTS-Multilingual-357M-MLX-<variant>.")
-    public var magpieVariant: String = "int4"
+    @Option(name: .long, help: "[magpie] Quantization variant: int8 (int4 was decommissioned). Resolves to aufklarer/Magpie-TTS-Multilingual-357M-MLX-int8.")
+    public var magpieVariant: String = "int8"
 
     @Option(name: .long, help: "[magpie] Baked speaker: sofia (default), aria, jason, leo, john. No voice cloning.")
     public var magpieSpeaker: String = "sofia"
@@ -203,8 +203,8 @@ public struct SpeakCommand: ParsableCommand {
             if MagpieSpeaker(named: magpieSpeaker) == nil {
                 throw ValidationError("--magpie-speaker must be one of sofia, aria, jason, leo, john (got '\(magpieSpeaker)')")
             }
-            guard magpieVariant.lowercased() == "int4" || magpieVariant.lowercased() == "int8" else {
-                throw ValidationError("--magpie-variant must be int4 or int8 (got '\(magpieVariant)')")
+            guard magpieVariant.lowercased() == "int8" else {
+                throw ValidationError("--magpie-variant must be int8 (int4 was decommissioned) (got '\(magpieVariant)')")
             }
             // magpie-coreml validation: nothing extra needed beyond the
             // shared --magpie-* flag checks above. --stream is supported
@@ -325,8 +325,7 @@ public struct SpeakCommand: ParsableCommand {
                 print("Error: invalid Magpie speaker '\(magpieSpeaker)'")
                 throw ExitCode(1)
             }
-            let variant: MagpieTTSVariant =
-                (magpieVariant.lowercased() == "int8") ? .int8 : .int4
+            let variant: MagpieTTSVariant = .int8
             let language: MagpieLanguage =
                 MagpieLanguage(code: effectiveLanguage) ?? .english
 
@@ -402,8 +401,7 @@ public struct SpeakCommand: ParsableCommand {
             if mlxLang == .japanese {
                 FileHandle.standardError.write(Data(
                     "[magpie-coreml] --language ja not supported by the CoreML bundle; using MLX backend.\n".utf8))
-                let variant: MagpieTTSVariant =
-                    (magpieVariant.lowercased() == "int8") ? .int8 : .int4
+                let variant: MagpieTTSVariant = .int8
                 let model = try await MagpieTTS.fromPretrained(
                     variant: variant,
                     progressHandler: { reportProgress($0, "Downloading MLX fallback") })
@@ -508,10 +506,8 @@ public struct SpeakCommand: ParsableCommand {
             // Resolve model ID
             let resolvedModelId: String
             switch model.lowercased() {
-            case "base":
+            case "base", "base-8bit", "base8bit":
                 resolvedModelId = TTSModelVariant.base.rawValue
-            case "base-8bit", "base8bit":
-                resolvedModelId = TTSModelVariant.base8bit.rawValue
             case "1.7b", "large", "1.7b-bf16", "large-bf16":
                 resolvedModelId = TTSModelVariant.base17Bbf16.rawValue
             case "1.7b-8bit", "large-8bit":
@@ -730,10 +726,8 @@ public struct SpeakCommand: ParsableCommand {
             return "aufklarer/VoxCPM2-MLX-bf16"
         case "int8":
             return "aufklarer/VoxCPM2-MLX-int8"
-        case "int4":
-            return "aufklarer/VoxCPM2-MLX-int4"
         default:
-            throw ValidationError("--voxcpm2-variant must be bf16, int8, or int4 (got '\(voxcpm2Variant)')")
+            throw ValidationError("--voxcpm2-variant must be bf16 or int8 (int4 was decommissioned) (got '\(voxcpm2Variant)')")
         }
     }
 
@@ -828,13 +822,12 @@ public struct SpeakCommand: ParsableCommand {
     private func resolvedCosyVoiceModelId() throws -> String {
         if let explicit = modelId, !explicit.isEmpty { return explicit }
         switch cosyvoiceVariant.lowercased() {
-        case "4bit":      return "aufklarer/CosyVoice3-0.5B-MLX-4bit"
         case "8bit":      return "aufklarer/CosyVoice3-0.5B-MLX-8bit"
         case "8bit-full": return "aufklarer/CosyVoice3-0.5B-MLX-8bit-full"
         case "bf16":      return "aufklarer/CosyVoice3-0.5B-MLX-bf16"
         default:
             throw ValidationError(
-                "--cosyvoice-variant must be 4bit, 8bit, 8bit-full, or bf16 (got '\(cosyvoiceVariant)')")
+                "--cosyvoice-variant must be 8bit, 8bit-full, or bf16 (int4 was decommissioned) (got '\(cosyvoiceVariant)')")
         }
     }
 

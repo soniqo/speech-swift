@@ -12,8 +12,8 @@ final class E2EMagpieSynthesisTests: XCTestCase {
     /// Round-trip sanity test: load INT4 bundle → synthesize a short phrase →
     /// verify shape, dtype, non-silence, and that greedy decoding terminates
     /// well below the max-frame cap.
-    func testInt4LoadAndSynthesizeHello() async throws {
-        let model = try await MagpieTTS.fromPretrained(variant: .int4)
+    func testInt8LoadAndSynthesizeHello() async throws {
+        let model = try await MagpieTTS.fromPretrained(variant: .int8)
 
         let start = Date()
         // Greedy decoding (temperature=0) makes the test deterministic and
@@ -57,7 +57,7 @@ final class E2EMagpieSynthesisTests: XCTestCase {
     /// dedup-ordering, weight-loading key paths, attention masks or the FSQ
     /// inverse — all of which are bugs we've already hit once.
     func testFirstFrameMatchesPythonReference() async throws {
-        let model = try await MagpieTTS.fromPretrained(variant: .int4)
+        let model = try await MagpieTTS.fromPretrained(variant: .int8)
 
         // Magpie's English vocab has duplicates after `<pad>`/`<oov>`. The
         // Python reference (and now our tokeniser) uses the first
@@ -82,7 +82,7 @@ final class E2EMagpieSynthesisTests: XCTestCase {
     /// "Hello, World from Magpie Text to Speech." — Swift must match.
     func testSynthesizedAudioTranscribesToInput() async throws {
 #if canImport(CoreML)
-        let tts = try await MagpieTTS.fromPretrained(variant: .int4)
+        let tts = try await MagpieTTS.fromPretrained(variant: .int8)
         let asr = try await CoreMLASRModel.fromPretrained()
 
         let prompt = "Hello world from Magpie text to speech."
@@ -225,7 +225,7 @@ final class E2EMagpieSynthesisTests: XCTestCase {
                  temperature: 0.6, topK: 80, maxSteps: 300, seed: 42),
         ]
 
-        let tts = try await MagpieTTS.fromPretrained(variant: .int4)
+        let tts = try await MagpieTTS.fromPretrained(variant: .int8)
         let asr = try await CoreMLASRModel.fromPretrained()
 
         var failures: [String] = []
@@ -270,7 +270,7 @@ final class E2EMagpieSynthesisTests: XCTestCase {
     /// concatenated stream matches what batch synthesis would have produced
     /// for the same seed.
     func testStreamingEmitsMultipleChunks() async throws {
-        let model = try await MagpieTTS.fromPretrained(variant: .int4)
+        let model = try await MagpieTTS.fromPretrained(variant: .int8)
         let stream = model.synthesizeStream(
             text: "test",
             speaker: .aria,

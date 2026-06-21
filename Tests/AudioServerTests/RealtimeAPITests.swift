@@ -91,7 +91,7 @@ final class RealtimeAPITests: XCTestCase {
         // the TTS slot. ASR slot stays at the default.
         XCTAssertEqual(session?["engine"] as? String, "qwen3")
         XCTAssertEqual(session?["tts_engine"] as? String, "qwen3-tts")
-        XCTAssertEqual(session?["tts_model"] as? String, "qwen3-tts-0.6b-mlx-int4")
+        XCTAssertEqual(session?["tts_model"] as? String, "qwen3-tts-1.7b-mlx-bf16")
         XCTAssertEqual(session?["asr_engine"] as? String, "parakeet")
         XCTAssertEqual(session?["language"] as? String, "chinese")
         XCTAssertEqual(session?["input_audio_format"] as? String, "pcm16")

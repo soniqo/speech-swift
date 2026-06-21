@@ -30,9 +30,9 @@ public enum CosyVoiceTTSError: Error, LocalizedError {
 ///
 /// - Warning: This class is not thread-safe. Create separate instances for concurrent use.
 public final class CosyVoiceTTSModel {
-    /// Default HuggingFace model identifier — the 0.5B 4-bit MLX bundle.
-    /// Single SSOT for the registry and other call sites.
-    public static let defaultModelId = "aufklarer/CosyVoice3-0.5B-MLX-4bit"
+    /// Default HuggingFace model identifier — the 0.5B bf16 MLX bundle (int4 was
+    /// decommissioned for TTS). Single SSOT for the registry and other call sites.
+    public static let defaultModelId = "aufklarer/CosyVoice3-0.5B-MLX-bf16"
 
     public let config: CosyVoiceConfig
 
@@ -58,7 +58,7 @@ public final class CosyVoiceTTSModel {
     /// Downloads three safetensors files: llm.safetensors, flow.safetensors, hifigan.safetensors
     /// Caches to ~/Library/Caches/qwen3-speech/
     public static func fromPretrained(
-        modelId: String = "aufklarer/CosyVoice3-0.5B-MLX-4bit",
+        modelId: String = CosyVoiceTTSModel.defaultModelId,
         cacheDir: URL? = nil,
         offlineMode: Bool = false,
         progressHandler: ((Double, String) -> Void)? = nil

@@ -3,12 +3,11 @@ import XCTest
 
 final class MagpieConfigTests: XCTestCase {
     func testVariantHFIDs() {
-        XCTAssertEqual(MagpieTTSVariant.int4.huggingFaceRepoId,
-                       "aufklarer/Magpie-TTS-Multilingual-357M-MLX-4bit")
+        // int4 was decommissioned for TTS; int8 is the sole surviving Magpie variant.
         XCTAssertEqual(MagpieTTSVariant.int8.huggingFaceRepoId,
                        "aufklarer/Magpie-TTS-Multilingual-357M-MLX-8bit")
-        XCTAssertEqual(MagpieTTSVariant.int4.bits, 4)
         XCTAssertEqual(MagpieTTSVariant.int8.bits, 8)
+        XCTAssertEqual(MagpieTTSVariant.allCases, [.int8])
     }
 
     func testSpeakerNames() {

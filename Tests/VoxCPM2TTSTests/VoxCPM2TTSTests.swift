@@ -406,7 +406,7 @@ final class E2EVoxCPM2TTSTests: XCTestCase {
     override func tearDown() {
         super.tearDown()
         // Free the previous variant's MLX buffers before the next test loads
-        // its model — otherwise running bf16 + int8 + int4 in one process
+        // its model — otherwise running bf16 + int8 in one process
         // blows past the GPU memory budget.
         Memory.clearCache()
     }
@@ -437,8 +437,5 @@ final class E2EVoxCPM2TTSTests: XCTestCase {
     func testBasicSynthesisInt8() async throws {
         try await runBasicSynthesis(modelId: "aufklarer/VoxCPM2-MLX-int8")
     }
-
-    func testBasicSynthesisInt4() async throws {
-        try await runBasicSynthesis(modelId: "aufklarer/VoxCPM2-MLX-int4")
-    }
+    // testBasicSynthesisInt4 removed — int4 was decommissioned for TTS.
 }

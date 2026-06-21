@@ -161,7 +161,7 @@ final class VoiceCloningTests: XCTestCase {
             ?? "This is a reference audio recording used for voice cloning."
 
         let modelId = ProcessInfo.processInfo.environment["COSY_TEST_MODEL_ID"]
-            ?? "aufklarer/CosyVoice3-0.5B-MLX-4bit"
+            ?? "aufklarer/CosyVoice3-0.5B-MLX-bf16"
         let model = try await CosyVoiceTTSModel.fromPretrained(modelId: modelId)
 
         // Locate speech_tokenizer.safetensors — the test prefers an explicit

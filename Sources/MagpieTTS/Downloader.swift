@@ -15,7 +15,7 @@ public enum MagpieTTSDownloader {
     }
 
     public static func ensureDownloaded(
-        variant: MagpieTTSVariant = .int4,
+        variant: MagpieTTSVariant = .int8,
         progressHandler: ((Double) -> Void)? = nil
     ) async throws -> Paths {
         let repoId = variant.huggingFaceRepoId

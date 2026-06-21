@@ -534,7 +534,7 @@ final class ModelState: RealtimeModelLoading, @unchecked Sendable {
 
     /// Back-compat shim — default Qwen3-TTS bundle.
     func loadTTS() async throws -> Qwen3TTSModel {
-        try await loadQwen3TTS(modelId: "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-4bit")
+        try await loadQwen3TTS(modelId: Qwen3TTSModel.defaultModelId)
     }
 
     func loadCosyVoice(modelId: String) async throws -> CosyVoiceTTSModel {
@@ -547,7 +547,7 @@ final class ModelState: RealtimeModelLoading, @unchecked Sendable {
 
     /// Back-compat shim — default CosyVoice bundle for HTTP routes.
     func loadCosyVoice() async throws -> CosyVoiceTTSModel {
-        try await loadCosyVoice(modelId: "aufklarer/CosyVoice3-0.5B-MLX-4bit")
+        try await loadCosyVoice(modelId: CosyVoiceTTSModel.defaultModelId)
     }
 
     func loadKokoro(modelId: String) async throws -> KokoroTTSModel {

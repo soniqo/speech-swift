@@ -134,7 +134,7 @@ public final class MagpieTTSCoreML {
         } else {
             tick("cache MISS", tCache)
             let tMLX = CFAbsoluteTimeGetCurrent()
-            let mlxModel = try await MagpieTTS.fromPretrained(variant: .int4)
+            let mlxModel = try await MagpieTTS.fromPretrained(variant: .int8)
             tick("MLX MagpieTTS load", tMLX)
             let tExtract = CFAbsoluteTimeGetCurrent()
             (ltWeights, audioEmbeds) = try MagpieCoreMLWeightExtractor.extract(from: mlxModel)

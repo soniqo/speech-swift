@@ -139,20 +139,20 @@ public let MODEL_REGISTRY: [ModelVariant] = [
           modelId: VoxCPM2TTSModel.int8ModelId,
           aliases: ["voxcpm2-int8"],
           kind: .tts),
-    .init(name: "qwen3-tts-0.6b-mlx-int4",
+    .init(name: "qwen3-tts-1.7b-mlx-bf16",
           engine: "qwen3-tts",
           modelId: Qwen3TTSModel.defaultModelId,
           // "qwen3" is shared with the ASR variant — bare "qwen3" lands in
           // both slots so naming the family pairs ASR + TTS in one update.
-          aliases: ["qwen3", "qwen3-tts", "qwen3-speech", "qwen3-tts-0.6b"],
+          aliases: ["qwen3", "qwen3-tts", "qwen3-speech", "qwen3-tts-1.7b"],
           kind: .tts),
-    // Magpie ships as a fixed bundle today (the `MagpieTTSVariant.int4`
-    // default). Listing it here keeps it selectable via the protocol; the
-    // dispatch site ignores the modelId because MagpieTTS.fromPretrained
-    // builds the model from its own variant enum, not an HF slug.
-    .init(name: "magpie-tts-multilingual-mlx-int4",
+    // Magpie ships as a fixed bundle today (the `MagpieTTSVariant.int8`
+    // default; int4 was decommissioned). Listing it here keeps it selectable
+    // via the protocol; the dispatch site ignores the modelId because
+    // MagpieTTS.fromPretrained builds the model from its own variant enum.
+    .init(name: "magpie-tts-multilingual-mlx-int8",
           engine: "magpie",
-          modelId: "aufklarer/Magpie-TTS-Multilingual-MLX-4bit",
+          modelId: MagpieTTSVariant.int8.huggingFaceRepoId,
           aliases: ["magpie", "magpie-tts"],
           kind: .tts),
     .init(name: "magpie-tts-multilingual-357m-coreml-int8",

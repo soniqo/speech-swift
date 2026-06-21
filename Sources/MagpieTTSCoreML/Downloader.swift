@@ -75,7 +75,9 @@ public enum MagpieCoreMLDownloader {
                 })
         }
 
-        let mlxRepoId = "aufklarer/Magpie-TTS-Multilingual-357M-MLX-4bit"
+        // int4 decommissioned for TTS — the CoreML path sources tokenizer assets
+        // from the surviving 8-bit MLX bundle.
+        let mlxRepoId = "aufklarer/Magpie-TTS-Multilingual-357M-MLX-8bit"
         let mlxDir = try HuggingFaceDownloader.getCacheDirectory(for: mlxRepoId)
         let mlxCached = filesPresent(in: mlxDir, relativePaths: mlxTokenizerFiles)
         if !mlxCached {
