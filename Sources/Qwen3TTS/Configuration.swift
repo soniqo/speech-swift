@@ -192,7 +192,7 @@ public struct CodecTokens {
     public static let ttsBos: Int = 151672
     public static let ttsEos: Int = 151673
     public static let languageEnglish: Int = 2050
-    public static let languageGerman: Int = 2052
+    public static let languageGerman: Int = 2053
     public static let languageChinese: Int = 2055
     public static let languageJapanese: Int = 2058
     public static let languageSpanish: Int = 2054
