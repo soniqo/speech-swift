@@ -189,23 +189,22 @@ extension Qwen3TTSModel {
         // Step 7: Optionally trim the reference echo from the start of the waveform.
         // The model is conditioned on [ref_text + target_text] and produces codec
         // for both, so the raw decoded waveform begins with a regeneration of the
-        // reference. Trim by the text-token ratio (refTokens / totalTokens) — this
-        // is more robust than trimming by raw reference-audio sample count, because
-        // the model often reproduces the reference at a different speech rate
-        // than the original recording (slower → reference leaks into target).
+        // reference. Trim by the reference's known codec-frame count: the model
+        // re-speaks the reference at ~its own encoded length (refCodes.dim(2)
+        // frames), which we know exactly — far more reliable than the old token-
+        // ratio estimate, whose generous floor clamped the trim and leaked seconds
+        // of reference echo.
         let trimmedWaveform: [Float]
         if trimReference {
-            let refTokenCount = tokenizer.encode(referenceText).count
             let targetTokenCount = tokenizer.encode(text).count
-            trimmedWaveform = Qwen3TTSModel.trimICLReferenceByTokenRatio(
+            let refFrames = refCodes.dim(2)
+            trimmedWaveform = Qwen3TTSModel.trimICLReferenceByFrames(
                 waveform,
-                referenceTokenCount: refTokenCount,
-                targetTokenCount: targetTokenCount,
-                referenceAudio: referenceAudio,
-                referenceSampleRate: referenceSampleRate)
+                referenceFrames: refFrames,
+                targetTokenCount: targetTokenCount)
             let removed = waveform.count - trimmedWaveform.count
             if removed > 0 {
-                iclLog("  ICL: trimmed \(removed) reference samples (~\(String(format: "%.2f", Double(removed)/24000.0))s, refTok=\(refTokenCount) tgtTok=\(targetTokenCount)) from output start")
+                iclLog("  ICL: trimmed \(removed) reference samples (~\(String(format: "%.2f", Double(removed)/24000.0))s, refFrames=\(refFrames) tgtTok=\(targetTokenCount)) from output start")
             }
         } else {
             trimmedWaveform = waveform
@@ -226,67 +225,44 @@ extension Qwen3TTSModel {
 
     // MARK: - Reference echo trim
 
-    /// Drop the first ~refDuration samples from an ICL-synthesized waveform.
+    /// Trim the reference reproduction by its known codec-frame count.
     ///
-    /// The Qwen3-TTS ICL path produces codec for `[reference_text + target_text]`, so the
-    /// raw output begins with the model's regeneration of the reference audio. This helper
-    /// removes that prefix, assuming the regeneration roughly matches the reference duration
-    /// at 24 kHz. The estimate is heuristic — the model may regenerate the reference at a
-    /// slightly different speech rate than the source — so a short tail can remain.
+    /// ICL output is `[reference reproduction + target]`. The model re-speaks the
+    /// reference transcript at ~its original rate, so the reproduction occupies
+    /// about `referenceFrames` codec frames (1920 samples each at 24 kHz) — the
+    /// same length as the encoded reference, which we know exactly. That makes the
+    /// frame count a far better trim point than the old token-ratio estimate,
+    /// whose over-generous `6 frames/token` target floor clamped the trim and left
+    /// seconds of reference echo (the seed-ladder leak that failed the grader's
+    /// prefix check).
     ///
-    /// Returns `waveform` unchanged if the computed trim would empty it.
-    static func trimICLReferenceFromWaveform(
+    /// The reproduction length still varies run-to-run, so the trim is a best
+    /// estimate, not exact: a longer-than-encoded reproduction leaves a short tail
+    /// (a leading word or two), a shorter one risks clipping the target's first
+    /// word. Both are caught by the caller's ASR grader + seed ladder.
+    static func trimICLReferenceByFrames(
         _ waveform: [Float],
-        referenceAudio: [Float],
-        referenceSampleRate: Int
+        referenceFrames: Int,
+        targetTokenCount: Int
     ) -> [Float] {
-        let refSampleCount24k: Int = referenceSampleRate == 24000
-            ? referenceAudio.count
-            : Int((Double(referenceAudio.count) / Double(referenceSampleRate)) * 24000.0)
-        guard refSampleCount24k > 0, refSampleCount24k < waveform.count else {
-            return waveform
-        }
-        return Array(waveform.dropFirst(refSampleCount24k))
-    }
-
-    /// Trim the reference reproduction by text-token proportion.
-    ///
-    /// The model generates [ref_reproduction + target] for `numFrames` codec frames
-    /// totalling `waveform.count` samples. Token-count ratio approximates the
-    /// time-domain split: the ref portion is `refTokens / (refTokens + targetTokens)`
-    /// of the output. We add a small safety margin (1 codec frame = 1920 samples
-    /// at 24 kHz = 80 ms) to account for the model's transition between ref and
-    /// target. Falls back to the audio-sample-based heuristic if token counts
-    /// are unavailable (zero or nonsensical).
-    static func trimICLReferenceByTokenRatio(
-        _ waveform: [Float],
-        referenceTokenCount: Int,
-        targetTokenCount: Int,
-        referenceAudio: [Float],
-        referenceSampleRate: Int
-    ) -> [Float] {
-        let total = referenceTokenCount + targetTokenCount
-        guard referenceTokenCount > 0, targetTokenCount > 0, total > 0 else {
-            return trimICLReferenceFromWaveform(waveform,
-                referenceAudio: referenceAudio,
-                referenceSampleRate: referenceSampleRate)
-        }
-        // Token-proportion estimate of where the target audio begins.
-        let proportional = waveform.count * referenceTokenCount / total
-        // Safety margin: 10 codec frames (~800 ms) catches the trailing word
-        // of the reference reproduction (e.g. "Ruddering.", "of fellows.").
-        let margin = 1920 * 10
-        let estimate = proportional + margin
-
-        // Floor on the target audio that survives the trim: rough estimate of
-        // how much audio a `targetTokenCount`-long sentence should produce —
-        // 6 codec frames per BPE token at 12.5 fps ≈ 0.48 s per token. With
-        // the floor we never trim INTO the target, even when MLX-Metal jitter
-        // makes the model produce an unusually short output and the
-        // proportional estimate over-shoots.
-        let minTargetSamples = max(1920 * 6, targetTokenCount * 6 * 1920)
-        let maxTrim = waveform.count - minTargetSamples
-        let trim = min(estimate, max(0, maxTrim))
+        guard referenceFrames > 0 else { return waveform }
+        let samplesPerFrame = 1920
+        // ~ the reproduction length + 1 frame for the ref→target boundary word.
+        let estimate = (referenceFrames + 1) * samplesPerFrame
+        // Safety floor against pathological over-trim: if the reproduction came out
+        // much shorter than its encoded length, `estimate` would eat into the
+        // target, so cap the trim to keep at least this many target samples. The
+        // cap only binds when the reproduction is well under `referenceFrames`; in
+        // the normal regime the exact frame `estimate` governs. Keep it loose
+        // (~2 frames/token) so it stays a last-resort net and doesn't displace the
+        // known-frame estimate with a coarser token-length guess (a higher floor
+        // would bind in the common case and re-introduce reference-echo leak).
+        let minTarget = max(samplesPerFrame * 4, targetTokenCount * 2 * samplesPerFrame)
+        // When the whole take is shorter than the floor (a degenerate/repetitive
+        // generation), `trim` collapses to 0 and the untrimmed waveform — reference
+        // echo included — is returned for the grader to reject and the seed ladder
+        // to retry.
+        let trim = min(estimate, max(0, waveform.count - minTarget))
         guard trim > 0, trim < waveform.count else { return waveform }
         return Array(waveform.dropFirst(trim))
     }
@@ -349,12 +325,34 @@ extension Qwen3TTSModel {
         let codecEmbedICL = concatenated([codecBosEmbed, refCodecEmbed], axis: 1)  // [1, T_ref+1, D]
         let codecLens = codecEmbedICL.dim(1)
 
-        // 5. Non-streaming overlay: all text + codec_pad, then all codec + tts_pad
-        let codecPadEmbed = talker.embedCodec(
-            MLXArray([Int32(CodecTokens.codecPad)]).expandedDimensions(axis: 0))
-        let textWithCodecPad = textEmbedWithEos + broadcast(codecPadEmbed, to: [1, textLens, hiddenSize])
-        let codecWithTextPad = codecEmbedICL + broadcast(ttsPadEmbed, to: [1, codecLens, hiddenSize])
-        let iclInputEmbed = concatenated([textWithCodecPad, codecWithTextPad], axis: 1)
+        // 5. Streaming overlay — matches the qwen-tts reference default
+        // (generate_icl_prompt, non_streaming_mode=False). Align the text with the
+        // reference codec ELEMENT-WISE (sum) instead of concatenating them, and feed
+        // any text beyond the codec length as trailing.
+        //
+        // The model still re-speaks the reference before the target (the trim below
+        // is still required), but with this overlay the reproduction is ~ the
+        // reference's own frame count and far more consistent run-to-run, instead of
+        // the longer, highly variable reproduction the non-streaming layout (text
+        // block, then codec block) produced. That variability is what defeated the
+        // token-ratio trim and leaked seconds of reference echo into the output
+        // (failing the grader's prefix check → seed-ladder retries). With the
+        // overlay + frame-based trim, takes come out clean often enough that the
+        // seed ladder reliably lands a clean one, and ~30-40% fewer frames are
+        // generated per take.
+        let iclInputEmbed: MLXArray
+        let iclTrailing: MLXArray
+        if textLens > codecLens {
+            iclInputEmbed = textEmbedWithEos[0..., 0..<codecLens, 0...] + codecEmbedICL
+            iclTrailing = textEmbedWithEos[0..., codecLens..., 0...]
+        } else {
+            let padLen = codecLens - textLens
+            let paddedText = padLen > 0
+                ? concatenated([textEmbedWithEos, broadcast(ttsPadEmbed, to: [1, padLen, hiddenSize])], axis: 1)
+                : textEmbedWithEos
+            iclInputEmbed = paddedText + codecEmbedICL
+            iclTrailing = ttsPadEmbed
+        }
 
         // 6. Codec prefix. Two layouts (reference parity):
         //   With language id: [codec_think, codec_think_bos, lang_id, codec_think_eos, pad, bos]
@@ -413,7 +411,8 @@ extension Qwen3TTSModel {
         let inputEmbeds = concatenated(
             [roleEmbed, combinedPrefixOverlay, iclInputEmbed], axis: 1)
 
-        // Trailing text: tts_pad (single token, generation will stream text via codec overlay)
-        return (inputEmbeds, ttsPadEmbed, ttsPadEmbed)
+        // Trailing text: leftover target text (streaming) or tts_pad. The generation
+        // loop feeds this one token per step so the model produces the target codec.
+        return (inputEmbeds, iclTrailing, ttsPadEmbed)
     }
 }

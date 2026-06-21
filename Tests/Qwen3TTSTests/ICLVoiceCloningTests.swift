@@ -86,45 +86,60 @@ final class ICLVoiceCloningTests: XCTestCase {
 
     // MARK: - Reference echo trim (unit tests, no model load)
 
-    func testTrimICLReferenceFromWaveform_sameSampleRate() {
-        // Reference is 1s at 24 kHz, waveform is 3s at 24 kHz.
-        // Expect: 2s of audio left after trim.
-        let ref = [Float](repeating: 0.5, count: 24000)
-        let wave = [Float](repeating: 1.0, count: 72000)
-        let trimmed = Qwen3TTSModel.trimICLReferenceFromWaveform(
-            wave, referenceAudio: ref, referenceSampleRate: 24000)
-        XCTAssertEqual(trimmed.count, 48000, "Should drop the first 24000 samples")
-        XCTAssertEqual(trimmed.first, 1.0, "Remaining samples should be from the original waveform tail")
+    func testTrimICLReferenceByFrames_normalTrim() {
+        // Reproduction ≈ referenceFrames, target well above the floor: the exact
+        // frame estimate governs, dropping (referenceFrames + 1) frames.
+        let referenceFrames = 10
+        let wave = [Float](repeating: 1.0, count: 80 * 1920)
+        let trimmed = Qwen3TTSModel.trimICLReferenceByFrames(
+            wave, referenceFrames: referenceFrames, targetTokenCount: 10)
+        XCTAssertEqual(trimmed.count, wave.count - (referenceFrames + 1) * 1920,
+            "Should drop ~(referenceFrames + 1) frames when the floor is not binding")
+        XCTAssertEqual(trimmed.first, 1.0, "Remaining samples should be the waveform tail")
     }
 
-    func testTrimICLReferenceFromWaveform_resamplesReferenceDuration() {
-        // Reference is 22050 samples at 22050 Hz (= 1s). Waveform is 3s at 24 kHz.
-        // Expect: 24000 samples trimmed (1s at 24 kHz), 48000 left.
-        let ref = [Float](repeating: 0.5, count: 22050)
-        let wave = [Float](repeating: 1.0, count: 72000)
-        let trimmed = Qwen3TTSModel.trimICLReferenceFromWaveform(
-            wave, referenceAudio: ref, referenceSampleRate: 22050)
-        XCTAssertEqual(trimmed.count, 48000,
-            "Reference duration should be converted to 24 kHz before trimming")
-    }
-
-    func testTrimICLReferenceFromWaveform_skipsWhenReferenceLongerThanOutput() {
-        // Reference would consume the entire waveform — leave it alone rather than
-        // returning an empty buffer.
-        let ref = [Float](repeating: 0.5, count: 48000)
-        let wave = [Float](repeating: 1.0, count: 24000)
-        let trimmed = Qwen3TTSModel.trimICLReferenceFromWaveform(
-            wave, referenceAudio: ref, referenceSampleRate: 24000)
+    func testTrimICLReferenceByFrames_zeroFramesPassesThrough() {
+        let wave = [Float](repeating: 1.0, count: 60 * 1920)
+        let trimmed = Qwen3TTSModel.trimICLReferenceByFrames(
+            wave, referenceFrames: 0, targetTokenCount: 5)
         XCTAssertEqual(trimmed.count, wave.count,
-            "Should return the full waveform when refDuration >= waveform.count")
+            "referenceFrames == 0 should return the waveform unchanged")
     }
 
-    func testTrimICLReferenceFromWaveform_skipsOnEmptyReference() {
-        let wave = [Float](repeating: 1.0, count: 24000)
-        let trimmed = Qwen3TTSModel.trimICLReferenceFromWaveform(
-            wave, referenceAudio: [], referenceSampleRate: 24000)
+    func testTrimICLReferenceByFrames_subFloorPassesThrough() {
+        // Whole take shorter than the target floor (degenerate generation): trim
+        // collapses to 0 and the untrimmed waveform is returned for the grader.
+        let minTarget = 10 * 2 * 1920  // targetTokenCount 10 → 20-frame floor
+        let wave = [Float](repeating: 1.0, count: minTarget - 1920)
+        let trimmed = Qwen3TTSModel.trimICLReferenceByFrames(
+            wave, referenceFrames: 10, targetTokenCount: 10)
         XCTAssertEqual(trimmed.count, wave.count,
-            "Empty reference should pass the waveform through unchanged")
+            "Output below the target floor should be returned untrimmed for the grader to reject")
+    }
+
+    func testTrimICLReferenceByFrames_floorClampsOverTrim() {
+        // Reproduction came out much shorter than referenceFrames, so the frame
+        // estimate would over-trim into the target — the floor caps the trim and
+        // preserves exactly minTarget samples of audio.
+        let referenceFrames = 100
+        let targetTokenCount = 5
+        let minTarget = max(4 * 1920, targetTokenCount * 2 * 1920)  // 19200
+        let wave = [Float](repeating: 1.0, count: 95 * 1920)
+        let trimmed = Qwen3TTSModel.trimICLReferenceByFrames(
+            wave, referenceFrames: referenceFrames, targetTokenCount: targetTokenCount)
+        XCTAssertEqual(trimmed.count, minTarget,
+            "Floor should cap the trim so at least minTarget target samples survive")
+    }
+
+    func testTrimICLReferenceByFrames_absoluteFloorForTinyTarget() {
+        // Tiny target (1 token): the 2-frames/token floor (3840) is below the
+        // absolute 4-frame floor (7680), so the absolute floor governs.
+        let referenceFrames = 100
+        let wave = [Float](repeating: 1.0, count: 90 * 1920)
+        let trimmed = Qwen3TTSModel.trimICLReferenceByFrames(
+            wave, referenceFrames: referenceFrames, targetTokenCount: 1)
+        XCTAssertEqual(trimmed.count, 4 * 1920,
+            "Absolute 4-frame floor should govern when the per-token floor is smaller")
     }
 }
 
