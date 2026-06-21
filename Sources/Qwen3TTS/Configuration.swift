@@ -278,9 +278,7 @@ public enum TTSModelVariant: String, CaseIterable, Sendable {
     case base = "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-8bit"
     case base17B8bit = "aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-8bit"
     case base17Bbf16 = "aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-bf16"
-    // TODO(int4-decommission): CustomVoice ships only as int4 — no 8bit/bf16
-    // bundle exists yet. Repoint once a non-int4 CustomVoice bundle is produced.
-    case customVoice = "aufklarer/Qwen3-TTS-12Hz-0.6B-CustomVoice-MLX-4bit"
+    case customVoice = "aufklarer/Qwen3-TTS-12Hz-0.6B-CustomVoice-MLX-bf16"
 }
 
 // MARK: - Combined TTS Config
@@ -306,9 +304,9 @@ public struct Qwen3TTSConfig: Codable, Sendable {
 
     /// Build config for a given model size and quantization. `bits == 0` selects bf16.
     ///
-    /// int4 is no longer a shipped TTS default, but the loader must still construct a
-    /// 4-bit config for the one surviving int4 TTS bundle (the 0.6B CustomVoice model),
-    /// so this respects any `bits` rather than routing int4 away.
+    /// int4 is no longer shipped for any TTS model. This still respects any `bits` —
+    /// the loader builds the config for whatever precision the model id reports — so a
+    /// 4-bit bundle (none ship today) would still load rather than being routed away.
     public static func config(for size: TTSModelSize, bits: Int) -> Qwen3TTSConfig {
         var talker: TalkerConfig = (size == .large) ? .large : TalkerConfig()
         var codePredictor: CodePredictorConfig = (size == .large) ? .large : CodePredictorConfig()
