@@ -164,7 +164,7 @@ docs/
     qwen3-asr-inference.md      Qwen3-ASR inference pipeline
     parakeet-asr-inference.md   Parakeet TDT inference (CoreML)
     qwen3-tts-inference.md      TTS inference pipeline
-    voxcpm2-inference.md        VoxCPM2 inference (48 kHz, --voxcpm2-variant bf16/int8/int4)
+    voxcpm2-inference.md        VoxCPM2 inference (48 kHz, --voxcpm2-variant bf16/int8)
     magpie-tts.md               Magpie-TTS Multilingual inference (CLI flags, languages, performance)
     magnet-music-gen.md         MAGNeT music generation CLI + tuning
     forced-aligner.md           Forced alignment pipeline

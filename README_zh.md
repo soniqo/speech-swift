@@ -30,10 +30,10 @@
 - **[Qwen3-ForcedAligner](https://soniqo.audio/zh/guides/align)** — 词级时间戳对齐（音频 + 文本 → 时间戳）
 - **[Qwen3-TTS](https://soniqo.audio/zh/guides/speak)** — 文本转语音（最高质量、流式输出、自定义说话人，10 种语言）
 - **[CosyVoice TTS](https://soniqo.audio/zh/guides/cosyvoice)** — 流式 TTS，支持声音克隆、多说话人对话、情感标签（9 种语言）
-- **[VoxCPM2](https://soniqo.audio/zh/speech-generation)** — 48 kHz 录音棚级 TTS，支持声音克隆与基于指令的声音设计（2B，MLX bf16/int8/int4，30 种语言）
+- **[VoxCPM2](https://soniqo.audio/zh/speech-generation)** — 48 kHz 录音棚级 TTS，支持声音克隆与基于指令的声音设计（2B，MLX bf16/int8，30 种语言）
 - **[Kokoro TTS](https://soniqo.audio/zh/guides/kokoro)** — 端侧 TTS（82M，CoreML/神经引擎，54 种音色，iOS 就绪，10 种语言）
 - **[VibeVoice TTS](https://soniqo.audio/zh/guides/vibevoice)** — 长篇 / 多说话人 TTS（Microsoft VibeVoice Realtime-0.5B + 1.5B，MLX，可合成最长 90 分钟的播客 / 有声书，英语 / 中文）
-- **[Magpie TTS](https://soniqo.audio/zh/guides/magpie)** — 多语言 TTS（NVIDIA Magpie-TTS Multilingual 357M，MLX INT4 247 MB / INT8 411 MB 或 CoreML INT8 342 MB，9 种语言，5 位预设说话人，MLX 端流式）
+- **[Magpie TTS](https://soniqo.audio/zh/guides/magpie)** — 多语言 TTS（NVIDIA Magpie-TTS Multilingual 357M，MLX INT8 411 MB 或 CoreML INT8 342 MB，9 种语言，5 位预设说话人，MLX 端流式）
 - **[Qwen3.5-Chat](https://soniqo.audio/zh/guides/chat)** — 端侧 LLM 对话（0.8B，MLX INT4 + CoreML INT8，DeltaNet 混合架构，流式 token）
 - **[FunctionGemma](https://soniqo.audio/zh/guides/function-calls)** — 端侧结构化函数 / 工具调用 LLM（Gemma 3 270M，CoreML 8 位调色板量化，Neural Engine，约 252 tok/s）
 - **[MADLAD-400](https://soniqo.audio/zh/guides/translate)** — 400+ 语言间的多对多翻译（3B，MLX INT4 + INT8，T5 v1.1，Apache 2.0）
@@ -41,7 +41,7 @@
 - **[PersonaPlex](https://soniqo.audio/zh/guides/respond)** — 全双工语音到语音（7B，音频输入 → 音频输出，18 种预设音色）
 - **[DeepFilterNet3](https://soniqo.audio/zh/guides/denoise)** — 实时噪声抑制（2.1M 参数，48 kHz）。超过 60 s 单次处理上限的长音频会自动分块并使用 crossfade 拼接 — 参见 `enhanceChunked(...)`
 - **[音源分离](https://soniqo.audio/zh/guides/separate)** — 通过 HTDemucs (Demucs v4) + Open-Unmix 进行音乐源分离（UMX-HQ / UMX-L，4 声轨：人声/鼓/贝斯/其他，44.1 kHz 立体声）
-- **[MAGNeT](https://soniqo.audio/zh/guides/compose)** — 文本到音乐生成（Meta MAGNeT Small 300M / Medium 1.5B，MLX INT4/INT8，30 秒片段 32 kHz 单声道，掩码并行解码）
+- **[MAGNeT](https://soniqo.audio/zh/guides/compose)** — 文本到音乐生成（Meta MAGNeT Small 300M / Medium 1.5B，MLX INT8，30 秒片段 32 kHz 单声道，掩码并行解码）
 - **[FlashSR](https://soniqo.audio/zh/guides/upsample)** — 音频超分辨率(FlashSR ICASSP 2025,MLX,48 kHz 单声道,1 步蒸馏扩散,INT4 363 MB / INT8 720 MB)
 - **[唤醒词](https://soniqo.audio/zh/guides/wake-word)** — 设备端关键词识别（KWS Zipformer 3M，CoreML，26× 实时，可配置关键词列表）
 - **[VAD](https://soniqo.audio/zh/guides/vad)** — 语音活动检测（Silero 流式、Pyannote 离线、FireRedVAD 100+ 种语言）
@@ -133,11 +133,11 @@ struct DictateView: View {
 | [Qwen3-ForcedAligner](https://soniqo.audio/zh/guides/align) | 音频 + 文本 → 时间戳 | MLX、CoreML | 0.6B | 多语言 |
 | [Qwen3-TTS](https://soniqo.audio/zh/guides/speak) | 文本 → 语音 | MLX、CoreML | 0.6B、1.7B | 10 |
 | [CosyVoice3](https://soniqo.audio/zh/guides/cosyvoice) | 文本 → 语音 | MLX | 0.5B | 9 |
-| [VoxCPM2](https://soniqo.audio/zh/speech-generation) | 文本 → 语音 (48 kHz, 声音设计 + 克隆) | MLX | 2B (bf16/int8/int4) | 30 |
+| [VoxCPM2](https://soniqo.audio/zh/speech-generation) | 文本 → 语音 (48 kHz, 声音设计 + 克隆) | MLX | 2B (bf16/int8) | 30 |
 | [Kokoro-82M](https://soniqo.audio/zh/guides/kokoro) | 文本 → 语音 | CoreML (ANE) | 82M | 10 |
 | [VibeVoice Realtime-0.5B](https://soniqo.audio/zh/guides/vibevoice) | 文本 → 语音（长篇、多说话人） | MLX | 0.5B | EN/ZH |
 | [VibeVoice 1.5B](https://soniqo.audio/zh/guides/vibevoice) | 文本 → 语音（最长 90 分钟播客） | MLX | 1.5B | EN/ZH |
-| [Magpie-TTS Multilingual](https://soniqo.audio/zh/guides/magpie) | 文本 → 语音（5 位预设说话人，流式） | MLX / CoreML | 357M (MLX INT4/INT8, CoreML INT8) | 9（CoreML 不含日语） |
+| [Magpie-TTS Multilingual](https://soniqo.audio/zh/guides/magpie) | 文本 → 语音（5 位预设说话人，流式） | MLX / CoreML | 357M (MLX INT8, CoreML INT8) | 9（CoreML 不含日语） |
 | [Qwen3.5-Chat](https://soniqo.audio/zh/guides/chat) | 文本 → 文本（LLM） | MLX、CoreML | 0.8B | 多语言 |
 | [FunctionGemma](https://soniqo.audio/zh/guides/function-calls) | 文本 → 工具调用（LLM） | CoreML | 270M | 主英语 |
 | [MADLAD-400](https://soniqo.audio/zh/guides/translate) | 文本 → 文本（翻译） | MLX | 3B | **400+** |

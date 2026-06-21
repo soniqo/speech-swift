@@ -30,10 +30,10 @@
 - **[Qwen3-ForcedAligner](https://soniqo.audio/ru/guides/align)** — Выравнивание временных меток на уровне слов (аудио + текст → временные метки)
 - **[Qwen3-TTS](https://soniqo.audio/ru/guides/speak)** — Синтез речи (наивысшее качество, потоковый режим, пользовательские голоса, 10 языков)
 - **[CosyVoice TTS](https://soniqo.audio/ru/guides/cosyvoice)** — Потоковый синтез речи с клонированием голоса, многоголосым диалогом, тегами эмоций (9 языков)
-- **[VoxCPM2](https://soniqo.audio/ru/speech-generation)** — TTS студийного качества 48 кГц с клонированием голоса и описанием голоса инструкцией (2B, MLX bf16/int8/int4, 30 языков)
+- **[VoxCPM2](https://soniqo.audio/ru/speech-generation)** — TTS студийного качества 48 кГц с клонированием голоса и описанием голоса инструкцией (2B, MLX bf16/int8, 30 языков)
 - **[Kokoro TTS](https://soniqo.audio/ru/guides/kokoro)** — Синтез речи на устройстве (82M, CoreML/Neural Engine, 54 голоса, готов для iOS, 10 языков)
 - **[VibeVoice TTS](https://soniqo.audio/ru/guides/vibevoice)** — Длинный формат / многоголосый TTS (Microsoft VibeVoice Realtime-0.5B + 1.5B, MLX, синтез подкастов/аудиокниг до 90 минут, EN/ZH)
-- **[Magpie TTS](https://soniqo.audio/ru/guides/magpie)** — Многоязычный TTS (NVIDIA Magpie-TTS Multilingual 357M, MLX INT4 247 МБ / INT8 411 МБ или CoreML INT8 342 МБ, 9 языков, 5 встроенных голосов, стриминг на MLX)
+- **[Magpie TTS](https://soniqo.audio/ru/guides/magpie)** — Многоязычный TTS (NVIDIA Magpie-TTS Multilingual 357M, MLX INT8 411 МБ или CoreML INT8 342 МБ, 9 языков, 5 встроенных голосов, стриминг на MLX)
 - **[Qwen3.5-Chat](https://soniqo.audio/ru/guides/chat)** — Локальный чат на базе LLM (0.8B, MLX INT4 + CoreML INT8, гибрид DeltaNet, потоковая генерация токенов)
 - **[FunctionGemma](https://soniqo.audio/ru/guides/function-calls)** — Локальный LLM для структурированных вызовов функций / инструментов (Gemma 3 270M, CoreML 8-битная палитризация, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/ru/guides/translate)** — Многоязычный перевод между 400+ языками (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
@@ -41,7 +41,7 @@
 - **[PersonaPlex](https://soniqo.audio/ru/guides/respond)** — Полнодуплексная генерация речи из речи (7B, аудио на входе → аудио на выходе, 18 голосовых пресетов)
 - **[DeepFilterNet3](https://soniqo.audio/ru/guides/denoise)** — Подавление шума в реальном времени (2.1M параметров, 48 кГц). Длинное аудио, превышающее лимит одиночного прохода в 60 s, автоматически разбивается на чанки с crossfade — см. `enhanceChunked(...)`
 - **[Разделение источников](https://soniqo.audio/ru/guides/separate)** — Разделение музыкальных источников через HTDemucs (Demucs v4) + Open-Unmix (UMX-HQ / UMX-L, 4 стема: вокал/ударные/бас/остальное, 44,1 кГц стерео)
-- **[MAGNeT](https://soniqo.audio/ru/guides/compose)** — Генерация музыки по тексту (Meta MAGNeT Small 300M / Medium 1.5B, MLX INT4/INT8, 30-секундные клипы 32 кГц моно, маскированное параллельное декодирование)
+- **[MAGNeT](https://soniqo.audio/ru/guides/compose)** — Генерация музыки по тексту (Meta MAGNeT Small 300M / Medium 1.5B, MLX INT8, 30-секундные клипы 32 кГц моно, маскированное параллельное декодирование)
 - **[FlashSR](https://soniqo.audio/ru/guides/upsample)** — Аудио супер-разрешение (FlashSR ICASSP 2025, MLX, 48 кГц моно, дистиллированная диффузия за 1 шаг, INT4 363 МБ / INT8 720 МБ)
 - **[Активационное слово](https://soniqo.audio/ru/guides/wake-word)** — Локальное распознавание ключевых слов (KWS Zipformer 3M, CoreML, 26× реального времени, настраиваемый список ключевых слов)
 - **[VAD](https://soniqo.audio/ru/guides/vad)** — Обнаружение голосовой активности (Silero потоковый, Pyannote офлайн, FireRedVAD 100+ языков)
@@ -133,11 +133,11 @@ struct DictateView: View {
 | [Qwen3-ForcedAligner](https://soniqo.audio/ru/guides/align) | Аудио + Текст → Метки | MLX, CoreML | 0.6B | Многоязычный |
 | [Qwen3-TTS](https://soniqo.audio/ru/guides/speak) | Текст → Речь | MLX, CoreML | 0.6B, 1.7B | 10 |
 | [CosyVoice3](https://soniqo.audio/ru/guides/cosyvoice) | Текст → Речь | MLX | 0.5B | 9 |
-| [VoxCPM2](https://soniqo.audio/ru/speech-generation) | Текст → Речь (48 кГц, описание голоса + клонирование) | MLX | 2B (bf16/int8/int4) | 30 |
+| [VoxCPM2](https://soniqo.audio/ru/speech-generation) | Текст → Речь (48 кГц, описание голоса + клонирование) | MLX | 2B (bf16/int8) | 30 |
 | [Kokoro-82M](https://soniqo.audio/ru/guides/kokoro) | Текст → Речь | CoreML (ANE) | 82M | 10 |
 | [VibeVoice Realtime-0.5B](https://soniqo.audio/ru/guides/vibevoice) | Текст → Речь (длинный формат, многоголосый) | MLX | 0.5B | EN/ZH |
 | [VibeVoice 1.5B](https://soniqo.audio/ru/guides/vibevoice) | Текст → Речь (подкаст до 90 минут) | MLX | 1.5B | EN/ZH |
-| [Magpie-TTS Multilingual](https://soniqo.audio/ru/guides/magpie) | Текст → Речь (5 встроенных голосов, стриминг) | MLX / CoreML | 357M (MLX INT4/INT8, CoreML INT8) | 9 (CoreML без JA) |
+| [Magpie-TTS Multilingual](https://soniqo.audio/ru/guides/magpie) | Текст → Речь (5 встроенных голосов, стриминг) | MLX / CoreML | 357M (MLX INT8, CoreML INT8) | 9 (CoreML без JA) |
 | [Qwen3.5-Chat](https://soniqo.audio/ru/guides/chat) | Текст → Текст (LLM) | MLX, CoreML | 0.8B | Многоязычный |
 | [FunctionGemma](https://soniqo.audio/ru/guides/function-calls) | Текст → Вызовы инструментов (LLM) | CoreML | 270M | EN |
 | [MADLAD-400](https://soniqo.audio/ru/guides/translate) | Текст → Текст (Перевод) | MLX | 3B | **400+** |

@@ -30,10 +30,10 @@ Nhận dạng, tổng hợp và hiểu giọng nói trên thiết bị cho Mac v
 - **[Qwen3-ForcedAligner](https://soniqo.audio/guides/align)** — Căn chỉnh dấu thời gian theo cấp độ từ (audio + văn bản → dấu thời gian)
 - **[Qwen3-TTS](https://soniqo.audio/guides/speak)** — Tổng hợp giọng nói (chất lượng cao nhất, streaming, người nói tùy chỉnh, 10 ngôn ngữ)
 - **[CosyVoice TTS](https://soniqo.audio/guides/cosyvoice)** — TTS streaming với nhân bản giọng nói, hội thoại nhiều người nói, thẻ cảm xúc (9 ngôn ngữ)
-- **[VoxCPM2](https://soniqo.audio/speech-generation)** — TTS chất lượng phòng thu 48 kHz với nhân bản giọng nói + thiết kế giọng nói theo chỉ dẫn (2B, MLX bf16/int8/int4, 30 ngôn ngữ)
+- **[VoxCPM2](https://soniqo.audio/speech-generation)** — TTS chất lượng phòng thu 48 kHz với nhân bản giọng nói + thiết kế giọng nói theo chỉ dẫn (2B, MLX bf16/int8, 30 ngôn ngữ)
 - **[Kokoro TTS](https://soniqo.audio/guides/kokoro)** — TTS trên thiết bị (82M, CoreML/Neural Engine, 54 giọng, sẵn sàng cho iOS, 10 ngôn ngữ)
 - **[VibeVoice TTS](https://soniqo.audio/guides/vibevoice)** — TTS định dạng dài / nhiều người nói (Microsoft VibeVoice Realtime-0.5B + 1.5B, MLX, tổng hợp podcast/sách nói lên đến 90 phút, EN/ZH)
-- **[Magpie TTS](https://soniqo.audio/guides/magpie)** — TTS đa ngôn ngữ (NVIDIA Magpie-TTS Multilingual 357M, MLX INT4 247 MB / INT8 411 MB hoặc CoreML INT8 342 MB, 9 ngôn ngữ, 5 giọng nói có sẵn, streaming trên MLX)
+- **[Magpie TTS](https://soniqo.audio/guides/magpie)** — TTS đa ngôn ngữ (NVIDIA Magpie-TTS Multilingual 357M, MLX INT8 411 MB hoặc CoreML INT8 342 MB, 9 ngôn ngữ, 5 giọng nói có sẵn, streaming trên MLX)
 - **[Qwen3.5-Chat](https://soniqo.audio/guides/chat)** — Chat LLM trên thiết bị (0.8B, MLX INT4 + CoreML INT8, DeltaNet hybrid, token streaming)
 - **[FunctionGemma](https://soniqo.audio/guides/function-calls)** — LLM trên thiết bị cho các lệnh gọi hàm / công cụ có cấu trúc (Gemma 3 270M, CoreML palette hóa 8-bit, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/guides/translate)** — Dịch nhiều-sang-nhiều giữa hơn 400 ngôn ngữ (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
@@ -41,7 +41,7 @@ Nhận dạng, tổng hợp và hiểu giọng nói trên thiết bị cho Mac v
 - **[PersonaPlex](https://soniqo.audio/guides/respond)** — Giọng nói sang giọng nói full-duplex (7B, audio vào → audio ra, 18 preset giọng nói)
 - **[DeepFilterNet3](https://soniqo.audio/guides/denoise)** — Khử nhiễu thời gian thực (2.1M tham số, 48 kHz)
 - **[Tách nguồn](https://soniqo.audio/guides/separate)** — Tách nguồn âm thanh nhạc qua HTDemucs (Demucs v4) + Open-Unmix (UMX-HQ / UMX-L, 4 stem: giọng hát/trống/bass/khác, 44,1 kHz stereo)
-- **[MAGNeT](https://soniqo.audio/guides/compose)** — Tạo nhạc từ văn bản (Meta MAGNeT Small 300M / Medium 1.5B, MLX INT4/INT8, đoạn 30 giây ở 32 kHz mono, giải mã song song có mặt nạ)
+- **[MAGNeT](https://soniqo.audio/guides/compose)** — Tạo nhạc từ văn bản (Meta MAGNeT Small 300M / Medium 1.5B, MLX INT8, đoạn 30 giây ở 32 kHz mono, giải mã song song có mặt nạ)
 - **[FlashSR](https://soniqo.audio/guides/upsample)** — Siêu phân giải âm thanh (FlashSR ICASSP 2025, MLX, 48 kHz mono, diffusion chưng cất 1 bước, INT4 363 MB / INT8 720 MB)
 - **[Từ kích hoạt](https://soniqo.audio/guides/wake-word)** — Phát hiện từ khóa trên thiết bị (KWS Zipformer 3M, CoreML, 26× thời gian thực, danh sách từ khóa có thể cấu hình)
 - **[VAD](https://soniqo.audio/guides/vad)** — Phát hiện hoạt động giọng nói (Silero streaming, Pyannote ngoại tuyến, FireRedVAD hơn 100 ngôn ngữ)
@@ -133,11 +133,11 @@ Xem tổng quan gọn bên dưới. **[Danh mục mô hình đầy đủ với k
 | [Qwen3-ForcedAligner](https://soniqo.audio/guides/align) | Audio + Văn bản → Dấu thời gian | MLX, CoreML | 0.6B | Đa ngôn ngữ |
 | [Qwen3-TTS](https://soniqo.audio/guides/speak) | Văn bản → Giọng nói | MLX, CoreML | 0.6B, 1.7B | 10 |
 | [CosyVoice3](https://soniqo.audio/guides/cosyvoice) | Văn bản → Giọng nói | MLX | 0.5B | 9 |
-| [VoxCPM2](https://soniqo.audio/speech-generation) | Văn bản → Giọng nói (48 kHz, thiết kế giọng + nhân bản) | MLX | 2B (bf16/int8/int4) | 30 |
+| [VoxCPM2](https://soniqo.audio/speech-generation) | Văn bản → Giọng nói (48 kHz, thiết kế giọng + nhân bản) | MLX | 2B (bf16/int8) | 30 |
 | [Kokoro-82M](https://soniqo.audio/guides/kokoro) | Văn bản → Giọng nói | CoreML (ANE) | 82M | 10 |
 | [VibeVoice Realtime-0.5B](https://soniqo.audio/guides/vibevoice) | Văn bản → Giọng nói (định dạng dài, nhiều người nói) | MLX | 0.5B | EN/ZH |
 | [VibeVoice 1.5B](https://soniqo.audio/guides/vibevoice) | Văn bản → Giọng nói (podcast đến 90 phút) | MLX | 1.5B | EN/ZH |
-| [Magpie-TTS Multilingual](https://soniqo.audio/guides/magpie) | Văn bản → Giọng nói (5 giọng có sẵn, streaming) | MLX / CoreML | 357M (MLX INT4/INT8, CoreML INT8) | 9 (CoreML loại trừ JA) |
+| [Magpie-TTS Multilingual](https://soniqo.audio/guides/magpie) | Văn bản → Giọng nói (5 giọng có sẵn, streaming) | MLX / CoreML | 357M (MLX INT8, CoreML INT8) | 9 (CoreML loại trừ JA) |
 | [Qwen3.5-Chat](https://soniqo.audio/guides/chat) | Văn bản → Văn bản (LLM) | MLX, CoreML | 0.8B | Đa ngôn ngữ |
 | [FunctionGemma](https://soniqo.audio/guides/function-calls) | Văn bản → Lệnh gọi công cụ (LLM) | CoreML | 270M | EN |
 | [MADLAD-400](https://soniqo.audio/guides/translate) | Văn bản → Văn bản (Dịch) | MLX | 3B | **400+** |

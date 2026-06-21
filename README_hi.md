@@ -30,10 +30,10 @@ Mac और iOS के लिए ऑन-डिवाइस स्पीच रि
 - **[Qwen3-ForcedAligner](https://soniqo.audio/hi/guides/align)** — शब्द-स्तरीय टाइमस्टैम्प अलाइनमेंट (ऑडियो + टेक्स्ट → टाइमस्टैम्प)
 - **[Qwen3-TTS](https://soniqo.audio/hi/guides/speak)** — टेक्स्ट-टू-स्पीच (सर्वोच्च गुणवत्ता, स्ट्रीमिंग, कस्टम स्पीकर, 10 भाषाएँ)
 - **[CosyVoice TTS](https://soniqo.audio/hi/guides/cosyvoice)** — वॉयस क्लोनिंग, मल्टी-स्पीकर डायलॉग, इमोशन टैग के साथ स्ट्रीमिंग TTS (9 भाषाएँ)
-- **[VoxCPM2](https://soniqo.audio/hi/speech-generation)** — वॉयस क्लोनिंग + निर्देश-आधारित वॉयस डिज़ाइन के साथ 48 kHz स्टूडियो-गुणवत्ता TTS (2B, MLX bf16/int8/int4, 30 भाषाएँ)
+- **[VoxCPM2](https://soniqo.audio/hi/speech-generation)** — वॉयस क्लोनिंग + निर्देश-आधारित वॉयस डिज़ाइन के साथ 48 kHz स्टूडियो-गुणवत्ता TTS (2B, MLX bf16/int8, 30 भाषाएँ)
 - **[Kokoro TTS](https://soniqo.audio/hi/guides/kokoro)** — ऑन-डिवाइस TTS (82M, CoreML/Neural Engine, 54 वॉयस, iOS-ready, 10 भाषाएँ)
 - **[VibeVoice TTS](https://soniqo.audio/hi/guides/vibevoice)** — लंबे-रूप / बहु-वक्ता TTS (Microsoft VibeVoice Realtime-0.5B + 1.5B, MLX, 90 मिनट तक के पॉडकास्ट / ऑडियोबुक संश्लेषण, EN/ZH)
-- **[Magpie TTS](https://soniqo.audio/hi/guides/magpie)** — बहुभाषी TTS (NVIDIA Magpie-TTS Multilingual 357M, MLX INT4 247 MB / INT8 411 MB या CoreML INT8 342 MB, 9 भाषाएँ, 5 पूर्व-निर्धारित वक्ता, MLX पर स्ट्रीमिंग)
+- **[Magpie TTS](https://soniqo.audio/hi/guides/magpie)** — बहुभाषी TTS (NVIDIA Magpie-TTS Multilingual 357M, MLX INT8 411 MB या CoreML INT8 342 MB, 9 भाषाएँ, 5 पूर्व-निर्धारित वक्ता, MLX पर स्ट्रीमिंग)
 - **[Qwen3.5-Chat](https://soniqo.audio/hi/guides/chat)** — ऑन-डिवाइस LLM चैट (0.8B, MLX INT4 + CoreML INT8, DeltaNet हाइब्रिड, स्ट्रीमिंग टोकन)
 - **[FunctionGemma](https://soniqo.audio/hi/guides/function-calls)** — संरचित फ़ंक्शन / टूल कॉल के लिए ऑन-डिवाइस LLM (Gemma 3 270M, CoreML 8-बिट पैलेटाइज़, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/hi/guides/translate)** — 400+ भाषाओं में बहु-दिशात्मक अनुवाद (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
@@ -41,7 +41,7 @@ Mac और iOS के लिए ऑन-डिवाइस स्पीच रि
 - **[PersonaPlex](https://soniqo.audio/hi/guides/respond)** — फुल-डुप्लेक्स स्पीच-टू-स्पीच (7B, ऑडियो इन → ऑडियो आउट, 18 वॉयस प्रीसेट)
 - **[DeepFilterNet3](https://soniqo.audio/hi/guides/denoise)** — रियल-टाइम नॉइज़ सप्रेशन (2.1M params, 48 kHz)। 60 s सिंगल-शॉट सीमा से अधिक लंबे ऑडियो को crossfade के साथ स्वतः चंक किया जाता है — `enhanceChunked(...)` देखें
 - **[सोर्स सेपरेशन](https://soniqo.audio/hi/guides/separate)** — HTDemucs (Demucs v4) + Open-Unmix के ज़रिए म्यूज़िक सोर्स सेपरेशन (UMX-HQ / UMX-L, 4 स्टेम: वोकल/ड्रम्स/बेस/अन्य, 44.1 kHz स्टीरियो)
-- **[MAGNeT](https://soniqo.audio/hi/guides/compose)** — टेक्स्ट से संगीत निर्माण (Meta MAGNeT Small 300M / Medium 1.5B, MLX INT4/INT8, 30 सेकंड क्लिप 32 kHz मोनो, मास्क्ड पैरलल डिकोडिंग)
+- **[MAGNeT](https://soniqo.audio/hi/guides/compose)** — टेक्स्ट से संगीत निर्माण (Meta MAGNeT Small 300M / Medium 1.5B, MLX INT8, 30 सेकंड क्लिप 32 kHz मोनो, मास्क्ड पैरलल डिकोडिंग)
 - **[FlashSR](https://soniqo.audio/hi/guides/upsample)** — ऑडियो सुपर-रेज़ोल्यूशन (FlashSR ICASSP 2025, MLX, 48 kHz मोनो, 1-स्टेप डिस्टिल्ड डिफ्यूज़न, INT4 363 MB / INT8 720 MB)
 - **[वेक-वर्ड](https://soniqo.audio/hi/guides/wake-word)** — ऑन-डिवाइस कीवर्ड स्पॉटिंग (KWS Zipformer 3M, CoreML, 26× रियल-टाइम, कॉन्फ़िगरेबल कीवर्ड सूची)
 - **[VAD](https://soniqo.audio/hi/guides/vad)** — वॉयस एक्टिविटी डिटेक्शन (Silero स्ट्रीमिंग, Pyannote ऑफ़लाइन, FireRedVAD 100+ भाषाएँ)
@@ -133,11 +133,11 @@ struct DictateView: View {
 | [Qwen3-ForcedAligner](https://soniqo.audio/hi/guides/align) | ऑडियो + टेक्स्ट → टाइमस्टैम्प | MLX, CoreML | 0.6B | बहुभाषी |
 | [Qwen3-TTS](https://soniqo.audio/hi/guides/speak) | टेक्स्ट → स्पीच | MLX, CoreML | 0.6B, 1.7B | 10 |
 | [CosyVoice3](https://soniqo.audio/hi/guides/cosyvoice) | टेक्स्ट → स्पीच | MLX | 0.5B | 9 |
-| [VoxCPM2](https://soniqo.audio/hi/speech-generation) | टेक्स्ट → स्पीच (48 kHz, वॉयस डिज़ाइन + क्लोनिंग) | MLX | 2B (bf16/int8/int4) | 30 |
+| [VoxCPM2](https://soniqo.audio/hi/speech-generation) | टेक्स्ट → स्पीच (48 kHz, वॉयस डिज़ाइन + क्लोनिंग) | MLX | 2B (bf16/int8) | 30 |
 | [Kokoro-82M](https://soniqo.audio/hi/guides/kokoro) | टेक्स्ट → स्पीच | CoreML (ANE) | 82M | 10 |
 | [VibeVoice Realtime-0.5B](https://soniqo.audio/hi/guides/vibevoice) | टेक्स्ट → स्पीच (लंबे-रूप, बहु-वक्ता) | MLX | 0.5B | EN/ZH |
 | [VibeVoice 1.5B](https://soniqo.audio/hi/guides/vibevoice) | टेक्स्ट → स्पीच (90 मिनट तक पॉडकास्ट) | MLX | 1.5B | EN/ZH |
-| [Magpie-TTS Multilingual](https://soniqo.audio/hi/guides/magpie) | टेक्स्ट → वाक् (5 पूर्व-निर्धारित वक्ता, स्ट्रीमिंग) | MLX / CoreML | 357M (MLX INT4/INT8, CoreML INT8) | 9 (CoreML में JA नहीं) |
+| [Magpie-TTS Multilingual](https://soniqo.audio/hi/guides/magpie) | टेक्स्ट → वाक् (5 पूर्व-निर्धारित वक्ता, स्ट्रीमिंग) | MLX / CoreML | 357M (MLX INT8, CoreML INT8) | 9 (CoreML में JA नहीं) |
 | [Qwen3.5-Chat](https://soniqo.audio/hi/guides/chat) | टेक्स्ट → टेक्स्ट (LLM) | MLX, CoreML | 0.8B | बहुभाषी |
 | [FunctionGemma](https://soniqo.audio/hi/guides/function-calls) | टेक्स्ट → टूल कॉल (LLM) | CoreML | 270M | EN |
 | [MADLAD-400](https://soniqo.audio/hi/guides/translate) | टेक्स्ट → टेक्स्ट (अनुवाद) | MLX | 3B | **400+** |

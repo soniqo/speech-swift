@@ -30,10 +30,10 @@
 - **[Qwen3-ForcedAligner](https://soniqo.audio/guides/align)** — การจัดเรียงเครื่องหมายเวลาในระดับคำ (เสียง + ข้อความ → เครื่องหมายเวลา)
 - **[Qwen3-TTS](https://soniqo.audio/guides/speak)** — การสังเคราะห์เสียงพูด (คุณภาพสูงสุด สตรีมมิ่ง ผู้พูดที่กำหนดเอง 10 ภาษา)
 - **[CosyVoice TTS](https://soniqo.audio/guides/cosyvoice)** — TTS แบบสตรีมมิ่งพร้อมการโคลนเสียง บทสนทนาหลายผู้พูด และแท็กอารมณ์ (9 ภาษา)
-- **[VoxCPM2](https://soniqo.audio/speech-generation)** — TTS คุณภาพระดับสตูดิโอที่ 48 kHz พร้อมการโคลนเสียง + การออกแบบเสียงผ่านคำสั่ง (2B, MLX bf16/int8/int4, 30 ภาษา)
+- **[VoxCPM2](https://soniqo.audio/speech-generation)** — TTS คุณภาพระดับสตูดิโอที่ 48 kHz พร้อมการโคลนเสียง + การออกแบบเสียงผ่านคำสั่ง (2B, MLX bf16/int8, 30 ภาษา)
 - **[Kokoro TTS](https://soniqo.audio/guides/kokoro)** — TTS บนอุปกรณ์ (82M, CoreML/Neural Engine, 54 เสียง พร้อมใช้งานบน iOS, 10 ภาษา)
 - **[VibeVoice TTS](https://soniqo.audio/guides/vibevoice)** — TTS แบบยาว / หลายผู้พูด (Microsoft VibeVoice Realtime-0.5B + 1.5B, MLX สังเคราะห์พอดแคสต์/หนังสือเสียงได้นานสูงสุด 90 นาที, EN/ZH)
-- **[Magpie TTS](https://soniqo.audio/guides/magpie)** — TTS หลายภาษา (NVIDIA Magpie-TTS Multilingual 357M, MLX INT4 247 MB / INT8 411 MB หรือ CoreML INT8 342 MB, 9 ภาษา, 5 ผู้พูดสำเร็จรูป สตรีมมิ่งบน MLX)
+- **[Magpie TTS](https://soniqo.audio/guides/magpie)** — TTS หลายภาษา (NVIDIA Magpie-TTS Multilingual 357M, MLX INT8 411 MB หรือ CoreML INT8 342 MB, 9 ภาษา, 5 ผู้พูดสำเร็จรูป สตรีมมิ่งบน MLX)
 - **[Qwen3.5-Chat](https://soniqo.audio/guides/chat)** — แชท LLM บนอุปกรณ์ (0.8B, MLX INT4 + CoreML INT8, DeltaNet ไฮบริด สตรีมมิ่งโทเค็น)
 - **[FunctionGemma](https://soniqo.audio/guides/function-calls)** — LLM บนอุปกรณ์สำหรับการเรียกฟังก์ชัน / เครื่องมือแบบมีโครงสร้าง (Gemma 3 270M, CoreML 8-bit palettize, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/guides/translate)** — การแปลแบบหลายต่อหลายระหว่างกว่า 400 ภาษา (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
@@ -41,7 +41,7 @@
 - **[PersonaPlex](https://soniqo.audio/guides/respond)** — เสียงพูดสู่เสียงพูดแบบ full-duplex (7B, เสียงเข้า → เสียงออก, 18 พรีเซ็ตเสียง)
 - **[DeepFilterNet3](https://soniqo.audio/guides/denoise)** — การลดเสียงรบกวนแบบเรียลไทม์ (2.1M พารามิเตอร์, 48 kHz)
 - **[Source Separation](https://soniqo.audio/guides/separate)** — การแยกแหล่งกำเนิดดนตรีด้วย HTDemucs (Demucs v4) + Open-Unmix (UMX-HQ / UMX-L, 4 stems: เสียงร้อง/กลอง/เบส/อื่นๆ, 44.1 kHz สเตอริโอ)
-- **[MAGNeT](https://soniqo.audio/guides/compose)** — การสร้างดนตรีจากข้อความ (Meta MAGNeT Small 300M / Medium 1.5B, MLX INT4/INT8, คลิป 30 วินาทีที่ 32 kHz โมโน, การถอดรหัสแบบขนานที่มีการมาสก์)
+- **[MAGNeT](https://soniqo.audio/guides/compose)** — การสร้างดนตรีจากข้อความ (Meta MAGNeT Small 300M / Medium 1.5B, MLX INT8, คลิป 30 วินาทีที่ 32 kHz โมโน, การถอดรหัสแบบขนานที่มีการมาสก์)
 - **[FlashSR](https://soniqo.audio/guides/upsample)** — การเพิ่มความละเอียดเสียง (FlashSR ICASSP 2025, MLX, 48 kHz โมโน, diffusion แบบกลั่นใน 1 ขั้น, INT4 363 MB / INT8 720 MB)
 - **[Wake-word](https://soniqo.audio/guides/wake-word)** — การตรวจจับคำสั่งปลุกบนอุปกรณ์ (KWS Zipformer 3M, CoreML, เร็วกว่าเรียลไทม์ 26 เท่า, รายการคำสั่งปลุกปรับแต่งได้)
 - **[VAD](https://soniqo.audio/guides/vad)** — การตรวจจับเสียงพูด (Silero streaming, Pyannote offline, FireRedVAD รองรับกว่า 100 ภาษา)
@@ -133,11 +133,11 @@ struct DictateView: View {
 | [Qwen3-ForcedAligner](https://soniqo.audio/guides/align) | เสียง + ข้อความ → เครื่องหมายเวลา | MLX, CoreML | 0.6B | หลายภาษา |
 | [Qwen3-TTS](https://soniqo.audio/guides/speak) | ข้อความ → เสียงพูด | MLX, CoreML | 0.6B, 1.7B | 10 |
 | [CosyVoice3](https://soniqo.audio/guides/cosyvoice) | ข้อความ → เสียงพูด | MLX | 0.5B | 9 |
-| [VoxCPM2](https://soniqo.audio/speech-generation) | ข้อความ → เสียงพูด (48 kHz, ออกแบบเสียง + โคลนเสียง) | MLX | 2B (bf16/int8/int4) | 30 |
+| [VoxCPM2](https://soniqo.audio/speech-generation) | ข้อความ → เสียงพูด (48 kHz, ออกแบบเสียง + โคลนเสียง) | MLX | 2B (bf16/int8) | 30 |
 | [Kokoro-82M](https://soniqo.audio/guides/kokoro) | ข้อความ → เสียงพูด | CoreML (ANE) | 82M | 10 |
 | [VibeVoice Realtime-0.5B](https://soniqo.audio/guides/vibevoice) | ข้อความ → เสียงพูด (รูปแบบยาว หลายผู้พูด) | MLX | 0.5B | EN/ZH |
 | [VibeVoice 1.5B](https://soniqo.audio/guides/vibevoice) | ข้อความ → เสียงพูด (พอดแคสต์ยาวสุด 90 นาที) | MLX | 1.5B | EN/ZH |
-| [Magpie-TTS Multilingual](https://soniqo.audio/guides/magpie) | ข้อความ → เสียงพูด (5 ผู้พูดสำเร็จรูป สตรีมมิ่ง) | MLX / CoreML | 357M (MLX INT4/INT8, CoreML INT8) | 9 (CoreML ไม่รวม JA) |
+| [Magpie-TTS Multilingual](https://soniqo.audio/guides/magpie) | ข้อความ → เสียงพูด (5 ผู้พูดสำเร็จรูป สตรีมมิ่ง) | MLX / CoreML | 357M (MLX INT8, CoreML INT8) | 9 (CoreML ไม่รวม JA) |
 | [Qwen3.5-Chat](https://soniqo.audio/guides/chat) | ข้อความ → ข้อความ (LLM) | MLX, CoreML | 0.8B | หลายภาษา |
 | [FunctionGemma](https://soniqo.audio/guides/function-calls) | ข้อความ → การเรียกเครื่องมือ (LLM) | CoreML | 270M | EN |
 | [MADLAD-400](https://soniqo.audio/guides/translate) | ข้อความ → ข้อความ (การแปล) | MLX | 3B | **400+** |

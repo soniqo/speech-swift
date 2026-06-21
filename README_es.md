@@ -30,10 +30,10 @@ Reconocimiento, síntesis y comprensión de voz en el dispositivo para Mac e iOS
 - **[Qwen3-ForcedAligner](https://soniqo.audio/es/guides/align)** — Alineación de marcas temporales a nivel de palabra (audio + texto → marcas temporales)
 - **[Qwen3-TTS](https://soniqo.audio/es/guides/speak)** — Síntesis de texto a voz (máxima calidad, streaming, hablantes personalizados, 10 idiomas)
 - **[CosyVoice TTS](https://soniqo.audio/es/guides/cosyvoice)** — TTS con streaming, clonación de voz, diálogo multi-hablante y etiquetas de emoción (9 idiomas)
-- **[VoxCPM2](https://soniqo.audio/es/speech-generation)** — TTS de calidad de estudio a 48 kHz con clonación de voz y diseño de voz por instrucciones (2B, MLX bf16/int8/int4, 30 idiomas)
+- **[VoxCPM2](https://soniqo.audio/es/speech-generation)** — TTS de calidad de estudio a 48 kHz con clonación de voz y diseño de voz por instrucciones (2B, MLX bf16/int8, 30 idiomas)
 - **[Kokoro TTS](https://soniqo.audio/es/guides/kokoro)** — TTS en el dispositivo (82M, CoreML/Neural Engine, 54 voces, listo para iOS, 10 idiomas)
 - **[VibeVoice TTS](https://soniqo.audio/es/guides/vibevoice)** — TTS de formato largo / múltiples hablantes (Microsoft VibeVoice Realtime-0.5B + 1.5B, MLX, síntesis de podcast/audiolibro de hasta 90 min, EN/ZH)
-- **[Magpie TTS](https://soniqo.audio/es/guides/magpie)** — TTS multilingüe (NVIDIA Magpie-TTS Multilingual 357M, MLX INT4 247 MB / INT8 411 MB o CoreML INT8 342 MB, 9 idiomas, 5 hablantes preconfigurados, streaming en MLX)
+- **[Magpie TTS](https://soniqo.audio/es/guides/magpie)** — TTS multilingüe (NVIDIA Magpie-TTS Multilingual 357M, MLX INT8 411 MB o CoreML INT8 342 MB, 9 idiomas, 5 hablantes preconfigurados, streaming en MLX)
 - **[Qwen3.5-Chat](https://soniqo.audio/es/guides/chat)** — Chat LLM en el dispositivo (0.8B, MLX INT4 + CoreML INT8, DeltaNet híbrido, tokens en streaming)
 - **[FunctionGemma](https://soniqo.audio/es/guides/function-calls)** — LLM en el dispositivo para llamadas estructuradas a funciones / herramientas (Gemma 3 270M, CoreML paletizado de 8 bits, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/es/guides/translate)** — Traducción multidireccional entre 400+ idiomas (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
@@ -41,7 +41,7 @@ Reconocimiento, síntesis y comprensión de voz en el dispositivo para Mac e iOS
 - **[PersonaPlex](https://soniqo.audio/es/guides/respond)** — Voz a voz full-duplex (7B, audio de entrada → audio de salida, 18 presets de voz)
 - **[DeepFilterNet3](https://soniqo.audio/es/guides/denoise)** — Supresión de ruido en tiempo real (2.1M parámetros, 48 kHz). El audio de larga duración por encima del límite de 60 s en una sola pasada se divide automáticamente en fragmentos con crossfade — ver `enhanceChunked(...)`
 - **[Separación de fuentes](https://soniqo.audio/es/guides/separate)** — Separación de fuentes musicales con HTDemucs (Demucs v4) + Open-Unmix (UMX-HQ / UMX-L, 4 stems: voces/batería/bajo/otros, 44,1 kHz estéreo)
-- **[MAGNeT](https://soniqo.audio/es/guides/compose)** — Generación de música a partir de texto (Meta MAGNeT Small 300M / Medium 1.5B, MLX INT4/INT8, clips de 30 s a 32 kHz mono, decodificación enmascarada en paralelo)
+- **[MAGNeT](https://soniqo.audio/es/guides/compose)** — Generación de música a partir de texto (Meta MAGNeT Small 300M / Medium 1.5B, MLX INT8, clips de 30 s a 32 kHz mono, decodificación enmascarada en paralelo)
 - **[FlashSR](https://soniqo.audio/es/guides/upsample)** — Super-resolución de audio (FlashSR ICASSP 2025, MLX, 48 kHz mono, difusión destilada en 1 paso, INT4 363 MB / INT8 720 MB)
 - **[Palabra de activación](https://soniqo.audio/es/guides/wake-word)** — Detección de palabras clave en el dispositivo (KWS Zipformer 3M, CoreML, 26× tiempo real, lista de palabras clave configurable)
 - **[VAD](https://soniqo.audio/es/guides/vad)** — Detección de actividad vocal (Silero streaming, Pyannote offline, FireRedVAD 100+ idiomas)
@@ -133,11 +133,11 @@ Vista compacta a continuación. **[Catálogo completo de modelos con tamaños, c
 | [Qwen3-ForcedAligner](https://soniqo.audio/es/guides/align) | Audio + Texto → Marcas temp. | MLX, CoreML | 0.6B | Multi |
 | [Qwen3-TTS](https://soniqo.audio/es/guides/speak) | Texto → Voz | MLX, CoreML | 0.6B, 1.7B | 10 |
 | [CosyVoice3](https://soniqo.audio/es/guides/cosyvoice) | Texto → Voz | MLX | 0.5B | 9 |
-| [VoxCPM2](https://soniqo.audio/es/speech-generation) | Texto → Voz (48 kHz, diseño de voz + clonación) | MLX | 2B (bf16/int8/int4) | 30 |
+| [VoxCPM2](https://soniqo.audio/es/speech-generation) | Texto → Voz (48 kHz, diseño de voz + clonación) | MLX | 2B (bf16/int8) | 30 |
 | [Kokoro-82M](https://soniqo.audio/es/guides/kokoro) | Texto → Voz | CoreML (ANE) | 82M | 10 |
 | [VibeVoice Realtime-0.5B](https://soniqo.audio/es/guides/vibevoice) | Texto → Voz (formato largo, múltiples hablantes) | MLX | 0.5B | EN/ZH |
 | [VibeVoice 1.5B](https://soniqo.audio/es/guides/vibevoice) | Texto → Voz (podcast de hasta 90 min) | MLX | 1.5B | EN/ZH |
-| [Magpie-TTS Multilingual](https://soniqo.audio/es/guides/magpie) | Texto → Voz (5 hablantes preconfigurados, streaming) | MLX / CoreML | 357M (MLX INT4/INT8, CoreML INT8) | 9 (CoreML excluye JA) |
+| [Magpie-TTS Multilingual](https://soniqo.audio/es/guides/magpie) | Texto → Voz (5 hablantes preconfigurados, streaming) | MLX / CoreML | 357M (MLX INT8, CoreML INT8) | 9 (CoreML excluye JA) |
 | [Qwen3.5-Chat](https://soniqo.audio/es/guides/chat) | Texto → Texto (LLM) | MLX, CoreML | 0.8B | Multi |
 | [FunctionGemma](https://soniqo.audio/es/guides/function-calls) | Texto → Llamadas a herramientas (LLM) | CoreML | 270M | EN |
 | [MADLAD-400](https://soniqo.audio/es/guides/translate) | Texto → Texto (Traducción) | MLX | 3B | **400+** |

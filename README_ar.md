@@ -40,10 +40,10 @@
 - **[Qwen3-ForcedAligner](https://soniqo.audio/ar/guides/align)** — محاذاة الطوابع الزمنية على مستوى الكلمة (صوت + نص → طوابع زمنية)
 - **[Qwen3-TTS](https://soniqo.audio/ar/guides/speak)** — تحويل النص إلى كلام (أعلى جودة، تدفق، متحدثون مخصصون، 10 لغات)
 - **[CosyVoice TTS](https://soniqo.audio/ar/guides/cosyvoice)** — تحويل تدفقي للنص إلى كلام مع استنساخ الصوت وحوار متعدد المتحدثين ووسوم المشاعر (9 لغات)
-- **[VoxCPM2](https://soniqo.audio/ar/speech-generation)** — تحويل النص إلى كلام بجودة استوديو 48 كيلوهرتز مع استنساخ الصوت وتصميم الصوت بالأوامر (2B، MLX bf16/int8/int4، 30 لغة)
+- **[VoxCPM2](https://soniqo.audio/ar/speech-generation)** — تحويل النص إلى كلام بجودة استوديو 48 كيلوهرتز مع استنساخ الصوت وتصميم الصوت بالأوامر (2B، MLX bf16/int8، 30 لغة)
 - **[Kokoro TTS](https://soniqo.audio/ar/guides/kokoro)** — تحويل النص إلى كلام على الجهاز (82M، CoreML/Neural Engine، 54 صوتاً، جاهز لـ iOS، 10 لغات)
 - **[VibeVoice TTS](https://soniqo.audio/ar/guides/vibevoice)** — تحويل النص إلى كلام للنصوص الطويلة / متعدد المتحدثين (Microsoft VibeVoice Realtime-0.5B + 1.5B، MLX، توليد بودكاست/كتب صوتية حتى 90 دقيقة، EN/ZH)
-- **[Magpie TTS](https://soniqo.audio/ar/guides/magpie)** — تحويل النص إلى كلام متعدد اللغات (NVIDIA Magpie-TTS Multilingual 357M، MLX INT4 247 ميغابايت / INT8 411 ميغابايت أو CoreML INT8 342 ميغابايت، 9 لغات، 5 متحدثين جاهزين، تدفق على MLX)
+- **[Magpie TTS](https://soniqo.audio/ar/guides/magpie)** — تحويل النص إلى كلام متعدد اللغات (NVIDIA Magpie-TTS Multilingual 357M، MLX INT8 411 ميغابايت أو CoreML INT8 342 ميغابايت، 9 لغات، 5 متحدثين جاهزين، تدفق على MLX)
 - **[Qwen3.5-Chat](https://soniqo.audio/ar/guides/chat)** — محادثة LLM على الجهاز (0.8B، MLX INT4 + CoreML INT8، DeltaNet هجين، رموز تدفقية)
 - **[FunctionGemma](https://soniqo.audio/ar/guides/function-calls)** — نموذج لغوي على الجهاز للاستدعاءات المنظمة للدوال / الأدوات (Gemma 3 270M، CoreML بترميز 8-بت، Neural Engine، حوالي 252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/ar/guides/translate)** — ترجمة متعددة الاتجاهات عبر أكثر من 400 لغة (3B، MLX INT4 + INT8، T5 v1.1، Apache 2.0)
@@ -51,7 +51,7 @@
 - **[PersonaPlex](https://soniqo.audio/ar/guides/respond)** — تحويل صوت إلى صوت ثنائي الاتجاه الكامل (7B، صوت داخل → صوت خارج، 18 إعداداً صوتياً مسبقاً)
 - **[DeepFilterNet3](https://soniqo.audio/ar/guides/denoise)** — قمع الضوضاء في الزمن الحقيقي (2.1M معامل، 48 كيلوهرتز) الصوت الطويل الذي يتجاوز حد اللقطة الواحدة البالغ 60 s يُقسَّم تلقائيًا إلى أجزاء مع crossfade — راجع `enhanceChunked(...)`
 - **[فصل المصادر](https://soniqo.audio/ar/guides/separate)** — فصل المصادر الموسيقية عبر HTDemucs (Demucs v4) + Open-Unmix (UMX-HQ / UMX-L، 4 طبقات: غناء/طبول/باس/أخرى، 44.1 كيلوهرتز ستيريو)
-- **[MAGNeT](https://soniqo.audio/ar/guides/compose)** — توليد الموسيقى من النص (Meta MAGNeT Small 300M / Medium 1.5B، MLX INT4/INT8، مقاطع 30 ثانية بجودة 32 كيلوهرتز مونو، فك ترميز متوازي مقنع)
+- **[MAGNeT](https://soniqo.audio/ar/guides/compose)** — توليد الموسيقى من النص (Meta MAGNeT Small 300M / Medium 1.5B، MLX INT8، مقاطع 30 ثانية بجودة 32 كيلوهرتز مونو، فك ترميز متوازي مقنع)
 - **[FlashSR](https://soniqo.audio/ar/guides/upsample)** — رفع دقة الصوت (FlashSR ICASSP 2025، MLX، 48 كيلوهرتز مونو، انتشار مقطر بخطوة واحدة، INT4 363 ميغابايت / INT8 720 ميغابايت)
 - **[كلمة التنبيه](https://soniqo.audio/ar/guides/wake-word)** — اكتشاف الكلمات المفتاحية على الجهاز (KWS Zipformer 3M، CoreML، 26× الزمن الحقيقي، قائمة كلمات مفتاحية قابلة للتهيئة)
 - **[VAD](https://soniqo.audio/ar/guides/vad)** — اكتشاف النشاط الصوتي (Silero تدفقي، Pyannote دون اتصال، FireRedVAD أكثر من 100 لغة)
@@ -177,11 +177,11 @@ struct DictateView: View {
 | [Qwen3-ForcedAligner](https://soniqo.audio/ar/guides/align) | صوت + نص → طوابع زمنية | MLX, CoreML | 0.6B | متعدد |
 | [Qwen3-TTS](https://soniqo.audio/ar/guides/speak) | نص → كلام | MLX, CoreML | 0.6B, 1.7B | 10 |
 | [CosyVoice3](https://soniqo.audio/ar/guides/cosyvoice) | نص → كلام | MLX | 0.5B | 9 |
-| [VoxCPM2](https://soniqo.audio/ar/speech-generation) | نص → كلام (48 كيلوهرتز، تصميم + استنساخ صوت) | MLX | 2B (bf16/int8/int4) | 30 |
+| [VoxCPM2](https://soniqo.audio/ar/speech-generation) | نص → كلام (48 كيلوهرتز، تصميم + استنساخ صوت) | MLX | 2B (bf16/int8) | 30 |
 | [Kokoro-82M](https://soniqo.audio/ar/guides/kokoro) | نص → كلام | CoreML (ANE) | 82M | 10 |
 | [VibeVoice Realtime-0.5B](https://soniqo.audio/ar/guides/vibevoice) | نص → كلام (نص طويل، متعدد المتحدثين) | MLX | 0.5B | EN/ZH |
 | [VibeVoice 1.5B](https://soniqo.audio/ar/guides/vibevoice) | نص → كلام (بودكاست حتى 90 دقيقة) | MLX | 1.5B | EN/ZH |
-| [Magpie-TTS Multilingual](https://soniqo.audio/ar/guides/magpie) | نص → كلام (5 متحدثين جاهزين، تدفق) | MLX / CoreML | 357M (MLX INT4/INT8, CoreML INT8) | 9 (CoreML يستثني JA) |
+| [Magpie-TTS Multilingual](https://soniqo.audio/ar/guides/magpie) | نص → كلام (5 متحدثين جاهزين، تدفق) | MLX / CoreML | 357M (MLX INT8, CoreML INT8) | 9 (CoreML يستثني JA) |
 | [Qwen3.5-Chat](https://soniqo.audio/ar/guides/chat) | نص → نص (LLM) | MLX, CoreML | 0.8B | متعدد |
 | [FunctionGemma](https://soniqo.audio/ar/guides/function-calls) | نص → استدعاءات الأدوات (LLM) | CoreML | 270M | EN |
 | [MADLAD-400](https://soniqo.audio/ar/guides/translate) | نص → نص (ترجمة) | MLX | 3B | **أكثر من 400** |

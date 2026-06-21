@@ -30,10 +30,10 @@ Mac과 iOS를 위한 온디바이스 음성 인식, 합성 및 이해. Apple Sil
 - **[Qwen3-ForcedAligner](https://soniqo.audio/ko/guides/align)** — 단어 수준 타임스탬프 정렬 (오디오 + 텍스트 → 타임스탬프)
 - **[Qwen3-TTS](https://soniqo.audio/ko/guides/speak)** — 텍스트-음성 변환 (최고 품질, 스트리밍, 커스텀 화자, 10개 언어)
 - **[CosyVoice TTS](https://soniqo.audio/ko/guides/cosyvoice)** — 음성 복제, 다화자 대화, 감정 태그를 지원하는 스트리밍 TTS (9개 언어)
-- **[VoxCPM2](https://soniqo.audio/ko/speech-generation)** — 48 kHz 스튜디오 품질 TTS, 음성 복제 + 명령 기반 보이스 디자인 (2B, MLX bf16/int8/int4, 30개 언어)
+- **[VoxCPM2](https://soniqo.audio/ko/speech-generation)** — 48 kHz 스튜디오 품질 TTS, 음성 복제 + 명령 기반 보이스 디자인 (2B, MLX bf16/int8, 30개 언어)
 - **[Kokoro TTS](https://soniqo.audio/ko/guides/kokoro)** — 온디바이스 TTS (82M, CoreML/Neural Engine, 54개 음색, iOS 지원, 10개 언어)
 - **[VibeVoice TTS](https://soniqo.audio/ko/guides/vibevoice)** — 장문 / 멀티 스피커 TTS (Microsoft VibeVoice Realtime-0.5B + 1.5B, MLX, 최대 90분 팟캐스트 / 오디오북 합성, EN/ZH)
-- **[Magpie TTS](https://soniqo.audio/ko/guides/magpie)** — 다국어 TTS (NVIDIA Magpie-TTS Multilingual 357M, MLX INT4 247 MB / INT8 411 MB 또는 CoreML INT8 342 MB, 9개 언어, 5개 내장 스피커, MLX 스트리밍)
+- **[Magpie TTS](https://soniqo.audio/ko/guides/magpie)** — 다국어 TTS (NVIDIA Magpie-TTS Multilingual 357M, MLX INT8 411 MB 또는 CoreML INT8 342 MB, 9개 언어, 5개 내장 스피커, MLX 스트리밍)
 - **[Qwen3.5-Chat](https://soniqo.audio/ko/guides/chat)** — 온디바이스 LLM 채팅 (0.8B, MLX INT4 + CoreML INT8, DeltaNet 하이브리드, 스트리밍 토큰)
 - **[FunctionGemma](https://soniqo.audio/ko/guides/function-calls)** — 온디바이스 구조화된 함수 / 도구 호출 LLM (Gemma 3 270M, CoreML 8비트 팔레타이즈, Neural Engine, 약 252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/ko/guides/translate)** — 400+ 언어 간 다대다 번역 (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
@@ -41,7 +41,7 @@ Mac과 iOS를 위한 온디바이스 음성 인식, 합성 및 이해. Apple Sil
 - **[PersonaPlex](https://soniqo.audio/ko/guides/respond)** — 전이중 음성-음성 대화 (7B, 오디오 입력 → 오디오 출력, 18개 음색 프리셋)
 - **[DeepFilterNet3](https://soniqo.audio/ko/guides/denoise)** — 실시간 노이즈 억제 (2.1M 파라미터, 48 kHz). 60 s 단일 처리 한계를 초과하는 장시간 오디오는 crossfade로 자동 청크 처리 — `enhanceChunked(...)` API 참조
 - **[소스 분리](https://soniqo.audio/ko/guides/separate)** — HTDemucs (Demucs v4) + Open-Unmix 기반 음악 소스 분리 (UMX-HQ / UMX-L, 4개 스템: 보컬/드럼/베이스/기타, 44.1 kHz 스테레오)
-- **[MAGNeT](https://soniqo.audio/ko/guides/compose)** — 텍스트 → 음악 생성 (Meta MAGNeT Small 300M / Medium 1.5B, MLX INT4/INT8, 30초 클립 32 kHz 모노, 마스크 병렬 디코딩)
+- **[MAGNeT](https://soniqo.audio/ko/guides/compose)** — 텍스트 → 음악 생성 (Meta MAGNeT Small 300M / Medium 1.5B, MLX INT8, 30초 클립 32 kHz 모노, 마스크 병렬 디코딩)
 - **[FlashSR](https://soniqo.audio/ko/guides/upsample)** — 오디오 초고해상도 (FlashSR ICASSP 2025, MLX, 48 kHz 모노, 1단계 증류 확산, INT4 363 MB / INT8 720 MB)
 - **[웨이크워드](https://soniqo.audio/ko/guides/wake-word)** — 온디바이스 키워드 감지 (KWS Zipformer 3M, CoreML, 실시간의 26배, 구성 가능한 키워드 목록)
 - **[VAD](https://soniqo.audio/ko/guides/vad)** — 음성 활동 감지 (Silero 스트리밍, Pyannote 오프라인, FireRedVAD 100+ 개 언어)
@@ -133,11 +133,11 @@ struct DictateView: View {
 | [Qwen3-ForcedAligner](https://soniqo.audio/ko/guides/align) | 오디오 + 텍스트 → 타임스탬프 | MLX, CoreML | 0.6B | 다언어 |
 | [Qwen3-TTS](https://soniqo.audio/ko/guides/speak) | 텍스트 → 음성 | MLX, CoreML | 0.6B, 1.7B | 10 |
 | [CosyVoice3](https://soniqo.audio/ko/guides/cosyvoice) | 텍스트 → 음성 | MLX | 0.5B | 9 |
-| [VoxCPM2](https://soniqo.audio/ko/speech-generation) | 텍스트 → 음성 (48 kHz, 보이스 디자인 + 복제) | MLX | 2B (bf16/int8/int4) | 30 |
+| [VoxCPM2](https://soniqo.audio/ko/speech-generation) | 텍스트 → 음성 (48 kHz, 보이스 디자인 + 복제) | MLX | 2B (bf16/int8) | 30 |
 | [Kokoro-82M](https://soniqo.audio/ko/guides/kokoro) | 텍스트 → 음성 | CoreML (ANE) | 82M | 10 |
 | [VibeVoice Realtime-0.5B](https://soniqo.audio/ko/guides/vibevoice) | 텍스트 → 음성 (장문, 멀티 스피커) | MLX | 0.5B | EN/ZH |
 | [VibeVoice 1.5B](https://soniqo.audio/ko/guides/vibevoice) | 텍스트 → 음성 (최대 90분 팟캐스트) | MLX | 1.5B | EN/ZH |
-| [Magpie-TTS Multilingual](https://soniqo.audio/ko/guides/magpie) | 텍스트 → 음성 (5개 내장 스피커, 스트리밍) | MLX / CoreML | 357M (MLX INT4/INT8, CoreML INT8) | 9 (CoreML은 일본어 제외) |
+| [Magpie-TTS Multilingual](https://soniqo.audio/ko/guides/magpie) | 텍스트 → 음성 (5개 내장 스피커, 스트리밍) | MLX / CoreML | 357M (MLX INT8, CoreML INT8) | 9 (CoreML은 일본어 제외) |
 | [Qwen3.5-Chat](https://soniqo.audio/ko/guides/chat) | 텍스트 → 텍스트 (LLM) | MLX, CoreML | 0.8B | 다언어 |
 | [FunctionGemma](https://soniqo.audio/ko/guides/function-calls) | 텍스트 → 도구 호출 (LLM) | CoreML | 270M | 영어 위주 |
 | [MADLAD-400](https://soniqo.audio/ko/guides/translate) | 텍스트 → 텍스트 (번역) | MLX | 3B | **400+** |
