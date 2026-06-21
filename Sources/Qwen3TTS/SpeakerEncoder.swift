@@ -183,7 +183,12 @@ public class SpeakerEncoder: Module {
     @ModuleInfo var asp: AttentiveStatisticsPooling
     @ModuleInfo var fc: Conv1d
 
-    public override init() {
+    /// - Parameter embeddingDim: speaker-embedding output dimension. This equals
+    ///   the model hidden size — 1024 for the 0.6B, **2048 for the 1.7B**. The
+    ///   1.7B's speaker-encoder `fc` is `3072 → 2048` (the 0.6B's is `3072 → 1024`),
+    ///   so hardcoding 1024 crashes ICL cloning on the 1.7B. The downstream ICL
+    ///   prefill reshapes the embedding to `[1, 1, hiddenSize]`, so this must match.
+    public init(embeddingDim: Int = 1024) {
         // Initial TDNN: mel(128) → 512 channels, kernel=5
         self._initialConv.wrappedValue = Conv1d(
             inputChannels: 128, outputChannels: 512,
@@ -200,9 +205,10 @@ public class SpeakerEncoder: Module {
         // Attentive statistics pooling: 1536 channels
         self._asp.wrappedValue = AttentiveStatisticsPooling(channels: 1536, attention: 128)
 
-        // Final projection: 3072 (1536*2 from ASP mean+std) → 1024
+        // Final projection: 3072 (1536*2 from ASP mean+std) → embeddingDim
+        // (1024 for 0.6B, 2048 for 1.7B).
         self._fc.wrappedValue = Conv1d(
-            inputChannels: 3072, outputChannels: 1024,
+            inputChannels: 3072, outputChannels: embeddingDim,
             kernelSize: 1, bias: true)
 
         super.init()

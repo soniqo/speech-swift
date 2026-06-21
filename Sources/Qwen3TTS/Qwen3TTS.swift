@@ -92,7 +92,10 @@ public class Qwen3TTSModel {
         self.talker = TalkerModel(config: config.talker)
         self.codePredictor = CodePredictorModel(config: config.codePredictor)
         self.codecDecoder = SpeechTokenizerDecoder(config: config.speechTokenizerDecoder)
-        self.speakerEncoder = SpeakerEncoder()
+        // The speaker-embedding dim equals the talker hidden size (1024 for 0.6B,
+        // 2048 for 1.7B); the 1.7B's speaker-encoder fc is 3072→2048, so this must
+        // be parameterized rather than hardcoded or ICL cloning crashes on the 1.7B.
+        self.speakerEncoder = SpeakerEncoder(embeddingDim: config.talker.hiddenSize)
     }
 
     func setTokenizer(_ tokenizer: Qwen3Tokenizer) {

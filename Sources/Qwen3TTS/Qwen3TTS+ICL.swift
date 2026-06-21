@@ -23,7 +23,11 @@ extension Qwen3TTSModel {
     /// The encoder is used to convert reference audio into codec tokens. Weights come from
     /// the same safetensors file (encoder.* prefixes).
     public static func fromPretrainedWithEncoder(
-        modelId: String = "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-4bit",
+        // Default to the 1.7B-bf16 (the production model Studio ships) — NOT the
+        // decommissioned 0.6B int4. The int4 default previously masked the 1.7B
+        // speaker-encoder bug (2048-dim fc + PyTorch conv layout), since the e2e
+        // tests only ever exercised the 0.6B path.
+        modelId: String = "aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-bf16",
         cacheDir: URL? = nil,
         offlineMode: Bool = false,
         progressHandler: ((Double, String) -> Void)? = nil
