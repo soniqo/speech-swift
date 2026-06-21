@@ -4,11 +4,28 @@
 
 Qwen3-ASR is an encoder-decoder model: audio encoder extracts features, text decoder generates transcription tokens autoregressively.
 
-Two model sizes are supported, each available in 4-bit and 8-bit quantization:
-- **0.6B 4-bit** (`aufklarer/Qwen3-ASR-0.6B-MLX-4bit`) — ~0.4 GB
-- **0.6B 8-bit** (`aufklarer/Qwen3-ASR-0.6B-MLX-8bit`) — ~0.7 GB
-- **1.7B 4-bit** (`aufklarer/Qwen3-ASR-1.7B-MLX-4bit`) — ~1.5 GB
-- **1.7B 8-bit** (`aufklarer/Qwen3-ASR-1.7B-MLX-8bit`) — ~2.5 GB
+Two model sizes are supported, each available in 4-bit, 5-bit, and 8-bit quantization:
+
+| Variant | Repo | File size | Peak RSS (run) |
+|---------|------|-----------|---------------|
+| 0.6B 4-bit | `aufklarer/Qwen3-ASR-0.6B-MLX-4bit` | 0.65 GB | 976 MB |
+| 0.6B 5-bit | `aufklarer/Qwen3-ASR-0.6B-MLX-5bit` | 1.01 GB | 1057 MB |
+| 0.6B 8-bit | `aufklarer/Qwen3-ASR-0.6B-MLX-8bit` | 0.93 GB | 1272 MB |
+| 1.7B 4-bit | `aufklarer/Qwen3-ASR-1.7B-MLX-4bit` | 2.07 GB | — |
+| 1.7B 5-bit | `aufklarer/Qwen3-ASR-1.7B-MLX-5bit` | 2.27 GB | — |
+| 1.7B 8-bit | `aufklarer/Qwen3-ASR-1.7B-MLX-8bit` | 2.29 GB | — |
+
+Note: on 0.6B the 5-bit file is slightly larger than 8-bit because the 4/8-bit paths use a hand-rolled packer (one uint32 per 8/4 elements with no waste), while 5-bit routes through `mx.quantize` whose layout carries a small fixed overhead. Runtime peak RSS still scales as expected (4-bit < 5-bit < 8-bit) — that's the cost users actually feel.
+
+Quality on LibriSpeech test-clean (100 utterances, M-series, 4-bit/5-bit/8-bit on 0.6B):
+
+| Variant | WER% | RTF | xRT | Peak RSS |
+|---------|------|-----|-----|----------|
+| 0.6B 4-bit | 2.33 | 0.013 | 75.3× | 976 MB |
+| 0.6B 5-bit | **1.74** | 0.014 | 70.5× | 1057 MB |
+| 0.6B 8-bit | 1.65 | 0.016 | 62.1× | 1272 MB |
+
+5-bit cuts WER by 25% relative over 4-bit and lands within 0.09 pp of 8-bit, with ~215 MB less peak RSS than 8-bit. 1.7B numbers TBD.
 
 ```
 Audio (16kHz mono)
@@ -72,7 +89,7 @@ Audio (16kHz mono)
 | Vocab size | 151936 | 151936 |
 | RoPE base | 1,000,000 | 1,000,000 |
 | RoPE type | MRoPE [24,20,20]* | MRoPE [24,20,20]* |
-| Quantization | 4-bit or 8-bit (group=64) | 4-bit or 8-bit (group=64) |
+| Quantization | 4/5/8-bit (group=64) | 4/5/8-bit (group=64) |
 | Activation | SwiGLU | SwiGLU |
 | Norm | RMSNorm (eps=1e-6) | RMSNorm |
 | Q/K normalization | RMSNorm per head | RMSNorm per head |
@@ -105,4 +122,4 @@ x -> RMSNorm -> Attention(Q/K/V projections, Q/K RMSNorm, RoPE, GQA via SDPA) ->
 | `vocab.json` | Token-to-ID mapping |
 | `tokenizer_config.json` | Tokenizer settings + added tokens |
 
-Total size: ~0.4 GB (0.6B 4-bit), ~0.7 GB (0.6B 8-bit), ~1.5 GB (1.7B 4-bit), ~2.5 GB (1.7B 8-bit)
+See the variant table at the top of this document for actual file sizes per variant.

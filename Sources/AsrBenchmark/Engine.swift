@@ -35,8 +35,10 @@ public protocol BenchEngine: AnyObject, Sendable {
 public enum EngineID: String, CaseIterable, Sendable {
     case qwen3CoreML = "qwen3-coreml"
     case qwen3MLX06b4bit = "qwen3-mlx-0.6b-4bit"
+    case qwen3MLX06b5bit = "qwen3-mlx-0.6b-5bit"
     case qwen3MLX06b8bit = "qwen3-mlx-0.6b-8bit"
     case qwen3MLX17b4bit = "qwen3-mlx-1.7b-4bit"
+    case qwen3MLX17b5bit = "qwen3-mlx-1.7b-5bit"
     case qwen3MLX17b8bit = "qwen3-mlx-1.7b-8bit"
     case parakeet = "parakeet"
     case nemotron = "nemotron"
@@ -53,8 +55,10 @@ public enum EngineID: String, CaseIterable, Sendable {
         switch self {
         case .qwen3CoreML: return Qwen3CoreMLEngine()
         case .qwen3MLX06b4bit: return Qwen3MLXEngine(size: "0.6B", bits: 4)
+        case .qwen3MLX06b5bit: return Qwen3MLXEngine(size: "0.6B", bits: 5)
         case .qwen3MLX06b8bit: return Qwen3MLXEngine(size: "0.6B", bits: 8)
         case .qwen3MLX17b4bit: return Qwen3MLXEngine(size: "1.7B", bits: 4)
+        case .qwen3MLX17b5bit: return Qwen3MLXEngine(size: "1.7B", bits: 5)
         case .qwen3MLX17b8bit: return Qwen3MLXEngine(size: "1.7B", bits: 8)
         case .parakeet: return ParakeetEngine()
         case .nemotron: return NemotronEngine()
