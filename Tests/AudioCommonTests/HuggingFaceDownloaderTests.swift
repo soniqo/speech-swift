@@ -312,6 +312,72 @@ final class HuggingFaceDownloaderTests: XCTestCase {
         XCTAssertEqual(HuggingFaceDownloader.downloadStallTimeoutSeconds, 300)
     }
 
+    // MARK: - HF_ENDPOINT (China mirror support)
+
+    /// Saves, mutates, and restores `HF_ENDPOINT` around a body so the
+    /// process-global env var doesn't leak between tests.
+    private func withHFEndpoint(_ value: String?, _ body: () -> Void) {
+        let previous = ProcessInfo.processInfo.environment["HF_ENDPOINT"]
+        if let value {
+            setenv("HF_ENDPOINT", value, 1)
+        } else {
+            unsetenv("HF_ENDPOINT")
+        }
+        defer {
+            if let previous { setenv("HF_ENDPOINT", previous, 1) }
+            else { unsetenv("HF_ENDPOINT") }
+        }
+        body()
+    }
+
+    /// A valid `https://` mirror (the documented hf-mirror.com case) is
+    /// passed through verbatim so `HubApi` routes downloads to it.
+    func testResolvedEndpointHonorsValidMirror() {
+        withHFEndpoint("https://hf-mirror.com") {
+            XCTAssertEqual(HuggingFaceDownloader.resolvedEndpoint(), "https://hf-mirror.com")
+        }
+    }
+
+    /// A plain `http://` host (e.g. a self-hosted internal mirror) is also
+    /// accepted — the guard only rejects non-http(s) and hostless URLs.
+    func testResolvedEndpointHonorsHttpMirror() {
+        withHFEndpoint("http://hf.internal.example") {
+            XCTAssertEqual(HuggingFaceDownloader.resolvedEndpoint(), "http://hf.internal.example")
+        }
+    }
+
+    /// Surrounding whitespace (a stray newline from `export`) is trimmed.
+    func testResolvedEndpointTrimsWhitespace() {
+        withHFEndpoint("  https://hf-mirror.com\n") {
+            XCTAssertEqual(HuggingFaceDownloader.resolvedEndpoint(), "https://hf-mirror.com")
+        }
+    }
+
+    /// Unset → nil, so `HubApi` keeps its built-in huggingface.co default.
+    func testResolvedEndpointNilWhenUnset() {
+        withHFEndpoint(nil) {
+            XCTAssertNil(HuggingFaceDownloader.resolvedEndpoint())
+        }
+    }
+
+    /// Blank → nil (treated as unset rather than an empty host).
+    func testResolvedEndpointNilWhenBlank() {
+        withHFEndpoint("   ") {
+            XCTAssertNil(HuggingFaceDownloader.resolvedEndpoint())
+        }
+    }
+
+    /// Malformed values (no scheme, wrong scheme, or no host) fall back to
+    /// the default instead of breaking downloads — mirrors HubApi's guard.
+    func testResolvedEndpointNilWhenMalformed() {
+        for bad in ["hf-mirror.com", "ftp://hf-mirror.com", "https://", "not a url"] {
+            withHFEndpoint(bad) {
+                XCTAssertNil(HuggingFaceDownloader.resolvedEndpoint(),
+                             "expected nil for malformed HF_ENDPOINT=\(bad)")
+            }
+        }
+    }
+
     /// Retry ladder sanity: attempts = delays + 1, delays strictly grow,
     /// and total backoff stays bounded (≲2 min) so a hard failure still
     /// terminates in reasonable time.

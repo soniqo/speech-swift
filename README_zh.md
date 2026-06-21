@@ -423,6 +423,8 @@ speech-swift 把每个模型拆成独立的 SPM target，因此使用者只为 i
 
 模型权重在首次使用时从 HuggingFace 下载并缓存到 `~/Library/Caches/qwen3-speech/`。可通过 `QWEN3_CACHE_DIR`（CLI）或 `cacheDir:`（Swift API）覆盖。所有 `fromPretrained()` 入口都接受 `offlineMode: true`，在权重已缓存时跳过网络。
 
+中国大陆用户（或任何 `huggingface.co` 访问缓慢/受限的地区）可通过设置 `HF_ENDPOINT` 从镜像下载，例如 `export HF_ENDPOINT=https://hf-mirror.com`。
+
 详见 [`docs/inference/cache-and-offline.md`](docs/inference/cache-and-offline.md)，包含 iOS 沙盒容器路径等完整说明。
 
 ## MLX Metal 库

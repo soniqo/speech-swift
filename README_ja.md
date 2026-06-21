@@ -423,6 +423,8 @@ speech-swift はモデルごとに1つのSPMターゲットに分割されてお
 
 モデルの重みは初回使用時にHuggingFaceからダウンロードされ、`~/Library/Caches/qwen3-speech/` にキャッシュされます。`QWEN3_CACHE_DIR`（CLI）または `cacheDir:`（Swift API）で上書き可能です。すべての `fromPretrained()` エントリーポイントは `offlineMode: true` を受け付け、重みがすでにキャッシュされている場合はネットワークをスキップします。
 
+中国本土のユーザー（または `huggingface.co` が遅い・ブロックされている地域）は、`HF_ENDPOINT` を設定することでミラーからダウンロードできます。例: `export HF_ENDPOINT=https://hf-mirror.com`。
+
 iOSサンドボックスコンテナのパスを含む詳細は [`docs/inference/cache-and-offline.md`](docs/inference/cache-and-offline.md) を参照してください。
 
 ## MLX Metalライブラリ

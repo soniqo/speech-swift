@@ -423,6 +423,8 @@ Docs locales (depot) :
 
 Les poids de modele sont telecharges depuis HuggingFace lors de la premiere utilisation et mis en cache dans `~/Library/Caches/qwen3-speech/`. Surchargez avec `QWEN3_CACHE_DIR` (CLI) ou `cacheDir:` (API Swift). Tous les points d'entree `fromPretrained()` acceptent `offlineMode: true` pour sauter le reseau lorsque les poids sont deja en cache.
 
+Les utilisateurs en Chine continentale (ou partout ou `huggingface.co` est lent ou bloque) peuvent telecharger depuis un miroir en definissant `HF_ENDPOINT`, par ex. `export HF_ENDPOINT=https://hf-mirror.com`.
+
 Voir [`docs/inference/cache-and-offline.md`](docs/inference/cache-and-offline.md) pour les details complets incluant les chemins de container iOS sandboxes.
 
 ## Bibliotheque MLX Metal

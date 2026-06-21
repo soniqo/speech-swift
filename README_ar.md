@@ -519,6 +519,8 @@ speech-swift مقسم إلى هدف SPM واحد لكل نموذج بحيث يد
 
 تُنزَّل أوزان النموذج من HuggingFace عند الاستخدام الأول وتُخزَّن في `~/Library/Caches/qwen3-speech/`. يمكن استبدالها بـ `QWEN3_CACHE_DIR` (CLI) أو `cacheDir:` (Swift API). تقبل جميع نقاط دخول `fromPretrained()` أيضاً `offlineMode: true` لتخطي الشبكة عندما تكون الأوزان مخزنة مؤقتاً بالفعل.
 
+يمكن للمستخدمين في الصين القارية (أو في أي مكان يكون فيه `huggingface.co` بطيئاً أو محجوباً) التنزيل من مرآة عبر ضبط `HF_ENDPOINT`، مثل `export HF_ENDPOINT=https://hf-mirror.com`.
+
 انظر [`docs/inference/cache-and-offline.md`](docs/inference/cache-and-offline.md) للتفاصيل الكاملة بما في ذلك مسارات حاوية iOS المعزولة.
 
 </div>

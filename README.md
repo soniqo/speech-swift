@@ -421,6 +421,8 @@ Local docs (repo):
 
 Model weights download from HuggingFace on first use and cache to `~/Library/Caches/qwen3-speech/`. Override with `QWEN3_CACHE_DIR` (CLI) or `cacheDir:` (Swift API). All `fromPretrained()` entry points also accept `offlineMode: true` to skip network when weights are already cached.
 
+Users in mainland China (or anywhere `huggingface.co` is slow/blocked) can fetch from a mirror by setting `HF_ENDPOINT`, e.g. `export HF_ENDPOINT=https://hf-mirror.com`.
+
 See [`docs/inference/cache-and-offline.md`](docs/inference/cache-and-offline.md) for full details including sandboxed iOS container paths.
 
 ## MLX Metal library

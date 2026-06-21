@@ -423,6 +423,8 @@ speech-swift разделён на отдельные SPM-таргеты для 
 
 Веса моделей скачиваются с HuggingFace при первом использовании и кэшируются в `~/Library/Caches/qwen3-speech/`. Переопределите с помощью `QWEN3_CACHE_DIR` (CLI) или `cacheDir:` (Swift API). Все точки входа `fromPretrained()` также принимают `offlineMode: true` для пропуска сети, когда веса уже закэшированы.
 
+Пользователи в материковом Китае (или там, где `huggingface.co` работает медленно или заблокирован) могут загружать с зеркала, задав `HF_ENDPOINT`, например `export HF_ENDPOINT=https://hf-mirror.com`.
+
 Подробности, включая пути в песочницах iOS-контейнеров, см. в [`docs/inference/cache-and-offline.md`](docs/inference/cache-and-offline.md).
 
 ## Metal-библиотека MLX

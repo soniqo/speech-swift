@@ -252,6 +252,29 @@ public enum HuggingFaceDownloader {
         return 300
     }
 
+    /// Resolve the HuggingFace Hub endpoint, honoring the `HF_ENDPOINT`
+    /// environment variable (the same name Python's `huggingface_hub` uses).
+    ///
+    /// Users behind the Great Firewall set `HF_ENDPOINT=https://hf-mirror.com`
+    /// to fetch models from the China mirror. The cache layout is keyed by repo
+    /// id, not host, so switching the endpoint reuses any already-downloaded
+    /// weights and needs no re-download.
+    ///
+    /// Returns `nil` (so `HubApi` keeps its default `https://huggingface.co`)
+    /// when the variable is unset, blank, or not a valid `http(s)://host` URL.
+    /// The validation mirrors `HubApi`'s own guard so a malformed value falls
+    /// back to the default instead of breaking downloads.
+    static func resolvedEndpoint() -> String? {
+        guard let raw = ProcessInfo.processInfo.environment["HF_ENDPOINT"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty,
+              let url = URL(string: raw),
+              let scheme = url.scheme, scheme == "http" || scheme == "https",
+              let host = url.host, !host.isEmpty
+        else { return nil }
+        return raw
+    }
+
     /// Thread-safe last-progress timestamp. `hub.snapshot`'s progress
     /// callback may fire from a background queue, so guard with a lock.
     private final class ProgressClock: @unchecked Sendable {
@@ -389,6 +412,6 @@ public enum HuggingFaceDownloader {
             // Hub won't match this path, so we derive base from env/defaults.
             downloadBase = resolveBaseCacheDir(cacheDirName: repoDir.deletingLastPathComponent().lastPathComponent)
         }
-        return HubApi(downloadBase: downloadBase, useOfflineMode: offlineMode)
+        return HubApi(downloadBase: downloadBase, endpoint: resolvedEndpoint(), useOfflineMode: offlineMode)
     }
 }

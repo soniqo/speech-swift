@@ -423,6 +423,8 @@ Docs locales (repositorio):
 
 Los pesos del modelo se descargan desde HuggingFace en el primer uso y se almacenan en `~/Library/Caches/qwen3-speech/`. Puedes sobrescribir con `QWEN3_CACHE_DIR` (CLI) o `cacheDir:` (API Swift). Todos los puntos de entrada `fromPretrained()` aceptan `offlineMode: true` para omitir la red cuando los pesos ya están en caché.
 
+Los usuarios en China continental (o donde `huggingface.co` sea lento o esté bloqueado) pueden descargar desde un espejo configurando `HF_ENDPOINT`, p. ej. `export HF_ENDPOINT=https://hf-mirror.com`.
+
 Consulta [`docs/inference/cache-and-offline.md`](docs/inference/cache-and-offline.md) para los detalles completos, incluyendo rutas de contenedor iOS sandboxed.
 
 ## Librería MLX Metal
