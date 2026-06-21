@@ -8,8 +8,10 @@ import Tokenizers
 /// `aufklarer/FunctionGemma-270M-CoreML-Palettize8` (or `-CoreML` fp16).
 ///
 /// Pipeline:
-///   1. Tokenize a prompt formatted with ``FunctionGemmaPrompt.formatUserTurn``
-///      via the chat template at `chat_template.jinja`.
+///   1. Tokenize a prompt formatted with
+///      ``FunctionGemmaPrompt.formatToolCallPrompt``, which mirrors the exact
+///      developer / user / model-prefix layout the model was trained on
+///      (including the `<start_function_declaration>` block).
 ///   2. Right-pad to ``cacheSeqLen`` (128), build prefill inputs, prefill once
 ///      against an `MLState` cache.
 ///   3. Decode greedily one token per step; each step writes to a one-hot
@@ -125,8 +127,7 @@ public final class FunctionGemma: @unchecked Sendable {
     public func generate(prompt: String,
                           tools: [FunctionDeclaration],
                           maxNewTokens: Int = 64) async throws -> String {
-        let userTurn = FunctionGemmaPrompt.formatUserTurn(tools: tools, userText: prompt)
-        let fullPrompt = try renderChatTemplate(userMessage: userTurn)
+        let fullPrompt = FunctionGemmaPrompt.formatToolCallPrompt(tools: tools, userText: prompt)
         let promptIds = try tokenize(fullPrompt)
         return try await generateFromTokens(promptIds: promptIds, maxNewTokens: maxNewTokens)
     }
@@ -180,14 +181,7 @@ public final class FunctionGemma: @unchecked Sendable {
         return (text, FunctionGemmaParser.parseFunctionCalls(text))
     }
 
-    // MARK: - Chat template + tokenize
-
-    private func renderChatTemplate(userMessage: String) throws -> String {
-        // The model's chat_template.jinja boils down to this — there is no
-        // multi-turn assistant history to fold in for a single tool call, so
-        // we use the fixed string instead of running the Jinja engine.
-        return "<start_of_turn>user\n\(userMessage)<end_of_turn>\n<start_of_turn>model\n"
-    }
+    // MARK: - Tokenize
 
     private func tokenize(_ text: String) throws -> [Int] {
         let ids = tokenizer.encode(text: text)
