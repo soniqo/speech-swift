@@ -25,6 +25,10 @@ let package = Package(
             targets: ["CosyVoiceTTS"]
         ),
         .library(
+            name: "ChatterboxTTS",
+            targets: ["ChatterboxTTS"]
+        ),
+        .library(
             name: "PersonaPlex",
             targets: ["PersonaPlex"]
         ),
@@ -177,6 +181,7 @@ let package = Package(
                 .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "MLXNN", package: "mlx-swift"),
                 .product(name: "MLXFast", package: "mlx-swift"),
+                .product(name: "MLXFFT", package: "mlx-swift"),
             ]
         ),
         .target(
@@ -214,6 +219,18 @@ let package = Package(
                 .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "MLXNN", package: "mlx-swift"),
                 .product(name: "MLXFast", package: "mlx-swift")
+            ]
+        ),
+        .target(
+            name: "ChatterboxTTS",
+            dependencies: [
+                "AudioCommon",
+                "MLXCommon",
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXNN", package: "mlx-swift"),
+                .product(name: "MLXFast", package: "mlx-swift"),
+                .product(name: "Hub", package: "swift-transformers"),
+                .product(name: "Tokenizers", package: "swift-transformers")
             ]
         ),
         .target(
@@ -566,6 +583,13 @@ let package = Package(
         .testTarget(
             name: "CosyVoiceTTSTests",
             dependencies: ["CosyVoiceTTS", "AudioCommon"]
+        ),
+        .testTarget(
+            name: "ChatterboxTTSTests",
+            dependencies: [
+                "ChatterboxTTS", "AudioCommon", "MLXCommon",
+                .product(name: "MLX", package: "mlx-swift")
+            ]
         ),
         .testTarget(
             name: "SpeechVADTests",

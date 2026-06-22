@@ -35,6 +35,7 @@ Mac और iOS के लिए ऑन-डिवाइस स्पीच रि
 - **[VibeVoice TTS](https://soniqo.audio/hi/guides/vibevoice)** — लंबे-रूप / बहु-वक्ता TTS (Microsoft VibeVoice Realtime-0.5B + 1.5B, MLX, 90 मिनट तक के पॉडकास्ट / ऑडियोबुक संश्लेषण, EN/ZH)
 - **[Magpie TTS](https://soniqo.audio/hi/guides/magpie)** — बहुभाषी TTS (NVIDIA Magpie-TTS Multilingual 357M, MLX INT8 411 MB या CoreML INT8 342 MB, 9 भाषाएँ, 5 पूर्व-निर्धारित वक्ता, MLX पर स्ट्रीमिंग)
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — ऑन-डिवाइस फ़्लो-मैचिंग TTS (Supertone Supertonic-3 99M, CoreML/Neural Engine, 31 भाषाएँ, 10 वॉयस, G2P-free, 44.1 kHz)
+- **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — ज़ीरो-शॉट वॉयस क्लोनिंग के साथ बहुभाषी TTS (Resemble AI Chatterbox Multilingual, MLX fp16 ~1.3 GB, अरबी और हिंदी सहित 23 भाषाएँ, MIT)
 - **[Qwen3.5-Chat](https://soniqo.audio/hi/guides/chat)** — ऑन-डिवाइस LLM चैट (0.8B, MLX INT4 + CoreML INT8, DeltaNet हाइब्रिड, स्ट्रीमिंग टोकन)
 - **[FunctionGemma](https://soniqo.audio/hi/guides/function-calls)** — संरचित फ़ंक्शन / टूल कॉल के लिए ऑन-डिवाइस LLM (Gemma 3 270M, CoreML 8-बिट पैलेटाइज़, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/hi/guides/translate)** — 400+ भाषाओं में बहु-दिशात्मक अनुवाद (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
@@ -117,7 +118,7 @@ struct DictateView: View {
 
 `SpeechUI` केवल `TranscriptionView` (finals + partials) और `TranscriptionStore` (स्ट्रीमिंग ASR एडाप्टर) प्रदान करता है। ऑडियो विज़ुअलाइज़ेशन और प्लेबैक के लिए AVFoundation का उपयोग करें।
 
-उपलब्ध SPM उत्पाद: `Qwen3ASR`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `KokoroTTS`, `SupertonicTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `MagpieTTS`, `MagpieTTSCoreML`, `MAGNeTMusicGen`, `FlashSR`, `PersonaPlex`, `HibikiTranslate`, `SpeechVAD`, `SpeechEnhancement`, `SourceSeparation`, `Qwen3Chat`, `SpeechCore`, `SpeechUI`, `AudioCommon`.
+उपलब्ध SPM उत्पाद: `Qwen3ASR`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `KokoroTTS`, `SupertonicTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `ChatterboxTTS`, `MagpieTTS`, `MagpieTTSCoreML`, `MAGNeTMusicGen`, `FlashSR`, `PersonaPlex`, `HibikiTranslate`, `SpeechVAD`, `SpeechEnhancement`, `SourceSeparation`, `Qwen3Chat`, `SpeechCore`, `SpeechUI`, `AudioCommon`.
 
 ## मॉडल
 
@@ -135,6 +136,7 @@ struct DictateView: View {
 | [Qwen3-TTS](https://soniqo.audio/hi/guides/speak) | टेक्स्ट → स्पीच | MLX, CoreML | 0.6B, 1.7B | 10 |
 | [CosyVoice3](https://soniqo.audio/hi/guides/cosyvoice) | टेक्स्ट → स्पीच | MLX | 0.5B | 9 |
 | [VoxCPM2](https://soniqo.audio/hi/speech-generation) | टेक्स्ट → स्पीच (48 kHz, वॉयस डिज़ाइन + क्लोनिंग) | MLX | 2B (bf16/int8) | 30 |
+| [Chatterbox Multilingual](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16) | टेक्स्ट → स्पीच (ज़ीरो-शॉट क्लोनिंग) | MLX | 0.8B (fp16) | 23 |
 | [Kokoro-82M](https://soniqo.audio/hi/guides/kokoro) | टेक्स्ट → स्पीच | CoreML (ANE) | 82M | 10 |
 | [Supertonic-3](https://soniqo.audio/guides/supertonic) | टेक्स्ट → स्पीच (44.1 kHz, फ़्लो-मैचिंग, G2P-free) | CoreML (ANE) | 99M | 31 |
 | [VibeVoice Realtime-0.5B](https://soniqo.audio/hi/guides/vibevoice) | टेक्स्ट → स्पीच (लंबे-रूप, बहु-वक्ता) | MLX | 0.5B | EN/ZH |

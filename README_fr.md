@@ -35,6 +35,7 @@ Reconnaissance, synthese et comprehension vocale embarquees pour Mac et iOS. S'e
 - **[VibeVoice TTS](https://soniqo.audio/fr/guides/vibevoice)** -- TTS long format / multi-locuteurs (Microsoft VibeVoice Realtime-0.5B + 1.5B, MLX, synthese de podcast/livre audio jusqu'a 90 min, EN/ZH)
 - **[Magpie TTS](https://soniqo.audio/fr/guides/magpie)** — TTS multilingue (NVIDIA Magpie-TTS Multilingual 357M, MLX INT8 411 Mo ou CoreML INT8 342 Mo, 9 langues, 5 voix prédéfinies, streaming sur MLX)
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — TTS embarque par appariement de flux (Supertone Supertonic-3 99M, CoreML/Neural Engine, 31 langues, 10 voix, sans G2P, 44.1 kHz)
+- **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — TTS multilingue avec clonage vocal zero-shot (Resemble AI Chatterbox Multilingual, MLX fp16 ~1,3 Go, 23 langues dont l'arabe et le hindi, MIT)
 - **[Qwen3.5-Chat](https://soniqo.audio/fr/guides/chat)** -- Chat LLM embarque (0.8B, MLX INT4 + CoreML INT8, DeltaNet hybride, tokens en streaming)
 - **[FunctionGemma](https://soniqo.audio/fr/guides/function-calls)** — LLM embarque pour les appels structures de fonctions / outils (Gemma 3 270M, CoreML palettisation 8 bits, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/fr/guides/translate)** — Traduction multidirectionnelle entre 400+ langues (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
@@ -117,7 +118,7 @@ struct DictateView: View {
 
 `SpeechUI` ne fournit que `TranscriptionView` (finaux + partiels) et `TranscriptionStore` (adaptateur ASR en streaming). Utilisez AVFoundation pour la visualisation et la lecture audio.
 
-Produits SPM disponibles : `Qwen3ASR`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `KokoroTTS`, `SupertonicTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `MagpieTTS`, `MagpieTTSCoreML`, `MAGNeTMusicGen`, `FlashSR`, `PersonaPlex`, `HibikiTranslate`, `SpeechVAD`, `SpeechEnhancement`, `SourceSeparation`, `Qwen3Chat`, `SpeechCore`, `SpeechUI`, `AudioCommon`.
+Produits SPM disponibles : `Qwen3ASR`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `KokoroTTS`, `SupertonicTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `ChatterboxTTS`, `MagpieTTS`, `MagpieTTSCoreML`, `MAGNeTMusicGen`, `FlashSR`, `PersonaPlex`, `HibikiTranslate`, `SpeechVAD`, `SpeechEnhancement`, `SourceSeparation`, `Qwen3Chat`, `SpeechCore`, `SpeechUI`, `AudioCommon`.
 
 ## Modeles
 
@@ -135,6 +136,7 @@ Vue compacte ci-dessous. **[Catalogue complet des modeles avec tailles, quantifi
 | [Qwen3-TTS](https://soniqo.audio/fr/guides/speak) | Texte → Parole | MLX, CoreML | 0.6B, 1.7B | 10 |
 | [CosyVoice3](https://soniqo.audio/fr/guides/cosyvoice) | Texte → Parole | MLX | 0.5B | 9 |
 | [VoxCPM2](https://soniqo.audio/fr/speech-generation) | Texte → Parole (48 kHz, conception vocale + clonage) | MLX | 2B (bf16/int8) | 30 |
+| [Chatterbox Multilingual](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16) | Texte → Voix (clonage zero-shot) | MLX | 0.8B (fp16) | 23 |
 | [Kokoro-82M](https://soniqo.audio/fr/guides/kokoro) | Texte → Parole | CoreML (ANE) | 82M | 10 |
 | [Supertonic-3](https://soniqo.audio/guides/supertonic) | Texte → Parole (44.1 kHz, appariement de flux, sans G2P) | CoreML (ANE) | 99M | 31 |
 | [VibeVoice Realtime-0.5B](https://soniqo.audio/fr/guides/vibevoice) | Texte → Parole (long format, multi-locuteurs) | MLX | 0.5B | EN/ZH |
