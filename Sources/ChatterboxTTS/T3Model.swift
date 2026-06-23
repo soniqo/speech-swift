@@ -49,15 +49,18 @@ public final class ChatterboxT3: Module {
         let condEmb = condEnc(speakerEmb: spk, promptSpeechEmb: promptEmb, emotionAdv: emotionAdv)
 
         let textArr = MLXArray(textTokens.map { Int32($0) }).reshaped([1, textTokens.count])
-        var textE = textEmb(textArr) + textPosEmb(textArr)
+        var textE = textEmb(textArr)  // token embeddings only
         var bosE = speechEmb(MLXArray([Int32(cfg.startSpeechToken)]).reshaped([1, 1])) + speechPosEmb.fixed(0)
         var condB = condEmb
 
         if useCFG {
-            textE = concatenated([textE, MLXArray.zeros(textE.shape)], axis: 0)  // uncond text zeroed
+            // Zero the uncond *token* embeddings, then add positions to BOTH batches —
+            // so the uncond text keeps its position embeddings (matches the reference).
+            textE = concatenated([textE, MLXArray.zeros(textE.shape)], axis: 0)
             condB = broadcast(condEmb, to: [2] + Array(condEmb.shape[1...]))
             bosE = concatenated([bosE, bosE], axis: 0)
         }
+        textE = textE + textPosEmb(textArr)  // position embeddings on all batches
         return concatenated([condB, textE, bosE], axis: 1)
     }
 
@@ -101,6 +104,69 @@ public final class ChatterboxT3: Module {
             eval(hidden)
         }
         return generated
+    }
+
+    /// Prefill input embeddings — for numeric validation/bisection.
+    public func debugInputEmbeds(
+        textTokens: [Int], speakerEmb: MLXArray, promptSpeechTokens: [Int]? = nil,
+        emotionAdv: Float = 0.5, cfgWeight: Float = 0.5
+    ) -> [Float] {
+        let input = buildPrefix(
+            textTokens: textTokens, speakerEmb: speakerEmb,
+            promptSpeechTokens: promptSpeechTokens, emotionAdv: emotionAdv, useCFG: cfgWeight > 0)
+        eval(input)
+        return input.asType(.float32).reshaped([input.size]).asArray(Float.self)
+    }
+
+    /// Prefill hidden after `afterLayers` layers (last position, both batches) — bisection.
+    public func debugHidden(
+        textTokens: [Int], speakerEmb: MLXArray, promptSpeechTokens: [Int]? = nil,
+        emotionAdv: Float = 0.5, cfgWeight: Float = 0.5, afterLayers: Int
+    ) -> [Float] {
+        let input = buildPrefix(
+            textTokens: textTokens, speakerEmb: speakerEmb,
+            promptSpeechTokens: promptSpeechTokens, emotionAdv: emotionAdv, useCFG: cfgWeight > 0)
+        let caches = (0 ..< cfg.numLayers).map { _ in T3KVCache() }
+        let h = tfmr.model(input, caches: caches, returnAfter: afterLayers)
+        let last = h.dim(1) - 1
+        let sub = h[0..., last ..< (last + 1), 0...]
+        eval(sub)
+        return sub.asType(.float32).reshaped([sub.size]).asArray(Float.self)
+    }
+
+    /// Debug: layer-0 RMSNorm + attention outputs (last position) — bisection.
+    public func debugLayer0Parts(
+        textTokens: [Int], speakerEmb: MLXArray, promptSpeechTokens: [Int]? = nil,
+        emotionAdv: Float = 0.5, cfgWeight: Float = 0.5
+    ) -> (norm: [Float], attn: [Float], qrope: [Float]) {
+        let input = buildPrefix(
+            textTokens: textTokens, speakerEmb: speakerEmb,
+            promptSpeechTokens: promptSpeechTokens, emotionAdv: emotionAdv, useCFG: cfgWeight > 0)
+        let (n, a, q) = tfmr.model.debugLayer0(input)
+        let last = input.dim(1) - 1
+        let ns = n[0..., last ..< (last + 1), 0...]
+        let aS = a[0..., last ..< (last + 1), 0...]
+        let qS = q[0 ..< 1, 0..., 0..., 0...]  // [1, H, L, headDim] batch 0, ALL positions
+        eval(ns); eval(aS); eval(qS)
+        return (ns.asType(.float32).reshaped([ns.size]).asArray(Float.self),
+                aS.asType(.float32).reshaped([aS.size]).asArray(Float.self),
+                qS.asType(.float32).reshaped([qS.size]).asArray(Float.self))
+    }
+
+    /// First-step (prefill) combined CFG logits — for numeric validation.
+    public func firstStepLogits(
+        textTokens: [Int], speakerEmb: MLXArray, promptSpeechTokens: [Int]? = nil,
+        emotionAdv: Float = 0.5, cfgWeight: Float = 0.5
+    ) -> [Float] {
+        let useCFG = cfgWeight > 0.0
+        let input = buildPrefix(
+            textTokens: textTokens, speakerEmb: speakerEmb,
+            promptSpeechTokens: promptSpeechTokens, emotionAdv: emotionAdv, useCFG: useCFG)
+        let caches = (0 ..< cfg.numLayers).map { _ in T3KVCache() }
+        let hidden = tfmr.model(input, caches: caches)
+        let last = hidden.dim(1) - 1
+        let logitsArr = speechHead(hidden[0..., last ..< (last + 1), 0...])
+        return nextStepLogits(logitsArr, useCFG: useCFG, cfgWeight: cfgWeight)
     }
 
     /// CFG-combine the last-position logits and return them on the host.

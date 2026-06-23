@@ -27,6 +27,13 @@ private func llama3Freqs(_ cfg: T3Config) -> MLXArray {
     return MLX.which(isMedium, smoothFreqs, scaled)
 }
 
+/// Non-Module holder so the precomputed RoPE frequencies aren't reflected as a
+/// loadable parameter.
+final class T3Freqs {
+    let array: MLXArray
+    init(_ a: MLXArray) { array = a }
+}
+
 /// Minimal append-only KV cache for the T3 AR loop.
 final class T3KVCache {
     var keys: MLXArray?
@@ -57,9 +64,9 @@ final class T3Attention: Module {
     let nKVHeads: Int
     let headDim: Int
     let scale: Float
-    let freqs: MLXArray
+    let freqs: T3Freqs
 
-    init(_ cfg: T3Config, freqs: MLXArray) {
+    init(_ cfg: T3Config, freqs: T3Freqs) {
         nHeads = cfg.numHeads
         nKVHeads = cfg.numKVHeads
         headDim = cfg.headDim
@@ -79,13 +86,38 @@ final class T3Attention: Module {
         var v = vProj(x).reshaped([b, l, nKVHeads, headDim]).transposed(0, 2, 1, 3)
 
         let offset = cache?.offset ?? 0
-        q = MLXFast.RoPE(q, dimensions: headDim, traditional: false, base: nil, scale: 1.0, offset: offset, freqs: freqs)
-        k = MLXFast.RoPE(k, dimensions: headDim, traditional: false, base: nil, scale: 1.0, offset: offset, freqs: freqs)
+        q = applyRoPE(q, offset: offset)
+        k = applyRoPE(k, offset: offset)
         if let cache { (k, v) = cache.update(k, v) }
 
-        var out = MLXFast.scaledDotProductAttention(queries: q, keys: k, values: v, scale: scale, mask: mask)
+        var scores = matmul(q * scale, k.transposed(0, 1, 3, 2))  // [b,h,l,l]
+        if let mask { scores = scores + mask }
+        scores = softmax(scores.asType(.float32), axis: -1).asType(q.dtype)
+        var out = matmul(scores, v)  // [b,h,l,d]
         out = out.transposed(0, 2, 1, 3).reshaped([b, l, nHeads * headDim])
         return oProj(out)
+    }
+
+    /// Debug: post-RoPE queries `[B, H, L, headDim]`.
+    func debugQRoPE(_ x: MLXArray) -> MLXArray {
+        let (b, l) = (x.dim(0), x.dim(1))
+        let q = qProj(x).reshaped([b, l, nHeads, headDim]).transposed(0, 2, 1, 3)
+        return applyRoPE(q, offset: 0)
+    }
+
+    /// NEOX-style RoPE using the precomputed llama3 wavelengths (angle = pos/freq).
+    /// `x`: [B, H, L, headDim].
+    private func applyRoPE(_ x: MLXArray, offset: Int) -> MLXArray {
+        let l = x.dim(2)
+        let half = headDim / 2
+        let pos = MLXArray((offset ..< offset + l).map { Float($0) })          // [L]
+        let invFreq = MLXArray(Float(1.0)) / freqs.array                        // [half]
+        let angles = pos.reshaped([l, 1]) * invFreq.reshaped([1, half])         // [L, half]
+        let cosA = cos(angles).reshaped([1, 1, l, half]).asType(x.dtype)
+        let sinA = sin(angles).reshaped([1, 1, l, half]).asType(x.dtype)
+        let x1 = x[0..., 0..., 0..., 0 ..< half]
+        let x2 = x[0..., 0..., 0..., half ..< headDim]
+        return concatenated([x1 * cosA - x2 * sinA, x2 * cosA + x1 * sinA], axis: -1)
     }
 }
 
@@ -112,7 +144,7 @@ final class T3Block: Module {
     @ModuleInfo(key: "input_layernorm") var inputLayerNorm: RMSNorm
     @ModuleInfo(key: "post_attention_layernorm") var postAttentionLayerNorm: RMSNorm
 
-    init(_ cfg: T3Config, freqs: MLXArray) {
+    init(_ cfg: T3Config, freqs: T3Freqs) {
         _selfAttn.wrappedValue = T3Attention(cfg, freqs: freqs)
         _mlp.wrappedValue = T3MLP(cfg)
         _inputLayerNorm.wrappedValue = RMSNorm(dimensions: cfg.hiddenSize, eps: cfg.rmsNormEps)
@@ -134,14 +166,25 @@ final class T3Backbone: Module {
     @ModuleInfo(key: "norm") var norm: RMSNorm
 
     init(_ cfg: T3Config) {
-        let freqs = llama3Freqs(cfg)
+        let freqs = T3Freqs(llama3Freqs(cfg))
         _embedTokens.wrappedValue = Embedding(embeddingCount: 8, dimensions: cfg.hiddenSize)
         _layers.wrappedValue = (0 ..< cfg.numLayers).map { _ in T3Block(cfg, freqs: freqs) }
         _norm.wrappedValue = RMSNorm(dimensions: cfg.hiddenSize, eps: cfg.rmsNormEps)
     }
 
+    /// Debug: layer-0 RMSNorm output, attention output, and post-RoPE q.
+    func debugLayer0(_ embeddings: MLXArray) -> (norm: MLXArray, attn: MLXArray, qrope: MLXArray) {
+        let l = embeddings.dim(1)
+        let mask = MultiHeadAttention.createAdditiveCausalMask(l).asType(embeddings.dtype)
+        let normed = layers[0].inputLayerNorm(embeddings)
+        let attn = layers[0].selfAttn(normed, mask: mask, cache: T3KVCache())
+        let qrope = layers[0].selfAttn.debugQRoPE(normed)
+        return (normed, attn, qrope)
+    }
+
     /// `embeddings`: `[B, L, dim]`. `caches`: per-layer (nil for a fresh prefill mask).
-    func callAsFunction(_ embeddings: MLXArray, caches: [T3KVCache]?) -> MLXArray {
+    /// `returnAfter`: if set, return the (pre-final-norm) hidden after that many layers.
+    func callAsFunction(_ embeddings: MLXArray, caches: [T3KVCache]?, returnAfter: Int? = nil) -> MLXArray {
         var h = embeddings
         let l = h.dim(1)
         // Causal mask only needed when processing >1 token (prefill); single-step
@@ -149,6 +192,7 @@ final class T3Backbone: Module {
         let mask: MLXArray? = l > 1 ? MultiHeadAttention.createAdditiveCausalMask(l).asType(h.dtype) : nil
         for (i, layer) in layers.enumerated() {
             h = layer(h, mask: mask, cache: caches?[i])
+            if let returnAfter, i == returnAfter { return h }
         }
         return norm(h)
     }

@@ -5,7 +5,7 @@ import MLXNN
 
 /// T3 (text→speech-token) configuration. Multilingual variant.
 public struct T3Config {
-    public var textTokensDictSize = 2454
+    public var textTokensDictSize = 2352
     public var startTextToken = 255
     public var stopTextToken = 0
     public var maxTextTokens = 2048
