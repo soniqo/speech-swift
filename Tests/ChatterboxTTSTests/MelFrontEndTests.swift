@@ -3,7 +3,7 @@ import MLXCommon
 import XCTest
 
 /// Numeric gate for the VoiceEncoder mel front-end (shared `SlaneyMel`), validated
-/// against a golden dumped from mlx-audio's `melspectrogram` on the SAME prepared
+/// against a reference-golden `melspectrogram` on the SAME prepared
 /// 16 kHz input (`/tmp/cbx_ve_input16k.f32`), so the resample/trim steps are
 /// isolated out and only the STFT + slaney filterbank + power are under test.
 final class MelFrontEndTests: XCTestCase {

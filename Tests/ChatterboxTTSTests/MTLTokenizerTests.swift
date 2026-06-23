@@ -3,9 +3,9 @@ import XCTest
 
 @testable import ChatterboxTTS
 
-/// Numeric gate for the Swift `MTLTokenizer`: token ids must match mlx-audio's
-/// Python `MTLTokenizer` (the conversion/runtime oracle) exactly for the
-/// frontend-free languages we support first (en / ar / hi).
+/// Numeric gate for the Swift `MTLTokenizer`: token ids must match the
+/// reference golden exactly for the frontend-free languages we support first
+/// (en / ar / hi).
 final class MTLTokenizerTests: XCTestCase {
     private func loadTokenizer() async throws -> MTLTokenizer {
         let folder = try await HubApi().snapshot(
@@ -15,10 +15,10 @@ final class MTLTokenizerTests: XCTestCase {
         return try MTLTokenizer(modelFolder: folder)
     }
 
-    func testEncodeMatchesPythonOracle() async throws {
+    func testEncodeMatchesReferenceGolden() async throws {
         let tok = try await loadTokenizer()
 
-        // Golden ids dumped from mlx-audio's MTLTokenizer over aufklarer/…-fp16.
+        // Golden ids from the reference tokenizer over aufklarer/…-fp16.
         XCTAssertEqual(
             tok.encode("Hello there, friend.", languageId: "en"),
             [708, 62, 84, 28, 2, 172, 7, 2, 19, 101, 204, 9])

@@ -6,7 +6,7 @@ import XCTest
 
 /// End-to-end numeric gate for the VoiceEncoder: mel → 3-layer LSTM → proj →
 /// ReLU → partial-window mean → L2, validated against the golden 256-d speaker
-/// embedding dumped from mlx-audio on the SAME prepared 16 kHz input (so
+/// embedding from the reference on the SAME prepared 16 kHz input (so
 /// resample/trim are isolated out). Weights come from a small ve-only
 /// safetensors to keep the test off the 1.3 GB bundle.
 final class VoiceEncoderTests: XCTestCase {
