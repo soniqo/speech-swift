@@ -291,26 +291,20 @@ let aligned = try aligner.align(
 )
 ```
 
-The CoreML aligner runs the audio encoder + token embedding + 28-layer non-autoregressive text decoder + classify head as three separate `.mlmodelc` bundles. The audio encoder is fixed to a 30 s mel input and reports the real (un-padded) audio-token count; the text decoder runs at a fixed prompt length of 1024 tokens — enough to cover the 9-token chat-template prefix + up to 390 audio tokens + 6-token suffix + ~150 word slots. The causal mask is `-1e4` (finite) so the fp16 softmax stays numerically stable.
+The CoreML aligner runs the audio encoder + token embedding + 28-layer non-autoregressive text decoder + classify head from two `.mlmodelc` bundles and a raw fp16 token-embedding binary. The audio encoder is fixed to a 30 s mel input and reports the real (un-padded) audio-token count; the text decoder runs at a fixed prompt length of 768 tokens — enough to cover the 9-token chat-template prefix + up to 390 audio tokens + 6-token suffix + ~120 word slots. The causal mask is `-1e4` (finite) so the fp16 softmax stays numerically stable.
 
-## Conversion
+## Model bundle layout
 
-The converters live in the [speech-models](https://github.com/soniqo/speech-models) repo under `models/forced-aligner/export/`.
+Each CoreML repo on HuggingFace contains:
 
-```bash
-# MLX variants (group-quantized text decoder)
-poetry run python convert_mlx.py --bits 4 --upload --repo-id aufklarer/Qwen3-ForcedAligner-0.6B-4bit
-poetry run python convert_mlx.py --bits 5 --upload --repo-id aufklarer/Qwen3-ForcedAligner-0.6B-5bit
-poetry run python convert_mlx.py --bits 8 --upload --repo-id aufklarer/Qwen3-ForcedAligner-0.6B-8bit
-poetry run python convert_mlx.py --bits 0 --upload --repo-id aufklarer/Qwen3-ForcedAligner-0.6B-bf16
+| File | Role |
+|---|---|
+| `audio_encoder.mlmodelc` (+ `.mlpackage`) | 24-layer block-attention audio encoder |
+| `text_decoder.mlmodelc` (+ `.mlpackage`) | 28-layer non-AR decoder + 5000-class classify head, fixed T=768 |
+| `embed_tokens.fp16.bin` | Raw little-endian fp16 token embedding table, `[152 064, 1024]` |
+| `config.json` | Variant + classify_num + timestamp_segment_time + fixed shapes |
+| `vocab.json`, `merges.txt`, `tokenizer_config.json` | Qwen3 BPE tokenizer files |
 
-# CoreML variants (audio encoder + embedding + text decoder + classify head)
-poetry run python convert_coreml.py --variant fp16 --compile --upload \
-        --repo-id aufklarer/Qwen3-ForcedAligner-0.6B-CoreML-FP16
-poetry run python convert_coreml.py --variant int8 --compile --upload \
-        --repo-id aufklarer/Qwen3-ForcedAligner-0.6B-CoreML-INT8
-```
+The embed-tokens table is shipped as a raw fp16 binary instead of a CoreML mlpackage — the Swift runtime memory-maps the file and gathers rows with `vImageConvert_Planar16FtoPlanarF`, costing ~0.5 ms per alignment versus ~70 ms for an mlpackage round-trip.
 
-**MLX**: quantizes text decoder (attention + MLP + embeddings) to N-bit. Audio encoder and classify head kept as float16. `--bits 0` keeps everything as float16.
-
-**CoreML**: traces the chunked block-attention audio encoder (fixed 30 s mel input, in-graph `mel_length`-driven mask), token embedding lookup, and a non-autoregressive 28-layer text decoder + 5000-class classify head. The text decoder runs at a fixed prompt length of 1024 tokens with a `-1e4` constant causal mask baked into the graph. `--variant fp16` keeps weights at fp16; `--variant int8` applies kmeans palettization to all three bundles. Published as pre-compiled `.mlmodelc` bundles alongside the source `.mlpackage` form.
+`--variant fp16` keeps all weights at fp16; `--variant int8` applies kmeans palettization to the audio encoder and text decoder bundles only. The embedding table stays fp16 in both variants because classification quality across the full 152 064-token vocabulary is sensitive to per-row quantization noise.

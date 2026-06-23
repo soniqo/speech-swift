@@ -242,7 +242,22 @@ final class AlignCommandTests: XCTestCase {
     func testDefaultAlignerModel() throws {
         let cmd = try AudioCLI.parseAsRoot(["align", "audio.wav"])
         let align = try XCTUnwrap(cmd as? AlignCommand)
-        XCTAssertEqual(align.alignerModel, "aufklarer/Qwen3-ForcedAligner-0.6B-4bit")
+        // The default is engine-dependent (mlx → 4-bit MLX, coreml → CoreML
+        // FP16) and resolved inside `run()`, so the parsed value is nil.
+        XCTAssertNil(align.alignerModel)
+    }
+
+    func testDefaultEngineIsMLX() throws {
+        let cmd = try AudioCLI.parseAsRoot(["align", "audio.wav"])
+        let align = try XCTUnwrap(cmd as? AlignCommand)
+        XCTAssertEqual(align.engine, "mlx")
+    }
+
+    func testEngineCoremlParses() throws {
+        let cmd = try AudioCLI.parseAsRoot(["align", "audio.wav", "--engine", "coreml"])
+        let align = try XCTUnwrap(cmd as? AlignCommand)
+        XCTAssertEqual(align.engine, "coreml")
+        XCTAssertNil(align.alignerModel)
     }
 
     func testParsesTextOption() throws {
