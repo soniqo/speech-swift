@@ -603,6 +603,26 @@ public final class S3GenVocoder: Module {
         super.init()
     }
 
+    /// Load vocoder weights (keys already stripped of any `s3gen.mel2wav.`
+    /// prefix), remapping the two array groups whose converted snake_case key
+    /// differs from the Swift property name. MLX's `@ModuleInfo(key:)` is honored
+    /// for scalar children but falls back to the reflected property name for
+    /// module *arrays*, so `source_downs.*` / `source_resblocks.*` must be
+    /// rewritten to `sourceDowns.*` / `sourceResblocks.*` to load cleanly.
+    public func loadWeights(_ weights: [String: MLXArray]) throws {
+        var remapped = [String: MLXArray](minimumCapacity: weights.count)
+        for (k, v) in weights {
+            var nk = k
+            if nk.hasPrefix("source_downs.") {
+                nk = "sourceDowns." + nk.dropFirst("source_downs.".count)
+            } else if nk.hasPrefix("source_resblocks.") {
+                nk = "sourceResblocks." + nk.dropFirst("source_resblocks.".count)
+            }
+            remapped[nk] = v
+        }
+        try update(parameters: ModuleParameters.unflattened(remapped), verify: .all)
+    }
+
     /// Nearest-neighbour upsample of F0 along time. f0: [B, 1, T] -> [B, 1, T*scale].
     private func f0Upsample(_ f0: MLXArray) -> MLXArray {
         let scale = config.f0UpsampleScale

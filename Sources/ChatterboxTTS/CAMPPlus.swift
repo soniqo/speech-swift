@@ -133,11 +133,18 @@ private enum KaldiFbank {
 
 // MARK: - Building blocks
 
-/// `batchnorm-relu` non-linearity: a `BatchNorm` (key `.0`) followed by ReLU.
-/// The optional `affine` toggle covers the `batchnorm_` variant (no weight/bias),
-/// and `relu` toggles whether the ReLU is applied.
+/// `batchnorm-relu` non-linearity: a `BatchNorm` followed by ReLU. The optional
+/// `affine` toggle covers the `batchnorm_` variant (no weight/bias), and `relu`
+/// toggles whether the ReLU is applied.
+///
+/// In the reference this is `nn.Sequential([BatchNorm1d, ReLU])`, so the
+/// converted weights are keyed `…nonlinear.0.{weight,bias,running_mean,
+/// running_var}` (BatchNorm at index 0). MLX's `ModuleParameters.unflattened`
+/// would read that `0` as an array index, which collides with this fixed-shape
+/// module — so the CAMPPlus loader rewrites the `.0.` segment to `.bn.` before
+/// loading (see `CAMPPlus.remapNonLinearKeys`).
 final class NonLinear: Module, UnaryLayer {
-    @ModuleInfo(key: "0") var bn: BatchNorm
+    @ModuleInfo(key: "bn") var bn: BatchNorm
     let relu: Bool
 
     init(_ channels: Int, affine: Bool = true, relu: Bool = true) {
@@ -498,6 +505,34 @@ public final class CAMPPlus: Module {
         // Statistics pooling doubles the channel count before the dense projection.
         self._dense.wrappedValue = DenseLayer(inChannels: channels * 2, outChannels: embeddingSize)
         super.init()
+    }
+
+    /// Rewrite converted `…<nonlinear>.0.<param>` keys to `…<nonlinear>.bn.<param>`
+    /// so the `NonLinear` BatchNorm (at reference `nn.Sequential` index 0) loads as
+    /// a fixed dictionary child rather than tripping MLX's integer-key array
+    /// detection in `ModuleParameters.unflattened`. Affects `nonlinear`,
+    /// `nonlinear1`, `nonlinear2`, and `out_nonlinear` segments.
+    public static func remapNonLinearKeys(_ weights: [String: MLXArray]) -> [String: MLXArray] {
+        let names = ["nonlinear", "nonlinear1", "nonlinear2", "out_nonlinear"]
+        var out = [String: MLXArray](minimumCapacity: weights.count)
+        for (k, v) in weights {
+            var nk = k
+            for n in names {
+                nk = nk.replacingOccurrences(of: ".\(n).0.", with: ".\(n).bn.")
+                if nk.hasPrefix("\(n).0.") {
+                    nk = "\(n).bn." + nk.dropFirst("\(n).0.".count)
+                }
+            }
+            out[nk] = v
+        }
+        return out
+    }
+
+    /// Load CAMPPlus weights (keys already stripped of any `s3gen.speaker_encoder.`
+    /// prefix), remapping the `NonLinear` BatchNorm keys first.
+    public func loadWeights(_ weights: [String: MLXArray]) throws {
+        let remapped = Self.remapNonLinearKeys(weights)
+        try update(parameters: ModuleParameters.unflattened(remapped), verify: .all)
     }
 
     /// Forward over precomputed features `(B, T, F)` -> embeddings `(B, embeddingSize)`.
