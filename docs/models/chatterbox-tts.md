@@ -18,10 +18,8 @@ speaker embeddings checked against a known-good reference at each stage.
 Greek, Hebrew, Hindi, Italian, Japanese, Korean, Malay, Norwegian, Polish,
 Portuguese, Russian, Spanish, Swahili, Swedish, Turkish.
 
-Latin-script languages plus Arabic and Hindi encode through the base text path
-(NFKD → `[lang]` token → BPE) and are supported first. Chinese, Japanese,
-Hebrew, Korean and Russian need a language-specific text frontend
-(Cangjie / kakasi / diacritics / Jamo / stress) and are enabled incrementally.
+Text encodes through a grapheme path: NFKD normalization → a per-language
+`[lang]` token → BPE.
 
 ## Pipeline Stages
 

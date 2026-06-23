@@ -24,7 +24,7 @@ public enum ChatterboxModelError: Error, LocalizedError {
         switch self {
         case let .missingFile(p): return "Chatterbox: required file not found: \(p)"
         case let .unsupportedLanguage(l):
-            return "Chatterbox: language '\(l)' needs a text frontend that isn't ported yet"
+            return "Chatterbox: language '\(l)' is not supported"
         }
     }
 }

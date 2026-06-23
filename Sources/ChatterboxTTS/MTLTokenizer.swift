@@ -24,9 +24,9 @@ public enum ChatterboxTokenizerError: Error {
 /// (rather than via swift-transformers' generic tokenizer) so token ids match the
 /// reference implementation exactly.
 ///
-/// Chinese, Japanese, Hebrew, Korean and Russian additionally need a
-/// language-specific text frontend (Cangjie / kakasi / diacritics / Jamo /
-/// stress) that is **not yet ported** — see `frontendFreeLanguages`.
+/// Some writing systems additionally need a language-specific text frontend
+/// before this grapheme path — see `frontendFreeLanguages` for the set this
+/// tokenizer encodes directly.
 public final class MTLTokenizer {
     private let vocab: [String: Int]
     private let idToToken: [Int: String]
@@ -36,7 +36,7 @@ public final class MTLTokenizer {
     private let addedTokens: [(token: [Character], id: Int)]
     private let unkId: Int
 
-    /// Languages whose encode path needs no special frontend, fully supported today.
+    /// Languages this tokenizer encodes directly (no language-specific frontend).
     public static let frontendFreeLanguages: Set<String> =
         ["en", "ar", "hi", "de", "es", "fr", "it", "pt"]
 
