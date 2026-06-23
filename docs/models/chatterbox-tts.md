@@ -4,8 +4,8 @@
 
 Chatterbox Multilingual (Resemble AI, MIT) is a zero-shot voice-cloning TTS that
 synthesizes a target text in the timbre of a short reference clip across 23
-languages. It is the only model in this package that covers **Arabic and Hindi**
-voice cloning (Qwen3-TTS and CosyVoice do not). The MLX bundle is a genuine fp16
+languages — the broadest language coverage of any TTS in this package. The MLX
+bundle is a genuine fp16
 conversion (~1.3 GB) of the three upstream checkpoints, published at
 [`aufklarer/Chatterbox-Multilingual-MLX-fp16`](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16).
 

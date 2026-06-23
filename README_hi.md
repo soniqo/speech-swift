@@ -35,7 +35,7 @@ Mac और iOS के लिए ऑन-डिवाइस स्पीच रि
 - **[VibeVoice TTS](https://soniqo.audio/hi/guides/vibevoice)** — लंबे-रूप / बहु-वक्ता TTS (Microsoft VibeVoice Realtime-0.5B + 1.5B, MLX, 90 मिनट तक के पॉडकास्ट / ऑडियोबुक संश्लेषण, EN/ZH)
 - **[Magpie TTS](https://soniqo.audio/hi/guides/magpie)** — बहुभाषी TTS (NVIDIA Magpie-TTS Multilingual 357M, MLX INT8 411 MB या CoreML INT8 342 MB, 9 भाषाएँ, 5 पूर्व-निर्धारित वक्ता, MLX पर स्ट्रीमिंग)
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — ऑन-डिवाइस फ़्लो-मैचिंग TTS (Supertone Supertonic-3 99M, CoreML/Neural Engine, 31 भाषाएँ, 10 वॉयस, G2P-free, 44.1 kHz)
-- **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — ज़ीरो-शॉट वॉयस क्लोनिंग के साथ बहुभाषी TTS (Resemble AI Chatterbox Multilingual, MLX fp16 ~1.3 GB, अरबी और हिंदी सहित 23 भाषाएँ, MIT)
+- **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — ज़ीरो-शॉट वॉयस क्लोनिंग के साथ बहुभाषी TTS (Resemble AI Chatterbox Multilingual, MLX fp16 ~1.3 GB, 23 भाषाएँ, MIT)
 - **[Qwen3.5-Chat](https://soniqo.audio/hi/guides/chat)** — ऑन-डिवाइस LLM चैट (0.8B, MLX INT4 + CoreML INT8, DeltaNet हाइब्रिड, स्ट्रीमिंग टोकन)
 - **[FunctionGemma](https://soniqo.audio/hi/guides/function-calls)** — संरचित फ़ंक्शन / टूल कॉल के लिए ऑन-डिवाइस LLM (Gemma 3 270M, CoreML 8-बिट पैलेटाइज़, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/hi/guides/translate)** — 400+ भाषाओं में बहु-दिशात्मक अनुवाद (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)

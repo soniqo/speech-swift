@@ -45,7 +45,7 @@
 - **[VibeVoice TTS](https://soniqo.audio/ar/guides/vibevoice)** — تحويل النص إلى كلام للنصوص الطويلة / متعدد المتحدثين (Microsoft VibeVoice Realtime-0.5B + 1.5B، MLX، توليد بودكاست/كتب صوتية حتى 90 دقيقة، EN/ZH)
 - **[Magpie TTS](https://soniqo.audio/ar/guides/magpie)** — تحويل النص إلى كلام متعدد اللغات (NVIDIA Magpie-TTS Multilingual 357M، MLX INT8 411 ميغابايت أو CoreML INT8 342 ميغابايت، 9 لغات، 5 متحدثين جاهزين، تدفق على MLX)
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — تحويل النص إلى كلام على الجهاز بمطابقة التدفق (Supertone Supertonic-3 99M، CoreML/Neural Engine، 31 لغة، 10 أصوات، بدون G2P، 44.1 كيلوهرتز)
-- **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — تحويل النص إلى كلام متعدد اللغات مع استنساخ الصوت بدون تدريب مسبق (Resemble AI Chatterbox Multilingual، MLX fp16 ~1.3 غيغابايت، 23 لغة تشمل العربية والهندية، MIT)
+- **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — تحويل النص إلى كلام متعدد اللغات مع استنساخ الصوت بدون تدريب مسبق (Resemble AI Chatterbox Multilingual، MLX fp16 ~1.3 غيغابايت، 23 لغة، MIT)
 - **[Qwen3.5-Chat](https://soniqo.audio/ar/guides/chat)** — محادثة LLM على الجهاز (0.8B، MLX INT4 + CoreML INT8، DeltaNet هجين، رموز تدفقية)
 - **[FunctionGemma](https://soniqo.audio/ar/guides/function-calls)** — نموذج لغوي على الجهاز للاستدعاءات المنظمة للدوال / الأدوات (Gemma 3 270M، CoreML بترميز 8-بت، Neural Engine، حوالي 252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/ar/guides/translate)** — ترجمة متعددة الاتجاهات عبر أكثر من 400 لغة (3B، MLX INT4 + INT8، T5 v1.1، Apache 2.0)

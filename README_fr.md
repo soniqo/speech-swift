@@ -35,7 +35,7 @@ Reconnaissance, synthese et comprehension vocale embarquees pour Mac et iOS. S'e
 - **[VibeVoice TTS](https://soniqo.audio/fr/guides/vibevoice)** -- TTS long format / multi-locuteurs (Microsoft VibeVoice Realtime-0.5B + 1.5B, MLX, synthese de podcast/livre audio jusqu'a 90 min, EN/ZH)
 - **[Magpie TTS](https://soniqo.audio/fr/guides/magpie)** — TTS multilingue (NVIDIA Magpie-TTS Multilingual 357M, MLX INT8 411 Mo ou CoreML INT8 342 Mo, 9 langues, 5 voix prédéfinies, streaming sur MLX)
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — TTS embarque par appariement de flux (Supertone Supertonic-3 99M, CoreML/Neural Engine, 31 langues, 10 voix, sans G2P, 44.1 kHz)
-- **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — TTS multilingue avec clonage vocal zero-shot (Resemble AI Chatterbox Multilingual, MLX fp16 ~1,3 Go, 23 langues dont l'arabe et le hindi, MIT)
+- **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — TTS multilingue avec clonage vocal zero-shot (Resemble AI Chatterbox Multilingual, MLX fp16 ~1,3 Go, 23 langues, MIT)
 - **[Qwen3.5-Chat](https://soniqo.audio/fr/guides/chat)** -- Chat LLM embarque (0.8B, MLX INT4 + CoreML INT8, DeltaNet hybride, tokens en streaming)
 - **[FunctionGemma](https://soniqo.audio/fr/guides/function-calls)** — LLM embarque pour les appels structures de fonctions / outils (Gemma 3 270M, CoreML palettisation 8 bits, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/fr/guides/translate)** — Traduction multidirectionnelle entre 400+ langues (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
