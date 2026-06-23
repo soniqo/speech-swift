@@ -164,13 +164,38 @@ Set `ALIGN_DEBUG=1` to dump raw vs corrected timestamp indices when investigatin
 
 ## Performance (M2 Max, 64 GB)
 
+MLX 4-bit (debug build):
+
 | Stage | Time | Notes |
 |-------|------|-------|
 | Audio encoder | ~328ms | Mel extraction + 24L transformer + projector |
 | Decoder + classify | ~37ms | Single forward pass, no autoregressive loop |
-| **Total (20s audio)** | **~365ms** | **RTF ~0.018 (55x faster than real-time)** |
+| **Total (20s audio)** | **~365ms** | **RTF ~0.018 (55× faster than real-time)** |
 
-Debug build. Release would be faster.
+CoreML variants (debug build, 20 s clip, median of 3 runs after warm-up):
+
+| Variant | RTF | Peak RSS | Load Δ |
+|---|---|---|---|
+| CoreML FP16 | 0.015 (67×) | 1071 MB | 966 MB |
+| CoreML INT8 | 0.014 (69×) | 697 MB  | 596 MB |
+
+INT8 cuts peak memory by ~35% at the same (slightly better) wall-clock speed. Release would be faster.
+
+Per-stage profile of an FP16 run (`COREML_ALIGN_PROFILE=1`):
+
+| Stage | Time | Notes |
+|-------|------|-------|
+| Mel extraction | ~150 ms | CPU (vDSP FFT + BLAS filterbank) |
+| Audio encoder | ~90 ms | CPU+ANE, fixed 30 s shape |
+| Token embedding | ~0.5 ms | Pure Swift gather from a memory-mapped fp16 table (no CoreML round-trip) |
+| Audio→embedding splice | ~0 ms | `memcpy` per audio token row |
+| Text decoder + classify | ~44 ms | 28-layer non-AR pass, fixed T=768 |
+| Argmax @ &lt;ts&gt; positions | ~7 ms | Stride-aware (CoreML pads inner dim to 5024 for alignment) |
+| LIS monotonicity | &lt;1 ms | O(n log n) on 22 timestamp slots |
+
+Two prior bottlenecks were removed in the current build:
+1. The token embedding used to round-trip through a CoreML mlpackage (~70 ms per call). The converter now writes the embed_tokens weight as a raw fp16 binary alongside the bundles; the Swift runtime memory-maps it and gathers rows with `vImageConvert_Planar16FtoPlanarF`.
+2. The text decoder was previously exported at T=1024. Attention compute is O(T²) so dropping it to T=768 (still covering 30 s of audio + ~120 word slots) cut the decoder stage by ~25%.
 
 ## Weight Structure
 
@@ -187,25 +212,31 @@ Weights use a `thinker.` prefix:
 | Model | ID | Size |
 |-------|----|------|
 | MLX 4-bit | `aufklarer/Qwen3-ForcedAligner-0.6B-4bit` | ~979 MB |
+| MLX 5-bit | `aufklarer/Qwen3-ForcedAligner-0.6B-5bit` | ~1.1 GB |
 | MLX 8-bit | `aufklarer/Qwen3-ForcedAligner-0.6B-8bit` | ~1.3 GB |
 | MLX bf16 | `aufklarer/Qwen3-ForcedAligner-0.6B-bf16` | ~1.8 GB |
-| CoreML INT4 | `aufklarer/Qwen3-ForcedAligner-0.6B-CoreML-INT4` | ~662 MB |
-| CoreML INT8 | `aufklarer/Qwen3-ForcedAligner-0.6B-CoreML-INT8` | ~1.1 GB |
+| CoreML FP16 | `aufklarer/Qwen3-ForcedAligner-0.6B-CoreML-FP16` | ~1.7 GB |
+| CoreML INT8 | `aufklarer/Qwen3-ForcedAligner-0.6B-CoreML-INT8` | ~880 MB |
 
-Variant is auto-detected from `quantize_config.json` in the model directory. The bf16 variant uses a float text decoder (`FloatTextModel`) instead of a quantized one.
+The MLX variant is auto-detected from `quantize_config.json`; the bf16 variant uses a float text decoder (`FloatTextModel`) instead of a quantized one. CoreML variants are loaded through `CoreMLForcedAligner.fromPretrained(...)` — see the Swift API section below.
 
 ## CLI Usage
 
 ```bash
-# Align with provided text
+# Align with provided text (MLX, default)
 speech align audio.wav --text "Can you guarantee that the replacement part will be shipped tomorrow?"
 
 # Transcribe first, then align
 speech align audio.wav
 
-# Custom aligner model (8-bit or bf16)
+# Custom MLX aligner model (5-bit / 8-bit / bf16)
+speech align audio.wav --aligner-model aufklarer/Qwen3-ForcedAligner-0.6B-5bit
 speech align audio.wav --aligner-model aufklarer/Qwen3-ForcedAligner-0.6B-8bit
 speech align audio.wav --aligner-model aufklarer/Qwen3-ForcedAligner-0.6B-bf16
+
+# CoreML aligner (Neural Engine + GPU; defaults to FP16, switch to INT8 via --aligner-model)
+speech align audio.wav --engine coreml
+speech align audio.wav --engine coreml --aligner-model aufklarer/Qwen3-ForcedAligner-0.6B-CoreML-INT8
 ```
 
 Output format:
@@ -243,19 +274,43 @@ for word in alignedLong {
 }
 ```
 
-## Conversion
+### CoreML
 
-```bash
-# MLX variants
-python scripts/convert_forced_aligner.py --bits 4 --upload --repo-id aufklarer/Qwen3-ForcedAligner-0.6B-4bit
-python scripts/convert_forced_aligner.py --bits 8 --upload --repo-id aufklarer/Qwen3-ForcedAligner-0.6B-8bit
-python scripts/convert_forced_aligner.py --bits 0 --upload --repo-id aufklarer/Qwen3-ForcedAligner-0.6B-bf16
+```swift
+import Qwen3ASR
 
-# CoreML variants
-python scripts/convert_forced_aligner.py --coreml --coreml-bits 4 --upload --repo-id aufklarer/Qwen3-ForcedAligner-0.6B-CoreML-INT4
-python scripts/convert_forced_aligner.py --coreml --coreml-bits 8 --upload --repo-id aufklarer/Qwen3-ForcedAligner-0.6B-CoreML-INT8
+let aligner = try await CoreMLForcedAligner.fromPretrained(
+    modelId: "aufklarer/Qwen3-ForcedAligner-0.6B-CoreML-FP16"
+)
+
+let aligned = try aligner.align(
+    audio: audioSamples,
+    text: "Can you guarantee that the replacement part will be shipped tomorrow?",
+    sampleRate: 16000,
+    language: "English"
+)
 ```
 
-MLX: quantizes text decoder (attention + MLP + embeddings) to N-bit. Audio encoder and classify head kept as float16. `--bits 0` keeps everything as float16.
+The CoreML aligner runs the audio encoder + token embedding + 28-layer non-autoregressive text decoder + classify head as three separate `.mlmodelc` bundles. The audio encoder is fixed to a 30 s mel input and reports the real (un-padded) audio-token count; the text decoder runs at a fixed prompt length of 1024 tokens — enough to cover the 9-token chat-template prefix + up to 390 audio tokens + 6-token suffix + ~150 word slots. The causal mask is `-1e4` (finite) so the fp16 softmax stays numerically stable.
 
-CoreML: traces audio encoder, text decoder + classify head, and embedding as separate models with INT4/INT8 palettization. Published as pre-compiled `.mlmodelc` bundles.
+## Conversion
+
+The converters live in the [speech-models](https://github.com/soniqo/speech-models) repo under `models/forced-aligner/export/`.
+
+```bash
+# MLX variants (group-quantized text decoder)
+poetry run python convert_mlx.py --bits 4 --upload --repo-id aufklarer/Qwen3-ForcedAligner-0.6B-4bit
+poetry run python convert_mlx.py --bits 5 --upload --repo-id aufklarer/Qwen3-ForcedAligner-0.6B-5bit
+poetry run python convert_mlx.py --bits 8 --upload --repo-id aufklarer/Qwen3-ForcedAligner-0.6B-8bit
+poetry run python convert_mlx.py --bits 0 --upload --repo-id aufklarer/Qwen3-ForcedAligner-0.6B-bf16
+
+# CoreML variants (audio encoder + embedding + text decoder + classify head)
+poetry run python convert_coreml.py --variant fp16 --compile --upload \
+        --repo-id aufklarer/Qwen3-ForcedAligner-0.6B-CoreML-FP16
+poetry run python convert_coreml.py --variant int8 --compile --upload \
+        --repo-id aufklarer/Qwen3-ForcedAligner-0.6B-CoreML-INT8
+```
+
+**MLX**: quantizes text decoder (attention + MLP + embeddings) to N-bit. Audio encoder and classify head kept as float16. `--bits 0` keeps everything as float16.
+
+**CoreML**: traces the chunked block-attention audio encoder (fixed 30 s mel input, in-graph `mel_length`-driven mask), token embedding lookup, and a non-autoregressive 28-layer text decoder + 5000-class classify head. The text decoder runs at a fixed prompt length of 1024 tokens with a `-1e4` constant causal mask baked into the graph. `--variant fp16` keeps weights at fp16; `--variant int8` applies kmeans palettization to all three bundles. Published as pre-compiled `.mlmodelc` bundles alongside the source `.mlpackage` form.
