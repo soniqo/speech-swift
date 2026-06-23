@@ -189,8 +189,8 @@ public final class ChatterboxTTSModel {
     }
 
     /// Download (or reuse cached) the published bundle + the S3TokenizerV2 repo,
-    /// then load. The conformer block weights are taken from the original
-    /// `ResembleAI/chatterbox` checkpoint when present in the HF cache.
+    /// then load. The bundle ships its flow-encoder conformer blocks as
+    /// `conformer.safetensors`, so cloning needs no external checkpoint.
     public static func fromPretrained(
         modelId: String = defaultModelId,
         s3TokenizerModelId: String = s3TokenizerModelId,
@@ -208,7 +208,7 @@ public final class ChatterboxTTSModel {
             progressHandler?(0.0, "Downloading \(modelId)...")
             try await HuggingFaceDownloader.downloadWeights(
                 modelId: modelId, to: bundleDir,
-                additionalFiles: ["config.json", "tokenizer.json"],
+                additionalFiles: ["config.json", "tokenizer.json", "conformer.safetensors"],
                 offlineMode: offlineMode
             ) { progressHandler?($0 * 0.7, "Downloading model...") }
         }
