@@ -80,8 +80,8 @@ public final class ChatterboxTTSModel {
     ///     quantizer). Required — the bundle does not carry tokenizer weights.
     ///   - conformerWeights: optional checkpoint carrying the flow-encoder
     ///     conformer blocks (`flow.encoder.encoders.* / up_encoders.*`). The
-    ///     published bundle omits these; pass the original `s3gen.safetensors`
-    ///     to load them for determinism / correctness.
+    ///     the bundle ships these as `conformer.safetensors`, which is used by
+    ///     default; pass an explicit URL only to override the source.
     public static func fromPretrained(
         localDir bundleDir: URL,
         s3TokenizerWeights: URL,
@@ -91,6 +91,13 @@ public final class ChatterboxTTSModel {
         let modelPath = bundleDir.appendingPathComponent("model.safetensors")
         for p in [modelPath.path, s3TokenizerWeights.path] where !fm.fileExists(atPath: p) {
             throw ChatterboxModelError.missingFile(p)
+        }
+        // The conformer blocks ship alongside the bundle; fall back to them when
+        // the caller doesn't override, so the bundle loads self-contained.
+        var conformerWeights = conformerWeights
+        if conformerWeights == nil {
+            let bundled = bundleDir.appendingPathComponent("conformer.safetensors")
+            if fm.fileExists(atPath: bundled.path) { conformerWeights = bundled }
         }
 
         let tokenizer = try MTLTokenizer(modelFolder: bundleDir)

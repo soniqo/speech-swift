@@ -98,13 +98,6 @@ final class T3Attention: Module {
         return oProj(out)
     }
 
-    /// Debug: post-RoPE queries `[B, H, L, headDim]`.
-    func debugQRoPE(_ x: MLXArray) -> MLXArray {
-        let (b, l) = (x.dim(0), x.dim(1))
-        let q = qProj(x).reshaped([b, l, nHeads, headDim]).transposed(0, 2, 1, 3)
-        return applyRoPE(q, offset: 0)
-    }
-
     /// NEOX-style RoPE using the precomputed llama3 wavelengths (angle = pos/freq).
     /// `x`: [B, H, L, headDim].
     private func applyRoPE(_ x: MLXArray, offset: Int) -> MLXArray {
@@ -172,19 +165,8 @@ final class T3Backbone: Module {
         _norm.wrappedValue = RMSNorm(dimensions: cfg.hiddenSize, eps: cfg.rmsNormEps)
     }
 
-    /// Debug: layer-0 RMSNorm output, attention output, and post-RoPE q.
-    func debugLayer0(_ embeddings: MLXArray) -> (norm: MLXArray, attn: MLXArray, qrope: MLXArray) {
-        let l = embeddings.dim(1)
-        let mask = MultiHeadAttention.createAdditiveCausalMask(l).asType(embeddings.dtype)
-        let normed = layers[0].inputLayerNorm(embeddings)
-        let attn = layers[0].selfAttn(normed, mask: mask, cache: T3KVCache())
-        let qrope = layers[0].selfAttn.debugQRoPE(normed)
-        return (normed, attn, qrope)
-    }
-
     /// `embeddings`: `[B, L, dim]`. `caches`: per-layer (nil for a fresh prefill mask).
-    /// `returnAfter`: if set, return the (pre-final-norm) hidden after that many layers.
-    func callAsFunction(_ embeddings: MLXArray, caches: [T3KVCache]?, returnAfter: Int? = nil) -> MLXArray {
+    func callAsFunction(_ embeddings: MLXArray, caches: [T3KVCache]?) -> MLXArray {
         var h = embeddings
         let l = h.dim(1)
         // Causal mask only needed when processing >1 token (prefill); single-step
@@ -192,7 +174,6 @@ final class T3Backbone: Module {
         let mask: MLXArray? = l > 1 ? MultiHeadAttention.createAdditiveCausalMask(l).asType(h.dtype) : nil
         for (i, layer) in layers.enumerated() {
             h = layer(h, mask: mask, cache: caches?[i])
-            if let returnAfter, i == returnAfter { return h }
         }
         return norm(h)
     }

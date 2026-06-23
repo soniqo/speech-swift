@@ -106,53 +106,6 @@ public final class ChatterboxT3: Module {
         return generated
     }
 
-    /// Prefill input embeddings — for numeric validation/bisection.
-    public func debugInputEmbeds(
-        textTokens: [Int], speakerEmb: MLXArray, promptSpeechTokens: [Int]? = nil,
-        emotionAdv: Float = 0.5, cfgWeight: Float = 0.5
-    ) -> [Float] {
-        let input = buildPrefix(
-            textTokens: textTokens, speakerEmb: speakerEmb,
-            promptSpeechTokens: promptSpeechTokens, emotionAdv: emotionAdv, useCFG: cfgWeight > 0)
-        eval(input)
-        return input.asType(.float32).reshaped([input.size]).asArray(Float.self)
-    }
-
-    /// Prefill hidden after `afterLayers` layers (last position, both batches) — bisection.
-    public func debugHidden(
-        textTokens: [Int], speakerEmb: MLXArray, promptSpeechTokens: [Int]? = nil,
-        emotionAdv: Float = 0.5, cfgWeight: Float = 0.5, afterLayers: Int
-    ) -> [Float] {
-        let input = buildPrefix(
-            textTokens: textTokens, speakerEmb: speakerEmb,
-            promptSpeechTokens: promptSpeechTokens, emotionAdv: emotionAdv, useCFG: cfgWeight > 0)
-        let caches = (0 ..< cfg.numLayers).map { _ in T3KVCache() }
-        let h = tfmr.model(input, caches: caches, returnAfter: afterLayers)
-        let last = h.dim(1) - 1
-        let sub = h[0..., last ..< (last + 1), 0...]
-        eval(sub)
-        return sub.asType(.float32).reshaped([sub.size]).asArray(Float.self)
-    }
-
-    /// Debug: layer-0 RMSNorm + attention outputs (last position) — bisection.
-    public func debugLayer0Parts(
-        textTokens: [Int], speakerEmb: MLXArray, promptSpeechTokens: [Int]? = nil,
-        emotionAdv: Float = 0.5, cfgWeight: Float = 0.5
-    ) -> (norm: [Float], attn: [Float], qrope: [Float]) {
-        let input = buildPrefix(
-            textTokens: textTokens, speakerEmb: speakerEmb,
-            promptSpeechTokens: promptSpeechTokens, emotionAdv: emotionAdv, useCFG: cfgWeight > 0)
-        let (n, a, q) = tfmr.model.debugLayer0(input)
-        let last = input.dim(1) - 1
-        let ns = n[0..., last ..< (last + 1), 0...]
-        let aS = a[0..., last ..< (last + 1), 0...]
-        let qS = q[0 ..< 1, 0..., 0..., 0...]  // [1, H, L, headDim] batch 0, ALL positions
-        eval(ns); eval(aS); eval(qS)
-        return (ns.asType(.float32).reshaped([ns.size]).asArray(Float.self),
-                aS.asType(.float32).reshaped([aS.size]).asArray(Float.self),
-                qS.asType(.float32).reshaped([qS.size]).asArray(Float.self))
-    }
-
     /// First-step (prefill) combined CFG logits — for numeric validation.
     public func firstStepLogits(
         textTokens: [Int], speakerEmb: MLXArray, promptSpeechTokens: [Int]? = nil,

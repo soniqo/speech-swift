@@ -41,7 +41,7 @@ final class RoundtripE2ETests: XCTestCase {
     }
 
     /// Full text → audio roundtrip. Loads the local `/tmp/cbx-fp16` bundle (plus
-    /// the cached S3TokenizerV2 + conformer weights), clones the reference clip,
+    /// the cached S3TokenizerV2 weights), clones the reference clip,
     /// and asserts non-empty, non-silent audio. The synthesized wav is written to
     /// /tmp/cbx_swift_synth.wav. Skips if the bundle/goldens aren't on disk.
     func testFullSynthesisRoundtrip() throws {
@@ -55,13 +55,12 @@ final class RoundtripE2ETests: XCTestCase {
         guard let s3tok = Self.cachedSnapshotFile(
             repo: "models--mlx-community--S3TokenizerV2", file: "model.safetensors")
         else { throw XCTSkip("S3TokenizerV2 weights not cached") }
-        let conformer = Self.cachedSnapshotFile(
-            repo: "models--ResembleAI--chatterbox", file: "s3gen.safetensors")
 
+        // No explicit conformer weights — the bundle's conformer.safetensors is
+        // used by default, proving the published bundle loads self-contained.
         let model = try ChatterboxTTSModel.fromPretrained(
             localDir: URL(fileURLWithPath: bundleDir),
-            s3TokenizerWeights: s3tok,
-            conformerWeights: conformer)
+            s3TokenizerWeights: s3tok)
 
         let (samples, sr) = try Self.loadWav(refPath)
         let audio = try model.clone(
@@ -92,12 +91,10 @@ final class RoundtripE2ETests: XCTestCase {
         guard let s3tok = Self.cachedSnapshotFile(
             repo: "models--mlx-community--S3TokenizerV2", file: "model.safetensors")
         else { throw XCTSkip("S3TokenizerV2 weights not cached") }
-        let conformer = Self.cachedSnapshotFile(
-            repo: "models--ResembleAI--chatterbox", file: "s3gen.safetensors")
 
         let model = try ChatterboxTTSModel.fromPretrained(
             localDir: URL(fileURLWithPath: bundleDir),
-            s3TokenizerWeights: s3tok, conformerWeights: conformer)
+            s3TokenizerWeights: s3tok)
         let (samples, sr) = try Self.loadWav(refPath)
 
         let cases: [(String, String)] = [
