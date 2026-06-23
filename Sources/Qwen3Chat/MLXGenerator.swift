@@ -218,12 +218,16 @@ public final class Qwen35MLXChat: @unchecked Sendable {
         var logits = extractLastPositionLogits(prefillLogits)
         var generatedTokens: [Int] = []
         var inThinking = false
+        var producedContent = false
         let thinkBudget = 100
 
         // Decode loop
         let decodeStart = CFAbsoluteTimeGetCurrent()
 
         for _ in 0..<(sampling.maxTokens + thinkBudget) {
+            // Don't let the model end the turn before saying anything (empty reply).
+            if !producedContent { suppressEndTokens(&logits) }
+
             let nextToken = ChatSampler.sample(
                 logits: logits,
                 config: sampling,
@@ -239,6 +243,8 @@ public final class Qwen35MLXChat: @unchecked Sendable {
                 inThinking = true
             } else if nextToken == ChatTemplate.thinkEndId {
                 inThinking = false
+            } else if !self.tokenizer.isSpecialToken(nextToken) {
+                producedContent = true
             }
 
             if inThinking && generatedTokens.count > thinkBudget {
@@ -315,8 +321,15 @@ public final class Qwen35MLXChat: @unchecked Sendable {
                     var logits = self.extractLastPositionLogits(prefillLogits)
                     var generatedTokens: [Int] = []
                     var inThinking = false
+                    var producedContent = false
+                    // Byte-level BPE can split one UTF-8 character across tokens, so accumulate
+                    // raw bytes and only emit complete characters (see ChatTokenizer.tokenBytes).
+                    var pending: [UInt8] = []
 
                     for _ in 0..<sampling.maxTokens {
+                        // Don't let the model end the turn before saying anything (empty reply).
+                        if !producedContent { self.suppressEndTokens(&logits) }
+
                         let nextToken = ChatSampler.sample(
                             logits: logits,
                             config: sampling,
@@ -331,10 +344,12 @@ public final class Qwen35MLXChat: @unchecked Sendable {
                             inThinking = true
                         } else if nextToken == ChatTemplate.thinkEndId {
                             inThinking = false
-                        } else if !inThinking,
-                                  let text = self.tokenizer.decodeToken(nextToken),
-                                  !self.tokenizer.isSpecialToken(nextToken) {
-                            continuation.yield(text)
+                        } else if !inThinking, !self.tokenizer.isSpecialToken(nextToken) {
+                            producedContent = true
+                            pending.append(contentsOf: self.tokenizer.tokenBytes(nextToken))
+                            let (text, remainder) = ChatTokenizer.decodeUTF8Prefix(pending)
+                            pending = remainder
+                            if !text.isEmpty { continuation.yield(text) }
                         }
 
                         let tokenArr = MLXArray([Int32(nextToken)])
@@ -346,6 +361,11 @@ public final class Qwen35MLXChat: @unchecked Sendable {
                         logits = self.extractLastPositionLogits(stepLogits)
                     }
 
+                    // Flush any trailing incomplete bytes (lossy — replacement char if invalid).
+                    if !pending.isEmpty {
+                        continuation.yield(String(decoding: pending, as: UTF8.self))
+                    }
+
                     continuation.finish()
                 } catch {
                     continuation.finish(throwing: error)
@@ -355,6 +375,18 @@ public final class Qwen35MLXChat: @unchecked Sendable {
     }
 
     // MARK: - Helpers
+
+    /// Forbid the end-of-turn tokens by driving their logits to -inf. Used to stop a small
+    /// model from ending a turn before it has produced any visible content (empty replies).
+    private func suppressEndTokens(_ logits: inout [Float]) {
+        let ninf = -Float.greatestFiniteMagnitude
+        if config.eosTokenId >= 0, config.eosTokenId < logits.count {
+            logits[config.eosTokenId] = ninf
+        }
+        if ChatTemplate.imEndId >= 0, ChatTemplate.imEndId < logits.count {
+            logits[ChatTemplate.imEndId] = ninf
+        }
+    }
 
     /// Extract logits for the last sequence position as a Float array.
     private func extractLastPositionLogits(_ logits: MLXArray) -> [Float] {

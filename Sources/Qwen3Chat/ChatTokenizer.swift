@@ -213,6 +213,41 @@ public final class ChatTokenizer: @unchecked Sendable {
         return decodeBPEString(piece)
     }
 
+    /// Raw byte sequence a (non-special) token maps to under byte-level BPE.
+    ///
+    /// Streaming decoders must accumulate these across tokens and decode UTF-8 on the
+    /// combined buffer — decoding each token's bytes in isolation corrupts any multi-byte
+    /// character (emoji, Cyrillic, CJK) that BPE split across token boundaries.
+    public func tokenBytes(_ tokenId: Int) -> [UInt8] {
+        guard let piece = idToToken[tokenId] else { return [] }
+        var bytes: [UInt8] = []
+        bytes.reserveCapacity(piece.unicodeScalars.count)
+        for ch in piece {
+            if let b = Self.unicodeToByte[ch] { bytes.append(b) }
+        }
+        return bytes
+    }
+
+    /// Decode the longest valid-UTF-8 prefix of `bytes`, returning the text plus any
+    /// trailing bytes that form an incomplete multi-byte character (≤3 bytes), to be
+    /// completed by the next token. Use `String(decoding:as:)` to flush the remainder
+    /// (lossily) when the stream ends.
+    public static func decodeUTF8Prefix(_ bytes: [UInt8]) -> (text: String, remainder: [UInt8]) {
+        if bytes.isEmpty { return ("", []) }
+        var end = bytes.count
+        // A UTF-8 character is at most 4 bytes, so only the last ≤3 bytes can be incomplete.
+        let floor = max(0, bytes.count - 3)
+        while end > floor {
+            if let s = String(bytes: bytes[0..<end], encoding: .utf8) {
+                return (s, Array(bytes[end...]))
+            }
+            end -= 1
+        }
+        // Whole buffer (or its head) decodes, or it's a genuinely invalid lead — keep buffering.
+        if let s = String(bytes: bytes, encoding: .utf8) { return (s, []) }
+        return ("", bytes)
+    }
+
     /// Convert a BPE token string to UTF-8 text.
     ///
     /// GPT-2/Qwen byte-level BPE represents each byte as a specific Unicode
