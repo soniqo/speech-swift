@@ -29,6 +29,10 @@ let package = Package(
             targets: ["ChatterboxTTS"]
         ),
         .library(
+            name: "OmniVoiceTTS",
+            targets: ["OmniVoiceTTS"]
+        ),
+        .library(
             name: "PersonaPlex",
             targets: ["PersonaPlex"]
         ),
@@ -156,6 +160,10 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/ml-explore/mlx-swift", from: "0.30.0"),
+        // Generic LLM runtime (loads standard HF MLX models: Qwen3, Gemma, Llama, …) — backs the
+        // larger on-device chat model. The MLXLLM/MLXLMCommon libraries moved here from
+        // mlx-swift-examples. Pins mlx-swift .upToNextMinor(0.31.4), compatible with ours.
+        .package(url: "https://github.com/ml-explore/mlx-swift-lm", branch: "main"),
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.5.0"),
         .package(url: "https://github.com/huggingface/swift-transformers", from: "1.1.6"),
         .package(url: "https://github.com/hummingbird-project/hummingbird.git", "2.5.0"..<"2.17.0"),
@@ -219,6 +227,19 @@ let package = Package(
                 .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "MLXNN", package: "mlx-swift"),
                 .product(name: "MLXFast", package: "mlx-swift")
+            ]
+        ),
+        .target(
+            name: "OmniVoiceTTS",
+            dependencies: [
+                "AudioCommon",
+                "MLXCommon",
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXNN", package: "mlx-swift"),
+                .product(name: "MLXFast", package: "mlx-swift"),
+                .product(name: "MLXFFT", package: "mlx-swift"),
+                .product(name: "Hub", package: "swift-transformers"),
+                .product(name: "Tokenizers", package: "swift-transformers")
             ]
         ),
         .target(
@@ -583,6 +604,13 @@ let package = Package(
         .testTarget(
             name: "CosyVoiceTTSTests",
             dependencies: ["CosyVoiceTTS", "AudioCommon"]
+        ),
+        .testTarget(
+            name: "OmniVoiceTTSTests",
+            dependencies: [
+                "OmniVoiceTTS", "AudioCommon", "MLXCommon",
+                .product(name: "MLX", package: "mlx-swift")
+            ]
         ),
         .testTarget(
             name: "ChatterboxTTSTests",
