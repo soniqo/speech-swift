@@ -2,7 +2,7 @@ import Foundation
 import MLX
 import AudioCommon
 
-/// Chat backend for the hand-written `Qwen3DenseModel` (standard Qwen3: 1.7B / 4B / 8B …).
+/// Chat backend for `Qwen3DenseModel` (standard Qwen3: 1.7B / 4B / 8B …).
 ///
 /// Conforms to `Qwen35ChatBackend`, so `Qwen35PipelineLLM(model:)` and the rest of the stack accept
 /// it with no changes — the larger chat model is a drop-in for the 0.8B. Reuses the shared

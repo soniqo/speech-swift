@@ -36,6 +36,7 @@
 - **[Magpie TTS](https://soniqo.audio/guides/magpie)** — TTS หลายภาษา (NVIDIA Magpie-TTS Multilingual 357M, MLX INT8 411 MB หรือ CoreML INT8 342 MB, 9 ภาษา, 5 ผู้พูดสำเร็จรูป สตรีมมิ่งบน MLX)
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — TTS แบบ flow-matching บนอุปกรณ์ (Supertone Supertonic-3 99M, CoreML/Neural Engine, 31 ภาษา, 10 เสียง, G2P-free, 44.1 kHz)
 - **[Qwen3.5-Chat](https://soniqo.audio/guides/chat)** — แชท LLM บนอุปกรณ์ (0.8B, MLX INT4 + CoreML INT8, DeltaNet ไฮบริด สตรีมมิ่งโทเค็น)
+- **[Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md)** — แชท LLM บนอุปกรณ์ ทรานส์ฟอร์เมอร์แบบหนาแน่น (Qwen3-4B-Instruct, MLX INT5/INT4, ตรวจสอบความเทียบเท่าแล้ว สตรีมมิ่งโทเค็น)
 - **[FunctionGemma](https://soniqo.audio/guides/function-calls)** — LLM บนอุปกรณ์สำหรับการเรียกฟังก์ชัน / เครื่องมือแบบมีโครงสร้าง (Gemma 3 270M, CoreML 8-bit palettize, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/guides/translate)** — การแปลแบบหลายต่อหลายระหว่างกว่า 400 ภาษา (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
 - **[Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate)** — การแปลเสียงพูดสู่เสียงพูดแบบสตรีมมิ่ง (FR/ES/PT/DE → EN, MLX INT4 + INT8, สแต็ก Kyutai Moshi/Mimi, CC-BY-4.0)
@@ -141,6 +142,7 @@ struct DictateView: View {
 | [VibeVoice 1.5B](https://soniqo.audio/guides/vibevoice) | ข้อความ → เสียงพูด (พอดแคสต์ยาวสุด 90 นาที) | MLX | 1.5B | EN/ZH |
 | [Magpie-TTS Multilingual](https://soniqo.audio/guides/magpie) | ข้อความ → เสียงพูด (5 ผู้พูดสำเร็จรูป สตรีมมิ่ง) | MLX / CoreML | 357M (MLX INT8, CoreML INT8) | 9 (CoreML ไม่รวม JA) |
 | [Qwen3.5-Chat](https://soniqo.audio/guides/chat) | ข้อความ → ข้อความ (LLM) | MLX, CoreML | 0.8B | หลายภาษา |
+| [Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md) | ข้อความ → ข้อความ (LLM) | MLX | 4B (INT5/INT4) | หลายภาษา |
 | [FunctionGemma](https://soniqo.audio/guides/function-calls) | ข้อความ → การเรียกเครื่องมือ (LLM) | CoreML | 270M | EN |
 | [MADLAD-400](https://soniqo.audio/guides/translate) | ข้อความ → ข้อความ (การแปล) | MLX | 3B | **400+** |
 | [Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate) | เสียงพูด → เสียงพูด (การแปล) | MLX | 3B | FR/ES/PT/DE → EN |

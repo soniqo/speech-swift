@@ -37,7 +37,7 @@ On-device speech recognition, synthesis, and understanding for Mac and iOS. Runs
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — On-device flow-matching TTS (Supertone Supertonic-3 99M, CoreML/Neural Engine, 31 languages, 10 voices, G2P-free, 44.1 kHz)
 - **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — Multilingual TTS with zero-shot voice cloning (Resemble AI Chatterbox Multilingual, MLX fp16 ~1.3 GB, 23 languages, MIT)
 - **[Qwen3.5-Chat](https://soniqo.audio/guides/chat)** — On-device LLM chat (0.8B, MLX INT4 + CoreML INT8, DeltaNet hybrid, streaming tokens)
-- **[Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md)** — On-device LLM chat, dense transformer (Qwen3-4B-Instruct, MLX INT5/INT4, hand-written runtime, parity-verified, streaming tokens)
+- **[Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md)** — On-device LLM chat, dense transformer (Qwen3-4B-Instruct, MLX INT5/INT4, parity-verified, streaming tokens)
 - **[FunctionGemma](https://soniqo.audio/guides/function-calls)** — On-device LLM for structured function / tool calls (Gemma 3 270M, CoreML 8-bit palettized, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/guides/translate)** — Many-to-many translation across 400+ languages (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
 - **[Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate)** — Streaming speech-to-speech translation (FR/ES/PT/DE → EN, MLX INT4 + INT8, Kyutai Moshi/Mimi stack, CC-BY-4.0)

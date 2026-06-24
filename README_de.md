@@ -37,6 +37,7 @@ Spracherkennung, -synthese und -verständnis auf dem Gerät für Mac und iOS. L�
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — Flow-Matching-TTS auf dem Gerät (Supertone Supertonic-3 99M, CoreML/Neural Engine, 31 Sprachen, 10 Stimmen, G2P-frei, 44,1 kHz)
 - **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — Mehrsprachiges TTS mit Zero-Shot-Stimmklonen (Resemble AI Chatterbox Multilingual, MLX fp16 ~1,3 GB, 23 Sprachen, MIT)
 - **[Qwen3.5-Chat](https://soniqo.audio/de/guides/chat)** — LLM-Chat auf dem Gerät (0.8B, MLX INT4 + CoreML INT8, DeltaNet-Hybrid, Token-Streaming)
+- **[Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md)** — LLM-Chat auf dem Gerät, dichter Transformer (Qwen3-4B-Instruct, MLX INT5/INT4, paritätsgeprüft, Token-Streaming)
 - **[FunctionGemma](https://soniqo.audio/de/guides/function-calls)** — On-Device-LLM für strukturierte Funktions- / Tool-Aufrufe (Gemma 3 270M, CoreML 8-Bit-Palettierung, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/de/guides/translate)** — Mehrsprachige Übersetzung über 400+ Sprachen (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
 - **[Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate)** — Streaming-Sprache-zu-Sprache-Übersetzung (FR/ES/PT/DE → EN, MLX INT4 + INT8, Kyutai Moshi/Mimi-Stack, CC-BY-4.0)
@@ -143,6 +144,7 @@ Kompakte Übersicht unten. **[Vollständiger Modellkatalog mit Größen, Quantis
 | [VibeVoice 1.5B](https://soniqo.audio/de/guides/vibevoice) | Text → Sprache (bis zu 90 Min. Podcast) | MLX | 1.5B | EN/ZH |
 | [Magpie-TTS Multilingual](https://soniqo.audio/de/guides/magpie) | Text → Sprache (5 vordefinierte Sprecher, Streaming) | MLX / CoreML | 357M (MLX INT8, CoreML INT8) | 9 (CoreML ohne JA) |
 | [Qwen3.5-Chat](https://soniqo.audio/de/guides/chat) | Text → Text (LLM) | MLX, CoreML | 0.8B | Multi |
+| [Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md) | Text → Text (LLM) | MLX | 4B (INT5/INT4) | Multi |
 | [FunctionGemma](https://soniqo.audio/de/guides/function-calls) | Text → Tool-Aufrufe (LLM) | CoreML | 270M | EN |
 | [MADLAD-400](https://soniqo.audio/de/guides/translate) | Text → Text (Übersetzung) | MLX | 3B | **400+** |
 | [Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate) | Sprache → Sprache (Übersetzung) | MLX | 3B | FR/ES/PT/DE → EN |

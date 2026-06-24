@@ -4,7 +4,7 @@ import MLXNN
 import MLXFast
 import MLXCommon
 
-// Hand-written MLX implementation of the standard **Qwen3 dense** transformer (model_type "qwen3"),
+// MLX implementation of the standard **Qwen3 dense** transformer (model_type "qwen3"),
 // in the same style as Qwen35MLXModel but for the plain dense architecture used by the larger chat
 // models (Qwen3-1.7B / 4B / 8B …). Reuses the shared building blocks (PreQuantizedEmbedding,
 // QuantizedLinear, RMSNorm, RoPE, SDPA). No DeltaNet, no attention gate — every layer is a standard

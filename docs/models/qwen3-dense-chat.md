@@ -1,7 +1,6 @@
 # Qwen3 Dense Chat (Qwen3-4B-Instruct)
 
-On-device LLM for chat using a **standard dense Qwen3 transformer**, implemented from scratch on
-`mlx-swift` (like every other model in this package — no third-party LLM runtime). It runs a **>1B
+On-device LLM for chat using a **standard dense Qwen3 transformer** on `mlx-swift`. It runs a **>1B
 instruct model** on Apple Silicon behind the same `Qwen35ChatBackend` protocol the 0.8B hybrid uses,
 so it is a drop-in swap.
 
@@ -102,7 +101,7 @@ assistant header is appended for generation.
 
 ## Numeric parity
 
-The hand-written forward pass is validated against the Python `mlx_lm` reference: for a fixed prompt
+The forward pass is validated against the Python `mlx_lm` reference: for a fixed prompt
 it produces the **same next-token argmax and top-5 logits** before any generation is trusted
 (`Tests/Qwen3ChatTests/Qwen3DenseParityTests`). Each quant has its own reference (int4 → argmax 358,
 int5 → argmax 1096 for tokens `[9707, 11, 1879, 0]`).

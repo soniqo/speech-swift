@@ -47,6 +47,7 @@
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — تحويل النص إلى كلام على الجهاز بمطابقة التدفق (Supertone Supertonic-3 99M، CoreML/Neural Engine، 31 لغة، 10 أصوات، بدون G2P، 44.1 كيلوهرتز)
 - **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — تحويل النص إلى كلام متعدد اللغات مع استنساخ الصوت بدون تدريب مسبق (Resemble AI Chatterbox Multilingual، MLX fp16 ~1.3 غيغابايت، 23 لغة، MIT)
 - **[Qwen3.5-Chat](https://soniqo.audio/ar/guides/chat)** — محادثة LLM على الجهاز (0.8B، MLX INT4 + CoreML INT8، DeltaNet هجين، رموز تدفقية)
+- **[Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md)** — محادثة LLM على الجهاز، محول كثيف (Qwen3-4B-Instruct، MLX INT5/INT4، مُتحقق من التطابق، رموز تدفقية)
 - **[FunctionGemma](https://soniqo.audio/ar/guides/function-calls)** — نموذج لغوي على الجهاز للاستدعاءات المنظمة للدوال / الأدوات (Gemma 3 270M، CoreML بترميز 8-بت، Neural Engine، حوالي 252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/ar/guides/translate)** — ترجمة متعددة الاتجاهات عبر أكثر من 400 لغة (3B، MLX INT4 + INT8، T5 v1.1، Apache 2.0)
 - **[Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate)** — ترجمة تدفقية من كلام إلى كلام (FR/ES/PT/DE → EN، MLX INT4 + INT8، حزمة Kyutai Moshi/Mimi، CC-BY-4.0)
@@ -187,6 +188,7 @@ struct DictateView: View {
 | [VibeVoice 1.5B](https://soniqo.audio/ar/guides/vibevoice) | نص → كلام (بودكاست حتى 90 دقيقة) | MLX | 1.5B | EN/ZH |
 | [Magpie-TTS Multilingual](https://soniqo.audio/ar/guides/magpie) | نص → كلام (5 متحدثين جاهزين، تدفق) | MLX / CoreML | 357M (MLX INT8, CoreML INT8) | 9 (CoreML يستثني JA) |
 | [Qwen3.5-Chat](https://soniqo.audio/ar/guides/chat) | نص → نص (LLM) | MLX, CoreML | 0.8B | متعدد |
+| [Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md) | نص → نص (LLM) | MLX | 4B (INT5/INT4) | متعدد |
 | [FunctionGemma](https://soniqo.audio/ar/guides/function-calls) | نص → استدعاءات الأدوات (LLM) | CoreML | 270M | EN |
 | [MADLAD-400](https://soniqo.audio/ar/guides/translate) | نص → نص (ترجمة) | MLX | 3B | **أكثر من 400** |
 | [Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate) | كلام → كلام (ترجمة) | MLX | 3B | FR/ES/PT/DE → EN |

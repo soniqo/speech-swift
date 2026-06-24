@@ -36,6 +36,7 @@ Mac・iOS向けのオンデバイス音声認識・合成・理解。Apple Silic
 - **[Magpie TTS](https://soniqo.audio/ja/guides/magpie)** — 多言語 TTS（NVIDIA Magpie-TTS Multilingual 357M、MLX INT8 411 MB または CoreML INT8 342 MB、9 言語、5 つの組み込みスピーカー、MLX でストリーミング）
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — オンデバイスのフローマッチングTTS（Supertone Supertonic-3 99M、CoreML/Neural Engine、31言語、10ボイス、G2P-free、44.1 kHz）
 - **[Qwen3.5-Chat](https://soniqo.audio/ja/guides/chat)** — オンデバイスLLMチャット（0.8B、MLX INT4 + CoreML INT8、DeltaNetハイブリッド、ストリーミングトークン）
+- **[Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md)** — オンデバイスLLMチャット、密なTransformer（Qwen3-4B-Instruct、MLX INT5/INT4、パリティ検証済み、ストリーミングトークン）
 - **[FunctionGemma](https://soniqo.audio/ja/guides/function-calls)** — オンデバイスの構造化された関数 / ツール呼び出し用 LLM（Gemma 3 270M、CoreML 8-bit パレタイズ、Neural Engine、約 252 tok/s）
 - **[MADLAD-400](https://soniqo.audio/ja/guides/translate)** — 400+言語間の多対多翻訳（3B、MLX INT4 + INT8、T5 v1.1、Apache 2.0）
 - **[Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate)** — ストリーミング音声間翻訳（FR/ES/PT/DE → EN、MLX INT4 + INT8、Kyutai Moshi/Mimi スタック、CC-BY-4.0）
@@ -141,6 +142,7 @@ struct DictateView: View {
 | [VibeVoice 1.5B](https://soniqo.audio/ja/guides/vibevoice) | テキスト → 音声（最長90分のポッドキャスト） | MLX | 1.5B | EN/ZH |
 | [Magpie-TTS Multilingual](https://soniqo.audio/ja/guides/magpie) | テキスト → 音声（5 つの組み込みスピーカー、ストリーミング） | MLX / CoreML | 357M (MLX INT8, CoreML INT8) | 9（CoreML は日本語を除く） |
 | [Qwen3.5-Chat](https://soniqo.audio/ja/guides/chat) | テキスト → テキスト（LLM） | MLX、CoreML | 0.8B | 多言語 |
+| [Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md) | テキスト → テキスト（LLM） | MLX | 4B (INT5/INT4) | 多言語 |
 | [FunctionGemma](https://soniqo.audio/ja/guides/function-calls) | テキスト → ツール呼び出し（LLM） | CoreML | 270M | 英語主体 |
 | [MADLAD-400](https://soniqo.audio/ja/guides/translate) | テキスト → テキスト（翻訳） | MLX | 3B | **400+** |
 | [Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate) | 音声 → 音声（翻訳） | MLX | 3B | FR/ES/PT/DE → EN |

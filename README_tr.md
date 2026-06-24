@@ -36,6 +36,7 @@ Mac ve iOS için cihaz üzerinde konuşma tanıma, sentezleme ve anlama. Apple S
 - **[Magpie TTS](https://soniqo.audio/guides/magpie)** — Çok dilli TTS (NVIDIA Magpie-TTS Multilingual 357M, MLX INT8 411 MB veya CoreML INT8 342 MB, 9 dil, 5 hazır konuşmacı, MLX'te akış)
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — Cihaz üzerinde flow-matching TTS (Supertone Supertonic-3 99M, CoreML/Neural Engine, 31 dil, 10 ses, G2P-free, 44.1 kHz)
 - **[Qwen3.5-Chat](https://soniqo.audio/guides/chat)** — Cihaz üzerinde LLM sohbet (0.8B, MLX INT4 + CoreML INT8, DeltaNet hibrit, akış token'ları)
+- **[Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md)** — Cihaz üzerinde LLM sohbet, yoğun transformer (Qwen3-4B-Instruct, MLX INT5/INT4, parite doğrulanmış, akış token'ları)
 - **[FunctionGemma](https://soniqo.audio/guides/function-calls)** — Cihaz üzerinde yapılandırılmış fonksiyon / araç çağrıları için LLM (Gemma 3 270M, CoreML 8-bit paletleme, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/guides/translate)** — 400+ dil arasında çoktan-çoğa çeviri (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
 - **[Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate)** — Akışlı konuşmadan konuşmaya çeviri (FR/ES/PT/DE → EN, MLX INT4 + INT8, Kyutai Moshi/Mimi yığını, CC-BY-4.0)
@@ -141,6 +142,7 @@ Aşağıda kompakt bir görünüm. **[Boyutlar, kuantizasyonlar, indirme URL'ler
 | [VibeVoice 1.5B](https://soniqo.audio/guides/vibevoice) | Metin → Konuşma (90 dakikaya kadar podcast) | MLX | 1.5B | EN/ZH |
 | [Magpie-TTS Multilingual](https://soniqo.audio/guides/magpie) | Metin → Konuşma (5 hazır konuşmacı, akış) | MLX / CoreML | 357M (MLX INT8, CoreML INT8) | 9 (CoreML, JA hariç) |
 | [Qwen3.5-Chat](https://soniqo.audio/guides/chat) | Metin → Metin (LLM) | MLX, CoreML | 0.8B | Çoklu |
+| [Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md) | Metin → Metin (LLM) | MLX | 4B (INT5/INT4) | Çoklu |
 | [FunctionGemma](https://soniqo.audio/guides/function-calls) | Metin → Araç çağrıları (LLM) | CoreML | 270M | EN |
 | [MADLAD-400](https://soniqo.audio/guides/translate) | Metin → Metin (Çeviri) | MLX | 3B | **400+** |
 | [Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate) | Konuşma → Konuşma (Çeviri) | MLX | 3B | FR/ES/PT/DE → EN |
