@@ -184,6 +184,21 @@ public final class Qwen35MLXChat: @unchecked Sendable {
         metrics = Metrics()
     }
 
+    // MARK: - GPU memory controls
+
+    /// Cap MLX's GPU buffer cache (bytes). MLX keeps freed buffers for reuse; unconstrained, that
+    /// pool can grow to several GB during inference. A modest cap trades a little speed for much
+    /// lower resident memory — important on memory-constrained devices. Call once after loading.
+    public static func setGPUCacheLimit(_ bytes: Int) {
+        MLX.Memory.cacheLimit = bytes
+    }
+
+    /// Release MLX's cached (recyclable) GPU buffers now — e.g. between conversation turns — to
+    /// drop resident memory back toward the model's active footprint.
+    public static func clearGPUCache() {
+        MLX.Memory.clearCache()
+    }
+
     // MARK: - Generation
 
     /// Generate a response from chat messages.

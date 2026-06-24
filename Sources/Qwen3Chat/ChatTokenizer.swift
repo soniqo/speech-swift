@@ -126,6 +126,10 @@ public final class ChatTokenizer: @unchecked Sendable {
 
     // MARK: - Encode
 
+    /// Token id for an exact token string (special/added tokens or a vocab entry), or nil.
+    /// Used to build chat templates without hardcoding model-specific special-token IDs.
+    public func tokenId(_ token: String) -> Int? { addedTokens[token] ?? tokenToId[token] }
+
     /// Encode text to token IDs using BPE.
     public func encode(_ text: String) -> [Int] {
         if text.isEmpty { return [] }
