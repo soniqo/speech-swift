@@ -69,11 +69,23 @@ public final class OmniVoiceModel: Module {
     /// Load the published bundle's `model.safetensors`. Splits by prefix:
     /// `llm.*` → backbone, `audio_embeddings`/`audio_heads` → here. The
     /// `codebook_layer_offsets` buffer is recomputed, so it's dropped.
-    public func loadWeights(from modelSafetensors: URL) throws {
+    ///
+    /// - Parameter quantization: when set (e.g. group 64 / 8-bit for the
+    ///   `OmniVoice-MLX-int8` bundle), the Linear/Embedding layers are swapped to
+    ///   their quantized form *before* loading so the packed weight + scales +
+    ///   biases line up. The float-weight bundles (fp16/fp32) pass `nil`.
+    public func loadWeights(
+        from modelSafetensors: URL, quantization: (groupSize: Int, bits: Int)? = nil
+    ) throws {
+        if let q = quantization {
+            MLXNN.quantize(model: self, groupSize: q.groupSize, bits: q.bits)
+        }
         let raw = try MLX.loadArrays(url: modelSafetensors)
         var weights: [String: MLXArray] = [:]
         for (k, v) in raw where k != "codebook_layer_offsets" {
-            weights[k] = v.asType(.float32)
+            // Quantized bundles carry packed-uint32 weights + float scales/biases;
+            // keep their dtypes. Float bundles are upcast to fp32 for compute.
+            weights[k] = quantization == nil ? v.asType(.float32) : v
         }
         try update(parameters: ModuleParameters.unflattened(weights), verify: .all)
         eval(parameters())
