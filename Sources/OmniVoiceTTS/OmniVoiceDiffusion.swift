@@ -18,7 +18,7 @@ extension OmniVoiceModel {
     public func generateTokens(
         condInputIds: MLXArray, audioMask: MLXArray, targetLen: Int,
         numSteps: Int = 16, guidance: Float = 2.0, tShift: Float = 0.1,
-        layerPenalty: Float = 5.0
+        layerPenalty: Float = 5.0, onStep: ((Int, MLXArray) -> Void)? = nil
     ) -> MLXArray {
         let C = cfg.numAudioCodebook
         let maskId = cfg.audioMaskId
@@ -27,6 +27,9 @@ extension OmniVoiceModel {
 
         var tokens = MLXArray.full([1, C, targetLen], values: MLXArray(Int32(maskId)))
         var cond = condInputIds
+        // The target region must start fully masked regardless of what the caller
+        // left in `condInputIds` (the loop fills it in from here).
+        cond[0..., 0..., tStart ..< condLen] = tokens
         let uncondMask = MLXArray.ones([1, targetLen]).asType(.int32)
         let layerIds = MLXArray((0 ..< C).map { Float($0) }).reshaped([1, C, 1])
 
@@ -79,6 +82,7 @@ extension OmniVoiceModel {
             tokens = MLX.where(pickMask, predTokens, tokens)
             cond[0..., 0..., tStart ..< condLen] = tokens
             MLX.eval(tokens, cond)
+            onStep?(step, tokens)
         }
         return tokens
     }
