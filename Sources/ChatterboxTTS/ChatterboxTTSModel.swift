@@ -206,9 +206,13 @@ public final class ChatterboxTTSModel {
         let fm = FileManager.default
         if !fm.fileExists(atPath: bundleDir.appendingPathComponent("model.safetensors").path) {
             progressHandler?(0.0, "Downloading \(modelId)...")
+            // No `.safetensors` in additionalFiles: that keeps downloadWeights'
+            // automatic `*.safetensors` glob enabled, which fetches the bundle's
+            // model + conformer (+ tokenizer) weights together. Listing a
+            // `.safetensors` here would disable that glob and drop model.safetensors.
             try await HuggingFaceDownloader.downloadWeights(
                 modelId: modelId, to: bundleDir,
-                additionalFiles: ["config.json", "tokenizer.json", "conformer.safetensors"],
+                additionalFiles: ["config.json", "tokenizer.json"],
                 offlineMode: offlineMode
             ) { progressHandler?($0 * 0.7, "Downloading model...") }
         }
