@@ -39,14 +39,18 @@ public final class OmniVoiceModel: Module {
     }
 
     /// Fuse text + audio tokens into backbone input embeddings.
-    /// - inputIds: `[B, 1 + numCodebook, L]` (row 0 = text ids, rows 1… = audio codebook ids)
-    /// - audioMask: `[B, L]` bool — true at audio positions.
+    /// - inputIds: `[B, numCodebook, L]` — at text positions the text token id is
+    ///   repeated across all `numCodebook` rows; at audio positions each row holds
+    ///   that codebook's token. Text uses **row 0**; audio zeroes non-audio
+    ///   positions (`× audio_mask`), shifts each row into its codebook slice, and
+    ///   sums the 8 codebook embeddings.
+    /// - audioMask: `[B, L]` (0/1) — 1 at audio positions.
     func prepareEmbedInputs(inputIds: MLXArray, audioMask: MLXArray) -> MLXArray {
-        let textEmbeds = llm.embedTokens(inputIds[0..., 0, 0...])             // [B, L, H]
-        let audioIds = inputIds[0..., 1..., 0...]                             // [B, C, L]
-        let shifted = audioIds + offsets.value.reshaped([1, cfg.numAudioCodebook, 1])
+        let textEmbeds = llm.embedTokens(inputIds[0..., 0, 0...])             // row 0 → [B, L, H]
+        let masked = inputIds * audioMask.expandedDimensions(axis: 1)         // [B, C, L]
+        let shifted = masked + offsets.value.reshaped([1, cfg.numAudioCodebook, 1])
         let audioEmbeds = audioEmbeddings(shifted).sum(axis: 1)              // [B, L, H]
-        let mask = audioMask.expandedDimensions(axis: -1)                     // [B, L, 1]
+        let mask = (audioMask .!= MLXArray(Int32(0))).expandedDimensions(axis: -1)  // [B, L, 1]
         return MLX.where(mask, audioEmbeds, textEmbeds)
     }
 
