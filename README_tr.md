@@ -50,8 +50,7 @@ Mac ve iOS için cihaz üzerinde konuşma tanıma, sentezleme ve anlama. Apple S
 
 **LLM ve çeviri**
 
-- **[Qwen3.5-Chat](https://soniqo.audio/guides/chat)** — Cihaz üzerinde LLM sohbet (0.8B, MLX INT4 + CoreML INT8, DeltaNet hibrit, akış token'ları)
-- **[Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md)** — Cihaz üzerinde LLM sohbet, yoğun transformer (Qwen3-4B-Instruct, MLX INT5/INT4, parite doğrulanmış, akış token'ları)
+- **[Qwen3Chat](https://soniqo.audio/guides/chat)** — Cihaz üzerinde LLM sohbet (Qwen3.5-0.8B MLX/CoreML artı dense Qwen3 4B ve Gemma 4 E2B/E4B MLX arka uçları, akış token'ları)
 - **[FunctionGemma](https://soniqo.audio/guides/function-calls)** — Cihaz üzerinde yapılandırılmış fonksiyon / araç çağrıları için LLM (Gemma 3 270M, CoreML 8-bit paletleme, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/guides/translate)** — 400+ dil arasında çoktan-çoğa çeviri (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
 
@@ -166,8 +165,7 @@ Aşağıda kompakt bir görünüm. **[Boyutlar, kuantizasyonlar, indirme URL'ler
 | [VibeVoice 1.5B](https://soniqo.audio/guides/vibevoice) | Metin → Konuşma (90 dakikaya kadar podcast) | MLX | 1.5B | EN/ZH |
 | [Magpie-TTS Multilingual](https://soniqo.audio/guides/magpie) | Metin → Konuşma (5 hazır konuşmacı, akış) | MLX / CoreML | 357M (MLX INT8, CoreML INT8) | 9 (CoreML, JA hariç) |
 | [OmniVoice](https://huggingface.co/aufklarer/OmniVoice-MLX-int8) | Metin → Konuşma (NAR difüzyon, zero-shot klonlama) | MLX | 0.8B (int8/fp16) | **600+** |
-| [Qwen3.5-Chat](https://soniqo.audio/guides/chat) | Metin → Metin (LLM) | MLX, CoreML | 0.8B | Çoklu |
-| [Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md) | Metin → Metin (LLM) | MLX | 4B (INT5/INT4) | Çoklu |
+| [Qwen3Chat](https://soniqo.audio/guides/chat) | Metin → Metin (LLM) | MLX, CoreML | 0.8B, 4B, E2B/E4B | Çoklu |
 | [FunctionGemma](https://soniqo.audio/guides/function-calls) | Metin → Araç çağrıları (LLM) | CoreML | 270M | EN |
 | [MADLAD-400](https://soniqo.audio/guides/translate) | Metin → Metin (Çeviri) | MLX | 3B | **400+** |
 | [Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate) | Konuşma → Konuşma (Çeviri) | MLX | 3B | FR/ES/PT/DE → EN |

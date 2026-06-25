@@ -50,8 +50,7 @@ Nhận dạng, tổng hợp và hiểu giọng nói trên thiết bị cho Mac v
 
 **LLM và dịch thuật**
 
-- **[Qwen3.5-Chat](https://soniqo.audio/guides/chat)** — Chat LLM trên thiết bị (0.8B, MLX INT4 + CoreML INT8, DeltaNet hybrid, token streaming)
-- **[Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md)** — Chat LLM trên thiết bị, transformer dense (Qwen3-4B-Instruct, MLX INT5/INT4, đã xác minh tương đương, token streaming)
+- **[Qwen3Chat](https://soniqo.audio/guides/chat)** — Chat LLM trên thiết bị (Qwen3.5-0.8B MLX/CoreML cùng các backend MLX dense Qwen3 4B và Gemma 4 E2B/E4B, token streaming)
 - **[FunctionGemma](https://soniqo.audio/guides/function-calls)** — LLM trên thiết bị cho các lệnh gọi hàm / công cụ có cấu trúc (Gemma 3 270M, CoreML palette hóa 8-bit, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/guides/translate)** — Dịch nhiều-sang-nhiều giữa hơn 400 ngôn ngữ (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
 
@@ -166,8 +165,7 @@ Xem tổng quan gọn bên dưới. **[Danh mục mô hình đầy đủ với k
 | [VibeVoice 1.5B](https://soniqo.audio/guides/vibevoice) | Văn bản → Giọng nói (podcast đến 90 phút) | MLX | 1.5B | EN/ZH |
 | [Magpie-TTS Multilingual](https://soniqo.audio/guides/magpie) | Văn bản → Giọng nói (5 giọng có sẵn, streaming) | MLX / CoreML | 357M (MLX INT8, CoreML INT8) | 9 (CoreML loại trừ JA) |
 | [OmniVoice](https://huggingface.co/aufklarer/OmniVoice-MLX-int8) | Văn bản → Giọng nói (khuếch tán NAR, nhân bản zero-shot) | MLX | 0.8B (int8/fp16) | **600+** |
-| [Qwen3.5-Chat](https://soniqo.audio/guides/chat) | Văn bản → Văn bản (LLM) | MLX, CoreML | 0.8B | Đa ngôn ngữ |
-| [Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md) | Văn bản → Văn bản (LLM) | MLX | 4B (INT5/INT4) | Đa ngôn ngữ |
+| [Qwen3Chat](https://soniqo.audio/guides/chat) | Văn bản → Văn bản (LLM) | MLX, CoreML | 0.8B, 4B, E2B/E4B | Đa ngôn ngữ |
 | [FunctionGemma](https://soniqo.audio/guides/function-calls) | Văn bản → Lệnh gọi công cụ (LLM) | CoreML | 270M | EN |
 | [MADLAD-400](https://soniqo.audio/guides/translate) | Văn bản → Văn bản (Dịch) | MLX | 3B | **400+** |
 | [Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate) | Giọng nói → Giọng nói (Dịch) | MLX | 3B | FR/ES/PT/DE → EN |

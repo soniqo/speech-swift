@@ -50,8 +50,7 @@
 
 **LLM 与翻译**
 
-- **[Qwen3.5-Chat](https://soniqo.audio/zh/guides/chat)** — 端侧 LLM 对话（0.8B，MLX INT4 + CoreML INT8，DeltaNet 混合架构，流式 token）
-- **[Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md)** — 端侧 LLM 对话，密集 Transformer（Qwen3-4B-Instruct，MLX INT5/INT4，已验证一致性，流式 token）
+- **[Qwen3Chat](https://soniqo.audio/zh/guides/chat)** — 端侧 LLM 对话（Qwen3.5-0.8B MLX/CoreML，加 dense Qwen3 4B 与 Gemma 4 E2B/E4B 的 MLX 后端，流式 token）
 - **[FunctionGemma](https://soniqo.audio/zh/guides/function-calls)** — 端侧结构化函数 / 工具调用 LLM（Gemma 3 270M，CoreML 8 位调色板量化，Neural Engine，约 252 tok/s）
 - **[MADLAD-400](https://soniqo.audio/zh/guides/translate)** — 400+ 语言间的多对多翻译（3B，MLX INT4 + INT8，T5 v1.1，Apache 2.0）
 
@@ -166,8 +165,7 @@ struct DictateView: View {
 | [VibeVoice 1.5B](https://soniqo.audio/zh/guides/vibevoice) | 文本 → 语音（最长 90 分钟播客） | MLX | 1.5B | EN/ZH |
 | [Magpie-TTS Multilingual](https://soniqo.audio/zh/guides/magpie) | 文本 → 语音（5 位预设说话人，流式） | MLX / CoreML | 357M (MLX INT8, CoreML INT8) | 9（CoreML 不含日语） |
 | [OmniVoice](https://huggingface.co/aufklarer/OmniVoice-MLX-int8) | 文本 → 语音（NAR 扩散，零样本克隆） | MLX | 0.8B (int8/fp16) | **600+** |
-| [Qwen3.5-Chat](https://soniqo.audio/zh/guides/chat) | 文本 → 文本（LLM） | MLX、CoreML | 0.8B | 多语言 |
-| [Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md) | 文本 → 文本（LLM） | MLX | 4B (INT5/INT4) | 多语言 |
+| [Qwen3Chat](https://soniqo.audio/zh/guides/chat) | 文本 → 文本（LLM） | MLX、CoreML | 0.8B, 4B, E2B/E4B | 多语言 |
 | [FunctionGemma](https://soniqo.audio/zh/guides/function-calls) | 文本 → 工具调用（LLM） | CoreML | 270M | 主英语 |
 | [MADLAD-400](https://soniqo.audio/zh/guides/translate) | 文本 → 文本（翻译） | MLX | 3B | **400+** |
 | [Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate) | 语音 → 语音（翻译） | MLX | 3B | FR/ES/PT/DE → EN |
