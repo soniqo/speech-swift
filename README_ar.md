@@ -46,6 +46,7 @@
 - **[Magpie TTS](https://soniqo.audio/ar/guides/magpie)** — تحويل النص إلى كلام متعدد اللغات (NVIDIA Magpie-TTS Multilingual 357M، MLX INT8 411 ميغابايت أو CoreML INT8 342 ميغابايت، 9 لغات، 5 متحدثين جاهزين، تدفق على MLX)
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — تحويل النص إلى كلام على الجهاز بمطابقة التدفق (Supertone Supertonic-3 99M، CoreML/Neural Engine، 31 لغة، 10 أصوات، بدون G2P، 44.1 كيلوهرتز)
 - **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — تحويل النص إلى كلام متعدد اللغات مع استنساخ الصوت بدون تدريب مسبق (Resemble AI Chatterbox Multilingual، MLX fp16 ~1.3 غيغابايت، 23 لغة، MIT)
+- **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-int8)** — تحويل النص إلى كلام بالانتشار غير الانحداري التلقائي مع استنساخ الصوت بدون تدريب مسبق (k2-fsa OmniVoice، عمود Qwen3 الفقري، MLX int8 ~1 GB / fp16، أكثر من 600 لغة، Apache-2.0)
 - **[Qwen3.5-Chat](https://soniqo.audio/ar/guides/chat)** — محادثة LLM على الجهاز (0.8B، MLX INT4 + CoreML INT8، DeltaNet هجين، رموز تدفقية)
 - **[FunctionGemma](https://soniqo.audio/ar/guides/function-calls)** — نموذج لغوي على الجهاز للاستدعاءات المنظمة للدوال / الأدوات (Gemma 3 270M، CoreML بترميز 8-بت، Neural Engine، حوالي 252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/ar/guides/translate)** — ترجمة متعددة الاتجاهات عبر أكثر من 400 لغة (3B، MLX INT4 + INT8، T5 v1.1، Apache 2.0)
@@ -156,7 +157,7 @@ struct DictateView: View {
 
 تشحن `SpeechUI` فقط `TranscriptionView` (النهائيات + الجزئيات) و `TranscriptionStore` (محول ASR تدفقي). استخدم AVFoundation لتصور الصوت وتشغيله.
 
-منتجات SPM المتاحة: `Qwen3ASR`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `KokoroTTS`, `SupertonicTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `ChatterboxTTS`, `MagpieTTS`, `MagpieTTSCoreML`, `MAGNeTMusicGen`, `FlashSR`, `PersonaPlex`, `HibikiTranslate`, `SpeechVAD`, `SpeechEnhancement`, `SourceSeparation`, `Qwen3Chat`, `SpeechCore`, `SpeechUI`, `AudioCommon`.
+منتجات SPM المتاحة: `Qwen3ASR`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `KokoroTTS`, `SupertonicTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `ChatterboxTTS`, `OmniVoiceTTS`, `MagpieTTS`, `MagpieTTSCoreML`, `MAGNeTMusicGen`, `FlashSR`, `PersonaPlex`, `HibikiTranslate`, `SpeechVAD`, `SpeechEnhancement`, `SourceSeparation`, `Qwen3Chat`, `SpeechCore`, `SpeechUI`, `AudioCommon`.
 
 </div>
 
@@ -181,6 +182,7 @@ struct DictateView: View {
 | [CosyVoice3](https://soniqo.audio/ar/guides/cosyvoice) | نص → كلام | MLX | 0.5B | 9 |
 | [VoxCPM2](https://soniqo.audio/ar/speech-generation) | نص → كلام (48 كيلوهرتز، تصميم + استنساخ صوت) | MLX | 2B (bf16/int8) | 30 |
 | [Chatterbox Multilingual](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16) | نص → كلام (استنساخ صوت بدون تدريب) | MLX | 0.8B (fp16) | 23 |
+| [OmniVoice](https://huggingface.co/aufklarer/OmniVoice-MLX-int8) | نص → كلام (انتشار NAR، استنساخ بدون تدريب) | MLX | 0.8B (int8/fp16) | 600+ |
 | [Kokoro-82M](https://soniqo.audio/ar/guides/kokoro) | نص → كلام | CoreML (ANE) | 82M | 10 |
 | [Supertonic-3](https://soniqo.audio/guides/supertonic) | نص → كلام (44.1 كيلوهرتز، مطابقة التدفق، بدون G2P) | CoreML (ANE) | 99M | 31 |
 | [VibeVoice Realtime-0.5B](https://soniqo.audio/ar/guides/vibevoice) | نص → كلام (نص طويل، متعدد المتحدثين) | MLX | 0.5B | EN/ZH |

@@ -35,6 +35,7 @@
 - **[VibeVoice TTS](https://soniqo.audio/zh/guides/vibevoice)** — 长篇 / 多说话人 TTS（Microsoft VibeVoice Realtime-0.5B + 1.5B，MLX，可合成最长 90 分钟的播客 / 有声书，英语 / 中文）
 - **[Magpie TTS](https://soniqo.audio/zh/guides/magpie)** — 多语言 TTS（NVIDIA Magpie-TTS Multilingual 357M，MLX INT8 411 MB 或 CoreML INT8 342 MB，9 种语言，5 位预设说话人，MLX 端流式）
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — 端侧流匹配 TTS（Supertone Supertonic-3 99M，CoreML/神经引擎，31 种语言，10 种音色，G2P-free，44.1 kHz）
+- **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-int8)** — 支持零样本语音克隆的非自回归扩散 TTS（k2-fsa OmniVoice，Qwen3 骨干，MLX int8 ~1 GB / fp16，600+ 种语言，Apache-2.0）
 - **[Qwen3.5-Chat](https://soniqo.audio/zh/guides/chat)** — 端侧 LLM 对话（0.8B，MLX INT4 + CoreML INT8，DeltaNet 混合架构，流式 token）
 - **[FunctionGemma](https://soniqo.audio/zh/guides/function-calls)** — 端侧结构化函数 / 工具调用 LLM（Gemma 3 270M，CoreML 8 位调色板量化，Neural Engine，约 252 tok/s）
 - **[MADLAD-400](https://soniqo.audio/zh/guides/translate)** — 400+ 语言间的多对多翻译（3B，MLX INT4 + INT8，T5 v1.1，Apache 2.0）
@@ -117,7 +118,7 @@ struct DictateView: View {
 
 `SpeechUI` 只提供 `TranscriptionView`（最终结果 + 部分结果）与 `TranscriptionStore`（流式 ASR 适配器）。音频可视化和播放请使用 AVFoundation。
 
-可用的 SPM products：`Qwen3ASR`、`Qwen3TTS`、`Qwen3TTSCoreML`、`ParakeetASR`、`ParakeetStreamingASR`、`NemotronStreamingASR`、`OmnilingualASR`、`KokoroTTS`、`SupertonicTTS`、`VibeVoiceTTS`、`CosyVoiceTTS`、`VoxCPM2TTS`、`MagpieTTS`、`MagpieTTSCoreML`、`MAGNeTMusicGen`、`FlashSR`、`PersonaPlex`、`HibikiTranslate`、`SpeechVAD`、`SpeechEnhancement`、`SourceSeparation`、`Qwen3Chat`、`SpeechCore`、`SpeechUI`、`AudioCommon`。
+可用的 SPM products：`Qwen3ASR`、`Qwen3TTS`、`Qwen3TTSCoreML`、`ParakeetASR`、`ParakeetStreamingASR`、`NemotronStreamingASR`、`OmnilingualASR`、`KokoroTTS`、`SupertonicTTS`、`VibeVoiceTTS`、`CosyVoiceTTS`、`VoxCPM2TTS`、`OmniVoiceTTS`、`MagpieTTS`、`MagpieTTSCoreML`、`MAGNeTMusicGen`、`FlashSR`、`PersonaPlex`、`HibikiTranslate`、`SpeechVAD`、`SpeechEnhancement`、`SourceSeparation`、`Qwen3Chat`、`SpeechCore`、`SpeechUI`、`AudioCommon`。
 
 ## 模型
 
@@ -140,6 +141,7 @@ struct DictateView: View {
 | [VibeVoice Realtime-0.5B](https://soniqo.audio/zh/guides/vibevoice) | 文本 → 语音（长篇、多说话人） | MLX | 0.5B | EN/ZH |
 | [VibeVoice 1.5B](https://soniqo.audio/zh/guides/vibevoice) | 文本 → 语音（最长 90 分钟播客） | MLX | 1.5B | EN/ZH |
 | [Magpie-TTS Multilingual](https://soniqo.audio/zh/guides/magpie) | 文本 → 语音（5 位预设说话人，流式） | MLX / CoreML | 357M (MLX INT8, CoreML INT8) | 9（CoreML 不含日语） |
+| [OmniVoice](https://huggingface.co/aufklarer/OmniVoice-MLX-int8) | 文本 → 语音（NAR 扩散，零样本克隆） | MLX | 0.8B (int8/fp16) | **600+** |
 | [Qwen3.5-Chat](https://soniqo.audio/zh/guides/chat) | 文本 → 文本（LLM） | MLX、CoreML | 0.8B | 多语言 |
 | [FunctionGemma](https://soniqo.audio/zh/guides/function-calls) | 文本 → 工具调用（LLM） | CoreML | 270M | 主英语 |
 | [MADLAD-400](https://soniqo.audio/zh/guides/translate) | 文本 → 文本（翻译） | MLX | 3B | **400+** |

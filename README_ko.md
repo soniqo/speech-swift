@@ -35,6 +35,7 @@ Mac과 iOS를 위한 온디바이스 음성 인식, 합성 및 이해. Apple Sil
 - **[VibeVoice TTS](https://soniqo.audio/ko/guides/vibevoice)** — 장문 / 멀티 스피커 TTS (Microsoft VibeVoice Realtime-0.5B + 1.5B, MLX, 최대 90분 팟캐스트 / 오디오북 합성, EN/ZH)
 - **[Magpie TTS](https://soniqo.audio/ko/guides/magpie)** — 다국어 TTS (NVIDIA Magpie-TTS Multilingual 357M, MLX INT8 411 MB 또는 CoreML INT8 342 MB, 9개 언어, 5개 내장 스피커, MLX 스트리밍)
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — 온디바이스 flow-matching TTS (Supertone Supertonic-3 99M, CoreML/Neural Engine, 31개 언어, 10개 음색, G2P-free, 44.1 kHz)
+- **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-int8)** — 제로샷 음성 복제를 지원하는 비자기회귀 확산 TTS (k2-fsa OmniVoice, Qwen3 백본, MLX int8 ~1 GB / fp16, 600+개 언어, Apache-2.0)
 - **[Qwen3.5-Chat](https://soniqo.audio/ko/guides/chat)** — 온디바이스 LLM 채팅 (0.8B, MLX INT4 + CoreML INT8, DeltaNet 하이브리드, 스트리밍 토큰)
 - **[FunctionGemma](https://soniqo.audio/ko/guides/function-calls)** — 온디바이스 구조화된 함수 / 도구 호출 LLM (Gemma 3 270M, CoreML 8비트 팔레타이즈, Neural Engine, 약 252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/ko/guides/translate)** — 400+ 언어 간 다대다 번역 (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
@@ -117,7 +118,7 @@ struct DictateView: View {
 
 `SpeechUI`에는 `TranscriptionView`(파이널 + 파셜)와 `TranscriptionStore`(스트리밍 ASR 어댑터)만 포함됩니다. 오디오 시각화와 재생에는 AVFoundation을 사용하세요.
 
-사용 가능한 SPM 프로덕트: `Qwen3ASR`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `KokoroTTS`, `SupertonicTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `MagpieTTS`, `MagpieTTSCoreML`, `MAGNeTMusicGen`, `FlashSR`, `PersonaPlex`, `HibikiTranslate`, `SpeechVAD`, `SpeechEnhancement`, `SourceSeparation`, `Qwen3Chat`, `SpeechCore`, `SpeechUI`, `AudioCommon`.
+사용 가능한 SPM 프로덕트: `Qwen3ASR`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `KokoroTTS`, `SupertonicTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `OmniVoiceTTS`, `MagpieTTS`, `MagpieTTSCoreML`, `MAGNeTMusicGen`, `FlashSR`, `PersonaPlex`, `HibikiTranslate`, `SpeechVAD`, `SpeechEnhancement`, `SourceSeparation`, `Qwen3Chat`, `SpeechCore`, `SpeechUI`, `AudioCommon`.
 
 ## 모델
 
@@ -140,6 +141,7 @@ struct DictateView: View {
 | [VibeVoice Realtime-0.5B](https://soniqo.audio/ko/guides/vibevoice) | 텍스트 → 음성 (장문, 멀티 스피커) | MLX | 0.5B | EN/ZH |
 | [VibeVoice 1.5B](https://soniqo.audio/ko/guides/vibevoice) | 텍스트 → 음성 (최대 90분 팟캐스트) | MLX | 1.5B | EN/ZH |
 | [Magpie-TTS Multilingual](https://soniqo.audio/ko/guides/magpie) | 텍스트 → 음성 (5개 내장 스피커, 스트리밍) | MLX / CoreML | 357M (MLX INT8, CoreML INT8) | 9 (CoreML은 일본어 제외) |
+| [OmniVoice](https://huggingface.co/aufklarer/OmniVoice-MLX-int8) | 텍스트 → 음성 (NAR 확산, 제로샷 복제) | MLX | 0.8B (int8/fp16) | **600+** |
 | [Qwen3.5-Chat](https://soniqo.audio/ko/guides/chat) | 텍스트 → 텍스트 (LLM) | MLX, CoreML | 0.8B | 다언어 |
 | [FunctionGemma](https://soniqo.audio/ko/guides/function-calls) | 텍스트 → 도구 호출 (LLM) | CoreML | 270M | 영어 위주 |
 | [MADLAD-400](https://soniqo.audio/ko/guides/translate) | 텍스트 → 텍스트 (번역) | MLX | 3B | **400+** |

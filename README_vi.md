@@ -35,6 +35,7 @@ Nhận dạng, tổng hợp và hiểu giọng nói trên thiết bị cho Mac v
 - **[VibeVoice TTS](https://soniqo.audio/guides/vibevoice)** — TTS định dạng dài / nhiều người nói (Microsoft VibeVoice Realtime-0.5B + 1.5B, MLX, tổng hợp podcast/sách nói lên đến 90 phút, EN/ZH)
 - **[Magpie TTS](https://soniqo.audio/guides/magpie)** — TTS đa ngôn ngữ (NVIDIA Magpie-TTS Multilingual 357M, MLX INT8 411 MB hoặc CoreML INT8 342 MB, 9 ngôn ngữ, 5 giọng nói có sẵn, streaming trên MLX)
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — TTS flow-matching trên thiết bị (Supertone Supertonic-3 99M, CoreML/Neural Engine, 31 ngôn ngữ, 10 giọng, không cần G2P, 44,1 kHz)
+- **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-int8)** — TTS khuếch tán phi tự hồi quy với nhân bản giọng nói zero-shot (k2-fsa OmniVoice, backbone Qwen3, MLX int8 ~1 GB / fp16, 600+ ngôn ngữ, Apache-2.0)
 - **[Qwen3.5-Chat](https://soniqo.audio/guides/chat)** — Chat LLM trên thiết bị (0.8B, MLX INT4 + CoreML INT8, DeltaNet hybrid, token streaming)
 - **[FunctionGemma](https://soniqo.audio/guides/function-calls)** — LLM trên thiết bị cho các lệnh gọi hàm / công cụ có cấu trúc (Gemma 3 270M, CoreML palette hóa 8-bit, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/guides/translate)** — Dịch nhiều-sang-nhiều giữa hơn 400 ngôn ngữ (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
@@ -117,7 +118,7 @@ struct DictateView: View {
 
 `SpeechUI` chỉ cung cấp `TranscriptionView` (kết quả cuối + tạm thời) và `TranscriptionStore` (adapter ASR streaming). Hãy dùng AVFoundation để hiển thị trực quan và phát lại âm thanh.
 
-Các sản phẩm SPM có sẵn: `Qwen3ASR`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `KokoroTTS`, `SupertonicTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `MagpieTTS`, `MagpieTTSCoreML`, `MAGNeTMusicGen`, `FlashSR`, `PersonaPlex`, `HibikiTranslate`, `SpeechVAD`, `SpeechEnhancement`, `SourceSeparation`, `Qwen3Chat`, `SpeechCore`, `SpeechUI`, `AudioCommon`.
+Các sản phẩm SPM có sẵn: `Qwen3ASR`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `KokoroTTS`, `SupertonicTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `OmniVoiceTTS`, `MagpieTTS`, `MagpieTTSCoreML`, `MAGNeTMusicGen`, `FlashSR`, `PersonaPlex`, `HibikiTranslate`, `SpeechVAD`, `SpeechEnhancement`, `SourceSeparation`, `Qwen3Chat`, `SpeechCore`, `SpeechUI`, `AudioCommon`.
 
 ## Mô hình
 
@@ -140,6 +141,7 @@ Xem tổng quan gọn bên dưới. **[Danh mục mô hình đầy đủ với k
 | [VibeVoice Realtime-0.5B](https://soniqo.audio/guides/vibevoice) | Văn bản → Giọng nói (định dạng dài, nhiều người nói) | MLX | 0.5B | EN/ZH |
 | [VibeVoice 1.5B](https://soniqo.audio/guides/vibevoice) | Văn bản → Giọng nói (podcast đến 90 phút) | MLX | 1.5B | EN/ZH |
 | [Magpie-TTS Multilingual](https://soniqo.audio/guides/magpie) | Văn bản → Giọng nói (5 giọng có sẵn, streaming) | MLX / CoreML | 357M (MLX INT8, CoreML INT8) | 9 (CoreML loại trừ JA) |
+| [OmniVoice](https://huggingface.co/aufklarer/OmniVoice-MLX-int8) | Văn bản → Giọng nói (khuếch tán NAR, nhân bản zero-shot) | MLX | 0.8B (int8/fp16) | **600+** |
 | [Qwen3.5-Chat](https://soniqo.audio/guides/chat) | Văn bản → Văn bản (LLM) | MLX, CoreML | 0.8B | Đa ngôn ngữ |
 | [FunctionGemma](https://soniqo.audio/guides/function-calls) | Văn bản → Lệnh gọi công cụ (LLM) | CoreML | 270M | EN |
 | [MADLAD-400](https://soniqo.audio/guides/translate) | Văn bản → Văn bản (Dịch) | MLX | 3B | **400+** |

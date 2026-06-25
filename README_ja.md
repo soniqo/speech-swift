@@ -35,6 +35,7 @@ Mac・iOS向けのオンデバイス音声認識・合成・理解。Apple Silic
 - **[VibeVoice TTS](https://soniqo.audio/ja/guides/vibevoice)** — 長尺・マルチスピーカーTTS（Microsoft VibeVoice Realtime-0.5B + 1.5B、MLX、最長90分のポッドキャスト／オーディオブック生成、EN/ZH）
 - **[Magpie TTS](https://soniqo.audio/ja/guides/magpie)** — 多言語 TTS（NVIDIA Magpie-TTS Multilingual 357M、MLX INT8 411 MB または CoreML INT8 342 MB、9 言語、5 つの組み込みスピーカー、MLX でストリーミング）
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — オンデバイスのフローマッチングTTS（Supertone Supertonic-3 99M、CoreML/Neural Engine、31言語、10ボイス、G2P-free、44.1 kHz）
+- **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-int8)** — ゼロショット音声クローンに対応した非自己回帰拡散TTS（k2-fsa OmniVoice、Qwen3バックボーン、MLX int8 ~1 GB / fp16、600+言語、Apache-2.0）
 - **[Qwen3.5-Chat](https://soniqo.audio/ja/guides/chat)** — オンデバイスLLMチャット（0.8B、MLX INT4 + CoreML INT8、DeltaNetハイブリッド、ストリーミングトークン）
 - **[FunctionGemma](https://soniqo.audio/ja/guides/function-calls)** — オンデバイスの構造化された関数 / ツール呼び出し用 LLM（Gemma 3 270M、CoreML 8-bit パレタイズ、Neural Engine、約 252 tok/s）
 - **[MADLAD-400](https://soniqo.audio/ja/guides/translate)** — 400+言語間の多対多翻訳（3B、MLX INT4 + INT8、T5 v1.1、Apache 2.0）
@@ -117,7 +118,7 @@ struct DictateView: View {
 
 `SpeechUI` には `TranscriptionView`（確定 + 部分）と `TranscriptionStore`（ストリーミングASRアダプター）のみが含まれます。音声の可視化や再生には AVFoundation をお使いください。
 
-利用可能なSPMプロダクト：`Qwen3ASR`、`Qwen3TTS`、`Qwen3TTSCoreML`、`ParakeetASR`、`ParakeetStreamingASR`、`NemotronStreamingASR`、`OmnilingualASR`、`KokoroTTS`、`SupertonicTTS`、`VibeVoiceTTS`、`CosyVoiceTTS`、`VoxCPM2TTS`、`MagpieTTS`、`MagpieTTSCoreML`、`MAGNeTMusicGen`、`FlashSR`、`PersonaPlex`、`HibikiTranslate`、`SpeechVAD`、`SpeechEnhancement`、`SourceSeparation`、`Qwen3Chat`、`SpeechCore`、`SpeechUI`、`AudioCommon`。
+利用可能なSPMプロダクト：`Qwen3ASR`、`Qwen3TTS`、`Qwen3TTSCoreML`、`ParakeetASR`、`ParakeetStreamingASR`、`NemotronStreamingASR`、`OmnilingualASR`、`KokoroTTS`、`SupertonicTTS`、`VibeVoiceTTS`、`CosyVoiceTTS`、`VoxCPM2TTS`、`OmniVoiceTTS`、`MagpieTTS`、`MagpieTTSCoreML`、`MAGNeTMusicGen`、`FlashSR`、`PersonaPlex`、`HibikiTranslate`、`SpeechVAD`、`SpeechEnhancement`、`SourceSeparation`、`Qwen3Chat`、`SpeechCore`、`SpeechUI`、`AudioCommon`。
 
 ## モデル
 
@@ -140,6 +141,7 @@ struct DictateView: View {
 | [VibeVoice Realtime-0.5B](https://soniqo.audio/ja/guides/vibevoice) | テキスト → 音声（長尺・マルチスピーカー） | MLX | 0.5B | EN/ZH |
 | [VibeVoice 1.5B](https://soniqo.audio/ja/guides/vibevoice) | テキスト → 音声（最長90分のポッドキャスト） | MLX | 1.5B | EN/ZH |
 | [Magpie-TTS Multilingual](https://soniqo.audio/ja/guides/magpie) | テキスト → 音声（5 つの組み込みスピーカー、ストリーミング） | MLX / CoreML | 357M (MLX INT8, CoreML INT8) | 9（CoreML は日本語を除く） |
+| [OmniVoice](https://huggingface.co/aufklarer/OmniVoice-MLX-int8) | テキスト → 音声（NAR 拡散、ゼロショットクローン） | MLX | 0.8B (int8/fp16) | **600+** |
 | [Qwen3.5-Chat](https://soniqo.audio/ja/guides/chat) | テキスト → テキスト（LLM） | MLX、CoreML | 0.8B | 多言語 |
 | [FunctionGemma](https://soniqo.audio/ja/guides/function-calls) | テキスト → ツール呼び出し（LLM） | CoreML | 270M | 英語主体 |
 | [MADLAD-400](https://soniqo.audio/ja/guides/translate) | テキスト → テキスト（翻訳） | MLX | 3B | **400+** |
