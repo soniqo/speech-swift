@@ -37,7 +37,7 @@ On-device speech recognition, synthesis, and understanding for Mac and iOS. Runs
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — On-device flow-matching TTS (Supertone Supertonic-3 99M, CoreML/Neural Engine, 31 languages, 10 voices, G2P-free, 44.1 kHz)
 - **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — Multilingual TTS with zero-shot voice cloning (Resemble AI Chatterbox Multilingual, MLX fp16 ~1.3 GB, 23 languages, MIT)
 - **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-int8)** — Non-autoregressive diffusion TTS with zero-shot voice cloning (k2-fsa OmniVoice, Qwen3 backbone, MLX int8 ~1 GB / fp16, 600+ languages, Apache-2.0)
-- **[Qwen3.5-Chat](https://soniqo.audio/guides/chat)** — On-device LLM chat (0.8B, MLX INT4 + CoreML INT8, DeltaNet hybrid, streaming tokens)
+- **[Qwen3Chat](https://soniqo.audio/guides/chat)** — On-device LLM chat (Qwen3.5-0.8B MLX/CoreML plus dense Qwen3 4B and Gemma 4 E2B/E4B MLX backends, streaming tokens)
 - **[FunctionGemma](https://soniqo.audio/guides/function-calls)** — On-device LLM for structured function / tool calls (Gemma 3 270M, CoreML 8-bit palettized, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/guides/translate)** — Many-to-many translation across 400+ languages (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
 - **[Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate)** — Streaming speech-to-speech translation (FR/ES/PT/DE → EN, MLX INT4 + INT8, Kyutai Moshi/Mimi stack, CC-BY-4.0)
@@ -144,7 +144,7 @@ Compact view below. **[Full model catalogue with sizes, quantisations, download 
 | [Magpie-TTS Multilingual](https://soniqo.audio/guides/magpie) | Text → Speech (5 baked speakers, streaming) | MLX / CoreML | 357M (MLX INT8, CoreML INT8) | 9 (CoreML excludes JA) |
 | [Chatterbox Multilingual](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16) | Text → Speech (zero-shot cloning) | MLX | 0.8B (fp16) | 23 |
 | [OmniVoice](https://huggingface.co/aufklarer/OmniVoice-MLX-int8) | Text → Speech (NAR diffusion, zero-shot cloning) | MLX | 0.8B (int8/fp16) | **600+** |
-| [Qwen3.5-Chat](https://soniqo.audio/guides/chat) | Text → Text (LLM) | MLX, CoreML | 0.8B | Multi |
+| [Qwen3Chat](https://soniqo.audio/guides/chat) | Text → Text (LLM) | MLX, CoreML | 0.8B, 4B, E2B/E4B | Multi |
 | [FunctionGemma](https://soniqo.audio/guides/function-calls) | Text → Tool calls (LLM) | CoreML | 270M | EN-tuned |
 | [MADLAD-400](https://soniqo.audio/guides/translate) | Text → Text (Translation) | MLX | 3B | **400+** |
 | [Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate) | Speech → Speech (Translation) | MLX | 3B | FR/ES/PT/DE → EN |
@@ -310,6 +310,11 @@ let chat = try await Qwen35MLXChat.fromPretrained()
 chat.chat(messages: [(.user, "Explain MLX in one sentence")]) { token, isFinal in
     print(token, terminator: "")
 }
+
+let qwen4b = try await Qwen3DenseChat.fromPretrained(
+    modelId: "aufklarer/Qwen3-4B-Instruct-2507-MLX-5bit")
+let gemma = try await Gemma4Chat.fromPretrained(
+    modelId: "aufklarer/gemma-4-E4B-it-MLX-4bit")
 ```
 
 ### Translation — [full guide →](https://soniqo.audio/guides/translate)

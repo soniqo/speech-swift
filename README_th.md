@@ -36,7 +36,7 @@
 - **[Magpie TTS](https://soniqo.audio/guides/magpie)** — TTS หลายภาษา (NVIDIA Magpie-TTS Multilingual 357M, MLX INT8 411 MB หรือ CoreML INT8 342 MB, 9 ภาษา, 5 ผู้พูดสำเร็จรูป สตรีมมิ่งบน MLX)
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — TTS แบบ flow-matching บนอุปกรณ์ (Supertone Supertonic-3 99M, CoreML/Neural Engine, 31 ภาษา, 10 เสียง, G2P-free, 44.1 kHz)
 - **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-int8)** — TTS แบบ diffusion non-autoregressive พร้อมการโคลนเสียงแบบ zero-shot (k2-fsa OmniVoice, backbone Qwen3, MLX int8 ~1 GB / fp16, 600+ ภาษา, Apache-2.0)
-- **[Qwen3.5-Chat](https://soniqo.audio/guides/chat)** — แชท LLM บนอุปกรณ์ (0.8B, MLX INT4 + CoreML INT8, DeltaNet ไฮบริด สตรีมมิ่งโทเค็น)
+- **[Qwen3Chat](https://soniqo.audio/guides/chat)** — แชท LLM บนอุปกรณ์ (Qwen3.5-0.8B MLX/CoreML พร้อมแบ็กเอนด์ MLX ของ dense Qwen3 4B และ Gemma 4 E2B/E4B, สตรีมมิ่งโทเค็น)
 - **[FunctionGemma](https://soniqo.audio/guides/function-calls)** — LLM บนอุปกรณ์สำหรับการเรียกฟังก์ชัน / เครื่องมือแบบมีโครงสร้าง (Gemma 3 270M, CoreML 8-bit palettize, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/guides/translate)** — การแปลแบบหลายต่อหลายระหว่างกว่า 400 ภาษา (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
 - **[Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate)** — การแปลเสียงพูดสู่เสียงพูดแบบสตรีมมิ่ง (FR/ES/PT/DE → EN, MLX INT4 + INT8, สแต็ก Kyutai Moshi/Mimi, CC-BY-4.0)
@@ -142,7 +142,7 @@ struct DictateView: View {
 | [VibeVoice 1.5B](https://soniqo.audio/guides/vibevoice) | ข้อความ → เสียงพูด (พอดแคสต์ยาวสุด 90 นาที) | MLX | 1.5B | EN/ZH |
 | [Magpie-TTS Multilingual](https://soniqo.audio/guides/magpie) | ข้อความ → เสียงพูด (5 ผู้พูดสำเร็จรูป สตรีมมิ่ง) | MLX / CoreML | 357M (MLX INT8, CoreML INT8) | 9 (CoreML ไม่รวม JA) |
 | [OmniVoice](https://huggingface.co/aufklarer/OmniVoice-MLX-int8) | ข้อความ → เสียงพูด (diffusion NAR, การโคลนแบบ zero-shot) | MLX | 0.8B (int8/fp16) | 600+ |
-| [Qwen3.5-Chat](https://soniqo.audio/guides/chat) | ข้อความ → ข้อความ (LLM) | MLX, CoreML | 0.8B | หลายภาษา |
+| [Qwen3Chat](https://soniqo.audio/guides/chat) | ข้อความ → ข้อความ (LLM) | MLX, CoreML | 0.8B, 4B, E2B/E4B | หลายภาษา |
 | [FunctionGemma](https://soniqo.audio/guides/function-calls) | ข้อความ → การเรียกเครื่องมือ (LLM) | CoreML | 270M | EN |
 | [MADLAD-400](https://soniqo.audio/guides/translate) | ข้อความ → ข้อความ (การแปล) | MLX | 3B | **400+** |
 | [Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate) | เสียงพูด → เสียงพูด (การแปล) | MLX | 3B | FR/ES/PT/DE → EN |
@@ -308,6 +308,11 @@ let chat = try await Qwen35MLXChat.fromPretrained()
 chat.chat(messages: [(.user, "Explain MLX in one sentence")]) { token, isFinal in
     print(token, terminator: "")
 }
+
+let qwen4b = try await Qwen3DenseChat.fromPretrained(
+    modelId: "aufklarer/Qwen3-4B-Instruct-2507-MLX-5bit")
+let gemma = try await Gemma4Chat.fromPretrained(
+    modelId: "aufklarer/gemma-4-E4B-it-MLX-4bit")
 ```
 
 ### การแปล — [คู่มือฉบับเต็ม →](https://soniqo.audio/guides/translate)

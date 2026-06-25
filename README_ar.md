@@ -47,7 +47,7 @@
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — تحويل النص إلى كلام على الجهاز بمطابقة التدفق (Supertone Supertonic-3 99M، CoreML/Neural Engine، 31 لغة، 10 أصوات، بدون G2P، 44.1 كيلوهرتز)
 - **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — تحويل النص إلى كلام متعدد اللغات مع استنساخ الصوت بدون تدريب مسبق (Resemble AI Chatterbox Multilingual، MLX fp16 ~1.3 غيغابايت، 23 لغة، MIT)
 - **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-int8)** — تحويل النص إلى كلام بالانتشار غير الانحداري التلقائي مع استنساخ الصوت بدون تدريب مسبق (k2-fsa OmniVoice، عمود Qwen3 الفقري، MLX int8 ~1 GB / fp16، أكثر من 600 لغة، Apache-2.0)
-- **[Qwen3.5-Chat](https://soniqo.audio/ar/guides/chat)** — محادثة LLM على الجهاز (0.8B، MLX INT4 + CoreML INT8، DeltaNet هجين، رموز تدفقية)
+- **[Qwen3Chat](https://soniqo.audio/ar/guides/chat)** — محادثة LLM على الجهاز (Qwen3.5-0.8B عبر MLX/CoreML، إضافة إلى خلفيات MLX لـ Qwen3 dense بحجم 4B و Gemma 4 E2B/E4B، رموز تدفقية)
 - **[FunctionGemma](https://soniqo.audio/ar/guides/function-calls)** — نموذج لغوي على الجهاز للاستدعاءات المنظمة للدوال / الأدوات (Gemma 3 270M، CoreML بترميز 8-بت، Neural Engine، حوالي 252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/ar/guides/translate)** — ترجمة متعددة الاتجاهات عبر أكثر من 400 لغة (3B، MLX INT4 + INT8، T5 v1.1، Apache 2.0)
 - **[Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate)** — ترجمة تدفقية من كلام إلى كلام (FR/ES/PT/DE → EN، MLX INT4 + INT8، حزمة Kyutai Moshi/Mimi، CC-BY-4.0)
@@ -188,7 +188,7 @@ struct DictateView: View {
 | [VibeVoice Realtime-0.5B](https://soniqo.audio/ar/guides/vibevoice) | نص → كلام (نص طويل، متعدد المتحدثين) | MLX | 0.5B | EN/ZH |
 | [VibeVoice 1.5B](https://soniqo.audio/ar/guides/vibevoice) | نص → كلام (بودكاست حتى 90 دقيقة) | MLX | 1.5B | EN/ZH |
 | [Magpie-TTS Multilingual](https://soniqo.audio/ar/guides/magpie) | نص → كلام (5 متحدثين جاهزين، تدفق) | MLX / CoreML | 357M (MLX INT8, CoreML INT8) | 9 (CoreML يستثني JA) |
-| [Qwen3.5-Chat](https://soniqo.audio/ar/guides/chat) | نص → نص (LLM) | MLX, CoreML | 0.8B | متعدد |
+| [Qwen3Chat](https://soniqo.audio/ar/guides/chat) | نص → نص (LLM) | MLX, CoreML | 0.8B, 4B, E2B/E4B | متعدد |
 | [FunctionGemma](https://soniqo.audio/ar/guides/function-calls) | نص → استدعاءات الأدوات (LLM) | CoreML | 270M | EN |
 | [MADLAD-400](https://soniqo.audio/ar/guides/translate) | نص → نص (ترجمة) | MLX | 3B | **أكثر من 400** |
 | [Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate) | كلام → كلام (ترجمة) | MLX | 3B | FR/ES/PT/DE → EN |
@@ -394,6 +394,11 @@ let chat = try await Qwen35MLXChat.fromPretrained()
 chat.chat(messages: [(.user, "Explain MLX in one sentence")]) { token, isFinal in
     print(token, terminator: "")
 }
+
+let qwen4b = try await Qwen3DenseChat.fromPretrained(
+    modelId: "aufklarer/Qwen3-4B-Instruct-2507-MLX-5bit")
+let gemma = try await Gemma4Chat.fromPretrained(
+    modelId: "aufklarer/gemma-4-E4B-it-MLX-4bit")
 ```
 
 ### الترجمة — [الدليل الكامل →](https://soniqo.audio/ar/guides/translate)

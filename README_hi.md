@@ -37,7 +37,7 @@ Mac और iOS के लिए ऑन-डिवाइस स्पीच रि
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — ऑन-डिवाइस फ़्लो-मैचिंग TTS (Supertone Supertonic-3 99M, CoreML/Neural Engine, 31 भाषाएँ, 10 वॉयस, G2P-free, 44.1 kHz)
 - **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — ज़ीरो-शॉट वॉयस क्लोनिंग के साथ बहुभाषी TTS (Resemble AI Chatterbox Multilingual, MLX fp16 ~1.3 GB, 23 भाषाएँ, MIT)
 - **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-int8)** — ज़ीरो-शॉट वॉयस क्लोनिंग के साथ नॉन-ऑटोरिग्रेसिव डिफ्यूज़न TTS (k2-fsa OmniVoice, Qwen3 बैकबोन, MLX int8 ~1 GB / fp16, 600+ भाषाएँ, Apache-2.0)
-- **[Qwen3.5-Chat](https://soniqo.audio/hi/guides/chat)** — ऑन-डिवाइस LLM चैट (0.8B, MLX INT4 + CoreML INT8, DeltaNet हाइब्रिड, स्ट्रीमिंग टोकन)
+- **[Qwen3Chat](https://soniqo.audio/hi/guides/chat)** — ऑन-डिवाइस LLM चैट (Qwen3.5-0.8B MLX/CoreML के साथ dense Qwen3 4B और Gemma 4 E2B/E4B MLX बैकएंड, स्ट्रीमिंग टोकन)
 - **[FunctionGemma](https://soniqo.audio/hi/guides/function-calls)** — संरचित फ़ंक्शन / टूल कॉल के लिए ऑन-डिवाइस LLM (Gemma 3 270M, CoreML 8-बिट पैलेटाइज़, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/hi/guides/translate)** — 400+ भाषाओं में बहु-दिशात्मक अनुवाद (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
 - **[Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate)** — स्ट्रीमिंग स्पीच-टू-स्पीच अनुवाद (FR/ES/PT/DE → EN, MLX INT4 + INT8, Kyutai Moshi/Mimi स्टैक, CC-BY-4.0)
@@ -144,7 +144,7 @@ struct DictateView: View {
 | [VibeVoice Realtime-0.5B](https://soniqo.audio/hi/guides/vibevoice) | टेक्स्ट → स्पीच (लंबे-रूप, बहु-वक्ता) | MLX | 0.5B | EN/ZH |
 | [VibeVoice 1.5B](https://soniqo.audio/hi/guides/vibevoice) | टेक्स्ट → स्पीच (90 मिनट तक पॉडकास्ट) | MLX | 1.5B | EN/ZH |
 | [Magpie-TTS Multilingual](https://soniqo.audio/hi/guides/magpie) | टेक्स्ट → वाक् (5 पूर्व-निर्धारित वक्ता, स्ट्रीमिंग) | MLX / CoreML | 357M (MLX INT8, CoreML INT8) | 9 (CoreML में JA नहीं) |
-| [Qwen3.5-Chat](https://soniqo.audio/hi/guides/chat) | टेक्स्ट → टेक्स्ट (LLM) | MLX, CoreML | 0.8B | बहुभाषी |
+| [Qwen3Chat](https://soniqo.audio/hi/guides/chat) | टेक्स्ट → टेक्स्ट (LLM) | MLX, CoreML | 0.8B, 4B, E2B/E4B | बहुभाषी |
 | [FunctionGemma](https://soniqo.audio/hi/guides/function-calls) | टेक्स्ट → टूल कॉल (LLM) | CoreML | 270M | EN |
 | [MADLAD-400](https://soniqo.audio/hi/guides/translate) | टेक्स्ट → टेक्स्ट (अनुवाद) | MLX | 3B | **400+** |
 | [Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate) | स्पीच → स्पीच (अनुवाद) | MLX | 3B | FR/ES/PT/DE → EN |
@@ -312,6 +312,11 @@ let chat = try await Qwen35MLXChat.fromPretrained()
 chat.chat(messages: [(.user, "Explain MLX in one sentence")]) { token, isFinal in
     print(token, terminator: "")
 }
+
+let qwen4b = try await Qwen3DenseChat.fromPretrained(
+    modelId: "aufklarer/Qwen3-4B-Instruct-2507-MLX-5bit")
+let gemma = try await Gemma4Chat.fromPretrained(
+    modelId: "aufklarer/gemma-4-E4B-it-MLX-4bit")
 ```
 
 ### अनुवाद — [पूरी गाइड →](https://soniqo.audio/hi/guides/translate)

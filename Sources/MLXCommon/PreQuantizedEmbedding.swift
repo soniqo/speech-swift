@@ -19,8 +19,9 @@ public class PreQuantizedEmbedding: Module {
         self.groupSize = groupSize
         self.bits = bits
 
-        // Packed dimensions: 8 values per uint32 for 4-bit
-        let packedDim = dimensions / (32 / bits)
+        // Packed last dim = dimensions * bits / 32 (MLX convention). For 4/8-bit this equals
+        // dimensions/(32/bits); written this way it also supports 3/5/6-bit quantized embeddings.
+        let packedDim = dimensions * bits / 32
         let numGroups = dimensions / groupSize
 
         // Initialize with zeros - will be loaded from weights
