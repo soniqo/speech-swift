@@ -31,13 +31,23 @@
 
 **حالات الاستخدام:** [وكلاء الصوت](https://soniqo.audio/ar/voice-agents) · [النسخ النصي](https://soniqo.audio/ar/transcription) · [توليد الكلام](https://soniqo.audio/ar/speech-generation)
 
+**مجموعات القدرات:** STT / ASR · المحاذاة · TTS · نماذج LLM والترجمة · الكلام إلى كلام · التحسين / الاستعادة · فصل المصادر · توليد الموسيقى / الصوت · كلمة التنبيه، VAD، diarization وهوية المتحدث
+
+**STT / ASR**
+
 - **[Qwen3-ASR](https://soniqo.audio/ar/guides/transcribe)** — تحويل الكلام إلى نص (تعرف تلقائي على الكلام، 52 لغة، MLX + CoreML)
 - **[Parakeet TDT](https://soniqo.audio/ar/guides/parakeet)** — تحويل الكلام إلى نص عبر CoreML (Neural Engine، NVIDIA FastConformer + مفكك ترميز TDT، 25 لغة)
 - **[Omnilingual ASR](https://soniqo.audio/ar/guides/omnilingual)** — تحويل الكلام إلى نص (Meta wav2vec2 + CTC، **1,672 لغة** عبر 32 نظام كتابة، CoreML 300M + MLX 300M/1B/3B/7B)
 - **[الإملاء التدفقي](https://soniqo.audio/ar/guides/dictate)** — إملاء فوري بنتائج جزئية واكتشاف نهاية النطق (Parakeet-EOU-120M)
 - **[Nemotron Streaming (متعدد اللغات)](https://soniqo.audio/ar/guides/nemotron)** — تعرف تدفقي على الكلام بزمن استجابة منخفض مع علامات ترقيم وأحرف كبيرة أصلية (NVIDIA Nemotron-3.5-ASR-Streaming-0.6B، CoreML + MLX، **40 لغة-منطقة**)
 - **[Nemotron Streaming (إنجليزي)](https://soniqo.audio/guides/nemotron)** — تعرف تدفقي على الكلام بزمن استجابة منخفض مع علامات ترقيم وأحرف كبيرة أصلية (NVIDIA Nemotron-Speech-Streaming-0.6B، CoreML، الإنجليزية فقط، أصغر وأسرع من المتغير متعدد اللغات)
+
+**المحاذاة**
+
 - **[Qwen3-ForcedAligner](https://soniqo.audio/ar/guides/align)** — محاذاة الطوابع الزمنية على مستوى الكلمة (صوت + نص → طوابع زمنية)
+
+**TTS / توليد الكلام**
+
 - **[Qwen3-TTS](https://soniqo.audio/ar/guides/speak)** — تحويل النص إلى كلام (أعلى جودة، تدفق، متحدثون مخصصون، 10 لغات)
 - **[CosyVoice TTS](https://soniqo.audio/ar/guides/cosyvoice)** — تحويل تدفقي للنص إلى كلام مع استنساخ الصوت وحوار متعدد المتحدثين ووسوم المشاعر (9 لغات)
 - **[VoxCPM2](https://soniqo.audio/ar/speech-generation)** — تحويل النص إلى كلام بجودة استوديو 48 كيلوهرتز مع استنساخ الصوت وتصميم الصوت بالأوامر (2B، MLX bf16/int8، 30 لغة)
@@ -47,16 +57,28 @@
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — تحويل النص إلى كلام على الجهاز بمطابقة التدفق (Supertone Supertonic-3 99M، CoreML/Neural Engine، 31 لغة، 10 أصوات، بدون G2P، 44.1 كيلوهرتز)
 - **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — تحويل النص إلى كلام متعدد اللغات مع استنساخ الصوت بدون تدريب مسبق (Resemble AI Chatterbox Multilingual، MLX fp16 ~1.3 غيغابايت، 23 لغة، MIT)
 - **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-int8)** — تحويل النص إلى كلام بالانتشار غير الانحداري التلقائي مع استنساخ الصوت بدون تدريب مسبق (k2-fsa OmniVoice، عمود Qwen3 الفقري، MLX int8 ~1 GB / fp16، أكثر من 600 لغة، Apache-2.0)
+
+**نماذج LLM والترجمة**
+
 - **[Qwen3.5-Chat](https://soniqo.audio/ar/guides/chat)** — محادثة LLM على الجهاز (0.8B، MLX INT4 + CoreML INT8، DeltaNet هجين، رموز تدفقية)
 - **[Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md)** — محادثة LLM على الجهاز، محول كثيف (Qwen3-4B-Instruct، MLX INT5/INT4، مُتحقق من التطابق، رموز تدفقية)
 - **[FunctionGemma](https://soniqo.audio/ar/guides/function-calls)** — نموذج لغوي على الجهاز للاستدعاءات المنظمة للدوال / الأدوات (Gemma 3 270M، CoreML بترميز 8-بت، Neural Engine، حوالي 252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/ar/guides/translate)** — ترجمة متعددة الاتجاهات عبر أكثر من 400 لغة (3B، MLX INT4 + INT8، T5 v1.1، Apache 2.0)
+
+**الكلام إلى كلام ووكلاء الصوت**
+
 - **[Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate)** — ترجمة تدفقية من كلام إلى كلام (FR/ES/PT/DE → EN، MLX INT4 + INT8، حزمة Kyutai Moshi/Mimi، CC-BY-4.0)
 - **[PersonaPlex](https://soniqo.audio/ar/guides/respond)** — تحويل صوت إلى صوت ثنائي الاتجاه الكامل (7B، صوت داخل → صوت خارج، 18 إعداداً صوتياً مسبقاً)
+
+**التحسين والفصل وتوليد الصوت**
+
 - **[DeepFilterNet3](https://soniqo.audio/ar/guides/denoise)** — قمع الضوضاء في الزمن الحقيقي (2.1M معامل، 48 كيلوهرتز) الصوت الطويل الذي يتجاوز حد اللقطة الواحدة البالغ 60 s يُقسَّم تلقائيًا إلى أجزاء مع crossfade — راجع `enhanceChunked(...)`
 - **[فصل المصادر](https://soniqo.audio/ar/guides/separate)** — فصل المصادر الموسيقية عبر HTDemucs (Demucs v4) + Open-Unmix (UMX-HQ / UMX-L، 4 طبقات: غناء/طبول/باس/أخرى، 44.1 كيلوهرتز ستيريو)
 - **[MAGNeT](https://soniqo.audio/ar/guides/compose)** — توليد الموسيقى من النص (Meta MAGNeT Small 300M / Medium 1.5B، MLX INT8، مقاطع 30 ثانية بجودة 32 كيلوهرتز مونو، فك ترميز متوازي مقنع)
 - **[FlashSR](https://soniqo.audio/ar/guides/upsample)** — رفع دقة الصوت (FlashSR ICASSP 2025، MLX، 48 كيلوهرتز مونو، انتشار مقطر بخطوة واحدة، INT4 363 ميغابايت / INT8 720 ميغابايت)
+
+**اكتشاف الدور، diarization وهوية المتحدث**
+
 - **[كلمة التنبيه](https://soniqo.audio/ar/guides/wake-word)** — اكتشاف الكلمات المفتاحية على الجهاز (KWS Zipformer 3M، CoreML، 26× الزمن الحقيقي، قائمة كلمات مفتاحية قابلة للتهيئة)
 - **[VAD](https://soniqo.audio/ar/guides/vad)** — اكتشاف النشاط الصوتي (Silero تدفقي، Pyannote دون اتصال، FireRedVAD أكثر من 100 لغة)
 - **[تمييز المتحدثين](https://soniqo.audio/ar/guides/diarize)** — من تحدث متى (خط أنابيب Pyannote، Sortformer من طرف إلى طرف على Neural Engine)

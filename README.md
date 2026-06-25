@@ -21,13 +21,23 @@ On-device speech recognition, synthesis, and understanding for Mac and iOS. Runs
 
 **Use cases:** [Voice Agents](https://soniqo.audio/voice-agents) · [Transcription](https://soniqo.audio/transcription) · [Speech Generation](https://soniqo.audio/speech-generation)
 
+**Capability groups:** STT / ASR · Alignment · TTS · LLMs & translation · Speech-to-speech · Enhancement/restoration · Source separation · Music/audio generation · Wake word, VAD, diarization & speaker identity
+
+**STT / ASR**
+
 - **[Qwen3-ASR](https://soniqo.audio/guides/transcribe)** — Speech-to-text (automatic speech recognition, 52 languages, MLX + CoreML)
 - **[Parakeet TDT](https://soniqo.audio/guides/parakeet)** — Speech-to-text via CoreML (Neural Engine, NVIDIA FastConformer + TDT decoder, 25 languages)
 - **[Omnilingual ASR](https://soniqo.audio/guides/omnilingual)** — Speech-to-text (Meta wav2vec2 + CTC, **1,672 languages** across 32 scripts, CoreML 300M + MLX 300M/1B/3B/7B)
 - **[Streaming Dictation](https://soniqo.audio/guides/dictate)** — Real-time dictation with partials and end-of-utterance detection (Parakeet-EOU-120M)
 - **[Nemotron Streaming (Multilingual)](https://soniqo.audio/guides/nemotron)** — Low-latency streaming ASR with native punctuation and capitalization (NVIDIA Nemotron-3.5-ASR-Streaming-0.6B, CoreML + MLX, **40 language-locales**)
 - **[Nemotron Streaming (English)](https://soniqo.audio/guides/nemotron)** — Low-latency streaming ASR with native punctuation and capitalization (NVIDIA Nemotron-Speech-Streaming-0.6B, CoreML, English-only, smaller and faster than the multilingual variant)
+
+**Alignment**
+
 - **[Qwen3-ForcedAligner](https://soniqo.audio/guides/align)** — Word-level timestamp alignment (audio + text → timestamps)
+
+**TTS / Speech Generation**
+
 - **[Qwen3-TTS](https://soniqo.audio/guides/speak)** — Text-to-speech (highest quality, streaming, custom speakers, 10 languages)
 - **[CosyVoice TTS](https://soniqo.audio/guides/cosyvoice)** — Streaming TTS with voice cloning, multi-speaker dialogue, emotion tags (9 languages)
 - **[VoxCPM2](https://soniqo.audio/speech-generation)** — 48 kHz studio-quality TTS with voice cloning + instruction-driven voice design (2B, MLX bf16/int8, 30 languages)
@@ -37,16 +47,28 @@ On-device speech recognition, synthesis, and understanding for Mac and iOS. Runs
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — On-device flow-matching TTS (Supertone Supertonic-3 99M, CoreML/Neural Engine, 31 languages, 10 voices, G2P-free, 44.1 kHz)
 - **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — Multilingual TTS with zero-shot voice cloning (Resemble AI Chatterbox Multilingual, MLX fp16 ~1.3 GB, 23 languages, MIT)
 - **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-int8)** — Non-autoregressive diffusion TTS with zero-shot voice cloning (k2-fsa OmniVoice, Qwen3 backbone, MLX int8 ~1 GB / fp16, 600+ languages, Apache-2.0)
+
+**LLMs & Translation**
+
 - **[Qwen3.5-Chat](https://soniqo.audio/guides/chat)** — On-device LLM chat (0.8B, MLX INT4 + CoreML INT8, DeltaNet hybrid, streaming tokens)
 - **[Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md)** — On-device LLM chat, dense transformer (Qwen3-4B-Instruct, MLX INT5/INT4, parity-verified, streaming tokens)
 - **[FunctionGemma](https://soniqo.audio/guides/function-calls)** — On-device LLM for structured function / tool calls (Gemma 3 270M, CoreML 8-bit palettized, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/guides/translate)** — Many-to-many translation across 400+ languages (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
+
+**Speech-to-Speech & Voice Agents**
+
 - **[Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate)** — Streaming speech-to-speech translation (FR/ES/PT/DE → EN, MLX INT4 + INT8, Kyutai Moshi/Mimi stack, CC-BY-4.0)
 - **[PersonaPlex](https://soniqo.audio/guides/respond)** — Full-duplex speech-to-speech (7B, audio in → audio out, 18 voice presets)
+
+**Enhancement, Separation & Audio Generation**
+
 - **[DeepFilterNet3](https://soniqo.audio/guides/denoise)** — Real-time noise suppression (2.1M params, 48 kHz). Long-form audio above the 60 s single-shot cap is auto-chunked with crossfade — see `enhanceChunked(...)`
 - **[Source Separation](https://soniqo.audio/guides/separate)** — Music source separation via HTDemucs (Demucs v4) + Open-Unmix (UMX-HQ / UMX-L, 4 stems: vocals/drums/bass/other, 44.1 kHz stereo)
 - **[MAGNeT](https://soniqo.audio/guides/compose)** — Text-to-music generation (Meta MAGNeT Small 300M / Medium 1.5B, MLX INT8, 30 s clips at 32 kHz mono, masked parallel decoding)
 - **[FlashSR](https://soniqo.audio/guides/upsample)** — Audio super-resolution (FlashSR ICASSP 2025, MLX, 48 kHz mono, 1-step distilled diffusion, INT4 363 MB / INT8 720 MB)
+
+**Turn Detection, Diarization & Speaker Identity**
+
 - **[Wake-word](https://soniqo.audio/guides/wake-word)** — On-device keyword spotting (KWS Zipformer 3M, CoreML, 26× real-time, configurable keyword list)
 - **[VAD](https://soniqo.audio/guides/vad)** — Voice activity detection (Silero streaming, Pyannote offline, FireRedVAD 100+ languages)
 - **[Speaker Diarization](https://soniqo.audio/guides/diarize)** — Who spoke when (Pyannote pipeline, Sortformer end-to-end on Neural Engine)

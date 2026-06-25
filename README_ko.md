@@ -21,13 +21,23 @@ Mac과 iOS를 위한 온디바이스 음성 인식, 합성 및 이해. Apple Sil
 
 **사용 사례:** [음성 에이전트](https://soniqo.audio/ko/voice-agents) · [전사](https://soniqo.audio/ko/transcription) · [음성 합성](https://soniqo.audio/ko/speech-generation)
 
+**기능 그룹:** STT / ASR · 정렬 · TTS · LLM 및 번역 · Speech-to-Speech · 향상 / 복원 · 소스 분리 · 음악 / 오디오 생성 · 웨이크워드, VAD, 화자 분리 및 화자 식별
+
+**STT / ASR**
+
 - **[Qwen3-ASR](https://soniqo.audio/ko/guides/transcribe)** — 음성-텍스트 변환 (자동 음성 인식, 52개 언어, MLX + CoreML)
 - **[Parakeet TDT](https://soniqo.audio/ko/guides/parakeet)** — CoreML을 통한 음성-텍스트 변환 (Neural Engine, NVIDIA FastConformer + TDT 디코더, 25개 언어)
 - **[Omnilingual ASR](https://soniqo.audio/ko/guides/omnilingual)** — 음성-텍스트 변환 (Meta wav2vec2 + CTC, **1,672개 언어**, 32개 문자 체계, CoreML 300M + MLX 300M/1B/3B/7B)
 - **[스트리밍 받아쓰기](https://soniqo.audio/ko/guides/dictate)** — 부분 결과와 발화 종료 감지를 갖춘 실시간 받아쓰기 (Parakeet-EOU-120M)
 - **[Nemotron 스트리밍 (다국어)](https://soniqo.audio/ko/guides/nemotron)** — 네이티브 구두점 및 대소문자 처리를 제공하는 저지연 스트리밍 ASR (NVIDIA Nemotron-3.5-ASR-Streaming-0.6B, CoreML + MLX, **40개 언어-로케일**)
 - **[Nemotron 스트리밍 (영어)](https://soniqo.audio/guides/nemotron)** — 네이티브 구두점 및 대소문자 처리를 제공하는 저지연 스트리밍 ASR (NVIDIA Nemotron-Speech-Streaming-0.6B, CoreML, 영어 전용, 다국어 버전보다 가볍고 빠름)
+
+**정렬**
+
 - **[Qwen3-ForcedAligner](https://soniqo.audio/ko/guides/align)** — 단어 수준 타임스탬프 정렬 (오디오 + 텍스트 → 타임스탬프)
+
+**TTS / 음성 생성**
+
 - **[Qwen3-TTS](https://soniqo.audio/ko/guides/speak)** — 텍스트-음성 변환 (최고 품질, 스트리밍, 커스텀 화자, 10개 언어)
 - **[CosyVoice TTS](https://soniqo.audio/ko/guides/cosyvoice)** — 음성 복제, 다화자 대화, 감정 태그를 지원하는 스트리밍 TTS (9개 언어)
 - **[VoxCPM2](https://soniqo.audio/ko/speech-generation)** — 48 kHz 스튜디오 품질 TTS, 음성 복제 + 명령 기반 보이스 디자인 (2B, MLX bf16/int8, 30개 언어)
@@ -35,17 +45,30 @@ Mac과 iOS를 위한 온디바이스 음성 인식, 합성 및 이해. Apple Sil
 - **[VibeVoice TTS](https://soniqo.audio/ko/guides/vibevoice)** — 장문 / 멀티 스피커 TTS (Microsoft VibeVoice Realtime-0.5B + 1.5B, MLX, 최대 90분 팟캐스트 / 오디오북 합성, EN/ZH)
 - **[Magpie TTS](https://soniqo.audio/ko/guides/magpie)** — 다국어 TTS (NVIDIA Magpie-TTS Multilingual 357M, MLX INT8 411 MB 또는 CoreML INT8 342 MB, 9개 언어, 5개 내장 스피커, MLX 스트리밍)
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — 온디바이스 flow-matching TTS (Supertone Supertonic-3 99M, CoreML/Neural Engine, 31개 언어, 10개 음색, G2P-free, 44.1 kHz)
+- **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — 제로샷 음성 복제를 지원하는 다국어 TTS (Resemble AI Chatterbox Multilingual, MLX fp16 ~1.3 GB, 23개 언어, MIT)
 - **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-int8)** — 제로샷 음성 복제를 지원하는 비자기회귀 확산 TTS (k2-fsa OmniVoice, Qwen3 백본, MLX int8 ~1 GB / fp16, 600+개 언어, Apache-2.0)
+
+**LLM 및 번역**
+
 - **[Qwen3.5-Chat](https://soniqo.audio/ko/guides/chat)** — 온디바이스 LLM 채팅 (0.8B, MLX INT4 + CoreML INT8, DeltaNet 하이브리드, 스트리밍 토큰)
 - **[Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md)** — 온디바이스 LLM 채팅, 밀집 Transformer (Qwen3-4B-Instruct, MLX INT5/INT4, 패리티 검증됨, 스트리밍 토큰)
 - **[FunctionGemma](https://soniqo.audio/ko/guides/function-calls)** — 온디바이스 구조화된 함수 / 도구 호출 LLM (Gemma 3 270M, CoreML 8비트 팔레타이즈, Neural Engine, 약 252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/ko/guides/translate)** — 400+ 언어 간 다대다 번역 (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
+
+**Speech-to-Speech 및 음성 에이전트**
+
 - **[Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate)** — 스트리밍 음성-음성 번역 (FR/ES/PT/DE → EN, MLX INT4 + INT8, Kyutai Moshi/Mimi 스택, CC-BY-4.0)
 - **[PersonaPlex](https://soniqo.audio/ko/guides/respond)** — 전이중 음성-음성 대화 (7B, 오디오 입력 → 오디오 출력, 18개 음색 프리셋)
+
+**향상, 분리 및 오디오 생성**
+
 - **[DeepFilterNet3](https://soniqo.audio/ko/guides/denoise)** — 실시간 노이즈 억제 (2.1M 파라미터, 48 kHz). 60 s 단일 처리 한계를 초과하는 장시간 오디오는 crossfade로 자동 청크 처리 — `enhanceChunked(...)` API 참조
 - **[소스 분리](https://soniqo.audio/ko/guides/separate)** — HTDemucs (Demucs v4) + Open-Unmix 기반 음악 소스 분리 (UMX-HQ / UMX-L, 4개 스템: 보컬/드럼/베이스/기타, 44.1 kHz 스테레오)
 - **[MAGNeT](https://soniqo.audio/ko/guides/compose)** — 텍스트 → 음악 생성 (Meta MAGNeT Small 300M / Medium 1.5B, MLX INT8, 30초 클립 32 kHz 모노, 마스크 병렬 디코딩)
 - **[FlashSR](https://soniqo.audio/ko/guides/upsample)** — 오디오 초고해상도 (FlashSR ICASSP 2025, MLX, 48 kHz 모노, 1단계 증류 확산, INT4 363 MB / INT8 720 MB)
+
+**턴 감지, 화자 분리 및 화자 식별**
+
 - **[웨이크워드](https://soniqo.audio/ko/guides/wake-word)** — 온디바이스 키워드 감지 (KWS Zipformer 3M, CoreML, 실시간의 26배, 구성 가능한 키워드 목록)
 - **[VAD](https://soniqo.audio/ko/guides/vad)** — 음성 활동 감지 (Silero 스트리밍, Pyannote 오프라인, FireRedVAD 100+ 개 언어)
 - **[화자 분리](https://soniqo.audio/ko/guides/diarize)** — 누가 언제 말했는지 (Pyannote 파이프라인, Neural Engine 상의 엔드투엔드 Sortformer)

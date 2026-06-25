@@ -21,13 +21,23 @@ Nhận dạng, tổng hợp và hiểu giọng nói trên thiết bị cho Mac v
 
 **Trường hợp sử dụng:** [Voice Agents](https://soniqo.audio/voice-agents) · [Phiên âm](https://soniqo.audio/transcription) · [Tổng hợp giọng nói](https://soniqo.audio/speech-generation)
 
+**Nhóm năng lực:** STT / ASR · Căn chỉnh · TTS · LLM và dịch thuật · Speech-to-Speech · Nâng cấp / phục hồi · Tách nguồn · Tạo nhạc / âm thanh · Wake word, VAD, diarization và định danh người nói
+
+**STT / ASR**
+
 - **[Qwen3-ASR](https://soniqo.audio/guides/transcribe)** — Chuyển giọng nói thành văn bản (nhận dạng giọng nói tự động, 52 ngôn ngữ, MLX + CoreML)
 - **[Parakeet TDT](https://soniqo.audio/guides/parakeet)** — Chuyển giọng nói thành văn bản qua CoreML (Neural Engine, NVIDIA FastConformer + bộ giải mã TDT, 25 ngôn ngữ)
 - **[Omnilingual ASR](https://soniqo.audio/guides/omnilingual)** — Chuyển giọng nói thành văn bản (Meta wav2vec2 + CTC, **1.672 ngôn ngữ** trên 32 hệ chữ viết, CoreML 300M + MLX 300M/1B/3B/7B)
 - **[Đọc chính tả streaming](https://soniqo.audio/guides/dictate)** — Đọc chính tả thời gian thực với kết quả tạm thời và phát hiện kết thúc phát ngôn (Parakeet-EOU-120M)
 - **[Nemotron Streaming (Đa ngôn ngữ)](https://soniqo.audio/guides/nemotron)** — ASR streaming độ trễ thấp với dấu câu và viết hoa tự nhiên (NVIDIA Nemotron-3.5-ASR-Streaming-0.6B, CoreML + MLX, **40 ngôn ngữ-khu vực**)
 - **[Nemotron Streaming (Tiếng Anh)](https://soniqo.audio/guides/nemotron)** — ASR streaming độ trễ thấp với dấu câu và viết hoa tự nhiên (NVIDIA Nemotron-Speech-Streaming-0.6B, CoreML, chỉ tiếng Anh, nhỏ gọn và nhanh hơn biến thể đa ngôn ngữ)
+
+**Căn chỉnh**
+
 - **[Qwen3-ForcedAligner](https://soniqo.audio/guides/align)** — Căn chỉnh dấu thời gian theo cấp độ từ (audio + văn bản → dấu thời gian)
+
+**TTS / Tổng hợp giọng nói**
+
 - **[Qwen3-TTS](https://soniqo.audio/guides/speak)** — Tổng hợp giọng nói (chất lượng cao nhất, streaming, người nói tùy chỉnh, 10 ngôn ngữ)
 - **[CosyVoice TTS](https://soniqo.audio/guides/cosyvoice)** — TTS streaming với nhân bản giọng nói, hội thoại nhiều người nói, thẻ cảm xúc (9 ngôn ngữ)
 - **[VoxCPM2](https://soniqo.audio/speech-generation)** — TTS chất lượng phòng thu 48 kHz với nhân bản giọng nói + thiết kế giọng nói theo chỉ dẫn (2B, MLX bf16/int8, 30 ngôn ngữ)
@@ -35,17 +45,30 @@ Nhận dạng, tổng hợp và hiểu giọng nói trên thiết bị cho Mac v
 - **[VibeVoice TTS](https://soniqo.audio/guides/vibevoice)** — TTS định dạng dài / nhiều người nói (Microsoft VibeVoice Realtime-0.5B + 1.5B, MLX, tổng hợp podcast/sách nói lên đến 90 phút, EN/ZH)
 - **[Magpie TTS](https://soniqo.audio/guides/magpie)** — TTS đa ngôn ngữ (NVIDIA Magpie-TTS Multilingual 357M, MLX INT8 411 MB hoặc CoreML INT8 342 MB, 9 ngôn ngữ, 5 giọng nói có sẵn, streaming trên MLX)
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — TTS flow-matching trên thiết bị (Supertone Supertonic-3 99M, CoreML/Neural Engine, 31 ngôn ngữ, 10 giọng, không cần G2P, 44,1 kHz)
+- **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — TTS đa ngôn ngữ với nhân bản giọng nói zero-shot (Resemble AI Chatterbox Multilingual, MLX fp16 ~1,3 GB, 23 ngôn ngữ, MIT)
 - **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-int8)** — TTS khuếch tán phi tự hồi quy với nhân bản giọng nói zero-shot (k2-fsa OmniVoice, backbone Qwen3, MLX int8 ~1 GB / fp16, 600+ ngôn ngữ, Apache-2.0)
+
+**LLM và dịch thuật**
+
 - **[Qwen3.5-Chat](https://soniqo.audio/guides/chat)** — Chat LLM trên thiết bị (0.8B, MLX INT4 + CoreML INT8, DeltaNet hybrid, token streaming)
 - **[Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md)** — Chat LLM trên thiết bị, transformer dense (Qwen3-4B-Instruct, MLX INT5/INT4, đã xác minh tương đương, token streaming)
 - **[FunctionGemma](https://soniqo.audio/guides/function-calls)** — LLM trên thiết bị cho các lệnh gọi hàm / công cụ có cấu trúc (Gemma 3 270M, CoreML palette hóa 8-bit, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/guides/translate)** — Dịch nhiều-sang-nhiều giữa hơn 400 ngôn ngữ (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
+
+**Speech-to-Speech và voice agents**
+
 - **[Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate)** — Dịch giọng nói sang giọng nói streaming (FR/ES/PT/DE → EN, MLX INT4 + INT8, stack Kyutai Moshi/Mimi, CC-BY-4.0)
 - **[PersonaPlex](https://soniqo.audio/guides/respond)** — Giọng nói sang giọng nói full-duplex (7B, audio vào → audio ra, 18 preset giọng nói)
+
+**Nâng cấp, tách nguồn và tạo âm thanh**
+
 - **[DeepFilterNet3](https://soniqo.audio/guides/denoise)** — Khử nhiễu thời gian thực (2.1M tham số, 48 kHz)
 - **[Tách nguồn](https://soniqo.audio/guides/separate)** — Tách nguồn âm thanh nhạc qua HTDemucs (Demucs v4) + Open-Unmix (UMX-HQ / UMX-L, 4 stem: giọng hát/trống/bass/khác, 44,1 kHz stereo)
 - **[MAGNeT](https://soniqo.audio/guides/compose)** — Tạo nhạc từ văn bản (Meta MAGNeT Small 300M / Medium 1.5B, MLX INT8, đoạn 30 giây ở 32 kHz mono, giải mã song song có mặt nạ)
 - **[FlashSR](https://soniqo.audio/guides/upsample)** — Siêu phân giải âm thanh (FlashSR ICASSP 2025, MLX, 48 kHz mono, diffusion chưng cất 1 bước, INT4 363 MB / INT8 720 MB)
+
+**Phát hiện lượt nói, diarization và định danh người nói**
+
 - **[Từ kích hoạt](https://soniqo.audio/guides/wake-word)** — Phát hiện từ khóa trên thiết bị (KWS Zipformer 3M, CoreML, 26× thời gian thực, danh sách từ khóa có thể cấu hình)
 - **[VAD](https://soniqo.audio/guides/vad)** — Phát hiện hoạt động giọng nói (Silero streaming, Pyannote ngoại tuyến, FireRedVAD hơn 100 ngôn ngữ)
 - **[Phân tách người nói](https://soniqo.audio/guides/diarize)** — Ai nói khi nào (pipeline Pyannote, Sortformer end-to-end trên Neural Engine)

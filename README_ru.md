@@ -21,13 +21,23 @@
 
 **Сценарии:** [Голосовые агенты](https://soniqo.audio/ru/voice-agents) · [Транскрипция](https://soniqo.audio/ru/transcription) · [Синтез речи](https://soniqo.audio/ru/speech-generation)
 
+**Группы возможностей:** STT / ASR · Выравнивание · TTS · LLM и перевод · Speech-to-Speech · Улучшение / восстановление · Разделение источников · Генерация музыки / аудио · Wake word, VAD, диаризация и идентичность говорящего
+
+**STT / ASR**
+
 - **[Qwen3-ASR](https://soniqo.audio/ru/guides/transcribe)** — Распознавание речи (автоматическое распознавание речи, 52 языка, MLX + CoreML)
 - **[Parakeet TDT](https://soniqo.audio/ru/guides/parakeet)** — Распознавание речи через CoreML (Neural Engine, NVIDIA FastConformer + TDT-декодер, 25 языков)
 - **[Omnilingual ASR](https://soniqo.audio/ru/guides/omnilingual)** — Распознавание речи (Meta wav2vec2 + CTC, **1 672 языка** в 32 письменностях, CoreML 300M + MLX 300M/1B/3B/7B)
 - **[Streaming Dictation](https://soniqo.audio/ru/guides/dictate)** — Диктовка в реальном времени с частичными результатами и детекцией окончания реплики (Parakeet-EOU-120M)
 - **[Nemotron Streaming (Многоязычный)](https://soniqo.audio/ru/guides/nemotron)** — Потоковое ASR с низкой задержкой, нативной пунктуацией и капитализацией (NVIDIA Nemotron-3.5-ASR-Streaming-0.6B, CoreML + MLX, **40 языковых локалей**)
 - **[Nemotron Streaming (Английский)](https://soniqo.audio/guides/nemotron)** — Потоковое ASR с низкой задержкой, нативной пунктуацией и капитализацией (NVIDIA Nemotron-Speech-Streaming-0.6B, CoreML, только английский, меньше и быстрее многоязычного варианта)
+
+**Выравнивание**
+
 - **[Qwen3-ForcedAligner](https://soniqo.audio/ru/guides/align)** — Выравнивание временных меток на уровне слов (аудио + текст → временные метки)
+
+**TTS / Синтез речи**
+
 - **[Qwen3-TTS](https://soniqo.audio/ru/guides/speak)** — Синтез речи (наивысшее качество, потоковый режим, пользовательские голоса, 10 языков)
 - **[CosyVoice TTS](https://soniqo.audio/ru/guides/cosyvoice)** — Потоковый синтез речи с клонированием голоса, многоголосым диалогом, тегами эмоций (9 языков)
 - **[VoxCPM2](https://soniqo.audio/ru/speech-generation)** — TTS студийного качества 48 кГц с клонированием голоса и описанием голоса инструкцией (2B, MLX bf16/int8, 30 языков)
@@ -35,17 +45,30 @@
 - **[VibeVoice TTS](https://soniqo.audio/ru/guides/vibevoice)** — Длинный формат / многоголосый TTS (Microsoft VibeVoice Realtime-0.5B + 1.5B, MLX, синтез подкастов/аудиокниг до 90 минут, EN/ZH)
 - **[Magpie TTS](https://soniqo.audio/ru/guides/magpie)** — Многоязычный TTS (NVIDIA Magpie-TTS Multilingual 357M, MLX INT8 411 МБ или CoreML INT8 342 МБ, 9 языков, 5 встроенных голосов, стриминг на MLX)
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — Синтез речи на устройстве на основе flow-matching (Supertone Supertonic-3 99M, CoreML/Neural Engine, 31 язык, 10 голосов, G2P-free, 44.1 кГц)
+- **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — Многоязычный TTS с zero-shot клонированием голоса (Resemble AI Chatterbox Multilingual, MLX fp16 ~1,3 ГБ, 23 языка, MIT)
 - **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-int8)** — Неавторегрессионный диффузионный TTS с zero-shot клонированием голоса (k2-fsa OmniVoice, бэкбон Qwen3, MLX int8 ~1 ГБ / fp16, 600+ языков, Apache-2.0)
+
+**LLM и перевод**
+
 - **[Qwen3.5-Chat](https://soniqo.audio/ru/guides/chat)** — Локальный чат на базе LLM (0.8B, MLX INT4 + CoreML INT8, гибрид DeltaNet, потоковая генерация токенов)
 - **[Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md)** — Локальный чат на базе LLM, плотный трансформер (Qwen3-4B-Instruct, MLX INT5/INT4, с проверкой паритета, потоковая генерация токенов)
 - **[FunctionGemma](https://soniqo.audio/ru/guides/function-calls)** — Локальный LLM для структурированных вызовов функций / инструментов (Gemma 3 270M, CoreML 8-битная палитризация, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/ru/guides/translate)** — Многоязычный перевод между 400+ языками (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
+
+**Speech-to-Speech и голосовые агенты**
+
 - **[Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate)** — Потоковый перевод речи в речь (FR/ES/PT/DE → EN, MLX INT4 + INT8, стек Kyutai Moshi/Mimi, CC-BY-4.0)
 - **[PersonaPlex](https://soniqo.audio/ru/guides/respond)** — Полнодуплексная генерация речи из речи (7B, аудио на входе → аудио на выходе, 18 голосовых пресетов)
+
+**Улучшение, разделение и генерация аудио**
+
 - **[DeepFilterNet3](https://soniqo.audio/ru/guides/denoise)** — Подавление шума в реальном времени (2.1M параметров, 48 кГц). Длинное аудио, превышающее лимит одиночного прохода в 60 s, автоматически разбивается на чанки с crossfade — см. `enhanceChunked(...)`
 - **[Разделение источников](https://soniqo.audio/ru/guides/separate)** — Разделение музыкальных источников через HTDemucs (Demucs v4) + Open-Unmix (UMX-HQ / UMX-L, 4 стема: вокал/ударные/бас/остальное, 44,1 кГц стерео)
 - **[MAGNeT](https://soniqo.audio/ru/guides/compose)** — Генерация музыки по тексту (Meta MAGNeT Small 300M / Medium 1.5B, MLX INT8, 30-секундные клипы 32 кГц моно, маскированное параллельное декодирование)
 - **[FlashSR](https://soniqo.audio/ru/guides/upsample)** — Аудио супер-разрешение (FlashSR ICASSP 2025, MLX, 48 кГц моно, дистиллированная диффузия за 1 шаг, INT4 363 МБ / INT8 720 МБ)
+
+**Детекция реплик, диаризация и идентичность говорящего**
+
 - **[Активационное слово](https://soniqo.audio/ru/guides/wake-word)** — Локальное распознавание ключевых слов (KWS Zipformer 3M, CoreML, 26× реального времени, настраиваемый список ключевых слов)
 - **[VAD](https://soniqo.audio/ru/guides/vad)** — Обнаружение голосовой активности (Silero потоковый, Pyannote офлайн, FireRedVAD 100+ языков)
 - **[Speaker Diarization](https://soniqo.audio/ru/guides/diarize)** — Кто говорил и когда (Pyannote-пайплайн, сквозной Sortformer на Neural Engine)

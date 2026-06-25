@@ -21,13 +21,23 @@ Mac और iOS के लिए ऑन-डिवाइस स्पीच रि
 
 **यूज़-केस:** [वॉइस एजेंट](https://soniqo.audio/hi/voice-agents) · [ट्रांसक्रिप्शन](https://soniqo.audio/hi/transcription) · [स्पीच जनरेशन](https://soniqo.audio/hi/speech-generation)
 
+**क्षमता समूह:** STT / ASR · अलाइनमेंट · TTS · LLM और अनुवाद · स्पीच-टू-स्पीच · एन्हांसमेंट / रिस्टोरेशन · सोर्स सेपरेशन · संगीत / ऑडियो जनरेशन · वेक वर्ड, VAD, डायराइज़ेशन और स्पीकर पहचान
+
+**STT / ASR**
+
 - **[Qwen3-ASR](https://soniqo.audio/hi/guides/transcribe)** — स्पीच-टू-टेक्स्ट (ऑटोमैटिक स्पीच रिकग्निशन, 52 भाषाएँ, MLX + CoreML)
 - **[Parakeet TDT](https://soniqo.audio/hi/guides/parakeet)** — CoreML के माध्यम से स्पीच-टू-टेक्स्ट (Neural Engine, NVIDIA FastConformer + TDT decoder, 25 भाषाएँ)
 - **[Omnilingual ASR](https://soniqo.audio/hi/guides/omnilingual)** — स्पीच-टू-टेक्स्ट (Meta wav2vec2 + CTC, **1,672 भाषाएँ** 32 लिपियों में, CoreML 300M + MLX 300M/1B/3B/7B)
 - **[Streaming Dictation](https://soniqo.audio/hi/guides/dictate)** — पार्शियल्स और एंड-ऑफ-अटरन्स डिटेक्शन के साथ रियल-टाइम डिक्टेशन (Parakeet-EOU-120M)
 - **[Nemotron Streaming (बहुभाषी)](https://soniqo.audio/hi/guides/nemotron)** — नेटिव विराम चिह्न और कैपिटलाइज़ेशन के साथ लो-लेटेंसी स्ट्रीमिंग ASR (NVIDIA Nemotron-3.5-ASR-Streaming-0.6B, CoreML + MLX, **40 भाषा-लोकेल**)
 - **[Nemotron Streaming (अंग्रेज़ी)](https://soniqo.audio/guides/nemotron)** — नेटिव विराम चिह्न और कैपिटलाइज़ेशन के साथ लो-लेटेंसी स्ट्रीमिंग ASR (NVIDIA Nemotron-Speech-Streaming-0.6B, CoreML, केवल अंग्रेज़ी, बहुभाषी संस्करण से छोटा और तेज़)
+
+**अलाइनमेंट**
+
 - **[Qwen3-ForcedAligner](https://soniqo.audio/hi/guides/align)** — शब्द-स्तरीय टाइमस्टैम्प अलाइनमेंट (ऑडियो + टेक्स्ट → टाइमस्टैम्प)
+
+**TTS / स्पीच जनरेशन**
+
 - **[Qwen3-TTS](https://soniqo.audio/hi/guides/speak)** — टेक्स्ट-टू-स्पीच (सर्वोच्च गुणवत्ता, स्ट्रीमिंग, कस्टम स्पीकर, 10 भाषाएँ)
 - **[CosyVoice TTS](https://soniqo.audio/hi/guides/cosyvoice)** — वॉयस क्लोनिंग, मल्टी-स्पीकर डायलॉग, इमोशन टैग के साथ स्ट्रीमिंग TTS (9 भाषाएँ)
 - **[VoxCPM2](https://soniqo.audio/hi/speech-generation)** — वॉयस क्लोनिंग + निर्देश-आधारित वॉयस डिज़ाइन के साथ 48 kHz स्टूडियो-गुणवत्ता TTS (2B, MLX bf16/int8, 30 भाषाएँ)
@@ -37,16 +47,28 @@ Mac और iOS के लिए ऑन-डिवाइस स्पीच रि
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — ऑन-डिवाइस फ़्लो-मैचिंग TTS (Supertone Supertonic-3 99M, CoreML/Neural Engine, 31 भाषाएँ, 10 वॉयस, G2P-free, 44.1 kHz)
 - **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — ज़ीरो-शॉट वॉयस क्लोनिंग के साथ बहुभाषी TTS (Resemble AI Chatterbox Multilingual, MLX fp16 ~1.3 GB, 23 भाषाएँ, MIT)
 - **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-int8)** — ज़ीरो-शॉट वॉयस क्लोनिंग के साथ नॉन-ऑटोरिग्रेसिव डिफ्यूज़न TTS (k2-fsa OmniVoice, Qwen3 बैकबोन, MLX int8 ~1 GB / fp16, 600+ भाषाएँ, Apache-2.0)
+
+**LLM और अनुवाद**
+
 - **[Qwen3.5-Chat](https://soniqo.audio/hi/guides/chat)** — ऑन-डिवाइस LLM चैट (0.8B, MLX INT4 + CoreML INT8, DeltaNet हाइब्रिड, स्ट्रीमिंग टोकन)
 - **[Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md)** — ऑन-डिवाइस LLM चैट, डेंस ट्रांसफ़ॉर्मर (Qwen3-4B-Instruct, MLX INT5/INT4, समता-सत्यापित, स्ट्रीमिंग टोकन)
 - **[FunctionGemma](https://soniqo.audio/hi/guides/function-calls)** — संरचित फ़ंक्शन / टूल कॉल के लिए ऑन-डिवाइस LLM (Gemma 3 270M, CoreML 8-बिट पैलेटाइज़, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/hi/guides/translate)** — 400+ भाषाओं में बहु-दिशात्मक अनुवाद (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
+
+**स्पीच-टू-स्पीच और वॉइस एजेंट**
+
 - **[Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate)** — स्ट्रीमिंग स्पीच-टू-स्पीच अनुवाद (FR/ES/PT/DE → EN, MLX INT4 + INT8, Kyutai Moshi/Mimi स्टैक, CC-BY-4.0)
 - **[PersonaPlex](https://soniqo.audio/hi/guides/respond)** — फुल-डुप्लेक्स स्पीच-टू-स्पीच (7B, ऑडियो इन → ऑडियो आउट, 18 वॉयस प्रीसेट)
+
+**एन्हांसमेंट, सेपरेशन और ऑडियो जनरेशन**
+
 - **[DeepFilterNet3](https://soniqo.audio/hi/guides/denoise)** — रियल-टाइम नॉइज़ सप्रेशन (2.1M params, 48 kHz)। 60 s सिंगल-शॉट सीमा से अधिक लंबे ऑडियो को crossfade के साथ स्वतः चंक किया जाता है — `enhanceChunked(...)` देखें
 - **[सोर्स सेपरेशन](https://soniqo.audio/hi/guides/separate)** — HTDemucs (Demucs v4) + Open-Unmix के ज़रिए म्यूज़िक सोर्स सेपरेशन (UMX-HQ / UMX-L, 4 स्टेम: वोकल/ड्रम्स/बेस/अन्य, 44.1 kHz स्टीरियो)
 - **[MAGNeT](https://soniqo.audio/hi/guides/compose)** — टेक्स्ट से संगीत निर्माण (Meta MAGNeT Small 300M / Medium 1.5B, MLX INT8, 30 सेकंड क्लिप 32 kHz मोनो, मास्क्ड पैरलल डिकोडिंग)
 - **[FlashSR](https://soniqo.audio/hi/guides/upsample)** — ऑडियो सुपर-रेज़ोल्यूशन (FlashSR ICASSP 2025, MLX, 48 kHz मोनो, 1-स्टेप डिस्टिल्ड डिफ्यूज़न, INT4 363 MB / INT8 720 MB)
+
+**टर्न डिटेक्शन, डायराइज़ेशन और स्पीकर पहचान**
+
 - **[वेक-वर्ड](https://soniqo.audio/hi/guides/wake-word)** — ऑन-डिवाइस कीवर्ड स्पॉटिंग (KWS Zipformer 3M, CoreML, 26× रियल-टाइम, कॉन्फ़िगरेबल कीवर्ड सूची)
 - **[VAD](https://soniqo.audio/hi/guides/vad)** — वॉयस एक्टिविटी डिटेक्शन (Silero स्ट्रीमिंग, Pyannote ऑफ़लाइन, FireRedVAD 100+ भाषाएँ)
 - **[Speaker Diarization](https://soniqo.audio/hi/guides/diarize)** — कौन कब बोला (Pyannote पाइपलाइन, Neural Engine पर एंड-टू-एंड Sortformer)

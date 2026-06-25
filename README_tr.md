@@ -21,13 +21,23 @@ Mac ve iOS için cihaz üzerinde konuşma tanıma, sentezleme ve anlama. Apple S
 
 **Kullanım senaryoları:** [Sesli Ajanlar](https://soniqo.audio/voice-agents) · [Transkripsiyon](https://soniqo.audio/transcription) · [Konuşma Üretimi](https://soniqo.audio/speech-generation)
 
+**Yetenek grupları:** STT / ASR · Hizalama · TTS · LLM ve çeviri · Speech-to-Speech · İyileştirme / restorasyon · Kaynak ayırma · Müzik / ses üretimi · Wake word, VAD, konuşmacı ayrıştırma ve konuşmacı kimliği
+
+**STT / ASR**
+
 - **[Qwen3-ASR](https://soniqo.audio/guides/transcribe)** — Konuşmadan metne (otomatik konuşma tanıma, 52 dil, MLX + CoreML)
 - **[Parakeet TDT](https://soniqo.audio/guides/parakeet)** — CoreML üzerinden konuşmadan metne (Neural Engine, NVIDIA FastConformer + TDT kod çözücü, 25 dil)
 - **[Omnilingual ASR](https://soniqo.audio/guides/omnilingual)** — Konuşmadan metne (Meta wav2vec2 + CTC, 32 yazı sistemi üzerinde **1.672 dil**, CoreML 300M + MLX 300M/1B/3B/7B)
 - **[Akış Dikte](https://soniqo.audio/guides/dictate)** — Kısmi sonuçlar ve söyleyiş sonu algılaması ile gerçek zamanlı dikte (Parakeet-EOU-120M)
 - **[Nemotron Streaming (Çok dilli)](https://soniqo.audio/guides/nemotron)** — Yerel noktalama ve büyük harf desteğiyle düşük gecikmeli akış ASR (NVIDIA Nemotron-3.5-ASR-Streaming-0.6B, CoreML + MLX, **40 dil-yerel ayarı**)
 - **[Nemotron Streaming (İngilizce)](https://soniqo.audio/guides/nemotron)** — Yerel noktalama ve büyük harf desteğiyle düşük gecikmeli akış ASR (NVIDIA Nemotron-Speech-Streaming-0.6B, CoreML, yalnızca İngilizce, çok dilli varyanttan daha küçük ve hızlı)
+
+**Hizalama**
+
 - **[Qwen3-ForcedAligner](https://soniqo.audio/guides/align)** — Kelime düzeyinde zaman damgası hizalama (ses + metin → zaman damgaları)
+
+**TTS / Konuşma üretimi**
+
 - **[Qwen3-TTS](https://soniqo.audio/guides/speak)** — Metinden konuşmaya (en yüksek kalite, akış, özel konuşmacılar, 10 dil)
 - **[CosyVoice TTS](https://soniqo.audio/guides/cosyvoice)** — Ses klonlama, çok konuşmacılı diyalog, duygu etiketleri ile akış TTS (9 dil)
 - **[VoxCPM2](https://soniqo.audio/speech-generation)** — Ses klonlama ve talimat odaklı ses tasarımı ile 48 kHz stüdyo kalitesinde TTS (2B, MLX bf16/int8, 30 dil)
@@ -35,17 +45,30 @@ Mac ve iOS için cihaz üzerinde konuşma tanıma, sentezleme ve anlama. Apple S
 - **[VibeVoice TTS](https://soniqo.audio/guides/vibevoice)** — Uzun biçimli / çok konuşmacılı TTS (Microsoft VibeVoice Realtime-0.5B + 1.5B, MLX, 90 dakikaya kadar podcast/sesli kitap sentezi, EN/ZH)
 - **[Magpie TTS](https://soniqo.audio/guides/magpie)** — Çok dilli TTS (NVIDIA Magpie-TTS Multilingual 357M, MLX INT8 411 MB veya CoreML INT8 342 MB, 9 dil, 5 hazır konuşmacı, MLX'te akış)
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — Cihaz üzerinde flow-matching TTS (Supertone Supertonic-3 99M, CoreML/Neural Engine, 31 dil, 10 ses, G2P-free, 44.1 kHz)
+- **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — Zero-shot ses klonlama özellikli çok dilli TTS (Resemble AI Chatterbox Multilingual, MLX fp16 ~1,3 GB, 23 dil, MIT)
 - **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-int8)** — Zero-shot ses klonlama ile otoregresif olmayan difüzyon TTS (k2-fsa OmniVoice, Qwen3 omurgası, MLX int8 ~1 GB / fp16, 600+ dil, Apache-2.0)
+
+**LLM ve çeviri**
+
 - **[Qwen3.5-Chat](https://soniqo.audio/guides/chat)** — Cihaz üzerinde LLM sohbet (0.8B, MLX INT4 + CoreML INT8, DeltaNet hibrit, akış token'ları)
 - **[Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md)** — Cihaz üzerinde LLM sohbet, yoğun transformer (Qwen3-4B-Instruct, MLX INT5/INT4, parite doğrulanmış, akış token'ları)
 - **[FunctionGemma](https://soniqo.audio/guides/function-calls)** — Cihaz üzerinde yapılandırılmış fonksiyon / araç çağrıları için LLM (Gemma 3 270M, CoreML 8-bit paletleme, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/guides/translate)** — 400+ dil arasında çoktan-çoğa çeviri (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
+
+**Speech-to-Speech ve sesli ajanlar**
+
 - **[Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate)** — Akışlı konuşmadan konuşmaya çeviri (FR/ES/PT/DE → EN, MLX INT4 + INT8, Kyutai Moshi/Mimi yığını, CC-BY-4.0)
 - **[PersonaPlex](https://soniqo.audio/guides/respond)** — Tam çift yönlü (full-duplex) konuşmadan konuşmaya (7B, ses girişi → ses çıkışı, 18 ses ön ayarı)
+
+**İyileştirme, ayırma ve ses üretimi**
+
 - **[DeepFilterNet3](https://soniqo.audio/guides/denoise)** — Gerçek zamanlı gürültü bastırma (2.1M parametre, 48 kHz)
 - **[Kaynak Ayrıştırma](https://soniqo.audio/guides/separate)** — HTDemucs (Demucs v4) + Open-Unmix ile müzik kaynağı ayrıştırma (UMX-HQ / UMX-L, 4 katman: vokal/davul/bas/diğer, 44,1 kHz stereo)
 - **[MAGNeT](https://soniqo.audio/guides/compose)** — Metinden müziğe üretim (Meta MAGNeT Small 300M / Medium 1.5B, MLX INT8, 32 kHz mono'da 30 sn klipler, maskelenmiş paralel kod çözme)
 - **[FlashSR](https://soniqo.audio/guides/upsample)** — Ses süper çözünürlük (FlashSR ICASSP 2025, MLX, 48 kHz mono, 1 adımda damıtılmış difüzyon, INT4 363 MB / INT8 720 MB)
+
+**Sıra algılama, konuşmacı ayrıştırma ve konuşmacı kimliği**
+
 - **[Uyandırma kelimesi](https://soniqo.audio/guides/wake-word)** — Cihaz üzerinde anahtar kelime tespiti (KWS Zipformer 3M, CoreML, 26× gerçek zaman, yapılandırılabilir anahtar kelime listesi)
 - **[VAD](https://soniqo.audio/guides/vad)** — Ses etkinlik algılama (Silero akış, Pyannote çevrimdışı, FireRedVAD 100+ dil)
 - **[Konuşmacı Ayrımı](https://soniqo.audio/guides/diarize)** — Kim ne zaman konuştu (Pyannote pipeline, Neural Engine üzerinde uçtan uca Sortformer)
