@@ -194,6 +194,12 @@ jobs:
         if: steps.shard-filter.outputs.selected == 'true'
         run: df -h /
 
+      - name: Relax audio-infra HuggingFace stall timeout
+        if: steps.shard-filter.outputs.selected == 'true' && matrix.shard.name == 'audio-infra'
+        run: |
+          echo "HF_DOWNLOAD_STALL_TIMEOUT=180" >> "$GITHUB_ENV"
+          echo "audio-infra downloads get 180s of no-progress patience"
+
       - name: Run E2E tests
         if: steps.shard-filter.outputs.selected == 'true'
         env:
