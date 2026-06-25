@@ -225,6 +225,13 @@ public final class CoreMLForcedAligner {
         )
         let t4 = profile ? CFAbsoluteTimeGetCurrent() : 0
 
+        if ProcessInfo.processInfo.environment["ALIGN_NAN_PROBE"] == "1" {
+            Self.dumpNaNStats(label: "audioEmbeds (encoder out)", array: audioEmbeds,
+                              firstRows: 3, rowSize: hiddenSize)
+            Self.dumpNaNStats(label: "tokenEmbeds (after splice)", array: tokenEmbeds,
+                              firstRows: 3, rowSize: hiddenSize)
+        }
+
         // 6. One forward pass through text_decoder + classify head. The
         // causal mask is baked into the exported graph as a constant.
         let logits = try textDecoder.run(inputsEmbeds: tokenEmbeds)
@@ -232,6 +239,10 @@ public final class CoreMLForcedAligner {
 
         // 8. Extract argmax at <timestamp> positions.
         let absolutePositions = slotted.timestampPositions.map { $0 + slottedStart }
+        if ProcessInfo.processInfo.environment["ALIGN_NAN_PROBE"] == "1" {
+            Self.dumpLogitsAtPositions(logits: logits, positions: absolutePositions,
+                                        classifyNum: classifyNum, top: 5)
+        }
         let rawIndices = Self.argmaxAtPositions(
             logits: logits, positions: absolutePositions, classifyNum: classifyNum)
         let t6 = profile ? CFAbsoluteTimeGetCurrent() : 0
@@ -367,6 +378,71 @@ public final class CoreMLForcedAligner {
             throw AudioModelError.inferenceFailed(
                 operation: "CoreML forced aligner",
                 reason: "Unsupported audio embeddings dtype \(audioEmbeds.dataType.rawValue)")
+        }
+    }
+
+    static func dumpNaNStats(label: String, array: MLMultiArray, firstRows: Int, rowSize: Int) {
+        let count = array.count
+        var nans = 0, infs = 0, finites = 0
+        var mn = Float.infinity, mx = -Float.infinity
+        switch array.dataType {
+        case .float32:
+            let p = array.dataPointer.assumingMemoryBound(to: Float.self)
+            for i in 0..<count {
+                let v = p[i]
+                if v.isNaN { nans += 1 }
+                else if !v.isFinite { infs += 1 }
+                else { finites += 1; mn = min(mn, v); mx = max(mx, v) }
+            }
+        case .float16:
+            let p = array.dataPointer.assumingMemoryBound(to: Float16.self)
+            for i in 0..<count {
+                let v = Float(p[i])
+                if v.isNaN { nans += 1 }
+                else if !v.isFinite { infs += 1 }
+                else { finites += 1; mn = min(mn, v); mx = max(mx, v) }
+            }
+        default: return
+        }
+        print("[NAN-PROBE] \(label) shape=\(array.shape.map{$0.intValue}) "
+            + "strides=\(array.strides.map{$0.intValue}) "
+            + "dtype=\(array.dataType.rawValue) "
+            + "nan=\(nans) inf=\(infs) finite=\(finites) "
+            + "min=\(mn) max=\(mx)")
+    }
+
+    static func dumpLogitsAtPositions(logits: MLMultiArray, positions: [Int],
+                                       classifyNum: Int, top: Int) {
+        let shape = logits.shape.map { $0.intValue }
+        guard shape.count == 3 else { return }
+        let strides = logits.strides.map { $0.intValue }
+        let posStride = strides[1]
+        let classStride = strides[2]
+        let load: (Int) -> Float
+        switch logits.dataType {
+        case .float32:
+            let p = logits.dataPointer.assumingMemoryBound(to: Float.self)
+            load = { i in p[i] }
+        case .float16:
+            let p = logits.dataPointer.assumingMemoryBound(to: Float16.self)
+            load = { i in Float(p[i]) }
+        default: return
+        }
+        for (i, pos) in positions.enumerated().prefix(5) {
+            let base = pos * posStride
+            var stats = (nan: 0, inf: 0, finite: 0, mn: Float.infinity, mx: -Float.infinity)
+            for c in 0..<classifyNum {
+                let v = load(base + c * classStride)
+                if v.isNaN { stats.nan += 1 }
+                else if !v.isFinite { stats.inf += 1 }
+                else { stats.finite += 1; stats.mn = min(stats.mn, v); stats.mx = max(stats.mx, v) }
+            }
+            var idx = Array(0..<classifyNum)
+            idx.sort { load(base + $0 * classStride) > load(base + $1 * classStride) }
+            let topIdx = idx.prefix(top).map { c in "\(c)=\(load(base + c * classStride))" }
+                .joined(separator: " ")
+            print("[NAN-PROBE] logits[pos=\(pos) (#\(i))] nan=\(stats.nan) inf=\(stats.inf) "
+                + "finite=\(stats.finite) min=\(stats.mn) max=\(stats.mx) top=\(topIdx)")
         }
     }
 

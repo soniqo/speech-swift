@@ -41,6 +41,14 @@ final class E2ECoreMLForcedAlignerTests: XCTestCase {
     // MARK: - Shared body
 
     private func runAligner(modelId: String, variantLabel: String) async throws {
+        // TEMP: nightly-runner diagnostic. Force the in-runtime NaN/logit probe
+        // so the workflow log shows whether the runner produces NaN, uniform,
+        // or just class-0-biased logits — revert once the cpuOnly NaN-collapse
+        // root cause is identified.
+        setenv("ALIGN_NAN_PROBE", "1", 1)
+        setenv("ALIGN_DEBUG", "1", 1)
+        setenv("COREML_ALIGN_PROFILE", "1", 1)
+
         guard let wavURL = Bundle.module.url(forResource: "test_audio", withExtension: "wav") else {
             throw XCTSkip("test_audio.wav not found in Qwen3ASRTests resources")
         }
