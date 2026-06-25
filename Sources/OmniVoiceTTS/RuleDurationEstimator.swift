@@ -106,6 +106,37 @@ public final class RuleDurationEstimator: @unchecked Sendable {
         return sum
     }
 
+    /// Estimate the target audio **token** count, matching OmniVoice's
+    /// `_estimate_target_tokens` -> `estimate_duration`. The reference's *token
+    /// count* (not its wall-clock seconds) sets the speaker's pace: a target whose
+    /// text weight is k times the reference's gets roughly k times the reference's
+    /// tokens. When the reference text/length is absent, the reference falls back
+    /// to a fixed prior ("Nice to meet you." / 25 tokens). Short estimates get a
+    /// power-curve boost.
+    public func estimateTargetTokens(
+        targetText: String, refText: String?, numRefAudioTokens: Int?,
+        lowThreshold: Double = 50, boostStrength: Double = 3
+    ) -> Int {
+        let effectiveRefText: String
+        let effectiveRefTokens: Int
+        if let refText, !refText.isEmpty, let numRefAudioTokens {
+            effectiveRefText = refText
+            effectiveRefTokens = numRefAudioTokens
+        } else {
+            effectiveRefText = "Nice to meet you."
+            effectiveRefTokens = 25
+        }
+        let refDuration = Double(effectiveRefTokens)
+        let refWeight = totalWeight(effectiveRefText)
+        guard refDuration > 0, refWeight > 0 else { return 1 }
+        let speedFactor = refWeight / refDuration
+        var est = totalWeight(targetText) / speedFactor
+        if est < lowThreshold {
+            est = lowThreshold * pow(est / lowThreshold, 1.0 / boostStrength)
+        }
+        return max(1, Int(est))
+    }
+
     /// First letter of the Unicode general category (`L`/`M`/`N`/`P`/`S`/`Z`/…),
     /// matching Python `unicodedata.category(c)[0]` for the cases the estimator
     /// branches on.

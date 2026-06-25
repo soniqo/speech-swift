@@ -65,14 +65,29 @@ public final class OmniVoiceTTSModel {
     ) async throws -> OmniVoiceTTSModel {
         let dir = try HuggingFaceDownloader.getCacheDirectory(for: modelId)
         let fm = FileManager.default
-        if !fm.fileExists(atPath: dir.appendingPathComponent("model.safetensors").path) {
+        // Repair incomplete or pre-tokenizer-config caches. The HF snapshot fetch
+        // is incremental, so already-present blobs are not refetched.
+        let requiredFiles = [
+            "model.safetensors",
+            "config.json",
+            "tokenizer.json",
+            "tokenizer_config.json",
+            "audio_tokenizer/model.safetensors",
+        ]
+        let hasMissingFile = requiredFiles.contains {
+            !fm.fileExists(atPath: dir.appendingPathComponent($0).path)
+        }
+        if hasMissingFile {
             progressHandler?(0.0, "Downloading \(modelId)...")
             // No explicit `.safetensors` in additionalFiles keeps the automatic
             // `*.safetensors` glob (fetches the top-level backbone); `audio_tokenizer/*`
-            // pulls the codec + its config.
+            // pulls the codec + its config. `tokenizer_config.json` carries the
+            // tokenizer class the loader needs.
             try await HuggingFaceDownloader.downloadWeights(
                 modelId: modelId, to: dir,
-                additionalFiles: ["config.json", "tokenizer.json", "audio_tokenizer/*"],
+                additionalFiles: [
+                    "config.json", "tokenizer.json", "tokenizer_config.json", "audio_tokenizer/*",
+                ],
                 offlineMode: offlineMode
             ) { progressHandler?($0 * 0.9, "Downloading model...") }
         }
@@ -88,6 +103,8 @@ public final class OmniVoiceTTSModel {
     ///   - referenceAudio: reference clip to clone (any format/rate; resampled to 24 kHz).
     ///   - referenceText: optional transcript of the reference (improves prosody).
     ///   - language: OmniVoice language id (e.g. "en"); the model covers 600+.
+    ///   - instruct: optional restricted OmniVoice style item (accent / age / gender /
+    ///     pitch / whisper); `nil` for neutral.
     ///   - duration: optional fixed output length in seconds; `nil` estimates from text.
     ///   - numSteps: diffusion steps (16 default; 12 is a faster, near-equal setting).
     /// - Returns: mono Float samples at `sampleRate`.
@@ -96,6 +113,7 @@ public final class OmniVoiceTTSModel {
         referenceAudio: URL,
         referenceText: String?,
         language: String = "en",
+        instruct: String? = nil,
         duration: Double? = nil,
         numSteps: Int = 16
     ) throws -> [Float] {
@@ -104,17 +122,81 @@ public final class OmniVoiceTTSModel {
         let refWav = MLXArray(refSamples).reshaped([1, 1, refSamples.count])
         let refTokens = encoder.encode(refWav)
 
-        let targetLen = duration.map { max(1, Int(($0 * frameRate).rounded())) }
-            ?? builder.estimateTargetLen(text: text, lang: language, frameRate: frameRate)
+        // Target length: an explicit duration wins; otherwise estimate the token
+        // count from the reference's pace (its text weight vs its token count),
+        // matching OmniVoice's `_estimate_target_tokens`.
+        let targetLen: Int
+        if let d = duration {
+            targetLen = max(1, Int((d * frameRate).rounded()))
+        } else {
+            let refTokenCount = refTokens.dim(refTokens.ndim - 1)
+            targetLen = RuleDurationEstimator.shared.estimateTargetTokens(
+                targetText: text, refText: referenceText, numRefAudioTokens: refTokenCount)
+        }
 
         let (ids, mask) = builder.buildInputs(
             text: text, refText: referenceText, lang: language,
-            refAudioTokens: refTokens, targetLen: targetLen, denoise: true, instruct: nil)
+            refAudioTokens: refTokens, targetLen: targetLen, denoise: true, instruct: instruct)
         let tokens = model.generateTokens(
             condInputIds: ids, audioMask: mask, targetLen: targetLen, numSteps: numSteps)
         let wav = codec.decode(tokens)
         MLX.eval(wav)
-        return wav.asType(.float32).asArray(Float.self)
+        let samples = wav.asType(.float32).asArray(Float.self)
+        let trimmed = Self.trimLeadingNoise(samples, sampleRate: cfg.sampleRate)
+        return Self.applyEdgeFades(trimmed, sampleRate: cfg.sampleRate)
+    }
+
+    /// Raised-cosine fade in/out over the edges, matching the reference's
+    /// `fade_and_pad_audio` (`fade_duration` 0.1 s). The long fade ramps over the
+    /// kept leading silence so the diffusion+codec onset transient is inaudible,
+    /// and removes any tail click, without shortening the speech (the fade sits on
+    /// the silence the trim left, not on the words).
+    static func applyEdgeFades(_ input: [Float], sampleRate: Int) -> [Float] {
+        var s = input
+        let n = s.count
+        let fade = min(sampleRate / 10, n / 2)  // ~100 ms (or half the clip)
+        guard fade > 0 else { return s }
+        for i in 0 ..< fade {
+            let w = Float(0.5 * (1.0 - cos(Double.pi * Double(i) / Double(fade))))
+            s[i] *= w
+            s[n - 1 - i] *= w
+        }
+        return s
+    }
+
+    /// Drop the brief codec/diffusion startup transient and any leading silence:
+    /// find where the signal first stays above a small energy threshold for a
+    /// sustained span (real speech, not the millisecond startup burst) and cut
+    /// just before it, keeping a short lead-in. Returns the input unchanged when
+    /// no sustained onset is found (e.g. an already-clean or silent clip).
+    static func trimLeadingNoise(_ s: [Float], sampleRate: Int) -> [Float] {
+        guard !s.isEmpty else { return s }
+        let win = max(1, sampleRate / 100)  // 10 ms windows
+        let sustain = 6  // require ~60 ms continuously above threshold = real speech
+        let threshold: Float = 0.02
+        func windowRMS(_ start: Int) -> Float {
+            let end = min(start + win, s.count)
+            var acc: Float = 0
+            for j in start ..< end { acc += s[j] * s[j] }
+            return (acc / Float(max(1, end - start))).squareRoot()
+        }
+        var start = 0
+        var found = false
+        while start + win * sustain <= s.count {
+            var ok = true
+            var k = 0
+            while k < sustain {
+                if windowRMS(start + k * win) < threshold { ok = false; break }
+                k += 1
+            }
+            if ok { found = true; break }
+            start += win
+        }
+        guard found, start > 0 else { return s }
+        // Keep 100 ms of leading silence (matches the reference's `lead_sil`); the
+        // 100 ms fade then ramps over it, reaching the speech onset gently.
+        let cut = max(0, start - sampleRate / 10)
+        return Array(s[cut...])
     }
 
     private static func readQuantization(_ url: URL) -> (groupSize: Int, bits: Int)? {

@@ -115,4 +115,47 @@ final class InputConstructionTests: XCTestCase {
         // CJK char weighs 3.0.
         XCTAssertEqual(est.totalWeight("\u{4F60}"), 3.0, accuracy: 1e-9)
     }
+
+    func testReferencePacedTargetTokenEstimator() {
+        let est = RuleDurationEstimator.shared
+        let target = "The quick brown fox jumps over the lazy dog."
+        let ref = "Hello there, this is a cloned voice."
+
+        let shortRef = est.estimateTargetTokens(
+            targetText: target, refText: ref, numRefAudioTokens: 25)
+        let longRef = est.estimateTargetTokens(
+            targetText: target, refText: ref, numRefAudioTokens: 75)
+
+        XCTAssertGreaterThan(longRef, shortRef, "slower reference should produce more target tokens")
+        XCTAssertGreaterThan(est.estimateTargetTokens(
+            targetText: target, refText: nil, numRefAudioTokens: nil), 0)
+    }
+
+    func testTrimLeadingNoiseKeepsShortLeadInBeforeSustainedSpeech() {
+        let sampleRate = 100
+        let input = Array(repeating: Float(0), count: 30)
+            + Array(repeating: Float(0.03), count: 20)
+            + Array(repeating: Float(0), count: 10)
+
+        let trimmed = OmniVoiceTTSModel.trimLeadingNoise(input, sampleRate: sampleRate)
+
+        XCTAssertEqual(trimmed.count, 40)
+        XCTAssertEqual(Array(trimmed.prefix(10)), Array(repeating: Float(0), count: 10))
+        XCTAssertEqual(Array(trimmed.dropFirst(10).prefix(20)), Array(repeating: Float(0.03), count: 20))
+    }
+
+    func testTrimLeadingNoiseLeavesSilentClipUnchanged() {
+        let input = Array(repeating: Float(0), count: 64)
+        XCTAssertEqual(OmniVoiceTTSModel.trimLeadingNoise(input, sampleRate: 100), input)
+    }
+
+    func testApplyEdgeFadesKeepsLengthAndFadesEdges() {
+        let input = Array(repeating: Float(1), count: 20)
+        let faded = OmniVoiceTTSModel.applyEdgeFades(input, sampleRate: 100)
+
+        XCTAssertEqual(faded.count, input.count)
+        XCTAssertEqual(faded.first ?? -1, Float(0), accuracy: Float(1e-6))
+        XCTAssertEqual(faded.last ?? -1, Float(0), accuracy: Float(1e-6))
+        XCTAssertGreaterThan(faded[10], Float(0.9))
+    }
 }
