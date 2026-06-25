@@ -4,7 +4,7 @@ On-device text generation backends exposed by the `Qwen3Chat` target. The module
 
 - `Qwen35MLXChat` / `Qwen35CoreMLChat`: Qwen3.5-0.8B hybrid chat for low-memory agents.
 - `Qwen3DenseChat`: standard dense Qwen3 instruct checkpoints such as Qwen3-4B.
-- `Gemma4Chat`: Gemma 4 text checkpoints such as E2B and E4B, including Gemma's native turn template and reasoning-channel filtering.
+- `Gemma4Chat`: Gemma 4 text checkpoints such as E2B and E4B, including Gemma's native turn template and reasoning-channel filtering. See [`gemma4-chat.md`](gemma4-chat.md) for the dedicated Gemma 4 model notes.
 
 All three conform to the same streaming backend surface used by `Qwen35PipelineLLM`, so voice-agent code can swap models without changing the pipeline wrapper.
 
