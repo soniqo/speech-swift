@@ -727,6 +727,7 @@ public final class CoreMLForcedAlignerDecoder {
     private let computeUnits: MLComputeUnits
     private let fallbackLock = NSLock()
     private var sourcePackageModel: MLModel?
+    private var sourcePackageCompiledURL: URL?
     public let fixedT: Int
 
     public init(
@@ -802,7 +803,14 @@ public final class CoreMLForcedAlignerDecoder {
         if let sourcePackageModel { return sourcePackageModel }
         let cfg = MLModelConfiguration()
         cfg.computeUnits = computeUnits
-        let model = try MLModel(contentsOf: url, configuration: cfg)
+        let compiledURL: URL
+        if let sourcePackageCompiledURL {
+            compiledURL = sourcePackageCompiledURL
+        } else {
+            compiledURL = try MLModel.compileModel(at: url)
+            sourcePackageCompiledURL = compiledURL
+        }
+        let model = try MLModel(contentsOf: compiledURL, configuration: cfg)
         sourcePackageModel = model
         return model
     }
