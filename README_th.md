@@ -21,13 +21,23 @@
 
 **กรณีการใช้งาน:** [Voice Agents](https://soniqo.audio/voice-agents) · [การถอดเสียง](https://soniqo.audio/transcription) · [การสังเคราะห์เสียงพูด](https://soniqo.audio/speech-generation)
 
+**กลุ่มความสามารถ:** STT / ASR · การจัดแนว · TTS · LLM และการแปล · Speech-to-Speech · การปรับปรุง / การฟื้นฟู · การแยกแหล่งเสียง · การสร้างดนตรี / เสียง · Wake word, VAD, diarization และอัตลักษณ์ผู้พูด
+
+**STT / ASR**
+
 - **[Qwen3-ASR](https://soniqo.audio/guides/transcribe)** — แปลงเสียงพูดเป็นข้อความ (การรู้จำเสียงพูดอัตโนมัติ รองรับ 52 ภาษา MLX + CoreML)
 - **[Parakeet TDT](https://soniqo.audio/guides/parakeet)** — แปลงเสียงพูดเป็นข้อความผ่าน CoreML (Neural Engine, NVIDIA FastConformer + ตัวถอดรหัส TDT รองรับ 25 ภาษา)
 - **[Omnilingual ASR](https://soniqo.audio/guides/omnilingual)** — แปลงเสียงพูดเป็นข้อความ (Meta wav2vec2 + CTC รองรับ **1,672 ภาษา** ครอบคลุม 32 ระบบอักษร, CoreML 300M + MLX 300M/1B/3B/7B)
 - **[Streaming Dictation](https://soniqo.audio/guides/dictate)** — การเขียนตามคำบอกแบบเรียลไทม์พร้อมผลลัพธ์บางส่วนและการตรวจจับจุดจบของประโยค (Parakeet-EOU-120M)
 - **[Nemotron Streaming (หลายภาษา)](https://soniqo.audio/guides/nemotron)** — ASR แบบสตรีมมิ่งที่มีความหน่วงต่ำ พร้อมเครื่องหมายวรรคตอนและตัวพิมพ์ใหญ่ในตัว (NVIDIA Nemotron-3.5-ASR-Streaming-0.6B, CoreML + MLX, **40 ภาษา-ตำแหน่ง**)
 - **[Nemotron Streaming (อังกฤษ)](https://soniqo.audio/guides/nemotron)** — ASR แบบสตรีมมิ่งที่มีความหน่วงต่ำ พร้อมเครื่องหมายวรรคตอนและตัวพิมพ์ใหญ่ในตัว (NVIDIA Nemotron-Speech-Streaming-0.6B, CoreML, ภาษาอังกฤษเท่านั้น เล็กและเร็วกว่ารุ่นหลายภาษา)
+
+**การจัดแนว**
+
 - **[Qwen3-ForcedAligner](https://soniqo.audio/guides/align)** — การจัดเรียงเครื่องหมายเวลาในระดับคำ (เสียง + ข้อความ → เครื่องหมายเวลา)
+
+**TTS / การสังเคราะห์เสียงพูด**
+
 - **[Qwen3-TTS](https://soniqo.audio/guides/speak)** — การสังเคราะห์เสียงพูด (คุณภาพสูงสุด สตรีมมิ่ง ผู้พูดที่กำหนดเอง 10 ภาษา)
 - **[CosyVoice TTS](https://soniqo.audio/guides/cosyvoice)** — TTS แบบสตรีมมิ่งพร้อมการโคลนเสียง บทสนทนาหลายผู้พูด และแท็กอารมณ์ (9 ภาษา)
 - **[VoxCPM2](https://soniqo.audio/speech-generation)** — TTS คุณภาพระดับสตูดิโอที่ 48 kHz พร้อมการโคลนเสียง + การออกแบบเสียงผ่านคำสั่ง (2B, MLX bf16/int8, 30 ภาษา)
@@ -35,17 +45,30 @@
 - **[VibeVoice TTS](https://soniqo.audio/guides/vibevoice)** — TTS แบบยาว / หลายผู้พูด (Microsoft VibeVoice Realtime-0.5B + 1.5B, MLX สังเคราะห์พอดแคสต์/หนังสือเสียงได้นานสูงสุด 90 นาที, EN/ZH)
 - **[Magpie TTS](https://soniqo.audio/guides/magpie)** — TTS หลายภาษา (NVIDIA Magpie-TTS Multilingual 357M, MLX INT8 411 MB หรือ CoreML INT8 342 MB, 9 ภาษา, 5 ผู้พูดสำเร็จรูป สตรีมมิ่งบน MLX)
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — TTS แบบ flow-matching บนอุปกรณ์ (Supertone Supertonic-3 99M, CoreML/Neural Engine, 31 ภาษา, 10 เสียง, G2P-free, 44.1 kHz)
+- **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — TTS หลายภาษาพร้อมการโคลนเสียงแบบ zero-shot (Resemble AI Chatterbox Multilingual, MLX fp16 ~1.3 GB, 23 ภาษา, MIT)
 - **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-int8)** — TTS แบบ diffusion non-autoregressive พร้อมการโคลนเสียงแบบ zero-shot (k2-fsa OmniVoice, backbone Qwen3, MLX int8 ~1 GB / fp16, 600+ ภาษา, Apache-2.0)
+
+**LLM และการแปล**
+
 - **[Qwen3.5-Chat](https://soniqo.audio/guides/chat)** — แชท LLM บนอุปกรณ์ (0.8B, MLX INT4 + CoreML INT8, DeltaNet ไฮบริด สตรีมมิ่งโทเค็น)
 - **[Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md)** — แชท LLM บนอุปกรณ์ ทรานส์ฟอร์เมอร์แบบหนาแน่น (Qwen3-4B-Instruct, MLX INT5/INT4, ตรวจสอบความเทียบเท่าแล้ว สตรีมมิ่งโทเค็น)
 - **[FunctionGemma](https://soniqo.audio/guides/function-calls)** — LLM บนอุปกรณ์สำหรับการเรียกฟังก์ชัน / เครื่องมือแบบมีโครงสร้าง (Gemma 3 270M, CoreML 8-bit palettize, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/guides/translate)** — การแปลแบบหลายต่อหลายระหว่างกว่า 400 ภาษา (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
+
+**Speech-to-Speech และ voice agents**
+
 - **[Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate)** — การแปลเสียงพูดสู่เสียงพูดแบบสตรีมมิ่ง (FR/ES/PT/DE → EN, MLX INT4 + INT8, สแต็ก Kyutai Moshi/Mimi, CC-BY-4.0)
 - **[PersonaPlex](https://soniqo.audio/guides/respond)** — เสียงพูดสู่เสียงพูดแบบ full-duplex (7B, เสียงเข้า → เสียงออก, 18 พรีเซ็ตเสียง)
+
+**การปรับปรุง การแยก และการสร้างเสียง**
+
 - **[DeepFilterNet3](https://soniqo.audio/guides/denoise)** — การลดเสียงรบกวนแบบเรียลไทม์ (2.1M พารามิเตอร์, 48 kHz)
 - **[Source Separation](https://soniqo.audio/guides/separate)** — การแยกแหล่งกำเนิดดนตรีด้วย HTDemucs (Demucs v4) + Open-Unmix (UMX-HQ / UMX-L, 4 stems: เสียงร้อง/กลอง/เบส/อื่นๆ, 44.1 kHz สเตอริโอ)
 - **[MAGNeT](https://soniqo.audio/guides/compose)** — การสร้างดนตรีจากข้อความ (Meta MAGNeT Small 300M / Medium 1.5B, MLX INT8, คลิป 30 วินาทีที่ 32 kHz โมโน, การถอดรหัสแบบขนานที่มีการมาสก์)
 - **[FlashSR](https://soniqo.audio/guides/upsample)** — การเพิ่มความละเอียดเสียง (FlashSR ICASSP 2025, MLX, 48 kHz โมโน, diffusion แบบกลั่นใน 1 ขั้น, INT4 363 MB / INT8 720 MB)
+
+**การตรวจจับเทิร์น, diarization และอัตลักษณ์ผู้พูด**
+
 - **[Wake-word](https://soniqo.audio/guides/wake-word)** — การตรวจจับคำสั่งปลุกบนอุปกรณ์ (KWS Zipformer 3M, CoreML, เร็วกว่าเรียลไทม์ 26 เท่า, รายการคำสั่งปลุกปรับแต่งได้)
 - **[VAD](https://soniqo.audio/guides/vad)** — การตรวจจับเสียงพูด (Silero streaming, Pyannote offline, FireRedVAD รองรับกว่า 100 ภาษา)
 - **[Speaker Diarization](https://soniqo.audio/guides/diarize)** — ใครพูดเมื่อใด (pipeline Pyannote, Sortformer แบบ end-to-end บน Neural Engine)

@@ -21,13 +21,23 @@
 
 **使用场景：** [语音代理](https://soniqo.audio/zh/voice-agents) · [转录](https://soniqo.audio/zh/transcription) · [语音合成](https://soniqo.audio/zh/speech-generation)
 
+**能力分组：** STT / ASR · 对齐 · TTS · LLM 与翻译 · 语音到语音 · 增强 / 修复 · 源分离 · 音乐 / 音频生成 · 唤醒词、VAD、说话人分离与说话人身份
+
+**STT / ASR**
+
 - **[Qwen3-ASR](https://soniqo.audio/zh/guides/transcribe)** — 语音转文字（自动语音识别，52 种语言，MLX + CoreML）
 - **[Parakeet TDT](https://soniqo.audio/zh/guides/parakeet)** — 通过 CoreML 进行语音转文字（神经引擎，NVIDIA FastConformer + TDT 解码器，25 种语言）
 - **[Omnilingual ASR](https://soniqo.audio/zh/guides/omnilingual)** — 语音转文字（Meta wav2vec2 + CTC，**1,672 种语言**，覆盖 32 种文字系统，CoreML 300M + MLX 300M/1B/3B/7B）
 - **[流式听写](https://soniqo.audio/zh/guides/dictate)** — 带部分结果和句末检测的实时听写（Parakeet-EOU-120M）
 - **[Nemotron 流式 (多语言)](https://soniqo.audio/zh/guides/nemotron)** — 具有原生标点和大小写的低延迟流式 ASR（NVIDIA Nemotron-3.5-ASR-Streaming-0.6B，CoreML + MLX，**40 种语言-区域设置**）
 - **[Nemotron 流式 (英语)](https://soniqo.audio/guides/nemotron)** — 具有原生标点和大小写的低延迟流式 ASR （NVIDIA Nemotron-Speech-Streaming-0.6B，CoreML，仅英语，比多语言版本更小、更快）
+
+**对齐**
+
 - **[Qwen3-ForcedAligner](https://soniqo.audio/zh/guides/align)** — 词级时间戳对齐（音频 + 文本 → 时间戳）
+
+**TTS / 语音生成**
+
 - **[Qwen3-TTS](https://soniqo.audio/zh/guides/speak)** — 文本转语音（最高质量、流式输出、自定义说话人，10 种语言）
 - **[CosyVoice TTS](https://soniqo.audio/zh/guides/cosyvoice)** — 流式 TTS，支持声音克隆、多说话人对话、情感标签（9 种语言）
 - **[VoxCPM2](https://soniqo.audio/zh/speech-generation)** — 48 kHz 录音棚级 TTS，支持声音克隆与基于指令的声音设计（2B，MLX bf16/int8，30 种语言）
@@ -35,17 +45,30 @@
 - **[VibeVoice TTS](https://soniqo.audio/zh/guides/vibevoice)** — 长篇 / 多说话人 TTS（Microsoft VibeVoice Realtime-0.5B + 1.5B，MLX，可合成最长 90 分钟的播客 / 有声书，英语 / 中文）
 - **[Magpie TTS](https://soniqo.audio/zh/guides/magpie)** — 多语言 TTS（NVIDIA Magpie-TTS Multilingual 357M，MLX INT8 411 MB 或 CoreML INT8 342 MB，9 种语言，5 位预设说话人，MLX 端流式）
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — 端侧流匹配 TTS（Supertone Supertonic-3 99M，CoreML/神经引擎，31 种语言，10 种音色，G2P-free，44.1 kHz）
+- **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — 支持零样本声音克隆的多语言 TTS（Resemble AI Chatterbox Multilingual，MLX fp16 ~1.3 GB，23 种语言，MIT）
 - **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-int8)** — 支持零样本语音克隆的非自回归扩散 TTS（k2-fsa OmniVoice，Qwen3 骨干，MLX int8 ~1 GB / fp16，600+ 种语言，Apache-2.0）
+
+**LLM 与翻译**
+
 - **[Qwen3.5-Chat](https://soniqo.audio/zh/guides/chat)** — 端侧 LLM 对话（0.8B，MLX INT4 + CoreML INT8，DeltaNet 混合架构，流式 token）
 - **[Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md)** — 端侧 LLM 对话，密集 Transformer（Qwen3-4B-Instruct，MLX INT5/INT4，已验证一致性，流式 token）
 - **[FunctionGemma](https://soniqo.audio/zh/guides/function-calls)** — 端侧结构化函数 / 工具调用 LLM（Gemma 3 270M，CoreML 8 位调色板量化，Neural Engine，约 252 tok/s）
 - **[MADLAD-400](https://soniqo.audio/zh/guides/translate)** — 400+ 语言间的多对多翻译（3B，MLX INT4 + INT8，T5 v1.1，Apache 2.0）
+
+**语音到语音与语音代理**
+
 - **[Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate)** — 流式语音到语音翻译（FR/ES/PT/DE → EN，MLX INT4 + INT8，Kyutai Moshi/Mimi 技术栈，CC-BY-4.0）
 - **[PersonaPlex](https://soniqo.audio/zh/guides/respond)** — 全双工语音到语音（7B，音频输入 → 音频输出，18 种预设音色）
+
+**增强、分离与音频生成**
+
 - **[DeepFilterNet3](https://soniqo.audio/zh/guides/denoise)** — 实时噪声抑制（2.1M 参数，48 kHz）。超过 60 s 单次处理上限的长音频会自动分块并使用 crossfade 拼接 — 参见 `enhanceChunked(...)`
 - **[音源分离](https://soniqo.audio/zh/guides/separate)** — 通过 HTDemucs (Demucs v4) + Open-Unmix 进行音乐源分离（UMX-HQ / UMX-L，4 声轨：人声/鼓/贝斯/其他，44.1 kHz 立体声）
 - **[MAGNeT](https://soniqo.audio/zh/guides/compose)** — 文本到音乐生成（Meta MAGNeT Small 300M / Medium 1.5B，MLX INT8，30 秒片段 32 kHz 单声道，掩码并行解码）
 - **[FlashSR](https://soniqo.audio/zh/guides/upsample)** — 音频超分辨率(FlashSR ICASSP 2025,MLX,48 kHz 单声道,1 步蒸馏扩散,INT4 363 MB / INT8 720 MB)
+
+**轮次检测、说话人分离与说话人身份**
+
 - **[唤醒词](https://soniqo.audio/zh/guides/wake-word)** — 设备端关键词识别（KWS Zipformer 3M，CoreML，26× 实时，可配置关键词列表）
 - **[VAD](https://soniqo.audio/zh/guides/vad)** — 语音活动检测（Silero 流式、Pyannote 离线、FireRedVAD 100+ 种语言）
 - **[说话人分离](https://soniqo.audio/zh/guides/diarize)** — 谁在什么时间说话（Pyannote 流水线，神经引擎上的端到端 Sortformer）

@@ -21,13 +21,23 @@ Mac・iOS向けのオンデバイス音声認識・合成・理解。Apple Silic
 
 **ユースケース：** [音声エージェント](https://soniqo.audio/ja/voice-agents) · [文字起こし](https://soniqo.audio/ja/transcription) · [音声合成](https://soniqo.audio/ja/speech-generation)
 
+**機能グループ：** STT / ASR · アラインメント · TTS · LLM と翻訳 · Speech-to-Speech · 強化 / 復元 · 音源分離 · 音楽 / オーディオ生成 · ウェイクワード、VAD、話者分離、話者識別
+
+**STT / ASR**
+
 - **[Qwen3-ASR](https://soniqo.audio/ja/guides/transcribe)** — 音声認識（自動音声認識、52言語、MLX + CoreML）
 - **[Parakeet TDT](https://soniqo.audio/ja/guides/parakeet)** — CoreMLによる音声認識（Neural Engine、NVIDIA FastConformer + TDTデコーダー、25言語）
 - **[Omnilingual ASR](https://soniqo.audio/ja/guides/omnilingual)** — 音声認識（Meta wav2vec2 + CTC、**1,672言語**、32文字体系、CoreML 300M + MLX 300M/1B/3B/7B）
 - **[ストリーミングディクテーション](https://soniqo.audio/ja/guides/dictate)** — 部分結果と発話終端検出付きのリアルタイムディクテーション（Parakeet-EOU-120M）
 - **[Nemotron ストリーミング (多言語)](https://soniqo.audio/ja/guides/nemotron)** — ネイティブな句読点と大文字化を備えた低レイテンシストリーミングASR（NVIDIA Nemotron-3.5-ASR-Streaming-0.6B、CoreML + MLX、**40言語ロケール**）
 - **[Nemotron ストリーミング (英語)](https://soniqo.audio/guides/nemotron)** — ネイティブな句読点と大文字化を備えた低レイテンシストリーミングASR （NVIDIA Nemotron-Speech-Streaming-0.6B、CoreML、英語のみ、多言語版より小型・高速）
+
+**アラインメント**
+
 - **[Qwen3-ForcedAligner](https://soniqo.audio/ja/guides/align)** — 単語レベルのタイムスタンプ整列（音声 + テキスト → タイムスタンプ）
+
+**TTS / 音声生成**
+
 - **[Qwen3-TTS](https://soniqo.audio/ja/guides/speak)** — 音声合成（最高品質、ストリーミング、カスタムスピーカー、10言語）
 - **[CosyVoice TTS](https://soniqo.audio/ja/guides/cosyvoice)** — 音声クローン、マルチスピーカー対話、感情タグを備えたストリーミングTTS（9言語）
 - **[VoxCPM2](https://soniqo.audio/ja/speech-generation)** — 48 kHz スタジオ品質の TTS。音声クローンと指示ベースのボイスデザインに対応（2B、MLX bf16/int8、30言語）
@@ -35,17 +45,30 @@ Mac・iOS向けのオンデバイス音声認識・合成・理解。Apple Silic
 - **[VibeVoice TTS](https://soniqo.audio/ja/guides/vibevoice)** — 長尺・マルチスピーカーTTS（Microsoft VibeVoice Realtime-0.5B + 1.5B、MLX、最長90分のポッドキャスト／オーディオブック生成、EN/ZH）
 - **[Magpie TTS](https://soniqo.audio/ja/guides/magpie)** — 多言語 TTS（NVIDIA Magpie-TTS Multilingual 357M、MLX INT8 411 MB または CoreML INT8 342 MB、9 言語、5 つの組み込みスピーカー、MLX でストリーミング）
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — オンデバイスのフローマッチングTTS（Supertone Supertonic-3 99M、CoreML/Neural Engine、31言語、10ボイス、G2P-free、44.1 kHz）
+- **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — ゼロショット音声クローン対応の多言語TTS（Resemble AI Chatterbox Multilingual、MLX fp16 ~1.3 GB、23言語、MIT）
 - **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-int8)** — ゼロショット音声クローンに対応した非自己回帰拡散TTS（k2-fsa OmniVoice、Qwen3バックボーン、MLX int8 ~1 GB / fp16、600+言語、Apache-2.0）
+
+**LLM と翻訳**
+
 - **[Qwen3.5-Chat](https://soniqo.audio/ja/guides/chat)** — オンデバイスLLMチャット（0.8B、MLX INT4 + CoreML INT8、DeltaNetハイブリッド、ストリーミングトークン）
 - **[Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md)** — オンデバイスLLMチャット、密なTransformer（Qwen3-4B-Instruct、MLX INT5/INT4、パリティ検証済み、ストリーミングトークン）
 - **[FunctionGemma](https://soniqo.audio/ja/guides/function-calls)** — オンデバイスの構造化された関数 / ツール呼び出し用 LLM（Gemma 3 270M、CoreML 8-bit パレタイズ、Neural Engine、約 252 tok/s）
 - **[MADLAD-400](https://soniqo.audio/ja/guides/translate)** — 400+言語間の多対多翻訳（3B、MLX INT4 + INT8、T5 v1.1、Apache 2.0）
+
+**Speech-to-Speech と音声エージェント**
+
 - **[Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate)** — ストリーミング音声間翻訳（FR/ES/PT/DE → EN、MLX INT4 + INT8、Kyutai Moshi/Mimi スタック、CC-BY-4.0）
 - **[PersonaPlex](https://soniqo.audio/ja/guides/respond)** — 全二重音声間会話（7B、音声入力 → 音声出力、18種類のボイスプリセット）
+
+**強化、分離、オーディオ生成**
+
 - **[DeepFilterNet3](https://soniqo.audio/ja/guides/denoise)** — リアルタイムノイズ抑制（2.1Mパラメーター、48 kHz）。60 s のシングルショット上限を超える長尺音声は crossfade 付きで自動チャンク化 — `enhanceChunked(...)` を参照
 - **[音源分離](https://soniqo.audio/ja/guides/separate)** — HTDemucs (Demucs v4) + Open-Unmix による音楽音源分離（UMX-HQ / UMX-L、4 ステム：ボーカル／ドラム／ベース／その他、44.1 kHz ステレオ）
 - **[MAGNeT](https://soniqo.audio/ja/guides/compose)** — テキスト→音楽生成（Meta MAGNeT Small 300M / Medium 1.5B、MLX INT8、30 秒 32 kHz モノラル、マスク並列デコーディング）
 - **[FlashSR](https://soniqo.audio/ja/guides/upsample)** — オーディオ超解像（FlashSR ICASSP 2025、MLX、48 kHz モノラル、1ステップ蒸留拡散、INT4 363 MB / INT8 720 MB）
+
+**ターン検出、話者分離、話者識別**
+
 - **[ウェイクワード](https://soniqo.audio/ja/guides/wake-word)** — オンデバイスのキーワード検出（KWS Zipformer 3M、CoreML、リアルタイムの26倍、キーワードリスト設定可能）
 - **[VAD](https://soniqo.audio/ja/guides/vad)** — 音声区間検出（Sileroストリーミング、Pyannoteオフライン、FireRedVAD 100以上の言語）
 - **[話者ダイアライゼーション](https://soniqo.audio/ja/guides/diarize)** — 誰がいつ話したか（Pyannoteパイプライン、Neural Engine上のエンドツーエンドSortformer）

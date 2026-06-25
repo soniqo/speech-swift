@@ -21,13 +21,23 @@ Reconnaissance, synthese et comprehension vocale embarquees pour Mac et iOS. S'e
 
 **Cas d'usage :** [Agents vocaux](https://soniqo.audio/fr/voice-agents) · [Transcription](https://soniqo.audio/fr/transcription) · [Synthese vocale](https://soniqo.audio/fr/speech-generation)
 
+**Groupes de capacités :** STT / ASR · Alignement · TTS · LLM et traduction · Speech-to-Speech · Amélioration / restauration · Séparation de sources · Génération musique / audio · Mot de réveil, VAD, diarisation et identité de locuteur
+
+**STT / ASR**
+
 - **[Qwen3-ASR](https://soniqo.audio/fr/guides/transcribe)** -- Reconnaissance vocale (reconnaissance automatique de la parole, 52 langues, MLX + CoreML)
 - **[Parakeet TDT](https://soniqo.audio/fr/guides/parakeet)** -- Reconnaissance vocale via CoreML (Neural Engine, NVIDIA FastConformer + decodeur TDT, 25 langues)
 - **[Omnilingual ASR](https://soniqo.audio/fr/guides/omnilingual)** -- Reconnaissance vocale (Meta wav2vec2 + CTC, **1 672 langues** reparties dans 32 ecritures, CoreML 300M + MLX 300M/1B/3B/7B)
 - **[Dictee en streaming](https://soniqo.audio/fr/guides/dictate)** -- Dictee en temps reel avec resultats partiels et detection de fin d'enonce (Parakeet-EOU-120M)
 - **[Nemotron Streaming (Multilingue)](https://soniqo.audio/fr/guides/nemotron)** — ASR en streaming à faible latence avec ponctuation et majuscules natives (NVIDIA Nemotron-3.5-ASR-Streaming-0.6B, CoreML + MLX, **40 paramètres régionaux**)
 - **[Nemotron Streaming (Anglais)](https://soniqo.audio/guides/nemotron)** — ASR en streaming à faible latence avec ponctuation et majuscules natives (NVIDIA Nemotron-Speech-Streaming-0.6B, CoreML, anglais uniquement, plus compact et rapide que la variante multilingue)
+
+**Alignement**
+
 - **[Qwen3-ForcedAligner](https://soniqo.audio/fr/guides/align)** -- Alignement temporel au niveau du mot (audio + texte → horodatages)
+
+**TTS / Synthèse vocale**
+
 - **[Qwen3-TTS](https://soniqo.audio/fr/guides/speak)** -- Synthese vocale (qualite maximale, streaming, locuteurs personnalises, 10 langues)
 - **[CosyVoice TTS](https://soniqo.audio/fr/guides/cosyvoice)** -- TTS en streaming avec clonage vocal, dialogue multi-locuteurs, balises d'emotion (9 langues)
 - **[VoxCPM2](https://soniqo.audio/fr/speech-generation)** -- TTS qualite studio 48 kHz avec clonage vocal et conception de voix par instruction (2B, MLX bf16/int8, 30 langues)
@@ -37,16 +47,28 @@ Reconnaissance, synthese et comprehension vocale embarquees pour Mac et iOS. S'e
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — TTS embarque par appariement de flux (Supertone Supertonic-3 99M, CoreML/Neural Engine, 31 langues, 10 voix, sans G2P, 44.1 kHz)
 - **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — TTS multilingue avec clonage vocal zero-shot (Resemble AI Chatterbox Multilingual, MLX fp16 ~1,3 Go, 23 langues, MIT)
 - **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-int8)** — TTS à diffusion non autorégressive avec clonage vocal zero-shot (k2-fsa OmniVoice, backbone Qwen3, MLX int8 ~1 Go / fp16, 600+ langues, Apache-2.0)
+
+**LLM et traduction**
+
 - **[Qwen3.5-Chat](https://soniqo.audio/fr/guides/chat)** -- Chat LLM embarque (0.8B, MLX INT4 + CoreML INT8, DeltaNet hybride, tokens en streaming)
 - **[Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md)** -- Chat LLM embarque, transformeur dense (Qwen3-4B-Instruct, MLX INT5/INT4, parite verifiee, tokens en streaming)
 - **[FunctionGemma](https://soniqo.audio/fr/guides/function-calls)** — LLM embarque pour les appels structures de fonctions / outils (Gemma 3 270M, CoreML palettisation 8 bits, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/fr/guides/translate)** — Traduction multidirectionnelle entre 400+ langues (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
+
+**Speech-to-Speech et agents vocaux**
+
 - **[Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate)** — Traduction parole-a-parole en streaming (FR/ES/PT/DE → EN, MLX INT4 + INT8, pile Kyutai Moshi/Mimi, CC-BY-4.0)
 - **[PersonaPlex](https://soniqo.audio/fr/guides/respond)** -- Parole-a-parole en full-duplex (7B, audio entrant → audio sortant, 18 preselections de voix)
+
+**Amélioration, séparation et génération audio**
+
 - **[DeepFilterNet3](https://soniqo.audio/fr/guides/denoise)** -- Suppression de bruit en temps reel (2,1M parametres, 48 kHz). L'audio long depassant la limite de 60 s en un seul passage est decoupe automatiquement en blocs avec crossfade -- voir l'API `enhanceChunked(...)`
 - **[Séparation de sources](https://soniqo.audio/fr/guides/separate)** — Séparation de sources musicales avec HTDemucs (Demucs v4) + Open-Unmix (UMX-HQ / UMX-L, 4 stems : voix/batterie/basse/autres, 44,1 kHz stéréo)
 - **[MAGNeT](https://soniqo.audio/fr/guides/compose)** — Génération de musique à partir de texte (Meta MAGNeT Small 300M / Medium 1.5B, MLX INT8, clips de 30 s à 32 kHz mono, décodage masqué en parallèle)
 - **[FlashSR](https://soniqo.audio/fr/guides/upsample)** — Super-résolution audio (FlashSR ICASSP 2025, MLX, 48 kHz mono, diffusion distillée en 1 étape, INT4 363 Mo / INT8 720 Mo)
+
+**Détection de tour, diarisation et identité de locuteur**
+
 - **[Mot de reveil](https://soniqo.audio/fr/guides/wake-word)** -- Detection de mots-cles sur appareil (KWS Zipformer 3M, CoreML, 26x temps reel, liste de mots-cles configurable)
 - **[VAD](https://soniqo.audio/fr/guides/vad)** -- Detection d'activite vocale (Silero streaming, Pyannote hors ligne, FireRedVAD 100+ langues)
 - **[Diarisation de locuteurs](https://soniqo.audio/fr/guides/diarize)** -- Qui a parle quand (pipeline Pyannote, Sortformer de bout en bout sur Neural Engine)
