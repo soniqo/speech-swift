@@ -1,8 +1,6 @@
 name: Daily Benchmarks
 
 on:
-  schedule:
-    - cron: '30 3 * * *'
   workflow_dispatch:
     inputs:
       runner_labels:
