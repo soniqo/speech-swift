@@ -2,7 +2,7 @@ import Foundation
 import MLX
 import MLXNN
 
-/// Silero VAD v5 neural network: STFT → Encoder → LSTM → Decoder.
+/// Silero VAD streaming neural network: STFT → Encoder → LSTM → Decoder.
 ///
 /// Processes 512-sample audio chunks (32ms @ 16kHz) with 64 samples of context
 /// prepended from the previous chunk. The STFT uses a pre-computed DFT basis

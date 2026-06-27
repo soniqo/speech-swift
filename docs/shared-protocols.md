@@ -416,7 +416,7 @@ Sources/
 │   ├── SpeechVAD.swift        PyannoteVADModel: VoiceActivityDetectionModel
 │   ├── SpeechVAD+Protocols.swift  Protocol conformances
 │   ├── SileroVAD.swift        SileroVADModel: VoiceActivityDetectionModel, StreamingVADProvider
-│   ├── SileroModel.swift      Silero VAD v5 network (STFT + encoder + LSTM)
+│   ├── SileroModel.swift      Silero VAD streaming network (STFT + encoder + LSTM)
 │   ├── StreamingVADProcessor.swift  Event-driven streaming wrapper
 │   ├── DiarizationPipeline.swift  PyannoteDiarizationPipeline: SpeakerDiarizationModel, SpeakerExtractionCapable
 │   ├── DiarizationHelpers.swift   Shared helpers (merge, compact IDs, resample)
