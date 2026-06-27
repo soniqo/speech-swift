@@ -7,7 +7,7 @@ import AudioCommon
 ///
 /// Requires both model variants to be cached locally:
 /// - `aufklarer/Silero-VAD-v5-MLX` for MLX
-/// - `aufklarer/Silero-VAD-v5-CoreML` for CoreML
+/// - `aufklarer/Silero-VAD-v6.2.1-CoreML` for CoreML
 ///
 /// Run with: `swift test --filter SileroVADBenchmarkTests -c release`
 final class E2ESileroVADBenchmarkTests: XCTestCase {

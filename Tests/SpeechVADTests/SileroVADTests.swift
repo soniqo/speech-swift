@@ -15,6 +15,11 @@ final class SileroVADTests: XCTestCase {
         XCTAssertEqual(config.minSilenceDuration, 0.1, accuracy: 0.001)
     }
 
+    func testSileroDefaultModelIds() {
+        XCTAssertEqual(SileroVADModel.defaultModelId, "aufklarer/Silero-VAD-v5-MLX")
+        XCTAssertEqual(SileroVADModel.defaultCoreMLModelId, "aufklarer/Silero-VAD-v6.2.1-CoreML")
+    }
+
     // MARK: - Model Shape Tests (random weights, no download)
 
     func testSileroNetworkForwardShape() {

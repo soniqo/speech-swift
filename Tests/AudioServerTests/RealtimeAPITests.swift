@@ -783,6 +783,10 @@ final class ResolveModelToEngineTests: XCTestCase {
         XCTAssertEqual(resolveModelVariant("parakeet-streaming")?.engine, "parakeet-streaming")
         XCTAssertEqual(resolveModelVariant("parakeet-eou")?.modelId,
                        "aufklarer/Parakeet-EOU-120M-CoreML-INT8")
+        XCTAssertEqual(resolveModelVariant("silero-vad-v6.2.1-coreml")?.modelId,
+                       "aufklarer/Silero-VAD-v6.2.1-CoreML")
+        XCTAssertEqual(resolveModelVariant("silero-vad-v5-coreml")?.modelId,
+                       "aufklarer/Silero-VAD-v6.2.1-CoreML")
         XCTAssertEqual(resolveModelVariant("vibevoice")?.engine, "vibevoice")
         XCTAssertEqual(resolveModelVariant("vibevoice-1.5b")?.engine, "vibevoice-1.5b")
         XCTAssertEqual(resolveModelVariant("qwen3-tts-coreml")?.engine, "qwen3-tts-coreml")

@@ -15,7 +15,7 @@ public enum SileroVADEngine: String, Sendable {
     case coreml
 }
 
-/// Streaming Voice Activity Detection using Silero VAD v5.
+/// Streaming Voice Activity Detection using Silero VAD.
 ///
 /// A lightweight (~260K params) VAD model that processes 512-sample chunks
 /// (32ms @ 16kHz) with sub-millisecond latency. Carries LSTM state across
@@ -68,11 +68,11 @@ public final class SileroVADModel {
     /// Context buffer: last 64 samples from previous chunk
     private var context: [Float]
 
-    /// Default HuggingFace model ID (MLX weights)
+    /// Default HuggingFace model ID (MLX v5 weights)
     public static let defaultModelId = "aufklarer/Silero-VAD-v5-MLX"
 
-    /// Default HuggingFace model ID (CoreML weights)
-    public static let defaultCoreMLModelId = "aufklarer/Silero-VAD-v5-CoreML"
+    /// Default HuggingFace model ID (CoreML v6.2.1 weights)
+    public static let defaultCoreMLModelId = "aufklarer/Silero-VAD-v6.2.1-CoreML"
 
     /// Number of audio samples per chunk (32ms @ 16kHz)
     public static let chunkSize = 512
