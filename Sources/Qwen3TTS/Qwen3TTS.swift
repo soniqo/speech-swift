@@ -152,8 +152,7 @@ public class Qwen3TTSModel {
         // Stage 3: Autoregressive generation with per-step code predictor
         // Cap max tokens based on text length to prevent runaway generation.
         var cappedSampling = sampling
-        let textTokenCount = tokenizer.encode(text).count
-        cappedSampling.maxTokens = min(sampling.maxTokens, max(75, textTokenCount * 6))
+        cappedSampling.maxTokens = maxTokenCap(for: [text], tokenizer: tokenizer, sampling: sampling)
 
         let (allCodebooks, numFrames) = generateWithCodePredictor(
             prefillEmbeds: prefillEmbeds,
@@ -252,8 +251,7 @@ public class Qwen3TTSModel {
         // At 12.5 Hz codec rate, ~3-5 codec tokens per text token is typical.
         // Factor of 6 gives ~50% margin for slow speech / pauses.
         var cappedSampling = sampling
-        let textTokenCount = tokenizer.encode(text).count
-        cappedSampling.maxTokens = min(sampling.maxTokens, max(75, textTokenCount * 6))
+        cappedSampling.maxTokens = maxTokenCap(for: [text], tokenizer: tokenizer, sampling: sampling)
 
         let (allCodebooks, numFrames) = generateWithCodePredictor(
             prefillEmbeds: prefillEmbeds,
@@ -358,7 +356,9 @@ public class Qwen3TTSModel {
         }
 
         let t0 = CFAbsoluteTimeGetCurrent()
-        let safeMaxTokens = min(sampling.maxTokens, 500)
+        var cappedSampling = sampling
+        cappedSampling.maxTokens = maxTokenCap(for: [text], tokenizer: tokenizer, sampling: sampling)
+        let safeMaxTokens = cappedSampling.maxTokens
         let samplesPerFrame = 1920  // 24000 / 12.5
 
         // Stage 1: Prepare embeddings (identical to synthesize)
@@ -463,7 +463,7 @@ public class Qwen3TTSModel {
 
             nextToken = sampleToken(
                 logits: logits,
-                config: sampling,
+                config: cappedSampling,
                 generatedTokens: generatedFirstCodebook,
                 suppressRange: (2048, 3072),
                 eosTokenId: CodecTokens.codecEos)
@@ -749,7 +749,8 @@ public class Qwen3TTSModel {
             batchPrefill: batchPrefill,
             batchTrailing: batchTrailing,
             ttsPadEmbed: ttsPadEmbed,
-            sampling: sampling)
+            sampling: sampling,
+            maxTokens: maxTokenCap(for: texts, tokenizer: tokenizer, sampling: sampling))
 
         let t2 = CFAbsoluteTimeGetCurrent()
 
@@ -803,10 +804,11 @@ public class Qwen3TTSModel {
         batchPrefill: MLXArray,
         batchTrailing: MLXArray,
         ttsPadEmbed: MLXArray,
-        sampling: SamplingConfig
+        sampling: SamplingConfig,
+        maxTokens: Int
     ) -> (allCodebooksList: [MLXArray], frameCounts: [Int]) {
         let batchSize = batchPrefill.dim(0)
-        let safeMaxTokens = min(sampling.maxTokens, 500)
+        let safeMaxTokens = maxTokens
         let maxTrailingLen = batchTrailing.dim(1)
         let cpSamplingConfig = SamplingConfig(temperature: sampling.temperature, topK: sampling.topK)
         let codecPadToken = Int32(CodecTokens.codecPad)
@@ -951,6 +953,18 @@ public class Qwen3TTSModel {
         }
 
         return (results, frameCounts)
+    }
+
+    /// Text-derived generation cap shared by single, streaming, clone, and batch paths.
+    /// At 12.5 Hz, six codec frames per text token leaves margin for slow speech while
+    /// preventing short prompts from running to the generic safety limit when EOS is weak.
+    private func maxTokenCap(
+        for texts: [String],
+        tokenizer: Qwen3Tokenizer,
+        sampling: SamplingConfig
+    ) -> Int {
+        let maxTextTokens = texts.map { tokenizer.encode($0).count }.max() ?? 0
+        return min(sampling.maxTokens, max(75, maxTextTokens * 6))
     }
 
     /// Predict 15 remaining codebook tokens for B items at a single timestep.

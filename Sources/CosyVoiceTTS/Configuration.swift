@@ -15,7 +15,7 @@ public struct CosyVoiceLLMConfig: Codable, Sendable {
     public var speechTokenSize: Int = 6561
     public var speechTokenExtra: Int = 200
     public var groupSize: Int = 64
-    public var bits: Int = 4
+    public var bits: Int = 8
 
     /// Total speech embedding/head size: speechTokenSize + speechTokenExtra
     public var totalSpeechVocabSize: Int { speechTokenSize + speechTokenExtra }
@@ -54,7 +54,7 @@ public struct CosyVoiceDiTConfig: Codable, Sendable {
     public var staticChunkSize: Int = 50
     public var freqEmbedDim: Int = 256
     public var groupSize: Int = 64
-    public var bits: Int = 4
+    public var bits: Int = 8
 
     /// Feedforward network dimension: dim * ffMult
     public var ffDim: Int { dim * ffMult }

@@ -18,6 +18,7 @@ final class CosyVoiceTTSConfigTests: XCTestCase {
         XCTAssertEqual(config.llm.textVocabSize, 151936)
         XCTAssertEqual(config.llm.speechTokenSize, 6561)
         XCTAssertEqual(config.llm.totalSpeechVocabSize, 6761)
+        XCTAssertEqual(config.llm.bits, 8)
 
         // Special tokens
         XCTAssertEqual(config.llm.sosToken, 6561)
@@ -33,6 +34,7 @@ final class CosyVoiceTTSConfigTests: XCTestCase {
         XCTAssertEqual(config.flow.dit.ffMult, 2)
         XCTAssertEqual(config.flow.dit.ffDim, 2048)
         XCTAssertEqual(config.flow.dit.melDim, 80)
+        XCTAssertEqual(config.flow.dit.bits, 8)
 
         // Flow
         XCTAssertEqual(config.flow.inputSize, 512)
@@ -73,6 +75,33 @@ final class CosyVoiceTTSConfigTests: XCTestCase {
         XCTAssertEqual(decoded.flow.dit.depth, config.flow.dit.depth)
         XCTAssertEqual(decoded.hifigan.upsampleRates, config.hifigan.upsampleRates)
         XCTAssertEqual(decoded.sampleRate, config.sampleRate)
+    }
+
+    func testQuantizedLayoutRequires8BitPacking() throws {
+        let packed8Bit = MLXArray.zeros([2, 16], dtype: .uint32)
+        let scales = MLXArray.zeros([2, 1], dtype: .float16)
+
+        XCTAssertNoThrow(
+            try CosyVoiceWeightLoader.validate8BitQuantizationLayout(
+                weight: packed8Bit,
+                scales: scales,
+                bits: 8,
+                groupSize: 64))
+
+        let stalePacked4BitShape = MLXArray.zeros([2, 8], dtype: .uint32)
+        XCTAssertThrowsError(
+            try CosyVoiceWeightLoader.validate8BitQuantizationLayout(
+                weight: stalePacked4BitShape,
+                scales: scales,
+                bits: 8,
+                groupSize: 64))
+
+        XCTAssertThrowsError(
+            try CosyVoiceWeightLoader.validate8BitQuantizationLayout(
+                weight: packed8Bit,
+                scales: scales,
+                bits: 16,
+                groupSize: 64))
     }
 
     func testLLMConfigDimensions() {

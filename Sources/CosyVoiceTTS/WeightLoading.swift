@@ -14,8 +14,8 @@ import AudioCommon
 /// All weight-bearing matmul modules in the LLM and DiT are declared as
 /// `Linear` and swapped to `QuantizedLinear` per-path at load time when the
 /// safetensors carries matching `.scales`. This lets one runtime serve
-/// quantised bundles (4-bit, 8-bit, 8-bit-full) AND the unquantised bf16
-/// bundle from the same module hierarchy.
+/// quantised bundles (8-bit, 8-bit-full) and the unquantised bf16 bundle from
+/// the same module hierarchy.
 public enum CosyVoiceWeightLoader {
 
     // MARK: - LLM
@@ -71,11 +71,13 @@ public enum CosyVoiceWeightLoader {
             owner: Linear,
             hasLinearBias: Bool,
             llmConfig: CosyVoiceLLMConfig
-        ) {
+        ) throws {
             if let scales = weights["\(stPrefix).scales"],
                let w = weights["\(stPrefix).weight"] {
-                let bits = inferBits(weight: w, scales: scales) ?? llmConfig.bits
-                let groupSize = inferGroupSize(weight: w, scales: scales) ?? llmConfig.groupSize
+                let bits = llmConfig.bits
+                let groupSize = llmConfig.groupSize
+                try validate8BitQuantizationLayout(
+                    weight: w, scales: scales, bits: bits, groupSize: groupSize)
                 let quantBiases = weights["\(stPrefix).biases"]
                 let linearBias  = hasLinearBias ? weights["\(stPrefix).bias"] : nil
                 qReplacements[modPath] = QuantizedLinear(
@@ -102,7 +104,7 @@ public enum CosyVoiceWeightLoader {
                 case "mlp.down_proj":    owner = block.mlp.downProj
                 default: continue
                 }
-                handleProjection(
+                try handleProjection(
                     stPrefix: stPrefix,
                     modPath: modPath,
                     owner: owner,
@@ -112,7 +114,7 @@ public enum CosyVoiceWeightLoader {
         }
 
         // Speech head sits at the LLM's top level; no Linear bias upstream.
-        handleProjection(
+        try handleProjection(
             stPrefix: "speech_head",
             modPath: "speechHead",
             owner: llm.speechHead,
@@ -160,7 +162,7 @@ public enum CosyVoiceWeightLoader {
             to: flow.preLookaheadLayer.conv2.conv,
             prefix: "pre_lookahead_layer.conv2", from: weights, transpose: false)
 
-        loadDiT(flow.decoder.decoder, prefix: "decoder", from: weights, ditConfig: flow.decoder.decoder.config)
+        try loadDiT(flow.decoder.decoder, prefix: "decoder", from: weights, ditConfig: flow.decoder.decoder.config)
     }
 
     /// Load DiT weights. Performs the same per-projection quantised/plain
@@ -171,7 +173,7 @@ public enum CosyVoiceWeightLoader {
         prefix: String,
         from weights: [String: MLXArray],
         ditConfig: CosyVoiceDiTConfig
-    ) {
+    ) throws {
         var qReplacements: [String: Module] = [:]
 
         func handleProjection(
@@ -179,11 +181,13 @@ public enum CosyVoiceWeightLoader {
             modPath: String,
             owner: Linear,
             hasLinearBias: Bool = true
-        ) {
+        ) throws {
             if let scales = weights["\(stPrefix).scales"],
                let w = weights["\(stPrefix).weight"] {
-                let bits = inferBits(weight: w, scales: scales) ?? ditConfig.bits
-                let groupSize = inferGroupSize(weight: w, scales: scales) ?? ditConfig.groupSize
+                let bits = ditConfig.bits
+                let groupSize = ditConfig.groupSize
+                try validate8BitQuantizationLayout(
+                    weight: w, scales: scales, bits: bits, groupSize: groupSize)
                 let quantBiases = weights["\(stPrefix).biases"]
                 let linearBias  = hasLinearBias ? weights["\(stPrefix).bias"] : nil
                 qReplacements[modPath] = QuantizedLinear(
@@ -202,16 +206,16 @@ public enum CosyVoiceWeightLoader {
         // owner module declared an explicit key. Sub-fields without an
         // explicit key fall back to the Swift property name.
 
-        handleProjection(
+        try handleProjection(
             stPrefix: "\(prefix).time_embed.time_mlp.0",
             modPath: "time_embed.linear1",
             owner: dit.timeEmbed.linear1)
-        handleProjection(
+        try handleProjection(
             stPrefix: "\(prefix).time_embed.time_mlp.2",
             modPath: "time_embed.linear2",
             owner: dit.timeEmbed.linear2)
 
-        handleProjection(
+        try handleProjection(
             stPrefix: "\(prefix).input_embed.proj",
             modPath: "input_embed.proj",
             owner: dit.inputEmbed.proj)
@@ -230,41 +234,41 @@ public enum CosyVoiceWeightLoader {
             let blockPrefix = "\(prefix).transformer_blocks.\(i)"
             let modBase = "transformer_blocks.\(i)"
 
-            handleProjection(
+            try handleProjection(
                 stPrefix: "\(blockPrefix).attn_norm.linear",
                 modPath: "\(modBase).attn_norm.linear",
                 owner: block.attnNorm.linear)
 
-            handleProjection(
+            try handleProjection(
                 stPrefix: "\(blockPrefix).attn.to_q",
                 modPath: "\(modBase).attn.to_q",
                 owner: block.attn.toQ)
-            handleProjection(
+            try handleProjection(
                 stPrefix: "\(blockPrefix).attn.to_k",
                 modPath: "\(modBase).attn.to_k",
                 owner: block.attn.toK)
-            handleProjection(
+            try handleProjection(
                 stPrefix: "\(blockPrefix).attn.to_v",
                 modPath: "\(modBase).attn.to_v",
                 owner: block.attn.toV)
-            handleProjection(
+            try handleProjection(
                 stPrefix: "\(blockPrefix).attn.to_out.0",
                 modPath: "\(modBase).attn.to_out",
                 owner: block.attn.toOut)
 
             // Feedforward (GELU MLP). Python keys: ff.ff.0.0 / ff.ff.2.
-            handleProjection(
+            try handleProjection(
                 stPrefix: "\(blockPrefix).ff.ff.0.0",
                 modPath: "\(modBase).ff.linear1",
                 owner: block.ff.linear1)
-            handleProjection(
+            try handleProjection(
                 stPrefix: "\(blockPrefix).ff.ff.2",
                 modPath: "\(modBase).ff.linear2",
                 owner: block.ff.linear2)
         }
 
         // Final adaptive norm projection.
-        handleProjection(
+        try handleProjection(
             stPrefix: "\(prefix).norm_out.linear",
             modPath: "norm_out.linear",
             owner: dit.normOut.linear)
@@ -401,35 +405,37 @@ public enum CosyVoiceWeightLoader {
 
     // MARK: - Quantization inference helpers
 
-    /// Pull `bits` out of the packed `weight` + `scales` shape ratio.
-    /// 4-bit packs 8 nibbles per uint32 word → `packedCols / outFeaturesPerWord = 8`.
-    /// 8-bit packs 4 bytes per uint32 word → ratio = 16. Falls back to nil if
-    /// the shapes don't look like an MLX quantised layout (lets the caller use
-    /// the bundle config's value).
-    static func inferBits(weight: MLXArray, scales: MLXArray) -> Int? {
-        guard weight.ndim == 2, scales.ndim == 2 else { return nil }
-        let packedCols = weight.dim(1)
-        let numGroups = scales.dim(1)
-        guard numGroups > 0 else { return nil }
-        let ratio = packedCols / numGroups
-        switch ratio {
-        case 8:  return 4
-        case 16: return 8
-        default: return nil
+    /// Validate MLX's packed 8-bit QuantizedLinear layout. bf16 bundles do not
+    /// enter this path because they omit `.scales` entirely.
+    static func validate8BitQuantizationLayout(
+        weight: MLXArray,
+        scales: MLXArray,
+        bits: Int,
+        groupSize: Int
+    ) throws {
+        guard bits == 8 else {
+            throw CosyVoiceTTSError.modelLoadFailed(
+                "CosyVoice packed quantized weights must be 8-bit; 16-bit/bf16 bundles must not include .scales.")
         }
-    }
-
-    /// Pull `groupSize` out of the scales' grouping. `scales.dim(1)` is the
-    /// number of per-row groups; multiplying by `elementsPerWord` gives the
-    /// logical input-feature count, and `inputFeatures / numGroups = groupSize`.
-    static func inferGroupSize(weight: MLXArray, scales: MLXArray) -> Int? {
-        guard weight.ndim == 2, scales.ndim == 2 else { return nil }
+        guard weight.ndim == 2, scales.ndim == 2 else {
+            throw CosyVoiceTTSError.modelLoadFailed(
+                "CosyVoice quantized weights must be rank-2 MLX QuantizedLinear tensors.")
+        }
         let packedCols = weight.dim(1)
         let numGroups = scales.dim(1)
-        guard numGroups > 0, packedCols > 0 else { return nil }
-        guard let bits = inferBits(weight: weight, scales: scales) else { return nil }
+        guard numGroups > 0, packedCols > 0 else {
+            throw CosyVoiceTTSError.modelLoadFailed(
+                "CosyVoice quantized weights have an invalid packed shape.")
+        }
         let elementsPerWord = 32 / bits
-        let inFeatures = packedCols * elementsPerWord
-        return inFeatures / numGroups
+        guard groupSize % elementsPerWord == 0 else {
+            throw CosyVoiceTTSError.modelLoadFailed(
+                "CosyVoice quantized group size \(groupSize) is not compatible with 8-bit packing.")
+        }
+        let expectedPackedColsPerGroup = groupSize / elementsPerWord
+        guard packedCols == numGroups * expectedPackedColsPerGroup else {
+            throw CosyVoiceTTSError.modelLoadFailed(
+                "CosyVoice quantized weights are not 8-bit packed; re-export this bundle as bf16 or 8-bit.")
+        }
     }
 }

@@ -46,7 +46,7 @@ public struct TalkerConfig: Codable, Sendable {
     public var codecVocabSize: Int = 3072
     public var groupSize: Int = 64
     // int4 was decommissioned for TTS (too much quality loss); 8-bit is the floor
-    // for the 0.6B (no bf16 bundle exists), bf16 for the 1.7B.
+    // for the 0.6B Base/CustomVoice models, bf16 for the 1.7B Base model.
     public var bits: Int = 8
 
     public init() {}
@@ -273,12 +273,13 @@ public struct StreamingConfig: Sendable {
 
 /// Well-known TTS model variants
 public enum TTSModelVariant: String, CaseIterable, Sendable {
-    // int4 decommissioned for TTS. The 0.6B has no bf16 bundle, so 8-bit is its
-    // floor; the 1.7B production model is bf16.
+    // int4 decommissioned for TTS. The 0.6B Base/CustomVoice models use 8-bit;
+    // the 1.7B production Base model is bf16.
     case base = "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-8bit"
     case base17B8bit = "aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-8bit"
     case base17Bbf16 = "aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-bf16"
-    case customVoice = "aufklarer/Qwen3-TTS-12Hz-0.6B-CustomVoice-MLX-bf16"
+    case customVoice = "aufklarer/Qwen3-TTS-12Hz-0.6B-CustomVoice-MLX-8bit"
+    case customVoiceBf16 = "aufklarer/Qwen3-TTS-12Hz-0.6B-CustomVoice-MLX-bf16"
 }
 
 // MARK: - Combined TTS Config

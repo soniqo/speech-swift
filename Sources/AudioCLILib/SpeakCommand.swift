@@ -52,7 +52,7 @@ public struct SpeakCommand: ParsableCommand {
     @Option(name: .long, help: "Sidon variant for --clean-reference: fp16 (default) or int8")
     public var cleanReferenceVariant: String = "fp16"
 
-    @Option(name: .long, help: "[qwen3] Model variant: base (default), base-8bit, 1.7b (bf16), 1.7b-8bit, customVoice, or full HF model ID. Note: --speaker requires customVoice.")
+    @Option(name: .long, help: "[qwen3] Model variant: base (default), base-8bit, 1.7b (bf16), 1.7b-8bit, customVoice, customVoice-bf16, or full HF model ID. Note: --speaker requires customVoice.")
     public var model: String = "base"
 
     @Flag(name: .long, help: "[qwen3] List available speakers and exit")
@@ -84,7 +84,7 @@ public struct SpeakCommand: ParsableCommand {
     @Option(name: .long, help: "[cosyvoice] HuggingFace model ID. Set explicitly to bypass --cosyvoice-variant resolution.")
     public var modelId: String?
 
-    @Option(name: .long, help: "[cosyvoice] Quantization variant: bf16 (default), 8bit, 8bit-full (int4 was decommissioned). Resolves to aufklarer/CosyVoice3-0.5B-MLX-<variant>. Ignored when --model-id is set.")
+    @Option(name: .long, help: "[cosyvoice] Quantization variant: bf16/16bit (default), 8bit, 8bit-full. Resolves to aufklarer/CosyVoice3-0.5B-MLX-<variant>. Ignored when --model-id is set.")
     public var cosyvoiceVariant: String = "bf16"
 
     @Option(name: .long, help: "[cosyvoice] Speaker mapping: s1=alice.wav,s2=bob.wav")
@@ -565,8 +565,10 @@ public struct SpeakCommand: ParsableCommand {
                 resolvedModelId = TTSModelVariant.base17Bbf16.rawValue
             case "1.7b-8bit", "large-8bit":
                 resolvedModelId = TTSModelVariant.base17B8bit.rawValue
-            case "customvoice", "custom_voice", "custom-voice":
+            case "customvoice", "custom_voice", "custom-voice", "customvoice-8bit", "custom_voice_8bit", "custom-voice-8bit":
                 resolvedModelId = TTSModelVariant.customVoice.rawValue
+            case "customvoice-bf16", "custom_voice_bf16", "custom-voice-bf16":
+                resolvedModelId = TTSModelVariant.customVoiceBf16.rawValue
             default:
                 resolvedModelId = model
             }
@@ -976,10 +978,11 @@ public struct SpeakCommand: ParsableCommand {
         switch cosyvoiceVariant.lowercased() {
         case "8bit":      return "aufklarer/CosyVoice3-0.5B-MLX-8bit"
         case "8bit-full": return "aufklarer/CosyVoice3-0.5B-MLX-8bit-full"
-        case "bf16":      return "aufklarer/CosyVoice3-0.5B-MLX-bf16"
+        case "bf16", "bfloat16", "16", "16bit", "16-bit", "unquantized":
+            return "aufklarer/CosyVoice3-0.5B-MLX-bf16"
         default:
             throw ValidationError(
-                "--cosyvoice-variant must be 8bit, 8bit-full, or bf16 (int4 was decommissioned) (got '\(cosyvoiceVariant)')")
+                "--cosyvoice-variant must be 8bit, 8bit-full, bf16, or 16bit (got '\(cosyvoiceVariant)')")
         }
     }
 

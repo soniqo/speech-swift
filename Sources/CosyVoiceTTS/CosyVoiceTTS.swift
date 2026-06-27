@@ -30,8 +30,8 @@ public enum CosyVoiceTTSError: Error, LocalizedError {
 ///
 /// - Warning: This class is not thread-safe. Create separate instances for concurrent use.
 public final class CosyVoiceTTSModel {
-    /// Default HuggingFace model identifier — the 0.5B bf16 MLX bundle (int4 was
-    /// decommissioned for TTS). Single SSOT for the registry and other call sites.
+    /// Default HuggingFace model identifier — the 0.5B bf16 MLX bundle. Single
+    /// SSOT for the registry and other call sites.
     public static let defaultModelId = "aufklarer/CosyVoice3-0.5B-MLX-bf16"
 
     public let config: CosyVoiceConfig
@@ -97,13 +97,24 @@ public final class CosyVoiceTTSModel {
            let data = try? Data(contentsOf: configURL),
            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             if let quant = json["quantization"] as? [String: Any] {
-                // The convert.py emits BOTH `bits` (legacy default = 4) and a
-                // per-component override `llm_bits`. Prefer the LLM-specific value.
-                if let bits = (quant["llm_bits"] as? Int) ?? (quant["bits"] as? Int) {
-                    config.llm.bits = bits
-                }
+                // `bits` is the LLM bit width; `llm_bits` is accepted for
+                // bundles that also carry per-component metadata.
                 if let gs = quant["group_size"] as? Int { config.llm.groupSize = gs }
-                print("  Bundle quantization (LLM): \(config.llm.bits)-bit (group_size \(config.llm.groupSize))")
+                if let bits = (quant["llm_bits"] as? Int) ?? (quant["bits"] as? Int) {
+                    switch bits {
+                    case 8:
+                        config.llm.bits = bits
+                        print("  Bundle quantization (LLM): \(config.llm.bits)-bit (group_size \(config.llm.groupSize))")
+                    case 16:
+                        config.llm.bits = bits
+                        print("  Bundle precision (LLM): 16-bit (plain Linear; no .scales)")
+                    default:
+                        throw CosyVoiceTTSError.modelLoadFailed(
+                            "CosyVoice LLM bundles must be 8-bit quantized or 16-bit/bf16 plain Linear.")
+                    }
+                } else {
+                    print("  Bundle quantization (LLM): \(config.llm.bits)-bit (group_size \(config.llm.groupSize))")
+                }
             } else {
                 print("  Bundle: unquantised (bf16) — LLM + DiT stay in plain Linear form")
             }
@@ -111,9 +122,22 @@ public final class CosyVoiceTTSModel {
             // override the DiT bits without affecting the LLM. The bf16 bundle
             // omits this; the loader will keep DiT as plain Linear.
             if let dit = json["dit_quantization"] as? [String: Any] {
-                if let bits = dit["bits"] as? Int { config.flow.dit.bits = bits }
                 if let gs = dit["group_size"] as? Int { config.flow.dit.groupSize = gs }
-                print("  Bundle quantization (DiT): \(config.flow.dit.bits)-bit (group_size \(config.flow.dit.groupSize))")
+                if let bits = dit["bits"] as? Int {
+                    switch bits {
+                    case 8:
+                        config.flow.dit.bits = bits
+                        print("  Bundle quantization (DiT): \(config.flow.dit.bits)-bit (group_size \(config.flow.dit.groupSize))")
+                    case 16:
+                        config.flow.dit.bits = bits
+                        print("  Bundle precision (DiT): 16-bit (plain Linear; no .scales)")
+                    default:
+                        throw CosyVoiceTTSError.modelLoadFailed(
+                            "CosyVoice DiT bundles must be 8-bit quantized or 16-bit/bf16 plain Linear.")
+                    }
+                } else {
+                    print("  Bundle quantization (DiT): \(config.flow.dit.bits)-bit (group_size \(config.flow.dit.groupSize))")
+                }
             }
         }
         let model = CosyVoiceTTSModel(config: config)

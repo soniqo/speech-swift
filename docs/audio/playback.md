@@ -166,7 +166,6 @@ For short utterances that don't fill the pre-buffer, `markGenerationComplete()` 
 |------------|-----|-----------|----------------|----------------------:|
 | Qwen3-TTS 0.6B (4-bit) | 0.53 | 2.0s | ~1.07s | 2.0s |
 | Qwen3-TTS 1.7B (8-bit) | 0.79 | 2.0s | ~1.58s | 3.0s |
-| CosyVoice3 (4-bit) | 0.59 | ~150ms | ~100ms | 1.0s |
 | Kokoro-82M (CoreML) | N/A | all at once | ~45ms | 0s |
 
 RTF = Real-Time Factor (time to generate / audio duration). RTF < 1.0 means generation is faster than playback.

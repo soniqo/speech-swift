@@ -191,11 +191,12 @@ final class Qwen3TTSConfigTests: XCTestCase {
     // MARK: - Model Variants
 
     func testTTSModelVariants() {
-        // int4 decommissioned: the 0.6B Base floor is 8bit (no bf16 bundle); 1.7B is bf16.
+        // int4 decommissioned: 0.6B Base/CustomVoice use 8bit; 1.7B Base is bf16.
         XCTAssertEqual(TTSModelVariant.base.rawValue, "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-8bit")
         XCTAssertEqual(TTSModelVariant.base17B8bit.rawValue, "aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-8bit")
         XCTAssertEqual(TTSModelVariant.base17Bbf16.rawValue, "aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-bf16")
-        XCTAssertEqual(TTSModelVariant.customVoice.rawValue, "aufklarer/Qwen3-TTS-12Hz-0.6B-CustomVoice-MLX-bf16")
+        XCTAssertEqual(TTSModelVariant.customVoice.rawValue, "aufklarer/Qwen3-TTS-12Hz-0.6B-CustomVoice-MLX-8bit")
+        XCTAssertEqual(TTSModelVariant.customVoiceBf16.rawValue, "aufklarer/Qwen3-TTS-12Hz-0.6B-CustomVoice-MLX-bf16")
     }
 
     func testUpsampleRateProduct() {
@@ -282,7 +283,8 @@ final class SpeakerConfigTests: XCTestCase {
 
     func testTTSModelVariant() {
         XCTAssertEqual(TTSModelVariant.base.rawValue, "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-8bit")
-        XCTAssertEqual(TTSModelVariant.customVoice.rawValue, "aufklarer/Qwen3-TTS-12Hz-0.6B-CustomVoice-MLX-bf16")
+        XCTAssertEqual(TTSModelVariant.customVoice.rawValue, "aufklarer/Qwen3-TTS-12Hz-0.6B-CustomVoice-MLX-8bit")
+        XCTAssertEqual(TTSModelVariant.customVoiceBf16.rawValue, "aufklarer/Qwen3-TTS-12Hz-0.6B-CustomVoice-MLX-bf16")
     }
 
     func testAvailableSpeakersEmptyByDefault() {
@@ -379,10 +381,10 @@ final class E2EInstructTokenTests: XCTestCase {
 // MARK: - CustomVoice Instruct E2E Tests
 
 /// End-to-end tests for CustomVoice model with instruct-based style control.
-/// Requires CustomVoice model weights (~1 GB download).
+/// Requires CustomVoice model weights (~1.2 GB download).
 final class E2ECustomVoiceInstructTests: XCTestCase {
 
-    static let customVoiceModelId = "aufklarer/Qwen3-TTS-12Hz-0.6B-CustomVoice-MLX-bf16"
+    static let customVoiceModelId = "aufklarer/Qwen3-TTS-12Hz-0.6B-CustomVoice-MLX-8bit"
     static let ttsTokenizerModelId = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
     static let asrModelId = "aufklarer/Qwen3-ASR-0.6B-MLX-4bit"
     private static var _sharedTTSModel: Qwen3TTSModel?
@@ -643,7 +645,7 @@ final class E2ECustomVoiceInstructTests: XCTestCase {
 /// Regression test for #105: speaker token must come BEFORE pad+bos.
 final class E2ESpeakerTokenPositionTests: XCTestCase {
 
-    static let customVoiceModelId = "aufklarer/Qwen3-TTS-12Hz-0.6B-CustomVoice-MLX-bf16"
+    static let customVoiceModelId = "aufklarer/Qwen3-TTS-12Hz-0.6B-CustomVoice-MLX-8bit"
     static let ttsTokenizerModelId = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
     private static var _sharedModel: Qwen3TTSModel?
 

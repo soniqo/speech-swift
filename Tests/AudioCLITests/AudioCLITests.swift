@@ -363,8 +363,7 @@ final class SpeakCommandTests: XCTestCase {
         let cmd = try AudioCLI.parseAsRoot(["speak", "Hello"])
         let speak = try XCTUnwrap(cmd as? SpeakCommand)
         // --model-id is now opt-in; the runtime resolves the default through
-        // --cosyvoice-variant (bf16 by default → aufklarer/CosyVoice3-0.5B-MLX-bf16;
-        // int4 was decommissioned).
+        // --cosyvoice-variant (bf16 by default → aufklarer/CosyVoice3-0.5B-MLX-bf16).
         XCTAssertNil(speak.modelId)
         XCTAssertEqual(speak.cosyvoiceVariant, "bf16")
     }
@@ -374,6 +373,14 @@ final class SpeakCommandTests: XCTestCase {
             ["speak", "--engine", "cosyvoice", "--cosyvoice-variant", "bf16", "Hello"])
         let speak = try XCTUnwrap(cmd as? SpeakCommand)
         XCTAssertEqual(speak.cosyvoiceVariant, "bf16")
+        XCTAssertNil(speak.modelId)
+    }
+
+    func testCosyVoiceVariant16BitAlias() throws {
+        let cmd = try AudioCLI.parseAsRoot(
+            ["speak", "--engine", "cosyvoice", "--cosyvoice-variant", "16bit", "Hello"])
+        let speak = try XCTUnwrap(cmd as? SpeakCommand)
+        XCTAssertEqual(speak.cosyvoiceVariant, "16bit")
         XCTAssertNil(speak.modelId)
     }
 
