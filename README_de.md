@@ -141,7 +141,7 @@ struct DictateView: View {
 
 `SpeechUI` liefert nur `TranscriptionView` (finale + partielle Ergebnisse) und `TranscriptionStore` (Streaming-ASR-Adapter). Verwende AVFoundation für Audio-Visualisierung und Wiedergabe.
 
-Verfügbare SPM-Produkte: `Qwen3ASR`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `KokoroTTS`, `SupertonicTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `ChatterboxTTS`, `OmniVoiceTTS`, `MagpieTTS`, `MagpieTTSCoreML`, `MAGNeTMusicGen`, `FlashSR`, `PersonaPlex`, `HibikiTranslate`, `SpeechVAD`, `SpeechEnhancement`, `SourceSeparation`, `Qwen3Chat`, `SpeechCore`, `SpeechUI`, `AudioCommon`.
+Verfügbare SPM-Produkte: `Qwen3ASR`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `KokoroTTS`, `SupertonicTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `ChatterboxTTS`, `OmniVoiceTTS`, `IndicMioTTS`, `FishAudioTTS`, `MagpieTTS`, `MagpieTTSCoreML`, `MAGNeTMusicGen`, `FlashSR`, `PersonaPlex`, `HibikiTranslate`, `SpeechVAD`, `SpeechEnhancement`, `SourceSeparation`, `Qwen3Chat`, `FunctionGemma`, `SpeechCore`, `SpeechUI`, `AudioCommon`.
 
 ## Modelle
 
@@ -161,6 +161,7 @@ Kompakte Übersicht unten. **[Vollständiger Modellkatalog mit Größen, Quantis
 | [VoxCPM2](https://soniqo.audio/de/speech-generation) | Text → Sprache (48 kHz, Voice Design + Klonen) | MLX | 2B (bf16/int8) | 30 |
 | [Chatterbox Multilingual](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16) | Text → Sprache (Zero-Shot-Klonen) | MLX | 0.8B (fp16) | 23 |
 | [OmniVoice](https://huggingface.co/aufklarer/OmniVoice-MLX-int8) | Text → Sprache (NAR-Diffusion, Zero-Shot-Klonen) | MLX | 0.8B (int8/fp16) | 600+ |
+| [Fish Audio S2 Pro](docs/models/fish-audio-s2-pro.md) | Text → Sprache (Zero-Shot-Klonen, explizite Stilmarker) | MLX | 0.5B-class (fp16) | Mehrsprachig |
 | [Kokoro-82M](https://soniqo.audio/de/guides/kokoro) | Text → Sprache | CoreML (ANE) | 82M | 10 |
 | [Supertonic-3](https://soniqo.audio/guides/supertonic) | Text → Sprache (44,1 kHz, Flow-Matching, G2P-frei) | CoreML (ANE) | 99M | 31 |
 | [VibeVoice Realtime-0.5B](https://soniqo.audio/de/guides/vibevoice) | Text → Sprache (Langform, Multi-Speaker) | MLX | 0.5B | EN/ZH |
@@ -227,6 +228,7 @@ import KokoroTTS            // Sprachsynthese (iOS-tauglich)
 import VibeVoiceTTS         // Langform-/Multi-Speaker-TTS (EN/ZH)
 import MagpieTTS            // Mehrsprachiges TTS (NVIDIA Magpie 357M, MLX, 9 Sprachen)
 import MagpieTTSCoreML      // Magpie CoreML-Backend (Hybrid CoreML + MLX, 8 Sprachen)
+import FishAudioTTS         // Experimentelle Fish Audio S2 Pro Runtime mit Stimmklonen
 import Qwen3Chat            // LLM-Chat auf dem Gerät
 import FunctionGemma    // On-Device-LLM für Tool-Aufrufe
 import MADLADTranslation    // Mehrsprachige Übersetzung über 400+ Sprachen
@@ -312,7 +314,7 @@ let audio = model.synthesize(text: "Hello world", language: "english")
 try WAVWriter.write(samples: audio, sampleRate: 24000, to: outputURL)
 ```
 
-Alternative TTS-Engines: [CosyVoice3](https://soniqo.audio/de/guides/cosyvoice) (Streaming + Stimmklonen + Emotions-Tags), [Kokoro-82M](https://soniqo.audio/de/guides/kokoro) (iOS-tauglich, 54 Stimmen), [VibeVoice](https://soniqo.audio/de/guides/vibevoice) (Langform-Podcast / Multi-Speaker, EN/ZH), [Stimmklonen](https://soniqo.audio/de/guides/voice-cloning).
+Alternative TTS-Engines: [CosyVoice3](https://soniqo.audio/de/guides/cosyvoice) (Streaming + Stimmklonen + Emotions-Tags), [Kokoro-82M](https://soniqo.audio/de/guides/kokoro) (iOS-tauglich, 54 Stimmen), [VibeVoice](https://soniqo.audio/de/guides/vibevoice) (Langform-Podcast / Multi-Speaker, EN/ZH), [Fish Audio S2 Pro](docs/inference/fish-audio-s2-pro.md) (experimentelles Zero-Shot-Klonen + Stilmarker in eckigen Klammern), [Stimmklonen](https://soniqo.audio/de/guides/voice-cloning).
 
 ### Sprache-zu-Sprache — [vollständige Anleitung →](https://soniqo.audio/de/guides/respond)
 
@@ -443,8 +445,8 @@ speech-swift ist in ein SPM-Target pro Modell aufgeteilt, sodass Konsumenten nur
 **[Vollständiges Architekturdiagramm mit Backends, Speichertabellen und Modulkarte → soniqo.audio/architecture](https://soniqo.audio/de/architecture)** · **[API-Referenz → soniqo.audio/api](https://soniqo.audio/de/api)** · **[Benchmarks → soniqo.audio/benchmarks](https://soniqo.audio/de/benchmarks)**
 
 Lokale Docs (Repo):
-- **Modelle:** [Qwen3-ASR](docs/models/asr-model.md) · [Qwen3-TTS](docs/models/tts-model.md) · [CosyVoice](docs/models/cosyvoice-tts.md) · [Kokoro](docs/models/kokoro-tts.md) · [VibeVoice](docs/models/vibevoice.md) · [Parakeet TDT](docs/models/parakeet-asr.md) · [Parakeet Streaming](docs/models/parakeet-streaming-asr.md) · [Nemotron Streaming](docs/models/nemotron-asr-streaming.md) · [Omnilingual ASR](docs/models/omnilingual-asr.md) · [PersonaPlex](docs/models/personaplex.md) · [Hibiki](docs/models/hibiki.md) · [FireRedVAD](docs/models/fireredvad.md) · [Source Separation](docs/models/source-separation.md) · [HTDemucs](docs/models/htdemucs.md) · [MAGNeT](docs/models/magnet-music-gen.md) · [FlashSR](docs/models/flashsr.md)
-- **Inferenz:** [Qwen3-ASR](docs/inference/qwen3-asr-inference.md) · [Parakeet TDT](docs/inference/parakeet-asr-inference.md) · [Parakeet Streaming](docs/inference/parakeet-streaming-asr-inference.md) · [Nemotron Streaming](docs/inference/nemotron-asr-streaming.md) · [Omnilingual ASR](docs/inference/omnilingual-asr-inference.md) · [TTS](docs/inference/qwen3-tts-inference.md) · [VibeVoice](docs/inference/vibevoice-inference.md) · [Hibiki](docs/inference/hibiki-inference.md) · [Forced Aligner](docs/inference/forced-aligner.md) · [Silero VAD](docs/inference/silero-vad.md) · [Sprecherdiarisierung](docs/inference/speaker-diarization.md) · [Sprachverbesserung](docs/inference/speech-enhancement.md) · [MAGNeT](docs/inference/magnet-music-gen.md) · [FlashSR](docs/inference/flashsr.md)
+- **Modelle:** [Qwen3-ASR](docs/models/asr-model.md) · [Qwen3-TTS](docs/models/tts-model.md) · [CosyVoice](docs/models/cosyvoice-tts.md) · [Kokoro](docs/models/kokoro-tts.md) · [VibeVoice](docs/models/vibevoice.md) · [Fish Audio S2 Pro](docs/models/fish-audio-s2-pro.md) · [Parakeet TDT](docs/models/parakeet-asr.md) · [Parakeet Streaming](docs/models/parakeet-streaming-asr.md) · [Nemotron Streaming](docs/models/nemotron-asr-streaming.md) · [Omnilingual ASR](docs/models/omnilingual-asr.md) · [PersonaPlex](docs/models/personaplex.md) · [Hibiki](docs/models/hibiki.md) · [FireRedVAD](docs/models/fireredvad.md) · [Source Separation](docs/models/source-separation.md) · [HTDemucs](docs/models/htdemucs.md) · [MAGNeT](docs/models/magnet-music-gen.md) · [FlashSR](docs/models/flashsr.md)
+- **Inferenz:** [Qwen3-ASR](docs/inference/qwen3-asr-inference.md) · [Parakeet TDT](docs/inference/parakeet-asr-inference.md) · [Parakeet Streaming](docs/inference/parakeet-streaming-asr-inference.md) · [Nemotron Streaming](docs/inference/nemotron-asr-streaming.md) · [Omnilingual ASR](docs/inference/omnilingual-asr-inference.md) · [TTS](docs/inference/qwen3-tts-inference.md) · [VibeVoice](docs/inference/vibevoice-inference.md) · [Fish Audio S2 Pro](docs/inference/fish-audio-s2-pro.md) · [Hibiki](docs/inference/hibiki-inference.md) · [Forced Aligner](docs/inference/forced-aligner.md) · [Silero VAD](docs/inference/silero-vad.md) · [Sprecherdiarisierung](docs/inference/speaker-diarization.md) · [Sprachverbesserung](docs/inference/speech-enhancement.md) · [MAGNeT](docs/inference/magnet-music-gen.md) · [FlashSR](docs/inference/flashsr.md)
 - **Referenz:** [Geteilte Protokolle](docs/shared-protocols.md)
 
 ## Cache-Konfiguration

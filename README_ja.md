@@ -141,7 +141,7 @@ struct DictateView: View {
 
 `SpeechUI` には `TranscriptionView`（確定 + 部分）と `TranscriptionStore`（ストリーミングASRアダプター）のみが含まれます。音声の可視化や再生には AVFoundation をお使いください。
 
-利用可能なSPMプロダクト：`Qwen3ASR`、`Qwen3TTS`、`Qwen3TTSCoreML`、`ParakeetASR`、`ParakeetStreamingASR`、`NemotronStreamingASR`、`OmnilingualASR`、`KokoroTTS`、`SupertonicTTS`、`VibeVoiceTTS`、`CosyVoiceTTS`、`VoxCPM2TTS`、`OmniVoiceTTS`、`MagpieTTS`、`MagpieTTSCoreML`、`MAGNeTMusicGen`、`FlashSR`、`PersonaPlex`、`HibikiTranslate`、`SpeechVAD`、`SpeechEnhancement`、`SourceSeparation`、`Qwen3Chat`、`SpeechCore`、`SpeechUI`、`AudioCommon`。
+利用可能なSPMプロダクト：`Qwen3ASR`、`Qwen3TTS`、`Qwen3TTSCoreML`、`ParakeetASR`、`ParakeetStreamingASR`、`NemotronStreamingASR`、`OmnilingualASR`、`KokoroTTS`、`SupertonicTTS`、`VibeVoiceTTS`、`CosyVoiceTTS`、`VoxCPM2TTS`、`ChatterboxTTS`、`OmniVoiceTTS`、`IndicMioTTS`、`FishAudioTTS`、`MagpieTTS`、`MagpieTTSCoreML`、`MAGNeTMusicGen`、`FlashSR`、`PersonaPlex`、`HibikiTranslate`、`SpeechVAD`、`SpeechEnhancement`、`SourceSeparation`、`Qwen3Chat`、`FunctionGemma`、`SpeechCore`、`SpeechUI`、`AudioCommon`。
 
 ## モデル
 
@@ -165,6 +165,7 @@ struct DictateView: View {
 | [VibeVoice 1.5B](https://soniqo.audio/ja/guides/vibevoice) | テキスト → 音声（最長90分のポッドキャスト） | MLX | 1.5B | EN/ZH |
 | [Magpie-TTS Multilingual](https://soniqo.audio/ja/guides/magpie) | テキスト → 音声（5 つの組み込みスピーカー、ストリーミング） | MLX / CoreML | 357M (MLX INT8, CoreML INT8) | 9（CoreML は日本語を除く） |
 | [OmniVoice](https://huggingface.co/aufklarer/OmniVoice-MLX-int8) | テキスト → 音声（NAR 拡散、ゼロショットクローン） | MLX | 0.8B (int8/fp16) | **600+** |
+| [Fish Audio S2 Pro](docs/models/fish-audio-s2-pro.md) | テキスト → 音声（ゼロショットクローン、明示的スタイルマーカー） | MLX | 0.5B-class (fp16) | 多言語 |
 | [Qwen3Chat](https://soniqo.audio/ja/guides/chat) | テキスト → テキスト（LLM） | MLX、CoreML | 0.8B, 4B, E2B/E4B | 多言語 |
 | [FunctionGemma](https://soniqo.audio/ja/guides/function-calls) | テキスト → ツール呼び出し（LLM） | CoreML | 270M | 英語主体 |
 | [MADLAD-400](https://soniqo.audio/ja/guides/translate) | テキスト → テキスト（翻訳） | MLX | 3B | **400+** |
@@ -226,6 +227,7 @@ import KokoroTTS            // 音声合成 (iOS対応)
 import VibeVoiceTTS         // 長尺・マルチスピーカーTTS（EN/ZH）
 import MagpieTTS            // 多言語 TTS（NVIDIA Magpie 357M、MLX、9 言語）
 import MagpieTTSCoreML      // Magpie CoreML バックエンド(CoreML + MLX のハイブリッド、8 言語)
+import FishAudioTTS         // 音声クローン対応の実験的 Fish Audio S2 Pro ランタイム
 import Qwen3Chat            // オンデバイスLLMチャット
 import FunctionGemma    // オンデバイスの関数 / ツール呼び出しLLM
 import MADLADTranslation    // 400+ 言語間の多対多翻訳
@@ -311,7 +313,7 @@ let audio = model.synthesize(text: "Hello world", language: "english")
 try WAVWriter.write(samples: audio, sampleRate: 24000, to: outputURL)
 ```
 
-代替TTSエンジン：[CosyVoice3](https://soniqo.audio/ja/guides/cosyvoice)（ストリーミング + 音声クローン + 感情タグ）、[Kokoro-82M](https://soniqo.audio/ja/guides/kokoro)（iOS対応、54ボイス）、[VibeVoice](https://soniqo.audio/ja/guides/vibevoice)（長尺ポッドキャスト・マルチスピーカー、EN/ZH）、[音声クローン](https://soniqo.audio/ja/guides/voice-cloning)。
+代替TTSエンジン：[CosyVoice3](https://soniqo.audio/ja/guides/cosyvoice)（ストリーミング + 音声クローン + 感情タグ）、[Kokoro-82M](https://soniqo.audio/ja/guides/kokoro)（iOS対応、54ボイス）、[VibeVoice](https://soniqo.audio/ja/guides/vibevoice)（長尺ポッドキャスト・マルチスピーカー、EN/ZH）、[Fish Audio S2 Pro](docs/inference/fish-audio-s2-pro.md)（実験的ゼロショットクローン + 角括弧スタイルマーカー）、[音声クローン](https://soniqo.audio/ja/guides/voice-cloning)。
 
 ### 音声間変換 — [完全ガイド →](https://soniqo.audio/ja/guides/respond)
 
@@ -442,8 +444,8 @@ speech-swift はモデルごとに1つのSPMターゲットに分割されてお
 **[バックエンド、メモリ表、モジュールマップ付きの完全なアーキテクチャ図 → soniqo.audio/architecture](https://soniqo.audio/ja/architecture)** · **[APIリファレンス → soniqo.audio/api](https://soniqo.audio/ja/api)** · **[ベンチマーク → soniqo.audio/benchmarks](https://soniqo.audio/ja/benchmarks)**
 
 ローカルドキュメント（リポジトリ内）：
-- **モデル：** [Qwen3-ASR](docs/models/asr-model.md) · [Qwen3-TTS](docs/models/tts-model.md) · [CosyVoice](docs/models/cosyvoice-tts.md) · [Kokoro](docs/models/kokoro-tts.md) · [VibeVoice](docs/models/vibevoice.md) · [Parakeet TDT](docs/models/parakeet-asr.md) · [Parakeet Streaming](docs/models/parakeet-streaming-asr.md) · [Nemotron Streaming](docs/models/nemotron-asr-streaming.md) · [Omnilingual ASR](docs/models/omnilingual-asr.md) · [PersonaPlex](docs/models/personaplex.md) · [Hibiki](docs/models/hibiki.md) · [FireRedVAD](docs/models/fireredvad.md) · [Source Separation](docs/models/source-separation.md) · [HTDemucs](docs/models/htdemucs.md) · [MAGNeT](docs/models/magnet-music-gen.md) · [FlashSR](docs/models/flashsr.md)
-- **推論：** [Qwen3-ASR](docs/inference/qwen3-asr-inference.md) · [Parakeet TDT](docs/inference/parakeet-asr-inference.md) · [Parakeet Streaming](docs/inference/parakeet-streaming-asr-inference.md) · [Nemotron Streaming](docs/inference/nemotron-asr-streaming.md) · [Omnilingual ASR](docs/inference/omnilingual-asr-inference.md) · [TTS](docs/inference/qwen3-tts-inference.md) · [VibeVoice](docs/inference/vibevoice-inference.md) · [Hibiki](docs/inference/hibiki-inference.md) · [Forced Aligner](docs/inference/forced-aligner.md) · [Silero VAD](docs/inference/silero-vad.md) · [話者ダイアライゼーション](docs/inference/speaker-diarization.md) · [音声強調](docs/inference/speech-enhancement.md) · [MAGNeT](docs/inference/magnet-music-gen.md) · [FlashSR](docs/inference/flashsr.md)
+- **モデル：** [Qwen3-ASR](docs/models/asr-model.md) · [Qwen3-TTS](docs/models/tts-model.md) · [CosyVoice](docs/models/cosyvoice-tts.md) · [Kokoro](docs/models/kokoro-tts.md) · [VibeVoice](docs/models/vibevoice.md) · [Fish Audio S2 Pro](docs/models/fish-audio-s2-pro.md) · [Parakeet TDT](docs/models/parakeet-asr.md) · [Parakeet Streaming](docs/models/parakeet-streaming-asr.md) · [Nemotron Streaming](docs/models/nemotron-asr-streaming.md) · [Omnilingual ASR](docs/models/omnilingual-asr.md) · [PersonaPlex](docs/models/personaplex.md) · [Hibiki](docs/models/hibiki.md) · [FireRedVAD](docs/models/fireredvad.md) · [Source Separation](docs/models/source-separation.md) · [HTDemucs](docs/models/htdemucs.md) · [MAGNeT](docs/models/magnet-music-gen.md) · [FlashSR](docs/models/flashsr.md)
+- **推論：** [Qwen3-ASR](docs/inference/qwen3-asr-inference.md) · [Parakeet TDT](docs/inference/parakeet-asr-inference.md) · [Parakeet Streaming](docs/inference/parakeet-streaming-asr-inference.md) · [Nemotron Streaming](docs/inference/nemotron-asr-streaming.md) · [Omnilingual ASR](docs/inference/omnilingual-asr-inference.md) · [TTS](docs/inference/qwen3-tts-inference.md) · [VibeVoice](docs/inference/vibevoice-inference.md) · [Fish Audio S2 Pro](docs/inference/fish-audio-s2-pro.md) · [Hibiki](docs/inference/hibiki-inference.md) · [Forced Aligner](docs/inference/forced-aligner.md) · [Silero VAD](docs/inference/silero-vad.md) · [話者ダイアライゼーション](docs/inference/speaker-diarization.md) · [音声強調](docs/inference/speech-enhancement.md) · [MAGNeT](docs/inference/magnet-music-gen.md) · [FlashSR](docs/inference/flashsr.md)
 - **リファレンス：** [共有プロトコル](docs/shared-protocols.md)
 
 ## キャッシュ設定

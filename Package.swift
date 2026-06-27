@@ -37,6 +37,10 @@ let package = Package(
             targets: ["IndicMioTTS"]
         ),
         .library(
+            name: "FishAudioTTS",
+            targets: ["FishAudioTTS"]
+        ),
+        .library(
             name: "PersonaPlex",
             targets: ["PersonaPlex"]
         ),
@@ -275,6 +279,18 @@ let package = Package(
                 .product(name: "MLXNN", package: "mlx-swift"),
                 .product(name: "MLXFast", package: "mlx-swift"),
                 .product(name: "MLXFFT", package: "mlx-swift"),
+                .product(name: "Hub", package: "swift-transformers"),
+                .product(name: "Tokenizers", package: "swift-transformers")
+            ]
+        ),
+        .target(
+            name: "FishAudioTTS",
+            dependencies: [
+                "AudioCommon",
+                "MLXCommon",
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXNN", package: "mlx-swift"),
+                .product(name: "MLXFast", package: "mlx-swift"),
                 .product(name: "Hub", package: "swift-transformers"),
                 .product(name: "Tokenizers", package: "swift-transformers")
             ]
@@ -675,6 +691,13 @@ let package = Package(
             name: "IndicMioTTSTests",
             dependencies: [
                 "IndicMioTTS", "AudioCommon", "MLXCommon", "Qwen3ASR",
+                .product(name: "MLX", package: "mlx-swift")
+            ]
+        ),
+        .testTarget(
+            name: "FishAudioTTSTests",
+            dependencies: [
+                "FishAudioTTS", "AudioCommon", "MLXCommon", "Qwen3ASR",
                 .product(name: "MLX", package: "mlx-swift")
             ]
         ),
