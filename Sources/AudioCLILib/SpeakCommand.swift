@@ -43,10 +43,10 @@ public struct SpeakCommand: ParsableCommand {
     @Option(name: .long, help: "[qwen3] Style instruction (requires CustomVoice model)")
     public var instruct: String?
 
-    @Option(name: .long, help: "Reference audio file for voice cloning (qwen3 Base, cosyvoice, or voxcpm2)")
+    @Option(name: .long, help: "Reference audio file for voice cloning (qwen3 Base, cosyvoice, voxcpm2, or indic-mio)")
     public var voiceSample: String?
 
-    @Flag(name: .long, help: "Restore (denoise + dereverb) the voice-cloning reference with Sidon before cloning. Opt-in; preserves speaker identity. Applies to qwen3/cosyvoice/voxcpm2 references.")
+    @Flag(name: .long, help: "Restore (denoise + dereverb) the voice-cloning reference with Sidon before cloning. Opt-in; preserves speaker identity. Applies to qwen3/cosyvoice/voxcpm2/indic-mio references.")
     public var cleanReference: Bool = false
 
     @Option(name: .long, help: "Sidon variant for --clean-reference: fp16 (default) or int8")
@@ -222,14 +222,11 @@ public struct SpeakCommand: ParsableCommand {
             if stream {
                 throw ValidationError("--engine indic-mio does not support --stream yet")
             }
-            if voiceSample != nil {
-                throw ValidationError(
-                    "--engine indic-mio does not support raw --voice-sample cloning yet. " +
-                    "Use --indic-mio-global-embedding with a 128-float MioCodec global embedding, " +
-                    "or wait for the WavLM reference-embedding path.")
+            if voiceSample != nil && indicMioGlobalEmbedding != nil {
+                throw ValidationError("--engine indic-mio accepts either --voice-sample or --indic-mio-global-embedding, not both")
             }
-            if cleanReference {
-                throw ValidationError("--clean-reference requires --voice-sample and is not supported by --engine indic-mio yet")
+            if cleanReference && voiceSample == nil {
+                throw ValidationError("--clean-reference requires --voice-sample")
             }
             if speaker != nil {
                 throw ValidationError("--engine indic-mio does not support --speaker; pass emotion markers in text, e.g. '<happy>'")
@@ -888,6 +885,13 @@ public struct SpeakCommand: ParsableCommand {
             )
 
             let embedding = try indicMioGlobalEmbedding.map { try loadIndicMioGlobalEmbedding(from: $0) }
+            let referenceAudio: [Float]?
+            if let voiceSample {
+                referenceAudio = try loadReference(path: voiceSample, targetSampleRate: model.sampleRate)
+                print("  Reference audio: \(referenceAudio?.count ?? 0) samples @ \(model.sampleRate) Hz")
+            } else {
+                referenceAudio = nil
+            }
             let sampling = IndicMioSamplingConfig(
                 maxNewTokens: maxTokens,
                 temperature: temperature,
@@ -899,16 +903,34 @@ public struct SpeakCommand: ParsableCommand {
             let markers = IndicMioPrompt.indianLanguageEmotionMarkers.joined(separator: ", ")
             var info = "Synthesizing with Indic-Mio (language: \(effectiveIndicMioLanguage))"
             if embedding != nil { info += " [global speaker embedding]" }
+            if referenceAudio != nil { info += " [voice clone: WavLM global embedding]" }
             print(info)
             print("  Emotion markers: \(markers)")
 
             let start = CFAbsoluteTimeGetCurrent()
-            let samples = try await model.generate(
-                text: inputText,
-                language: effectiveIndicMioLanguage,
-                globalEmbedding: embedding,
-                sampling: sampling
-            )
+            let samples: [Float]
+            if let embedding {
+                samples = try await model.generate(
+                    text: inputText,
+                    language: effectiveIndicMioLanguage,
+                    globalEmbedding: embedding,
+                    sampling: sampling
+                )
+            } else if let referenceAudio {
+                samples = try await model.generate(
+                    text: inputText,
+                    language: effectiveIndicMioLanguage,
+                    referenceAudio: referenceAudio,
+                    referenceSampleRate: model.sampleRate,
+                    sampling: sampling
+                )
+            } else {
+                samples = try await model.generate(
+                    text: inputText,
+                    language: effectiveIndicMioLanguage,
+                    sampling: sampling
+                )
+            }
             let elapsed = CFAbsoluteTimeGetCurrent() - start
 
             guard !samples.isEmpty else {

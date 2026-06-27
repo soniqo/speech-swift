@@ -597,10 +597,26 @@ final class SpeakCommandTests: XCTestCase {
 
     // MARK: - Indic-Mio engine
 
-    func testIndicMioRejectsVoiceSampleUntilReferenceEmbeddingLands() {
+    func testIndicMioAcceptsVoiceSampleReference() throws {
+        let cmd = try AudioCLI.parseAsRoot([
+            "speak", "नमस्ते <happy>",
+            "--engine", "indic-mio",
+            "--voice-sample", "ref.wav",
+        ])
+        let speak = try XCTUnwrap(cmd as? SpeakCommand)
+        XCTAssertEqual(speak.voiceSample, "ref.wav")
+    }
+
+    func testIndicMioRejectsVoiceSampleWithExplicitEmbedding() {
+        let embedding = Array(repeating: "0", count: 128).joined(separator: ",")
         expectSpeakReject(
-            ["speak", "नमस्ते <happy>", "--engine", "indic-mio", "--voice-sample", "ref.wav"],
-            contains: "--voice-sample")
+            [
+                "speak", "नमस्ते <happy>",
+                "--engine", "indic-mio",
+                "--voice-sample", "ref.wav",
+                "--indic-mio-global-embedding", embedding,
+            ],
+            contains: "either --voice-sample or --indic-mio-global-embedding")
     }
 
     func testIndicMioRejectsQwen3StyleControls() {

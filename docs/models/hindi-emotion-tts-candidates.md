@@ -24,7 +24,9 @@ does not need a separate MioCodec model download.
 - decodes content embeddings through the MioCodec wave decoder to 24 kHz
   waveform audio;
 - accepts an explicit 128-dim MioCodec global embedding, or uses a
-  deterministic default embedding for non-cloned synthesis.
+  deterministic default embedding for non-cloned synthesis;
+- extracts the 128-dim MioCodec global embedding from raw reference audio via
+  WavLM-base-plus when the WavLM safetensors companion bundle is available.
 
 It is exposed as the `indic-mio` TTS engine in the model registry, realtime
 server dispatch, one-shot synthesis dispatch, and `speech speak --engine
@@ -32,11 +34,12 @@ indic-mio`. The CLI accepts `--indic-mio-global-embedding` for callers that
 already have a 128-dim MioCodec global speaker embedding.
 
 Indic-Mio's full zero-shot clone path requires a global speaker embedding. The
-bundled MioCodec weights include the decoder path, but the raw reference
-waveform-to-global-embedding path depends on the upstream SSL feature extractor
-(`wavlm_base_plus`), which is not part of the current export. Until that WavLM
-path is exported and ported, raw `--voice-sample` cloning is rejected for
-Indic-Mio and server clone-reference calls return the same runtime limitation.
+bundled MioCodec weights include the global encoder and decoder path. Raw
+reference waveform cloning now runs the WavLM-base-plus SSL feature extractor,
+averages the first two hidden layers, and feeds the result through MioCodec's
+global ConvNeXt encoder. The runtime resolves the WavLM companion from
+`aufklarer/WavLM-Base-Plus-MLX-fp16`, or from `INDIC_MIO_WAVLM_BUNDLE` when
+testing a local export.
 
 E2E coverage currently loads `aufklarer/Indic-Mio-MLX-fp16`, runs Hindi text
 with an emotion tag through Qwen3 speech-token generation, decodes MioCodec
@@ -58,7 +61,7 @@ but the public model card requires non-commercial use.
 
 | Model | HF repo | License posture | Hindi | Explicit emotion control | Voice path | speech-swift status |
 |---|---|---|---:|---|---|---|
-| Indic-Mio | `SPRINGLab/Indic-Mio` / `aufklarer/Indic-Mio-MLX-fp16` | Apache-2.0 | Yes | End-of-utterance tags: `<happy>`, `<sad>`, `<angry>`, `<disgust>`, `<fear>`, `<surprise>` | Speaker embeddings / zero-shot clone path | Runtime: bundle download, token generation, wave decode, CLI/server exposure, Hindi ASR roundtrip; raw-reference embedding pending |
+| Indic-Mio | `SPRINGLab/Indic-Mio` / `aufklarer/Indic-Mio-MLX-fp16` | Apache-2.0 | Yes | End-of-utterance tags: `<happy>`, `<sad>`, `<angry>`, `<disgust>`, `<fear>`, `<surprise>` | Speaker embeddings / zero-shot clone path | Runtime: bundle download, token generation, WavLM raw-reference embedding, wave decode, CLI/server exposure, Hindi ASR roundtrip |
 | Svara-TTS v1 | `kenpath/svara-tts-v1` | Apache-2.0 | Yes | Tags: `<happy>`, `<sad>`, `<anger>`, `<fear>` | Adaptation / speaker identity path; clone quality needs validation | Secondary port candidate |
 | Fish Audio S2 Pro | `fishaudio/s2-pro` | Research/non-commercial public weights | Yes | Inline bracket tags, including `[angry]`, `[sad]`, `[whisper]`, `[shouting]`, `[surprised]` | Reference / speaker conditioning in Fish stack | Benchmark only |
 | Indic Parler-TTS | `ai4bharat/indic-parler-tts` | Apache-2.0 | Yes | Caption/descriptive prompt emotions; Hindi emotion is not officially tested | Preset/descriptive voices | Secondary comparison |
@@ -89,8 +92,9 @@ format:
      CLI synthesis are wired under `indic-mio`.
    - E2E coverage is present for Hindi text plus `<happy>`, including Qwen3ASR
      keyword recovery over synthesized audio.
-   - Next: export/port `wavlm_base_plus` reference waveform to global speaker
-     embedding before adding Studio clone selection.
+   - Raw reference cloning is wired through the WavLM companion bundle.
+   - Next: publish/verify the WavLM safetensors companion and add Studio clone
+     selection copy that explains the extra first-run download.
 
 2. **Svara-TTS v1**
    - Validate whether its speaker/adaptation path can satisfy Studio's

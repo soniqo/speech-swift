@@ -47,17 +47,37 @@ final class E2EIndicMioTTSTests: XCTestCase {
             sampling: sampling)
         assertUsableWaveform(generated, sampleRate: model.sampleRate)
 
-        do {
-            _ = try await model.generate(
-                text: "यह एक संदर्भ परीक्षण है। <happy>",
-                language: "hindi",
-                referenceAudio: Array(repeating: 0, count: 24_000),
-                referenceSampleRate: 24_000,
-                sampling: sampling)
-            XCTFail("Raw reference audio should stay gated until WavLM speaker embedding is implemented")
-        } catch IndicMioError.speakerEmbeddingNotImplemented(let reason) {
-            XCTAssertTrue(reason.contains("WavLM"))
+    }
+
+    func testRawReferenceAudioSynthesizesWhenWavLMBundleIsAvailable() async throws {
+        let env = ProcessInfo.processInfo.environment
+        guard let wavlm = env["INDIC_MIO_WAVLM_BUNDLE"], !wavlm.isEmpty else {
+            throw XCTSkip("Set INDIC_MIO_WAVLM_BUNDLE to run Indic-Mio raw-reference cloning E2E")
         }
+
+        let model = try await loadModel()
+        let reference = sineReference(sampleRate: model.sampleRate, seconds: 1.0)
+        let embedding = try await model.extractGlobalEmbedding(
+            referenceAudio: reference,
+            referenceSampleRate: model.sampleRate)
+
+        XCTAssertEqual(embedding.count, MioCodecConfig.default.globalEmbeddingDim)
+        XCTAssertTrue(embedding.allSatisfy(\.isFinite))
+        XCTAssertGreaterThan(embedding.map { abs($0) }.max() ?? 0, 0.0001)
+
+        let sampling = IndicMioSamplingConfig(
+            maxNewTokens: 64,
+            temperature: 0,
+            topK: 1,
+            topP: 1,
+            repetitionPenalty: 1)
+        let waveform = try await model.generate(
+            text: "नमस्ते, यह संदर्भ आवाज़ है। <happy>",
+            language: "hindi",
+            referenceAudio: reference,
+            referenceSampleRate: model.sampleRate,
+            sampling: sampling)
+        assertUsableWaveform(waveform, sampleRate: model.sampleRate)
     }
 
     func testHindiWaveformRoundTripWithASR() async throws {
@@ -97,6 +117,13 @@ final class E2EIndicMioTTSTests: XCTestCase {
         XCTAssertGreaterThan(Double(waveform.count) / Double(sampleRate), 0.05, file: file, line: line)
         XCTAssertTrue(waveform.allSatisfy(\.isFinite), "Waveform must not contain NaN/Inf", file: file, line: line)
         XCTAssertGreaterThan(waveform.map { abs($0) }.max() ?? 0, 0.0001, file: file, line: line)
+    }
+
+    private func sineReference(sampleRate: Int, seconds: Double) -> [Float] {
+        let count = Int(Double(sampleRate) * seconds)
+        return (0..<count).map { i in
+            Float(0.08 * sin(2.0 * Double.pi * 220.0 * Double(i) / Double(sampleRate)))
+        }
     }
 
     private func loadModel() async throws -> IndicMioTTSModel {

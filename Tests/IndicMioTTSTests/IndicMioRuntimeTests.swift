@@ -59,6 +59,21 @@ final class IndicMioRuntimeTests: XCTestCase {
         XCTAssertEqual(plan.stftFrames, 138)
     }
 
+    func testReferenceEncoderUsesSoniqoSafetensorsCompanionId() {
+        XCTAssertEqual(
+            IndicMioWavLMFeatureModel.defaultModelId,
+            "aufklarer/WavLM-Base-Plus-MLX-fp16")
+        XCTAssertEqual(IndicMioReferenceConfig.codecSampleRate, 24_000)
+        XCTAssertEqual(IndicMioReferenceConfig.wavLMSampleRate, 16_000)
+        XCTAssertEqual(IndicMioReferenceConfig.wavLMHopSize, 320)
+    }
+
+    func testWavLMFeatureExtractorMinimumInputLength() {
+        let model = IndicMioWavLMFeatureModel()
+        XCTAssertEqual(model.minimumWavLMInputLength(forFeatureFrames: 1), 400)
+        XCTAssertGreaterThan(model.minimumWavLMInputLength(forFeatureFrames: 50), 16_000)
+    }
+
     func testModelConfigParsesIndicMioShape() throws {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("indic-mio-config-\(UUID().uuidString)", isDirectory: true)

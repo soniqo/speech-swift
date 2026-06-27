@@ -14,8 +14,10 @@ public final class IndicMioTTSModel: SpeechGenerationModel, @unchecked Sendable 
     private let tokenizer: IndicMioTokenizer
     private let languageModel: IndicMioQwen3Model
     private let contentDecoder: MioCodecContentDecoder
+    private let globalEncoder: MioCodecGlobalEncoder
     private let waveDecoder: MioCodecWaveDecoder
     private var state: IndicMioQwen3Model.InferenceState
+    private var wavLMReferenceEncoder: IndicMioWavLMFeatureModel?
 
     private init(
         bundleDirectory: URL,
@@ -24,6 +26,7 @@ public final class IndicMioTTSModel: SpeechGenerationModel, @unchecked Sendable 
         tokenizer: IndicMioTokenizer,
         languageModel: IndicMioQwen3Model,
         contentDecoder: MioCodecContentDecoder,
+        globalEncoder: MioCodecGlobalEncoder,
         waveDecoder: MioCodecWaveDecoder
     ) {
         self.bundleDirectory = bundleDirectory
@@ -33,6 +36,7 @@ public final class IndicMioTTSModel: SpeechGenerationModel, @unchecked Sendable 
         self.tokenizer = tokenizer
         self.languageModel = languageModel
         self.contentDecoder = contentDecoder
+        self.globalEncoder = globalEncoder
         self.waveDecoder = waveDecoder
         self.state = .initial(config: modelConfig)
     }
@@ -95,6 +99,10 @@ public final class IndicMioTTSModel: SpeechGenerationModel, @unchecked Sendable 
         let contentDecoder = MioCodecContentDecoder()
         contentDecoder.loadWeights(from: codecWeights)
 
+        progressHandler?(0.91, "Loading MioCodec global encoder")
+        let globalEncoder = MioCodecGlobalEncoder()
+        globalEncoder.loadWeights(from: codecWeights)
+
         progressHandler?(0.94, "Loading MioCodec wave decoder")
         let waveDecoder = MioCodecWaveDecoder()
         waveDecoder.loadWeights(from: codecWeights)
@@ -107,6 +115,7 @@ public final class IndicMioTTSModel: SpeechGenerationModel, @unchecked Sendable 
             tokenizer: tokenizer,
             languageModel: languageModel,
             contentDecoder: contentDecoder,
+            globalEncoder: globalEncoder,
             waveDecoder: waveDecoder)
     }
 
@@ -176,8 +185,14 @@ public final class IndicMioTTSModel: SpeechGenerationModel, @unchecked Sendable 
         referenceSampleRate: Int,
         sampling: IndicMioSamplingConfig = .default
     ) async throws -> [Float] {
-        throw IndicMioError.speakerEmbeddingNotImplemented(
-            "raw reference audio requires MioCodec's WavLM-based SSL feature extractor; pass a 128-dim globalEmbedding until that bundle is exported and ported")
+        let globalEmbedding = try await extractGlobalEmbedding(
+            referenceAudio: referenceAudio,
+            referenceSampleRate: referenceSampleRate)
+        return try await generate(
+            text: text,
+            language: language,
+            globalEmbedding: globalEmbedding,
+            sampling: sampling)
     }
 
     public func generate(text: String, language: String?) async throws -> [Float] {
@@ -190,6 +205,87 @@ public final class IndicMioTTSModel: SpeechGenerationModel, @unchecked Sendable 
         globalEmbedding: [Float]
     ) async throws -> [Float] {
         try await generate(text: text, language: language, globalEmbedding: globalEmbedding, sampling: .default)
+    }
+
+    public func extractGlobalEmbedding(
+        referenceAudio: [Float],
+        referenceSampleRate: Int
+    ) async throws -> [Float] {
+        guard !referenceAudio.isEmpty else {
+            throw IndicMioError.invalidConfig("reference audio must not be empty")
+        }
+
+        let wavlm = try await referenceEncoder()
+        let prepared = prepareReferenceAudioForWavLM(
+            referenceAudio,
+            sourceSampleRate: referenceSampleRate,
+            wavlm: wavlm)
+        let sslFeatures = wavlm.averagedGlobalFeatures(audio16k: prepared)
+        let embedding = globalEncoder(sslFeatures).asType(.float32).squeezed()
+        eval(embedding)
+        return embedding.asArray(Float.self)
+    }
+
+    private func referenceEncoder() async throws -> IndicMioWavLMFeatureModel {
+        if let wavLMReferenceEncoder {
+            return wavLMReferenceEncoder
+        }
+
+        if let bundle = ProcessInfo.processInfo.environment["INDIC_MIO_WAVLM_BUNDLE"], !bundle.isEmpty {
+            let model = try IndicMioWavLMFeatureModel.fromBundle(
+                URL(fileURLWithPath: bundle, isDirectory: true))
+            wavLMReferenceEncoder = model
+            return model
+        }
+
+        let model = try await IndicMioWavLMFeatureModel.fromPretrained()
+        wavLMReferenceEncoder = model
+        return model
+    }
+
+    private func prepareReferenceAudioForWavLM(
+        _ audio: [Float],
+        sourceSampleRate: Int,
+        wavlm: IndicMioWavLMFeatureModel
+    ) -> [Float] {
+        let audio24k = sourceSampleRate == IndicMioReferenceConfig.codecSampleRate
+            ? audio
+            : AudioFileLoader.resample(
+                audio,
+                from: sourceSampleRate,
+                to: IndicMioReferenceConfig.codecSampleRate)
+
+        let padding = referencePaddingSamples24k(
+            audioLength: audio24k.count,
+            wavlm: wavlm)
+        let padded: [Float]
+        if padding > 0 {
+            padded = [Float](repeating: 0, count: padding)
+                + audio24k
+                + [Float](repeating: 0, count: padding)
+        } else {
+            padded = audio24k
+        }
+
+        return AudioFileLoader.resample(
+            padded,
+            from: IndicMioReferenceConfig.codecSampleRate,
+            to: IndicMioReferenceConfig.wavLMSampleRate)
+    }
+
+    private func referencePaddingSamples24k(
+        audioLength: Int,
+        wavlm: IndicMioWavLMFeatureModel
+    ) -> Int {
+        let resampledLength = Double(audioLength)
+            / Double(IndicMioReferenceConfig.codecSampleRate)
+            * Double(IndicMioReferenceConfig.wavLMSampleRate)
+        let expectedFrames = Int(ceil(resampledLength / Double(IndicMioReferenceConfig.wavLMHopSize)))
+        let required16k = wavlm.minimumWavLMInputLength(forFeatureFrames: max(1, expectedFrames))
+        let required24k = Double(required16k)
+            / Double(IndicMioReferenceConfig.wavLMSampleRate)
+            * Double(IndicMioReferenceConfig.codecSampleRate)
+        return max(0, Int(ceil((required24k - Double(audioLength)) / 2.0)))
     }
 
     private func generateSpeechTokens(
