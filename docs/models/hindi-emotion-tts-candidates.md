@@ -53,9 +53,12 @@ Port **Indic-Mio** first. It is Apache-2.0, Hindi-capable, documents explicit
 Indian-language emotion tags, and describes zero-shot voice cloning through
 speaker embeddings.
 
-Use **Fish Audio S2 Pro** only as a quality benchmark unless a commercial
-license is secured. Its marker control is the strongest of the reviewed models,
-but the public model card requires non-commercial use.
+Use **Fish Audio S2 Pro** as an experimental quality benchmark unless a
+commercial license is secured. Its marker control is the strongest of the
+reviewed models, and the Swift port now covers programmatic generation,
+raw-WAV zero-shot reference conditioning, and Fish DAC decode. The public model
+card still requires non-commercial use, so it should stay outside default
+product paths.
 
 ## Candidates
 
@@ -63,7 +66,7 @@ but the public model card requires non-commercial use.
 |---|---|---|---:|---|---|---|
 | Indic-Mio | `SPRINGLab/Indic-Mio` / `aufklarer/Indic-Mio-MLX-fp16` | Apache-2.0 | Yes | End-of-utterance tags: `<happy>`, `<sad>`, `<angry>`, `<disgust>`, `<fear>`, `<surprise>` | Speaker embeddings / zero-shot clone path | Runtime: bundle download, token generation, WavLM raw-reference embedding, wave decode, CLI/server exposure, Hindi ASR roundtrip |
 | Svara-TTS v1 | `kenpath/svara-tts-v1` | Apache-2.0 | Yes | Tags: `<happy>`, `<sad>`, `<anger>`, `<fear>` | Adaptation / speaker identity path; clone quality needs validation | Secondary port candidate |
-| Fish Audio S2 Pro | `fishaudio/s2-pro` | Research/non-commercial public weights | Yes | Inline bracket tags, including `[angry]`, `[sad]`, `[whisper]`, `[shouting]`, `[surprised]` | Reference / speaker conditioning in Fish stack | Benchmark only |
+| Fish Audio S2 Pro | `fishaudio/s2-pro` / `aufklarer/Fish-Audio-S2-Pro-MLX-fp16` | Research/non-commercial public weights | Yes | Inline bracket tags, including `[angry]`, `[sad]`, `[whisper]`, `[shouting]`, `[surprised]` | Raw-WAV reference conditioning through Fish DAC | Programmatic runtime implemented; CLI/server exposure and broader quality characterization remain |
 | Indic Parler-TTS | `ai4bharat/indic-parler-tts` | Apache-2.0 | Yes | Caption/descriptive prompt emotions; Hindi emotion is not officially tested | Preset/descriptive voices | Secondary comparison |
 | IndicF5 | `ai4bharat/IndicF5` | MIT | Yes | None documented | Reference cloning baseline | Tracked only |
 | Orpheus TTS Hindi | `SachinTelecmi/Orpheus-tts-hi` | Apache-2.0, needs review | Yes | Emotion/prosody tokens listed as future work | Not clear enough | Tracked only |
@@ -103,8 +106,10 @@ format:
 
 3. **Fish Audio S2 Pro**
    - Keep outside default product paths.
-   - Use for benchmark samples and marker-quality comparisons only unless a
-     separate commercial license is obtained.
+   - Use the programmatic runtime for benchmark samples and marker-quality
+     comparisons only unless a separate commercial license is obtained.
+   - Add CLI/server exposure only if the product path remains explicitly
+     experimental or a commercial license is secured.
 
 ## References
 
