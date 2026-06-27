@@ -13,6 +13,7 @@ import NemotronStreamingASR
 import OmnilingualASR
 import KokoroTTS
 import VoxCPM2TTS
+import IndicMioTTS
 import MagpieTTS
 import MagpieTTSCoreML
 import VibeVoiceTTS
@@ -355,6 +356,7 @@ protocol RealtimeModelLoading: Sendable {
     func loadCosyVoice(modelId: String) async throws -> CosyVoiceTTSModel
     func loadKokoro(modelId: String) async throws -> KokoroTTSModel
     func loadVoxCPM2(modelId: String) async throws -> VoxCPM2TTSModel
+    func loadIndicMio(modelId: String) async throws -> IndicMioTTSModel
     func loadMagpie() async throws -> MagpieTTS
     func loadMagpieCoreML() async throws -> MagpieTTSCoreML
     func loadQwen3TTSCoreML(modelId: String) async throws -> Qwen3TTSCoreMLModel
@@ -425,6 +427,10 @@ final class FailingRealtimeModelLoading: RealtimeModelLoading, @unchecked Sendab
         try await fail()
     }
 
+    func loadIndicMio(modelId: String) async throws -> IndicMioTTSModel {
+        try await fail()
+    }
+
     func loadMagpie() async throws -> MagpieTTS {
         try await fail()
     }
@@ -469,6 +475,7 @@ final class ModelState: RealtimeModelLoading, @unchecked Sendable {
     private var cosyvoice: [String: CosyVoiceTTSModel] = [:]
     private var kokoro: [String: KokoroTTSModel] = [:]
     private var voxcpm2: [String: VoxCPM2TTSModel] = [:]
+    private var indicMio: [String: IndicMioTTSModel] = [:]
     private var magpie: MagpieTTS?
     private var magpieCoreML: MagpieTTSCoreML?
     private var vibevoice: [String: VibeVoiceTTSModel] = [:]
@@ -563,6 +570,14 @@ final class ModelState: RealtimeModelLoading, @unchecked Sendable {
         print("[server] Loading VoxCPM2 (\(modelId))...")
         let m = try await VoxCPM2TTSModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
         voxcpm2[modelId] = m
+        return m
+    }
+
+    func loadIndicMio(modelId: String) async throws -> IndicMioTTSModel {
+        if let m = indicMio[modelId] { return m }
+        print("[server] Loading Indic-Mio (\(modelId))...")
+        let m = try await IndicMioTTSModel.fromPretrained(modelId: modelId, progressHandler: logProgress)
+        indicMio[modelId] = m
         return m
     }
 
@@ -1213,6 +1228,20 @@ func handleRealtimeWS(
                         : resample(samples, from: model.outputSampleRate, to: 24000)
                     totalSamples += try await streamSamplesAsDeltas(
                         samples24k, outbound: outbound, responseId: responseId)
+                case "indic-mio":
+                    let samples = try await runOffloaded {
+                        let model = try await state.loadIndicMio(modelId: ttsVariant.modelId)
+                        if hasCloneReference {
+                            return try await model.generate(
+                                text: text,
+                                language: language,
+                                referenceAudio: session.voiceCloneReferenceAudio ?? [],
+                                referenceSampleRate: 24_000)
+                        }
+                        return try await model.generate(text: text, language: language)
+                    }
+                    totalSamples += try await streamSamplesAsDeltas(
+                        samples, outbound: outbound, responseId: responseId)
                 case "magpie":
                     let samples22k = try await runOffloaded {
                         let model = try await state.loadMagpie()
@@ -1521,6 +1550,16 @@ func dispatchSynthesize(
         return model.outputSampleRate == 24000
             ? samples
             : resample(samples, from: model.outputSampleRate, to: 24000)
+    case "indic-mio":
+        let model = try await state.loadIndicMio(modelId: variant.modelId)
+        if let refAudio = cloneReferenceAudio, !refAudio.isEmpty {
+            return try await model.generate(
+                text: text,
+                language: language,
+                referenceAudio: refAudio,
+                referenceSampleRate: 24_000)
+        }
+        return try await model.generate(text: text, language: language)
     case "magpie":
         let model = try await state.loadMagpie()
         let lang = MagpieLanguage(code: mapToMagpieLanguageCode(language)) ?? .english

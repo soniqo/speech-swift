@@ -392,6 +392,15 @@ final class SpeakCommandTests: XCTestCase {
         XCTAssertEqual(speak.engine, "cosyvoice")
     }
 
+    func testIndicMioEngine() throws {
+        let cmd = try AudioCLI.parseAsRoot(["speak", "--engine", "indic-mio", "नमस्ते <happy>"])
+        let speak = try XCTUnwrap(cmd as? SpeakCommand)
+        XCTAssertEqual(speak.engine, "indic-mio")
+        XCTAssertEqual(speak.indicMioModelId, "aufklarer/Indic-Mio-MLX-fp16")
+        XCTAssertEqual(speak.indicMioTopP, 0.9, accuracy: 0.001)
+        XCTAssertEqual(speak.indicMioRepetitionPenalty, 1.0, accuracy: 0.001)
+    }
+
     func testInvalidEngineFails() {
         XCTAssertThrowsError(try AudioCLI.parseAsRoot(["speak", "--engine", "whisper", "hi"])) { error in
             XCTAssertEqual(AudioCLI.exitCode(for: error), .validationFailure)
@@ -509,6 +518,32 @@ final class SpeakCommandTests: XCTestCase {
         XCTAssertEqual(speak.modelId, "org/my-cosyvoice")
     }
 
+    func testIndicMioOptions() throws {
+        let embedding = Array(repeating: "0", count: 128).joined(separator: ",")
+        let cmd = try AudioCLI.parseAsRoot([
+            "speak", "नमस्ते <happy>",
+            "--engine", "indic-mio",
+            "--indic-mio-model-id", "org/indic-mio",
+            "--indic-mio-top-p", "0.8",
+            "--indic-mio-repetition-penalty", "1.1",
+            "--indic-mio-global-embedding", embedding,
+        ])
+        let speak = try XCTUnwrap(cmd as? SpeakCommand)
+        XCTAssertEqual(speak.indicMioModelId, "org/indic-mio")
+        XCTAssertEqual(speak.indicMioTopP, 0.8, accuracy: 0.001)
+        XCTAssertEqual(speak.indicMioRepetitionPenalty, 1.1, accuracy: 0.001)
+        XCTAssertNotNil(speak.indicMioGlobalEmbedding)
+    }
+
+    func testIndicMioAcceptsInlineJSONEmbedding() throws {
+        let embedding = "[\(Array(repeating: "0", count: 128).joined(separator: ","))]"
+        XCTAssertNoThrow(try AudioCLI.parseAsRoot([
+            "speak", "नमस्ते <happy>",
+            "--engine", "indic-mio",
+            "--indic-mio-global-embedding", embedding,
+        ]))
+    }
+
     func testVerboseFlag() throws {
         let cmd = try AudioCLI.parseAsRoot(["speak", "hi", "--verbose"])
         let speak = try XCTUnwrap(cmd as? SpeakCommand)
@@ -535,6 +570,15 @@ final class SpeakCommandTests: XCTestCase {
 
     // `parseAsRoot` runs `validate()` during parsing, so the error
     // surfaces from the parse call rather than from a separate validate().
+    private func expectSpeakReject(_ args: [String], contains needle: String,
+                                   file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertThrowsError(try AudioCLI.parseAsRoot(args), file: file, line: line) { err in
+            XCTAssertTrue("\(err)".contains(needle),
+                          "expected error containing '\(needle)', got: \(err)",
+                          file: file, line: line)
+        }
+    }
+
     private func expectMagpieReject(_ args: [String], contains needle: String,
                                       file: StaticString = #filePath, line: UInt = #line) {
         XCTAssertThrowsError(try AudioCLI.parseAsRoot(args), file: file, line: line) { err in
@@ -542,6 +586,32 @@ final class SpeakCommandTests: XCTestCase {
                           "expected error containing '\(needle)', got: \(err)",
                           file: file, line: line)
         }
+    }
+
+    // MARK: - Indic-Mio engine
+
+    func testIndicMioRejectsVoiceSampleUntilReferenceEmbeddingLands() {
+        expectSpeakReject(
+            ["speak", "नमस्ते <happy>", "--engine", "indic-mio", "--voice-sample", "ref.wav"],
+            contains: "--voice-sample")
+    }
+
+    func testIndicMioRejectsQwen3StyleControls() {
+        expectSpeakReject(
+            ["speak", "नमस्ते <happy>", "--engine", "indic-mio", "--speaker", "someone"],
+            contains: "--speaker")
+        expectSpeakReject(
+            ["speak", "नमस्ते <happy>", "--engine", "indic-mio", "--instruct", "be sad"],
+            contains: "--instruct")
+    }
+
+    func testIndicMioRejectsStreamingAndBatch() {
+        expectSpeakReject(
+            ["speak", "नमस्ते <happy>", "--engine", "indic-mio", "--stream"],
+            contains: "--stream")
+        expectSpeakReject(
+            ["speak", "--engine", "indic-mio", "--batch-file", "texts.txt"],
+            contains: "single text")
     }
 
     func testMagpieRejectsVoiceSample() {

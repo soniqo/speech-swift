@@ -33,6 +33,10 @@ let package = Package(
             targets: ["OmniVoiceTTS"]
         ),
         .library(
+            name: "IndicMioTTS",
+            targets: ["IndicMioTTS"]
+        ),
+        .library(
             name: "PersonaPlex",
             targets: ["PersonaPlex"]
         ),
@@ -258,6 +262,19 @@ let package = Package(
                 .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "MLXNN", package: "mlx-swift"),
                 .product(name: "MLXFast", package: "mlx-swift"),
+                .product(name: "Hub", package: "swift-transformers"),
+                .product(name: "Tokenizers", package: "swift-transformers")
+            ]
+        ),
+        .target(
+            name: "IndicMioTTS",
+            dependencies: [
+                "AudioCommon",
+                "MLXCommon",
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXNN", package: "mlx-swift"),
+                .product(name: "MLXFast", package: "mlx-swift"),
+                .product(name: "MLXFFT", package: "mlx-swift"),
                 .product(name: "Hub", package: "swift-transformers"),
                 .product(name: "Tokenizers", package: "swift-transformers")
             ]
@@ -508,6 +525,7 @@ let package = Package(
                 "KokoroTTS",
                 "VibeVoiceTTS",
                 "VoxCPM2TTS",
+                "IndicMioTTS",
                 "MAGNeTMusicGen",
                 "StableAudio3MusicGen",
                 "FlashSR",
@@ -575,6 +593,7 @@ let package = Package(
                 "OmnilingualASR",
                 "KokoroTTS",
                 "VoxCPM2TTS",
+                "IndicMioTTS",
                 "MagpieTTS",
                 "MagpieTTSCoreML",
                 "VibeVoiceTTS",
@@ -649,6 +668,13 @@ let package = Package(
             name: "ChatterboxTTSTests",
             dependencies: [
                 "ChatterboxTTS", "AudioCommon", "MLXCommon",
+                .product(name: "MLX", package: "mlx-swift")
+            ]
+        ),
+        .testTarget(
+            name: "IndicMioTTSTests",
+            dependencies: [
+                "IndicMioTTS", "AudioCommon", "MLXCommon", "Qwen3ASR",
                 .product(name: "MLX", package: "mlx-swift")
             ]
         ),

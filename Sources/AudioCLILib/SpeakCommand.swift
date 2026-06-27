@@ -5,6 +5,7 @@ import MLX
 import Qwen3TTS
 import CosyVoiceTTS
 import VoxCPM2TTS
+import IndicMioTTS
 import MagpieTTS
 import MagpieTTSCoreML
 import AudioCommon
@@ -13,19 +14,19 @@ import SpeechRestoration
 public struct SpeakCommand: ParsableCommand {
     public static let configuration = CommandConfiguration(
         commandName: "speak",
-        abstract: "Text-to-speech synthesis (Qwen3-TTS, CosyVoice, VoxCPM2, or Magpie). For CoreML, use the `qwen3-tts-coreml` subcommand."
+        abstract: "Text-to-speech synthesis (Qwen3-TTS, CosyVoice, VoxCPM2, Indic-Mio, or Magpie). For CoreML, use the `qwen3-tts-coreml` subcommand."
     )
 
     @Argument(help: "Text to synthesize (omit when using --list-speakers or --batch-file)")
     public var text: String?
 
-    @Option(name: .long, help: "TTS engine: qwen3 (default), cosyvoice, voxcpm2, magpie, or magpie-coreml")
+    @Option(name: .long, help: "TTS engine: qwen3 (default), cosyvoice, voxcpm2, indic-mio, magpie, or magpie-coreml")
     public var engine: String = "qwen3"
 
     @Option(name: .shortAndLong, help: "Output WAV file path")
     public var output: String = "output.wav"
 
-    @Option(name: .long, help: "Language (english, chinese, german, japanese, spanish, french, korean, russian, italian, portuguese). Default: english. Omit to use speaker's native dialect when --speaker is set.")
+    @Option(name: .long, help: "Language (english, hindi, chinese, german, japanese, spanish, french, korean, russian, italian, portuguese). Default: english, or hindi for --engine indic-mio. Omit to use speaker's native dialect when --speaker is set.")
     public var language: String?
 
     @Flag(name: .long, help: "Enable streaming synthesis")
@@ -57,13 +58,13 @@ public struct SpeakCommand: ParsableCommand {
     @Flag(name: .long, help: "[qwen3] List available speakers and exit")
     public var listSpeakers: Bool = false
 
-    @Option(name: .long, help: "[qwen3] Sampling temperature (default: 0.3)")
+    @Option(name: .long, help: "[qwen3/indic-mio] Sampling temperature (default: 0.3)")
     public var temperature: Float = 0.3
 
-    @Option(name: .long, help: "[qwen3] Top-k sampling")
+    @Option(name: .long, help: "[qwen3/indic-mio] Top-k sampling")
     public var topK: Int = 50
 
-    @Option(name: .long, help: "[qwen3] Maximum tokens (500 = ~40s audio)")
+    @Option(name: .long, help: "[qwen3/indic-mio] Maximum generated tokens (500 = ~40s audio for Qwen3)")
     public var maxTokens: Int = 500
 
     @Option(name: .long, help: "[qwen3] File with one text per line for batch synthesis")
@@ -145,6 +146,20 @@ public struct SpeakCommand: ParsableCommand {
     @Option(name: .long, help: "[voxcpm2] Warmup patches to skip before emitting audio")
     public var voxcpm2WarmupPatches: Int = 0
 
+    // MARK: - Indic-Mio-specific options
+
+    @Option(name: .long, help: "[indic-mio] HuggingFace model ID")
+    public var indicMioModelId: String = IndicMioTTSModel.defaultModelId
+
+    @Option(name: .long, help: "[indic-mio] Top-p sampling")
+    public var indicMioTopP: Float = 0.9
+
+    @Option(name: .long, help: "[indic-mio] Repetition penalty")
+    public var indicMioRepetitionPenalty: Float = 1.0
+
+    @Option(name: .long, help: "[indic-mio] 128-float MioCodec global speaker embedding as JSON, comma-separated, or whitespace-separated floats")
+    public var indicMioGlobalEmbedding: String?
+
     // MARK: - Magpie-specific options
 
     @Option(name: .long, help: "[magpie] Quantization variant: int8 (int4 was decommissioned). Resolves to aufklarer/Magpie-TTS-Multilingual-357M-MLX-int8.")
@@ -176,14 +191,18 @@ public struct SpeakCommand: ParsableCommand {
     /// Resolved language: explicit value or default "english"
     private var effectiveLanguage: String { language ?? "english" }
 
+    /// Indic-Mio is an Indic/Hindi-first model; keep CLI defaults aligned with
+    /// that instead of inheriting Qwen3's English default.
+    private var effectiveIndicMioLanguage: String { language ?? "hindi" }
+
     /// Whether the user explicitly passed --language
     private var languageIsExplicit: Bool { language != nil }
 
     public func validate() throws {
         let eng = engine.lowercased()
         guard eng == "qwen3" || eng == "cosyvoice" || eng == "voxcpm2"
-                || eng == "magpie" || eng == "magpie-coreml" else {
-            throw ValidationError("--engine must be 'qwen3', 'cosyvoice', 'voxcpm2', 'magpie', or 'magpie-coreml'. For Qwen3-TTS CoreML, use the `qwen3-tts-coreml` subcommand.")
+                || eng == "indic-mio" || eng == "magpie" || eng == "magpie-coreml" else {
+            throw ValidationError("--engine must be 'qwen3', 'cosyvoice', 'voxcpm2', 'indic-mio', 'magpie', or 'magpie-coreml'. For Qwen3-TTS CoreML, use the `qwen3-tts-coreml` subcommand.")
         }
         if text == nil && batchFile == nil && !listSpeakers {
             throw ValidationError("Either a text argument, --batch-file, or --list-speakers must be provided")
@@ -194,6 +213,38 @@ public struct SpeakCommand: ParsableCommand {
             }
             if (voxcpm2PromptAudio == nil) != (voxcpm2PromptText == nil) {
                 throw ValidationError("--voxcpm2-prompt-audio and --voxcpm2-prompt-text must be provided together")
+            }
+        }
+        if eng == "indic-mio" {
+            if batchFile != nil || listSpeakers {
+                throw ValidationError("--engine indic-mio only supports a single text input")
+            }
+            if stream {
+                throw ValidationError("--engine indic-mio does not support --stream yet")
+            }
+            if voiceSample != nil {
+                throw ValidationError(
+                    "--engine indic-mio does not support raw --voice-sample cloning yet. " +
+                    "Use --indic-mio-global-embedding with a 128-float MioCodec global embedding, " +
+                    "or wait for the WavLM reference-embedding path.")
+            }
+            if cleanReference {
+                throw ValidationError("--clean-reference requires --voice-sample and is not supported by --engine indic-mio yet")
+            }
+            if speaker != nil {
+                throw ValidationError("--engine indic-mio does not support --speaker; pass emotion markers in text, e.g. '<happy>'")
+            }
+            if instruct != nil {
+                throw ValidationError("--engine indic-mio does not support --instruct; use inline/suffix markers such as '<sad>' or '<angry>'")
+            }
+            guard indicMioTopP > 0 && indicMioTopP <= 1 else {
+                throw ValidationError("--indic-mio-top-p must be in (0, 1]")
+            }
+            guard indicMioRepetitionPenalty >= 1 else {
+                throw ValidationError("--indic-mio-repetition-penalty must be >= 1")
+            }
+            if let embedding = indicMioGlobalEmbedding {
+                _ = try loadIndicMioGlobalEmbedding(from: embedding)
             }
         }
         if eng == "magpie" || eng == "magpie-coreml" {
@@ -257,6 +308,8 @@ public struct SpeakCommand: ParsableCommand {
             try runCosyVoice()
         case "voxcpm2":
             try runVoxCPM2()
+        case "indic-mio":
+            try runIndicMio()
         case "magpie":
             try runMagpie()
         case "magpie-coreml":
@@ -815,6 +868,105 @@ public struct SpeakCommand: ParsableCommand {
                 try await body()
             }
         }
+    }
+
+    // MARK: - Indic-Mio engine
+
+    private func runIndicMio() throws {
+        try runAsync {
+            guard let inputText = text else {
+                print("Error: text argument is required for Indic-Mio")
+                throw ExitCode(1)
+            }
+
+            print("Loading Indic-Mio model (\(indicMioModelId))...")
+            let model = try await IndicMioTTSModel.fromPretrained(
+                modelId: indicMioModelId,
+                progressHandler: reportProgress
+            )
+
+            let embedding = try indicMioGlobalEmbedding.map { try loadIndicMioGlobalEmbedding(from: $0) }
+            let sampling = IndicMioSamplingConfig(
+                maxNewTokens: maxTokens,
+                temperature: temperature,
+                topK: topK,
+                topP: indicMioTopP,
+                repetitionPenalty: indicMioRepetitionPenalty
+            )
+
+            let markers = IndicMioPrompt.indianLanguageEmotionMarkers.joined(separator: ", ")
+            var info = "Synthesizing with Indic-Mio (language: \(effectiveIndicMioLanguage))"
+            if embedding != nil { info += " [global speaker embedding]" }
+            print(info)
+            print("  Emotion markers: \(markers)")
+
+            let start = CFAbsoluteTimeGetCurrent()
+            let samples = try await model.generate(
+                text: inputText,
+                language: effectiveIndicMioLanguage,
+                globalEmbedding: embedding,
+                sampling: sampling
+            )
+            let elapsed = CFAbsoluteTimeGetCurrent() - start
+
+            guard !samples.isEmpty else {
+                print("Error: No audio generated")
+                throw ExitCode(1)
+            }
+
+            let duration = Double(samples.count) / Double(model.sampleRate)
+            print(String(format: "  Duration: %.2fs, Time: %.2fs, RTF: %.2f",
+                         duration, elapsed, elapsed / max(duration, 0.001)))
+
+            if !play {
+                let outputURL = URL(fileURLWithPath: output)
+                try WAVWriter.write(samples: samples, sampleRate: model.sampleRate, to: outputURL)
+                print("Saved \(samples.count) samples (\(formatDuration(samples.count, sampleRate: model.sampleRate))s) to \(output)")
+            } else {
+                playAudio(samples: samples, sampleRate: model.sampleRate)
+            }
+        }
+    }
+
+    private func loadIndicMioGlobalEmbedding(from value: String) throws -> [Float] {
+        func parseJSONEmbedding(_ data: Data) throws -> [Float]? {
+            guard let json = try? JSONSerialization.jsonObject(with: data) as? [NSNumber] else {
+                return nil
+            }
+            let floats = json.map { $0.floatValue }
+            guard floats.count == MioCodecConfig.default.globalEmbeddingDim else {
+                throw ValidationError("--indic-mio-global-embedding JSON must contain 128 floats")
+            }
+            return floats
+        }
+
+        let url = URL(fileURLWithPath: value)
+        let text: String
+        if FileManager.default.fileExists(atPath: url.path) {
+            let data = try Data(contentsOf: url)
+            if let floats = try parseJSONEmbedding(data) {
+                return floats
+            }
+            text = String(decoding: data, as: UTF8.self)
+        } else {
+            text = value
+        }
+
+        if text.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("["),
+           let floats = try parseJSONEmbedding(Data(text.utf8)) {
+            return floats
+        }
+
+        let separators = CharacterSet(charactersIn: ", \n\r\t")
+        let floats = text
+            .split(whereSeparator: { scalar in
+                scalar.unicodeScalars.allSatisfy { separators.contains($0) }
+            })
+            .compactMap { Float($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+        guard floats.count == MioCodecConfig.default.globalEmbeddingDim else {
+            throw ValidationError("--indic-mio-global-embedding must contain 128 floats (got \(floats.count))")
+        }
+        return floats
     }
 
     // MARK: - CosyVoice engine

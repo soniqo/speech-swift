@@ -9,6 +9,7 @@ import NemotronStreamingASR
 import OmnilingualASR
 import KokoroTTS
 import VoxCPM2TTS
+import IndicMioTTS
 import MagpieTTS
 import MagpieTTSCoreML
 import VibeVoiceTTS
@@ -138,6 +139,11 @@ public let MODEL_REGISTRY: [ModelVariant] = [
           engine: "voxcpm2",
           modelId: VoxCPM2TTSModel.int8ModelId,
           aliases: ["voxcpm2-int8"],
+          kind: .tts),
+    .init(name: "indic-mio-mlx-fp16",
+          engine: "indic-mio",
+          modelId: IndicMioTTSModel.defaultModelId,
+          aliases: ["indic-mio", "mio", "hindi-emotion"],
           kind: .tts),
     .init(name: "qwen3-tts-1.7b-mlx-bf16",
           engine: "qwen3-tts",

@@ -24,6 +24,13 @@ final class E2ECoreMLForcedAlignerTests: XCTestCase {
     private static let referenceText =
         "Can you guarantee that the replacement part will be shipped tomorrow?"
 
+    override func setUpWithError() throws {
+        try super.setUpWithError()
+        try XCTSkipUnless(
+            ProcessInfo.processInfo.environment["ALIGNER_COREML_PUBLISHED_E2E"] == "1",
+            "Set ALIGNER_COREML_PUBLISHED_E2E=1 to run published CoreML forced-aligner E2E tests")
+    }
+
     func testFP16AlignerProducesMonotonicTimestamps() async throws {
         try await runAligner(
             modelId: "aufklarer/Qwen3-ForcedAligner-0.6B-CoreML-FP16",

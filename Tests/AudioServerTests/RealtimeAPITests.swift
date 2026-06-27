@@ -274,6 +274,26 @@ final class RealtimeAPITests: XCTestCase {
         XCTAssertEqual(session?["asr_engine"] as? String, "parakeet")
     }
 
+    func testSessionUpdateWithIndicMioUpdatesTTSSlot() async throws {
+        let ws = try await connect()
+        defer { ws.cancel(with: .normalClosure, reason: nil) }
+
+        _ = try await receiveJSON(ws) // session.created
+
+        try await sendJSON(ws, [
+            "type": "session.update",
+            "session": ["model": "indic-mio"]
+        ] as [String: Any])
+
+        let msg = try await receiveJSON(ws)
+        XCTAssertEqual(msg["type"] as? String, "session.updated")
+        let session = msg["session"] as? [String: Any]
+        XCTAssertEqual(session?["model"] as? String, "indic-mio")
+        XCTAssertEqual(session?["tts_engine"] as? String, "indic-mio")
+        XCTAssertEqual(session?["tts_model"] as? String, "indic-mio-mlx-fp16")
+        XCTAssertEqual(session?["asr_engine"] as? String, "parakeet")
+    }
+
     func testSessionUpdateWithSpecificVariantSelectsExactBundle() async throws {
         let ws = try await connect()
         defer { ws.cancel(with: .normalClosure, reason: nil) }
@@ -465,6 +485,7 @@ final class RealtimeAPITests: XCTestCase {
         XCTAssertTrue(engines.contains("parakeet"))
         XCTAssertTrue(engines.contains("kokoro"))
         XCTAssertTrue(engines.contains("voxcpm2"))
+        XCTAssertTrue(engines.contains("indic-mio"))
         XCTAssertTrue(engines.contains("hibiki"))
         XCTAssertTrue(engines.contains("personaplex"))
         XCTAssertTrue(engines.contains("vibevoice"))
@@ -695,6 +716,7 @@ final class ResolveModelToEngineTests: XCTestCase {
         // TTS-only and unknown names return nil.
         XCTAssertNil(resolveModelToASREngine("kokoro"))
         XCTAssertNil(resolveModelToASREngine("voxcpm2"))
+        XCTAssertNil(resolveModelToASREngine("indic-mio"))
         XCTAssertNil(resolveModelToASREngine("magpie"))
         XCTAssertNil(resolveModelToASREngine("qwen3-speech"))
         XCTAssertNil(resolveModelToASREngine("future-model-v9"))
@@ -707,6 +729,8 @@ final class ResolveModelToEngineTests: XCTestCase {
         XCTAssertEqual(resolveModelToTTSEngine("cosyvoice-3"), "cosyvoice")
         XCTAssertEqual(resolveModelToTTSEngine("voxcpm2"), "voxcpm2")
         XCTAssertEqual(resolveModelToTTSEngine("voxcpm2-int8"), "voxcpm2")
+        XCTAssertEqual(resolveModelToTTSEngine("indic-mio"), "indic-mio")
+        XCTAssertEqual(resolveModelToTTSEngine("hindi-emotion"), "indic-mio")
         XCTAssertEqual(resolveModelToTTSEngine("magpie"), "magpie")
         XCTAssertEqual(resolveModelToTTSEngine("magpie-tts"), "magpie")
         XCTAssertEqual(resolveModelToTTSEngine("qwen3-speech"), "qwen3-tts")
@@ -739,6 +763,7 @@ final class ResolveModelToEngineTests: XCTestCase {
         XCTAssertEqual(resolveModelToEngine("omnilingual"), "omnilingual")
         XCTAssertEqual(resolveModelToEngine("kokoro"), "kokoro")
         XCTAssertEqual(resolveModelToEngine("voxcpm2"), "voxcpm2")
+        XCTAssertEqual(resolveModelToEngine("indic-mio"), "indic-mio")
         XCTAssertEqual(resolveModelToEngine("magpie"), "magpie")
         XCTAssertEqual(resolveModelToEngine("cosyvoice"), "cosyvoice")
         // Bare "qwen3" hits both sides; ASR is checked first.
@@ -770,6 +795,7 @@ final class ResolveModelToEngineTests: XCTestCase {
         // Aliases must always come back to a fully-specified ModelVariant —
         // the protocol surface should never hand the loader a nil modelId.
         XCTAssertEqual(resolveModelVariant("kokoro")?.modelId, "aufklarer/Kokoro-82M-CoreML")
+        XCTAssertEqual(resolveModelVariant("indic-mio")?.modelId, "aufklarer/Indic-Mio-MLX-fp16")
         XCTAssertEqual(resolveModelVariant("parakeet")?.modelId,
                        "aufklarer/Parakeet-TDT-v3-CoreML-INT8-30s")
         XCTAssertEqual(resolveModelVariant("qwen3-0.6b")?.modelId,
@@ -797,7 +823,7 @@ final class ResolveModelToEngineTests: XCTestCase {
         let mustBeReachable: Set<String> = [
             "qwen3-asr", "parakeet", "parakeet-streaming", "nemotron", "omnilingual",
             "kokoro", "qwen3-tts", "qwen3-tts-coreml", "cosyvoice", "voxcpm2",
-            "magpie", "magpie-coreml", "vibevoice", "vibevoice-1.5b",
+            "indic-mio", "magpie", "magpie-coreml", "vibevoice", "vibevoice-1.5b",
             "personaplex", "hibiki",
         ]
         for engine in mustBeReachable {

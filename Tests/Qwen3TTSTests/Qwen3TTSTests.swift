@@ -388,6 +388,13 @@ final class E2ECustomVoiceInstructTests: XCTestCase {
     private static var _sharedTTSModel: Qwen3TTSModel?
     private static var _sharedASRModel: Qwen3ASRModel?
 
+    override func setUpWithError() throws {
+        try super.setUpWithError()
+        try XCTSkipUnless(
+            ProcessInfo.processInfo.environment["QWEN3_CUSTOMVOICE_INSTRUCT_E2E"] == "1",
+            "Set QWEN3_CUSTOMVOICE_INSTRUCT_E2E=1 to run CustomVoice instruct E2E tests")
+    }
+
     override func tearDown() {
         super.tearDown()
         // Release accumulated MLX buffer pool between tests to prevent
