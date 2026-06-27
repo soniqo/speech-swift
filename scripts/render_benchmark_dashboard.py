@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render the daily benchmark dashboard from persisted JSON reports."""
+"""Render the benchmark dashboard from persisted JSON reports."""
 
 from __future__ import annotations
 
@@ -20,6 +20,8 @@ class Run:
     path: Path
     metadata: dict[str, Any]
     asr: dict[str, Any] | None
+    vad: dict[str, Any] | None
+    diarization: dict[str, Any] | None
 
     @property
     def started_at(self) -> str:
@@ -55,6 +57,8 @@ def load_runs(runs_dir: Path) -> list[Run]:
             path=run_path,
             metadata=metadata,
             asr=load_json(run_path / "asr.json"),
+            vad=load_json(run_path / "vad.json"),
+            diarization=load_json(run_path / "diarization.json"),
         ))
 
     return sorted(runs, key=lambda run: run.sort_key, reverse=True)
@@ -112,6 +116,28 @@ def asr_results(run: Run) -> list[dict[str, Any]]:
     return results if isinstance(results, list) else []
 
 
+def vad_results(run: Run) -> list[dict[str, Any]]:
+    if not run.vad:
+        return []
+    results = run.vad.get("results")
+    return results if isinstance(results, list) else []
+
+
+def diarization_results(run: Run) -> list[dict[str, Any]]:
+    if not run.diarization:
+        return []
+    results = run.diarization.get("results")
+    return results if isinstance(results, list) else []
+
+
+def first_metric(result: dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        value = result.get(key)
+        if value is not None:
+            return value
+    return None
+
+
 def previous_by_engine(runs: list[Run], latest: Run) -> dict[str, dict[str, Any]]:
     out: dict[str, dict[str, Any]] = {}
     for run in runs:
@@ -124,14 +150,14 @@ def previous_by_engine(runs: list[Run], latest: Run) -> dict[str, dict[str, Any]
     return out
 
 
-def engine_history(runs: list[Run], engine: str, metric: str) -> list[float]:
+def engine_history(runs: list[Run], engine: str, *metrics: str) -> list[float]:
     values: list[float] = []
     for run in reversed(runs):
         for result in asr_results(run):
             if result.get("engine") != engine:
                 continue
             try:
-                value = float(result.get(metric))
+                value = float(first_metric(result, *metrics))
             except (TypeError, ValueError):
                 continue
             if math.isfinite(value):
@@ -172,17 +198,23 @@ def latest_table(runs: list[Run]) -> str:
     for result in sorted(asr_results(latest), key=lambda item: str(item.get("engine", ""))):
         engine = str(result.get("engine", "unknown"))
         prev = previous.get(engine, {})
+        wer_agg = first_metric(result, "werAggregatePercent", "werPercent")
+        prev_wer_agg = first_metric(prev, "werAggregatePercent", "werPercent")
+        xrt_overall = first_metric(result, "throughputOverallXRT", "throughputXRT")
+        prev_xrt_overall = first_metric(prev, "throughputOverallXRT", "throughputXRT")
         rows.append(
             "<tr>"
             f"<td><strong>{esc(engine)}</strong></td>"
-            f"<td>{fmt(result.get('werPercent'), 2, '%')} {delta(result.get('werPercent'), prev.get('werPercent'), 2, True)}</td>"
-            f"<td>{fmt(result.get('rtfMean'), 3)} {delta(result.get('rtfMean'), prev.get('rtfMean'), 3, True)}</td>"
-            f"<td>{fmt(result.get('throughputXRT'), 1, 'x')} {delta(result.get('throughputXRT'), prev.get('throughputXRT'), 1, False)}</td>"
+            f"<td>{fmt(wer_agg, 2, '%')} {delta(wer_agg, prev_wer_agg, 2, True)}</td>"
+            f"<td>{fmt(result.get('werMeanPercent'), 2, '%')}</td>"
+            f"<td>{fmt(first_metric(result, 'cerAggregatePercent', 'cerPercent'), 2, '%')}</td>"
+            f"<td>{fmt(xrt_overall, 1, 'x')} {delta(xrt_overall, prev_xrt_overall, 1, False)}</td>"
+            f"<td>{fmt(result.get('throughputMedianXRT'), 1, 'x')}</td>"
             f"<td>{fmt(result.get('loadElapsedSeconds'), 1, 's')}</td>"
             f"<td>{mb(result.get('peakRSSBytes'))}</td>"
             f"<td>{int(result.get('utterances') or 0)}</td>"
-            f"<td>{sparkline(engine_history(runs, engine, 'werPercent'), True)}</td>"
-            f"<td>{sparkline(engine_history(runs, engine, 'throughputXRT'), False)}</td>"
+            f"<td>{sparkline(engine_history(runs, engine, 'werAggregatePercent', 'werPercent'), True)}</td>"
+            f"<td>{sparkline(engine_history(runs, engine, 'throughputOverallXRT', 'throughputXRT'), False)}</td>"
             "</tr>"
         )
 
@@ -191,8 +223,77 @@ def latest_table(runs: list[Run]) -> str:
 
     return (
         '<table><thead><tr>'
-        '<th>Engine</th><th>WER</th><th>RTF</th><th>xRT</th><th>Load</th>'
+        '<th>Engine</th><th>Agg WER</th><th>Avg WER</th><th>Agg CER</th>'
+        '<th>Overall xRT</th><th>Median xRT</th><th>Load</th>'
         '<th>Peak RSS</th><th>Utts</th><th>WER trend</th><th>xRT trend</th>'
+        '</tr></thead><tbody>'
+        + "\n".join(rows)
+        + '</tbody></table>'
+    )
+
+
+def latest_vad_table(runs: list[Run]) -> str:
+    latest = next((run for run in runs if vad_results(run)), None)
+    if not latest:
+        return '<p class="empty">No VAD benchmark results found.</p>'
+
+    rows: list[str] = []
+    for result in sorted(vad_results(latest), key=lambda item: str(item.get("engine", ""))):
+        rows.append(
+            "<tr>"
+            f"<td><strong>{esc(result.get('engine', 'unknown'))}</strong></td>"
+            f"<td>{fmt(result.get('fileF1Percent'), 2, '%')}</td>"
+            f"<td>{fmt(result.get('f1Percent'), 2, '%')}</td>"
+            f"<td>{fmt(result.get('precisionPercent'), 2, '%')}</td>"
+            f"<td>{fmt(result.get('recallPercent'), 2, '%')}</td>"
+            f"<td>{fmt(result.get('falseAlarmRatePercent'), 2, '%')}</td>"
+            f"<td>{fmt(result.get('missRatePercent'), 2, '%')}</td>"
+            f"<td>{fmt(result.get('throughputOverallXRT'), 1, 'x')}</td>"
+            f"<td>{fmt(result.get('loadElapsedSeconds'), 1, 's')}</td>"
+            f"<td>{mb(result.get('peakRSSBytes'))}</td>"
+            f"<td>{int(result.get('files') or 0)}</td>"
+            "</tr>"
+        )
+
+    return (
+        '<table><thead><tr>'
+        '<th>Engine</th><th>File F1</th><th>Span F1</th><th>Precision</th><th>Recall</th>'
+        '<th>FAR</th><th>MR</th><th>Overall xRT</th><th>Load</th>'
+        '<th>Peak RSS</th><th>Files</th>'
+        '</tr></thead><tbody>'
+        + "\n".join(rows)
+        + '</tbody></table>'
+    )
+
+
+def latest_diarization_table(runs: list[Run]) -> str:
+    latest = next((run for run in runs if diarization_results(run)), None)
+    if not latest:
+        return '<p class="empty">No diarization benchmark results found.</p>'
+
+    rows: list[str] = []
+    for result in sorted(diarization_results(latest), key=lambda item: str(item.get("engine", ""))):
+        rows.append(
+            "<tr>"
+            f"<td><strong>{esc(result.get('engine', 'unknown'))}</strong></td>"
+            f"<td>{fmt(result.get('derPercent'), 2, '%')}</td>"
+            f"<td>{fmt(result.get('jerMeanPercent'), 2, '%')}</td>"
+            f"<td>{fmt(result.get('missPercent'), 2, '%')}</td>"
+            f"<td>{fmt(result.get('falseAlarmPercent'), 2, '%')}</td>"
+            f"<td>{fmt(result.get('speakerErrorPercent'), 2, '%')}</td>"
+            f"<td>{fmt(result.get('speakerCountAccuracyPercent'), 1, '%')}</td>"
+            f"<td>{fmt(result.get('throughputOverallXRT'), 1, 'x')}</td>"
+            f"<td>{fmt(result.get('loadElapsedSeconds'), 1, 's')}</td>"
+            f"<td>{mb(result.get('peakRSSBytes'))}</td>"
+            f"<td>{int(result.get('files') or 0)}</td>"
+            "</tr>"
+        )
+
+    return (
+        '<table><thead><tr>'
+        '<th>Engine</th><th>DER</th><th>JER</th><th>Miss</th><th>FA</th>'
+        '<th>SE</th><th>Spk Acc</th><th>Overall xRT</th><th>Load</th>'
+        '<th>Peak RSS</th><th>Files</th>'
         '</tr></thead><tbody>'
         + "\n".join(rows)
         + '</tbody></table>'
@@ -206,21 +307,33 @@ def run_history_table(runs: list[Run]) -> str:
         git = metadata.get("git") if isinstance(metadata.get("git"), dict) else {}
         runner = metadata.get("runner") if isinstance(metadata.get("runner"), dict) else {}
         results = asr_results(run)
-        best_wer = min((float(r["werPercent"]) for r in results if "werPercent" in r), default=None)
-        fastest = max((float(r["throughputXRT"]) for r in results if "throughputXRT" in r), default=None)
+        vad_count = len(vad_results(run))
+        diarization_count = len(diarization_results(run))
+        best_wer = min(
+            (float(first_metric(r, "werAggregatePercent", "werPercent")) for r in results
+             if first_metric(r, "werAggregatePercent", "werPercent") is not None),
+            default=None,
+        )
+        fastest = max(
+            (float(first_metric(r, "throughputOverallXRT", "throughputXRT")) for r in results
+             if first_metric(r, "throughputOverallXRT", "throughputXRT") is not None),
+            default=None,
+        )
         rows.append(
             "<tr>"
             f"<td>{esc(run.started_at)}</td>"
             f"<td><code>{esc(git.get('short_sha', ''))}</code></td>"
             f"<td>{esc(runner.get('host') or runner.get('name') or '')}</td>"
             f"<td>{len(results)}</td>"
+            f"<td>{vad_count}</td>"
+            f"<td>{diarization_count}</td>"
             f"<td>{fmt(best_wer, 2, '%')}</td>"
             f"<td>{fmt(fastest, 1, 'x')}</td>"
             "</tr>"
         )
     return (
         '<table><thead><tr><th>Run</th><th>SHA</th><th>Host</th>'
-        '<th>Engines</th><th>Best WER</th><th>Fastest xRT</th></tr></thead><tbody>'
+        '<th>ASR</th><th>VAD</th><th>Diar</th><th>Best Agg WER</th><th>Fastest Overall xRT</th></tr></thead><tbody>'
         + "\n".join(rows)
         + '</tbody></table>'
     )
@@ -306,8 +419,7 @@ def render(runs: list[Run]) -> str:
       text-align: right;
       white-space: nowrap;
     }}
-    th:first-child, td:first-child,
-    th:nth-child(3), td:nth-child(3) {{ text-align: left; }}
+    th:first-child, td:first-child {{ text-align: left; }}
     th {{ color: var(--muted); font-weight: 600; font-size: 12px; }}
     tr:last-child td {{ border-bottom: 0; }}
     code {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }}
@@ -339,7 +451,7 @@ def render(runs: list[Run]) -> str:
         <h1>Soniqo Benchmarks</h1>
         <p class="muted">Generated {esc(generated)}</p>
       </div>
-      <p class="muted">Daily ASR quality and speed on Apple Silicon</p>
+      <p class="muted">Local ASR quality and speed on Apple Silicon</p>
     </header>
 
     <section class="summary" aria-label="Latest run summary">
@@ -351,6 +463,12 @@ def render(runs: list[Run]) -> str:
 
     <h2>Latest ASR Results</h2>
     {latest_table(runs)}
+
+    <h2>Latest VAD Results</h2>
+    {latest_vad_table(runs)}
+
+    <h2>Latest Diarization Results</h2>
+    {latest_diarization_table(runs)}
 
     <h2>Run History</h2>
     {run_history_table(runs) if runs else '<p class="empty">No run history yet.</p>'}
@@ -368,14 +486,18 @@ def write_summary(runs: list[Run], path: Path) -> None:
             f.write("No benchmark runs found.\n")
             return
         f.write(f"Latest run: `{latest.started_at}`\n\n")
-        f.write("| Engine | WER | RTF | xRT | Load | Peak RSS |\n")
-        f.write("|---|---:|---:|---:|---:|---:|\n")
+        if vad_results(latest):
+            f.write("VAD and diarization sections are available in the HTML dashboard when their JSON files exist.\n\n")
+        f.write("| Engine | Agg WER | Avg WER | Agg CER | Overall xRT | Median xRT | Load | Peak RSS |\n")
+        f.write("|---|---:|---:|---:|---:|---:|---:|---:|\n")
         for result in sorted(asr_results(latest), key=lambda item: str(item.get("engine", ""))):
             f.write(
                 f"| {result.get('engine', 'unknown')} "
-                f"| {fmt(result.get('werPercent'), 2, '%')} "
-                f"| {fmt(result.get('rtfMean'), 3)} "
-                f"| {fmt(result.get('throughputXRT'), 1, 'x')} "
+                f"| {fmt(first_metric(result, 'werAggregatePercent', 'werPercent'), 2, '%')} "
+                f"| {fmt(result.get('werMeanPercent'), 2, '%')} "
+                f"| {fmt(first_metric(result, 'cerAggregatePercent', 'cerPercent'), 2, '%')} "
+                f"| {fmt(first_metric(result, 'throughputOverallXRT', 'throughputXRT'), 1, 'x')} "
+                f"| {fmt(result.get('throughputMedianXRT'), 1, 'x')} "
                 f"| {fmt(result.get('loadElapsedSeconds'), 1, 's')} "
                 f"| {mb(result.get('peakRSSBytes'))} |\n"
             )

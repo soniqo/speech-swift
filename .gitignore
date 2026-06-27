@@ -48,6 +48,8 @@ Frameworks/
 # Benchmark data (downloaded at runtime)
 benchmarks/
 !docs/benchmarks/
+.benchmark-datasets/
+benchmark-results/
 .claude/worktrees/
 *.xcodeproj/project.pbxproj
 .DS_Store

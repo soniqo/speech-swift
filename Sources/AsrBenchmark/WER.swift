@@ -12,6 +12,15 @@ public struct WERBreakdown: Sendable {
     }
 }
 
+public struct CERBreakdown: Sendable {
+    public var editDistance: Int
+    public var referenceCharacters: Int
+
+    public var cer: Double {
+        referenceCharacters == 0 ? 0 : Double(editDistance) / Double(referenceCharacters)
+    }
+}
+
 /// Word error rate via Levenshtein on whitespace-tokenized strings.
 ///
 /// Reference and hypothesis are assumed to be already normalized — see
@@ -68,5 +77,45 @@ public enum WER {
             }
         }
         return WERBreakdown(substitutions: subs, insertions: ins, deletions: dels, referenceWords: m)
+    }
+}
+
+/// Character error rate using normalized text with whitespace removed.
+///
+/// This matches the usual ASR benchmark convention for CER: punctuation and
+/// casing are already handled by `Normalizer`, then spaces are removed before
+/// character-level edit distance is computed.
+public enum CER {
+    public static func compute(reference: String, hypothesis: String) -> CERBreakdown {
+        let ref = Array(reference.replacingOccurrences(of: " ", with: ""))
+        let hyp = Array(hypothesis.replacingOccurrences(of: " ", with: ""))
+        return CERBreakdown(
+            editDistance: editDistance(ref, hyp),
+            referenceCharacters: ref.count
+        )
+    }
+
+    private static func editDistance<T: Equatable>(_ ref: [T], _ hyp: [T]) -> Int {
+        let m = ref.count
+        let n = hyp.count
+        if m == 0 { return n }
+        if n == 0 { return m }
+
+        var previous = Array(0...n)
+        var current = Array(repeating: 0, count: n + 1)
+
+        for i in 1...m {
+            current[0] = i
+            for j in 1...n {
+                if ref[i - 1] == hyp[j - 1] {
+                    current[j] = previous[j - 1]
+                } else {
+                    current[j] = 1 + min(previous[j], min(current[j - 1], previous[j - 1]))
+                }
+            }
+            swap(&previous, &current)
+        }
+
+        return previous[n]
     }
 }

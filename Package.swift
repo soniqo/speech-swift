@@ -156,6 +156,14 @@ let package = Package(
         .executable(
             name: "asr-bench",
             targets: ["AsrBenchmark"]
+        ),
+        .executable(
+            name: "vad-bench",
+            targets: ["VadBenchmark"]
+        ),
+        .executable(
+            name: "diarization-bench",
+            targets: ["DiarizationBenchmark"]
         )
     ],
     dependencies: [
@@ -526,6 +534,31 @@ let package = Package(
                 "NemotronStreamingASR",
                 "OmnilingualASR",
                 .product(name: "WhisperKit", package: "WhisperKit"),
+                .product(name: "ArgumentParser", package: "swift-argument-parser")
+            ]
+        ),
+        .target(
+            name: "BenchmarkSupport",
+            dependencies: [
+                "AudioCommon",
+                "SpeechVAD",
+            ]
+        ),
+        .executableTarget(
+            name: "VadBenchmark",
+            dependencies: [
+                "AudioCommon",
+                "SpeechVAD",
+                "BenchmarkSupport",
+                .product(name: "ArgumentParser", package: "swift-argument-parser")
+            ]
+        ),
+        .executableTarget(
+            name: "DiarizationBenchmark",
+            dependencies: [
+                "AudioCommon",
+                "SpeechVAD",
+                "BenchmarkSupport",
                 .product(name: "ArgumentParser", package: "swift-argument-parser")
             ]
         ),
