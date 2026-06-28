@@ -1,7 +1,6 @@
 import XCTest
 @testable import Qwen3ASR
 @testable import AudioCommon
-@testable import KokoroTTS
 
 private func maxNgramRepeat(_ tokens: [String], n: Int) -> (gram: [String], count: Int) {
     guard tokens.count >= n else { return ([], 0) }
@@ -23,10 +22,10 @@ private func wordTokens(_ s: String) -> [String] {
 /// >15 s spans. Two scenarios that the clean 20-s `test_audio.wav` does not
 /// stress:
 ///
-///   • A long stitched buffer of 5 Kokoro-synthesized sentences with NO
-///     padding between them — the greedy decoder sees continuous mel content
-///     with no acoustic break, the worst case for length-extrapolation in
-///     the audio encoder + decoder.
+///   • A long committed fixture of 5 Kokoro-synthesized sentences stitched
+///     with NO padding between them — the greedy decoder sees continuous mel
+///     content with no acoustic break, the worst case for length-extrapolation
+///     in the audio encoder + decoder.
 ///   • The same long buffer with additive white noise at SNR ≈ 10 dB —
 ///     degraded acoustics push the decoder toward higher-entropy regions
 ///     where degenerate trajectories are more likely.
@@ -49,24 +48,22 @@ final class E2EQwen3ASRHarshAudioTests: XCTestCase {
         }
     }
 
-    /// Five Kokoro phrases stitched with zero inter-phrase silence to form
-    /// ~15-20 s of dense continuous speech. Returns the audio plus the list
-    /// of expected sentence-fragment keywords so the caller can verify
-    /// content coverage downstream.
-    private func continuousStitchedSpeech(noise: Bool) async throws -> (audio: [Float], expected: [String]) {
-        let tts = try await KokoroTTSModel.fromPretrained()
-        let phrases = [
-            "Margaret stood by the window as the rain tapped against the glass",
-            "She poured another cup of coffee and watched the gray sky",
-            "The morning newspaper sat unread on the kitchen table",
-            "A black cat slipped quietly between the garden hedges",
-            "She wondered when her sister would finally call her back",
-        ]
-        var clips: [[Float]] = []
-        for p in phrases {
-            clips.append(try tts.synthesize(text: p, voice: "af_heart"))
+    /// Five Kokoro phrases stitched with zero inter-phrase silence into a
+    /// committed fixture. Returns the audio plus the list of expected
+    /// sentence-fragment keywords so the caller can verify content coverage
+    /// downstream without making this ASR shard download Kokoro weights.
+    private func continuousStitchedSpeech(noise: Bool) throws -> (audio: [Float], expected: [String]) {
+        guard let wavURL = Bundle.module.url(
+            forResource: "kokoro_continuous_stitched",
+            withExtension: "wav"
+        ) else {
+            throw XCTSkip("Kokoro stitched fixture not found in bundle resources")
         }
-        var stitched = HarshAudio.stitch(clips, paddingSamples: 0)
+
+        let (samples, sampleRate) = try AudioFileLoader.loadWAV(url: wavURL)
+        var stitched = sampleRate == 24000
+            ? samples
+            : AudioFileLoader.resample(samples, from: sampleRate, to: 24000)
         if noise {
             let n = HarshAudio.whiteNoise(samples: stitched.count, seed: 0x71_15_27_b9)
             stitched = HarshAudio.mixAtSNR(signal: stitched, noise: n, snrDB: 10)
@@ -87,7 +84,7 @@ final class E2EQwen3ASRHarshAudioTests: XCTestCase {
     /// output, and that the content survives.
     func testNoLoopOnContinuousStitchedSpeech() async throws {
         guard let model = Self._model else { throw XCTSkip("model not loaded") }
-        let (audio, expected) = try await continuousStitchedSpeech(noise: false)
+        let (audio, expected) = try continuousStitchedSpeech(noise: false)
         print("stitched continuous: \(audio.count) samples @ 24kHz = \(Float(audio.count) / 24000) s")
 
         let start = Date()
@@ -122,7 +119,7 @@ final class E2EQwen3ASRHarshAudioTests: XCTestCase {
     /// degraded.
     func testNoLoopOnNoisyContinuousSpeech() async throws {
         guard let model = Self._model else { throw XCTSkip("model not loaded") }
-        let (audio, expected) = try await continuousStitchedSpeech(noise: true)
+        let (audio, expected) = try continuousStitchedSpeech(noise: true)
         print("noisy stitched continuous: \(audio.count) samples @ 24kHz = \(Float(audio.count) / 24000) s")
 
         let result = model.transcribe(audio: audio, sampleRate: 24000)
@@ -154,7 +151,7 @@ final class E2EQwen3ASRHarshAudioTests: XCTestCase {
     /// when the input is harsh.
     func testNoRepeatNgramHandlesNoisyContinuousSpeech() async throws {
         guard let model = Self._model else { throw XCTSkip("model not loaded") }
-        let (audio, expected) = try await continuousStitchedSpeech(noise: true)
+        let (audio, expected) = try continuousStitchedSpeech(noise: true)
 
         let result = model.transcribe(
             audio: audio,

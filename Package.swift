@@ -656,9 +656,10 @@ let package = Package(
         ),
         .testTarget(
             name: "Qwen3ASRTests",
-            dependencies: ["Qwen3ASR", "SpeechVAD", "AudioCommon", "KokoroTTS"],
+            dependencies: ["Qwen3ASR", "SpeechVAD", "AudioCommon"],
             resources: [
-                .copy("Resources/test_audio.wav")
+                .copy("Resources/test_audio.wav"),
+                .copy("Resources/kokoro_continuous_stitched.wav"),
             ]
         ),
         .testTarget(
