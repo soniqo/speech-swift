@@ -31,7 +31,7 @@ let pipeline = try await PyannoteDiarizationPipeline.fromPretrained(
     cacheBaseDir: appModels)
 // Segmentation → appModels/models/aufklarer/Pyannote-Segmentation-MLX/
 // Embedding    → appModels/models/aufklarer/WeSpeaker-ResNet34-LM-MLX/
-// VAD (opt.)   → appModels/models/aufklarer/Silero-VAD-v5-MLX/
+// VAD (opt.)   → appModels/models/aufklarer/Silero-VAD-v6.2.1-MLX/
 ```
 
 ## HuggingFace Mirror (`HF_ENDPOINT`)

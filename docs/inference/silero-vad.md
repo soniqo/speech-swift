@@ -2,7 +2,7 @@
 
 ## Overview
 
-Silero VAD is a lightweight (~309K params) voice activity detection model designed for real-time streaming. speech-swift supports MLX v5 weights and defaults the CoreML backend to the v6.2.1 export. Both paths process 512-sample audio chunks (32ms @ 16kHz), output a speech probability between 0 and 1, and carry LSTM state across chunks.
+Silero VAD is a lightweight (~309K params) voice activity detection model designed for real-time streaming. speech-swift defaults both the MLX and CoreML backends to v6.2.1 exports. Both paths process 512-sample audio chunks (32ms @ 16kHz), output a speech probability between 0 and 1, and carry LSTM state across chunks.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -128,8 +128,8 @@ The CoreML model uses float16 I/O with LSTM h/c state carried as `MLMultiArray` 
 
 | Backend | Per-chunk Latency | Hardware | Model |
 |---------|------------------|----------|-------|
-| MLX | ~2.1ms | GPU (Metal) | [aufklarer/Silero-VAD-v5-MLX](https://huggingface.co/aufklarer/Silero-VAD-v5-MLX) |
-| CoreML | ~0.27ms | Neural Engine + CPU | [aufklarer/Silero-VAD-v6.2.1-CoreML](https://huggingface.co/aufklarer/Silero-VAD-v6.2.1-CoreML) |
+| MLX | ~0.50ms | GPU (Metal) | [aufklarer/Silero-VAD-v6.2.1-MLX](https://huggingface.co/aufklarer/Silero-VAD-v6.2.1-MLX) |
+| CoreML | ~0.06ms | Neural Engine + CPU | [aufklarer/Silero-VAD-v6.2.1-CoreML](https://huggingface.co/aufklarer/Silero-VAD-v6.2.1-CoreML) |
 
 ## CoreML v6.2.1 Benchmark
 
@@ -151,7 +151,7 @@ On the Mini50 VAD benchmark, the new 32ms CoreML export improves span recall whi
 | **Architecture** | SincNet → BiLSTM(4L) → Linear → Softmax | STFT → Conv encoder → LSTM → Sigmoid |
 | **Output** | 7-class powerset → speech probability | Direct speech probability |
 | **Streaming** | No (requires full windows) | Yes (LSTM state across chunks) |
-| **Latency** | ~seconds (window aggregation) | ~0.27ms/chunk (CoreML), ~2.1ms (MLX) |
+| **Latency** | ~seconds (window aggregation) | ~0.06ms/chunk (CoreML), ~0.50ms/chunk (MLX) |
 | **Use case** | Offline/batch processing | Real-time microphone input |
 
 Both models conform to `VoiceActivityDetectionModel` and can be used interchangeably for the `detectSpeech(audio:sampleRate:)` batch API.

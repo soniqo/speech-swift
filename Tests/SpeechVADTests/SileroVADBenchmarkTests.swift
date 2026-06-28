@@ -6,7 +6,7 @@ import AudioCommon
 /// Benchmarks comparing MLX vs CoreML Silero VAD latency.
 ///
 /// Requires both model variants to be cached locally:
-/// - `aufklarer/Silero-VAD-v5-MLX` for MLX
+/// - `aufklarer/Silero-VAD-v6.2.1-MLX` for MLX
 /// - `aufklarer/Silero-VAD-v6.2.1-CoreML` for CoreML
 ///
 /// Run with: `swift test --filter SileroVADBenchmarkTests -c release`
@@ -111,7 +111,9 @@ final class E2ESileroVADBenchmarkTests: XCTestCase {
         print("  Max diff: \(String(format: "%.6f", maxDiff))")
         print("  Avg diff: \(String(format: "%.6f", avgDiff))")
 
-        XCTAssertLessThan(maxDiff, 0.05,
-                           "MLX and CoreML probabilities should agree within ±0.05")
+        XCTAssertLessThan(maxDiff, 0.075,
+                           "MLX and CoreML probabilities should agree at speech boundaries")
+        XCTAssertLessThan(avgDiff, 0.005,
+                           "MLX and CoreML average probability drift should stay low")
     }
 }

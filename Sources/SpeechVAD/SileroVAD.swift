@@ -68,8 +68,8 @@ public final class SileroVADModel {
     /// Context buffer: last 64 samples from previous chunk
     private var context: [Float]
 
-    /// Default HuggingFace model ID (MLX v5 weights)
-    public static let defaultModelId = "aufklarer/Silero-VAD-v5-MLX"
+    /// Default HuggingFace model ID (MLX v6.2.1 weights)
+    public static let defaultModelId = "aufklarer/Silero-VAD-v6.2.1-MLX"
 
     /// Default HuggingFace model ID (CoreML v6.2.1 weights)
     public static let defaultCoreMLModelId = "aufklarer/Silero-VAD-v6.2.1-CoreML"
