@@ -69,4 +69,4 @@ The Echo tab uses the `SpeechCore` voice pipeline with AEC (acoustic echo cancel
 | Qwen3-ASR (MLX 4-bit) | ~400 MB | `~/Library/Caches/qwen3-speech/aufklarer_Qwen3-ASR-0.6B-MLX-4bit/` |
 | Qwen3-TTS (MLX 4-bit) | ~1 GB | `~/Library/Caches/qwen3-speech/aufklarer_Qwen3-TTS-12Hz-0.6B-Base-MLX-4bit/` |
 | Qwen3-TTS Tokenizer | ~650 MB | `~/Library/Caches/qwen3-speech/Qwen_Qwen3-TTS-Tokenizer-12Hz/` |
-| Silero VAD v5 (CoreML) | ~1.2 MB | `~/Library/Caches/qwen3-speech/` |
+| Silero VAD v6.2.1 (CoreML) | ~1.2 MB | `~/Library/Caches/qwen3-speech/` |

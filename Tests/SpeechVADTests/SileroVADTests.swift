@@ -16,7 +16,7 @@ final class SileroVADTests: XCTestCase {
     }
 
     func testSileroDefaultModelIds() {
-        XCTAssertEqual(SileroVADModel.defaultModelId, "aufklarer/Silero-VAD-v5-MLX")
+        XCTAssertEqual(SileroVADModel.defaultModelId, "aufklarer/Silero-VAD-v6.2.1-MLX")
         XCTAssertEqual(SileroVADModel.defaultCoreMLModelId, "aufklarer/Silero-VAD-v6.2.1-CoreML")
     }
 
