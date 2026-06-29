@@ -317,6 +317,19 @@ public enum HuggingFaceDownloader {
         return 300
     }
 
+    /// Concurrent range requests used by the byte-weighted downloader for
+    /// large files. Fish Audio and similar multi-GB checkpoints are hosted
+    /// behind HF/CDN endpoints where one stream can under-fill the user's
+    /// connection; bounded parallel ranges improve first-run download time
+    /// while still avoiding unbounded request fan-out.
+    static var downloadRangeConcurrency: Int {
+        if let raw = ProcessInfo.processInfo.environment["HF_DOWNLOAD_RANGE_CONCURRENCY"],
+           let v = Int(raw), v > 0 {
+            return min(v, 16)
+        }
+        return 16
+    }
+
     /// Resolve the HuggingFace Hub endpoint, honoring the `HF_ENDPOINT`
     /// environment variable (the same name Python's `huggingface_hub` uses).
     ///
@@ -496,7 +509,6 @@ private struct ResolvedRemoteFile: Sendable {
 private extension HuggingFaceDownloader {
     static let rangedDownloadThresholdBytes: Int64 = 64 * 1_024 * 1_024
     static let rangedDownloadChunkBytes: Int64 = 16 * 1_024 * 1_024
-    static let rangedDownloadConcurrency = 4
 
     static func resolveRemoteFiles(
         modelId: String,
@@ -662,6 +674,11 @@ private extension HuggingFaceDownloader {
             totalBytes: totalBytes,
             fileName: file.fileName,
             progressHandler: progressHandler)
+        let concurrency = downloadRangeConcurrency
+        let configuration = URLSessionConfiguration.default
+        configuration.httpMaximumConnectionsPerHost = max(concurrency, 1)
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
 
         var missingChunks: [DownloadChunk] = []
         missingChunks.reserveCapacity(chunks.count)
@@ -681,7 +698,7 @@ private extension HuggingFaceDownloader {
         if !missingChunks.isEmpty {
             try await withThrowingTaskGroup(of: Void.self) { group in
                 var nextIndex = 0
-                let initial = min(rangedDownloadConcurrency, missingChunks.count)
+                let initial = min(concurrency, missingChunks.count)
                 for _ in 0..<initial {
                     let chunk = missingChunks[nextIndex]
                     nextIndex += 1
@@ -690,7 +707,8 @@ private extension HuggingFaceDownloader {
                             file,
                             chunk: chunk,
                             to: partFileURL(partsDirectory: partsDirectory, chunk: chunk),
-                            state: state)
+                            state: state,
+                            session: session)
                     }
                 }
 
@@ -703,7 +721,8 @@ private extension HuggingFaceDownloader {
                                 file,
                                 chunk: chunk,
                                 to: partFileURL(partsDirectory: partsDirectory, chunk: chunk),
-                                state: state)
+                                state: state,
+                                session: session)
                         }
                     }
                 }
@@ -737,13 +756,14 @@ private extension HuggingFaceDownloader {
         _ file: ResolvedRemoteFile,
         chunk: DownloadChunk,
         to destination: URL,
-        state: RangedDownloadProgress
+        state: RangedDownloadProgress,
+        session: URLSession
     ) async throws {
         var request = URLRequest(url: file.url)
         request.setValue("bytes=\(chunk.start)-\(chunk.end)", forHTTPHeaderField: "Range")
         applyHubAuth(to: &request)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw DownloadError.failedToDownload("\(file.fileName) part \(chunk.index): missing HTTP response")
         }
