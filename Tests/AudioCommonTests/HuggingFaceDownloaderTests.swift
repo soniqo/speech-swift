@@ -389,4 +389,46 @@ final class HuggingFaceDownloaderTests: XCTestCase {
         XCTAssertLessThanOrEqual(delays.reduce(0, +), 120,
                                  "total backoff should stay bounded")
     }
+
+    // MARK: - Range download concurrency
+
+    private func withEnv(_ key: String, _ value: String?, _ body: () -> Void) {
+        let previous = ProcessInfo.processInfo.environment[key]
+        if let value {
+            setenv(key, value, 1)
+        } else {
+            unsetenv(key)
+        }
+        defer {
+            if let previous { setenv(key, previous, 1) }
+            else { unsetenv(key) }
+        }
+        body()
+    }
+
+    func testRangeDownloadConcurrencyDefaultIsFast() {
+        withEnv("HF_DOWNLOAD_RANGE_CONCURRENCY", nil) {
+            XCTAssertEqual(HuggingFaceDownloader.downloadRangeConcurrency, 16)
+        }
+    }
+
+    func testRangeDownloadConcurrencyHonorsOverride() {
+        withEnv("HF_DOWNLOAD_RANGE_CONCURRENCY", "12") {
+            XCTAssertEqual(HuggingFaceDownloader.downloadRangeConcurrency, 12)
+        }
+    }
+
+    func testRangeDownloadConcurrencyRejectsInvalidOverride() {
+        for raw in ["", "0", "-1", "not-a-number"] {
+            withEnv("HF_DOWNLOAD_RANGE_CONCURRENCY", raw) {
+                XCTAssertEqual(HuggingFaceDownloader.downloadRangeConcurrency, 16)
+            }
+        }
+    }
+
+    func testRangeDownloadConcurrencyCapsOverride() {
+        withEnv("HF_DOWNLOAD_RANGE_CONCURRENCY", "64") {
+            XCTAssertEqual(HuggingFaceDownloader.downloadRangeConcurrency, 16)
+        }
+    }
 }
