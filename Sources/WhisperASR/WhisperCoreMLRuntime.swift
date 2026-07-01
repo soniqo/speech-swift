@@ -19,19 +19,24 @@ final class WhisperCoreMLRuntime: @unchecked Sendable {
     private let generationConfig: WhisperGenerationConfig
 
     private let maxAudioSamples = 480_000
+    // Native greedy decoding has no temperature fallback yet; stop obvious
+    // repeated-word loops before they dominate the transcription.
+    private let maxRepeatedWordRun = 2
     private let cacheDim: Int
     private let cacheLength: Int
     private let vocabSize: Int
 
     init(modelFolder: URL) throws {
         self.modelFolder = modelFolder
-        let mlConfig = MLModelConfiguration()
-        mlConfig.computeUnits = .all
+        let melConfig = MLModelConfiguration()
+        melConfig.computeUnits = .cpuAndGPU
+        let neuralConfig = MLModelConfiguration()
+        neuralConfig.computeUnits = .cpuAndNeuralEngine
 
-        self.melModel = try Self.loadModel("MelSpectrogram.mlmodelc", from: modelFolder, configuration: mlConfig)
-        self.encoderModel = try Self.loadModel("AudioEncoder.mlmodelc", from: modelFolder, configuration: mlConfig)
-        self.decoderPrefillModel = try Self.loadModel("TextDecoderContextPrefill.mlmodelc", from: modelFolder, configuration: mlConfig)
-        self.decoderModel = try Self.loadModel("TextDecoder.mlmodelc", from: modelFolder, configuration: mlConfig)
+        self.melModel = try Self.loadModel("MelSpectrogram.mlmodelc", from: modelFolder, configuration: melConfig)
+        self.encoderModel = try Self.loadModel("AudioEncoder.mlmodelc", from: modelFolder, configuration: neuralConfig)
+        self.decoderPrefillModel = try Self.loadModel("TextDecoderContextPrefill.mlmodelc", from: modelFolder, configuration: neuralConfig)
+        self.decoderModel = try Self.loadModel("TextDecoder.mlmodelc", from: modelFolder, configuration: neuralConfig)
         self.tokenizer = try WhisperByteLevelTokenizer(modelFolder: modelFolder)
         self.generationConfig = try WhisperGenerationConfig.load(from: modelFolder)
 
@@ -54,7 +59,9 @@ final class WhisperCoreMLRuntime: @unchecked Sendable {
         while offset < audio.count {
             let end = min(offset + maxAudioSamples, audio.count)
             let chunk = Array(audio[offset..<end])
-            let result = try transcribeChunk(audio: chunk, languageHint: languageHint ?? resolvedLanguage)
+            let result = try autoreleasepool {
+                try transcribeChunk(audio: chunk, languageHint: languageHint ?? resolvedLanguage)
+            }
             if !result.text.isEmpty {
                 texts.append(result.text)
             }
@@ -162,13 +169,17 @@ final class WhisperCoreMLRuntime: @unchecked Sendable {
                 throw AudioModelError.inferenceFailed(operation: "Whisper decoder", reason: "Missing decoder outputs")
             }
 
-            let sampled = argmax(logits: logits, generatedTokenCount: generated.count)
+            let sampled = argmax(logits: logits, generatedTokens: generated)
             if sampled == generationConfig.endToken {
                 break
             }
 
             if sampled < generationConfig.specialTokenBegin {
-                generated.append(sampled)
+                let candidate = generated + [sampled]
+                if shouldStopForRepeatedWords(candidate) {
+                    break
+                }
+                generated = candidate
             }
 
             copyCacheUpdate(keyUpdate, into: state.keyCache, at: tokenIndex)
@@ -237,8 +248,9 @@ final class WhisperCoreMLRuntime: @unchecked Sendable {
         return array
     }
 
-    private func argmax(logits: MLMultiArray, generatedTokenCount: Int) -> Int {
-        argmax(logits: logits) { token in
+    private func argmax(logits: MLMultiArray, generatedTokens: [Int]) -> Int {
+        let generatedTokenCount = generatedTokens.count
+        return argmax(logits: logits) { token in
             if token == generationConfig.endToken {
                 return generatedTokenCount == 0 && generationConfig.beginSuppressTokens.contains(token)
             }
@@ -256,6 +268,44 @@ final class WhisperCoreMLRuntime: @unchecked Sendable {
         argmax(logits: logits) { token in
             !allowed.contains(token)
         }
+    }
+
+    private func shouldStopForRepeatedWords(_ tokens: [Int]) -> Bool {
+        guard tokens.count >= maxRepeatedWordRun + 1 else {
+            return false
+        }
+
+        let words = normalizedWords(tokenizer.decode(tokens))
+        guard let last = words.last else {
+            return false
+        }
+
+        var runLength = 0
+        for word in words.reversed() {
+            if word == last {
+                runLength += 1
+            } else {
+                break
+            }
+        }
+        return runLength > maxRepeatedWordRun
+    }
+
+    private func normalizedWords(_ text: String) -> [String] {
+        var words: [String] = []
+        var current = ""
+        for scalar in text.lowercased().unicodeScalars {
+            if CharacterSet.letters.contains(scalar) || CharacterSet.decimalDigits.contains(scalar) {
+                current.unicodeScalars.append(scalar)
+            } else if !current.isEmpty {
+                words.append(current)
+                current.removeAll(keepingCapacity: true)
+            }
+        }
+        if !current.isEmpty {
+            words.append(current)
+        }
+        return words
     }
 
     private func argmax(logits: MLMultiArray, shouldSkip: (Int) -> Bool) -> Int? {

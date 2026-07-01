@@ -51,7 +51,9 @@ struct WhisperGenerationConfig: Sendable {
             noTimestampsToken: raw.noTimestampsTokenId ?? 50_364,
             specialTokenBegin: raw.eosTokenId ?? 50_257,
             beginSuppressTokens: Set(raw.beginSuppressTokens ?? [220, raw.eosTokenId ?? 50_257]),
-            suppressTokens: Set(raw.suppressTokens ?? []),
+            // Match WhisperKit's default DecodingOptions. The broad exported
+            // suppress list over-constrains greedy text decoding for this model.
+            suppressTokens: [],
             languageTokensByCode: languages,
             languageCodesByToken: inverse)
     }

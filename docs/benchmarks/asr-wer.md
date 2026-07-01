@@ -40,7 +40,7 @@ The Qwen3-ASR-CoreML row in the table above is the **rebuilt** encoder (chunked 
 
 The `whisper-asr-turbo` engine loads the published `aufklarer/Whisper-Large-v3-Turbo-CoreML` bundle through speech-swift's native `WhisperASRModel` CoreML runtime. It no longer calls WhisperKit for inference. The direct WhisperKit baseline remains in the benchmark harness as an external comparison via `WhisperKitConfig(model: "openai_whisper-large-v3-v20240930_turbo")`.
 
-Current native runtime scope: fixed 30 s CoreML mel input, CoreML encoder, CoreML decoder prefill, explicit KV-cache updates, greedy no-timestamp decoding, byte-level tokenizer decode, and optional language detection. Timestamp decoding, word timestamps, VAD/chunk seeking, and fallback heuristics are not yet parity with WhisperKit.
+Current native runtime scope: fixed 30 s CoreML mel input, CoreML encoder, CoreML decoder prefill, explicit KV-cache updates, WhisperKit-style CoreML compute placement (mel on CPU/GPU; encoder/decoder on CPU/Neural Engine), greedy no-timestamp decoding, byte-level tokenizer decode, optional language detection, and a narrow repeated-word stop guard for greedy hallucination loops. Timestamp decoding, word timestamps, VAD/chunk seeking, and temperature fallback heuristics are not yet parity with WhisperKit.
 
 Quick LibriSpeech test-clean slice on Apple M5 Pro, 48 GB, macOS 26.5.1, debug build, 2026-07-01:
 
@@ -49,15 +49,15 @@ Quick LibriSpeech test-clean slice on Apple M5 Pro, 48 GB, macOS 26.5.1, debug b
   --dataset ~/Library/Caches/qwen3-speech/datasets/LibriSpeech/test-clean \
   --engines whisper-asr-turbo whisperkit-large-v3-turbo \
   --language en \
-  --limit 20
+  --limit 100
 ```
 
 | Engine | WER% | CER% | Mean RTF | Median RTF | Overall xRT | Load | Peak RSS | RSS Delta |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| WhisperASR native | 1.70 | 0.82 | 0.086 | 0.083 | 13.9x | 27.8s | 2794 MB | +2751 MB |
-| Direct WhisperKit | 0.73 | 0.27 | 0.091 | 0.091 | 13.6x | 101.3s | 2919 MB | +125 MB |
+| WhisperASR native | 1.40 | 0.39 | 0.089 | 0.078 | 14.0x | 6.1s | 384 MB | +295 MB |
+| Direct WhisperKit | 1.53 | 0.46 | 0.085 | 0.074 | 15.5x | 100.2s | 507 MB | +418 MB |
 
-The native runtime is throughput-competitive on this slice. The remaining WER gap is concentrated in a few decoding-policy/normalization-sensitive utterances (`10` vs `ten`, `ardor` vs `ardour`, `st` vs `saint`, plus one first-word merge). Re-run the full isolated release benchmark before using these quick-slice numbers as release data.
+The native runtime is memory-competitive on this slice after switching away from `.all` compute units and adding per-chunk autorelease pools; peak RSS drops from 4.8 GB to 384 MB. The first run after a model or compute-unit change can still pay CoreML specialization time. It also avoids the previous repeated-token hallucination on `again again`. Remaining errors are mostly decoding-policy/normalization-sensitive variants (`10` vs `ten`, `ardor` vs `ardour`, `st` vs `saint`, name spellings). Re-run the full isolated release benchmark before using these quick-slice numbers as release data.
 
 ## Comparison with published models
 
