@@ -4,19 +4,20 @@ import Qwen3ASR
 import ParakeetASR
 import NemotronStreamingASR
 import OmnilingualASR
+import WhisperASR
 import SpeechVAD
 import AudioCommon
 
 public struct TranscribeCommand: ParsableCommand {
     public static let configuration = CommandConfiguration(
         commandName: "transcribe",
-        abstract: "Transcribe speech to text (Qwen3-ASR or Parakeet-TDT)"
+        abstract: "Transcribe speech to text (Qwen3-ASR, Parakeet-TDT, Whisper, and other ASR backends)"
     )
 
     @Argument(help: "Audio file to transcribe (WAV, any sample rate)")
     public var audioFile: String
 
-    @Option(name: .long, help: "ASR engine: qwen3 (default), parakeet, nemotron, omnilingual, qwen3-coreml, or qwen3-coreml-full")
+    @Option(name: .long, help: "ASR engine: qwen3 (default), parakeet, nemotron, omnilingual, whisper, qwen3-coreml, or qwen3-coreml-full")
     public var engine: String = "qwen3"
 
     @Option(name: .long, help: "[omnilingual] Window size in seconds: 5 or 10 (default 10) — CoreML backend only")
@@ -31,7 +32,7 @@ public struct TranscribeCommand: ParsableCommand {
     @Option(name: .long, help: "[omnilingual mlx] Quantization bits: 4 (default) or 8")
     public var bits: Int = 4
 
-    @Option(name: .shortAndLong, help: "[qwen3] Model: 0.6B (default), 0.6B-8bit, 1.7B, 1.7B-4bit, or full HuggingFace model ID")
+    @Option(name: .shortAndLong, help: "[qwen3] Model: 0.6B (default), 0.6B-8bit, 1.7B, 1.7B-4bit, or full HuggingFace model ID; [whisper] default/turbo or full CoreML HuggingFace model ID")
     public var model: String = "0.6B"
 
     @Option(name: .long, help: "Language hint (optional)")
@@ -53,8 +54,8 @@ public struct TranscribeCommand: ParsableCommand {
 
     public func validate() throws {
         let eng = engine.lowercased()
-        guard eng == "qwen3" || eng == "parakeet" || eng == "nemotron" || eng == "omnilingual" || eng == "qwen3-coreml" || eng == "qwen3-coreml-full" else {
-            throw ValidationError("--engine must be 'qwen3', 'parakeet', 'nemotron', 'omnilingual', 'qwen3-coreml', or 'qwen3-coreml-full'")
+        guard eng == "qwen3" || eng == "parakeet" || eng == "nemotron" || eng == "omnilingual" || eng == "whisper" || eng == "qwen3-coreml" || eng == "qwen3-coreml-full" else {
+            throw ValidationError("--engine must be 'qwen3', 'parakeet', 'nemotron', 'omnilingual', 'whisper', 'qwen3-coreml', or 'qwen3-coreml-full'")
         }
         if eng == "omnilingual" {
             if window != 5 && window != 10 {
@@ -83,6 +84,8 @@ public struct TranscribeCommand: ParsableCommand {
             try runNemotronTranscription()
         case "omnilingual":
             try runOmnilingualTranscription()
+        case "whisper":
+            try runWhisperTranscription()
         case "qwen3-coreml":
             try runCoreMLTranscription()
         case "qwen3-coreml-full":
@@ -304,6 +307,31 @@ public struct TranscribeCommand: ParsableCommand {
         }
     }
 
+    private func runWhisperTranscription() throws {
+        try runAsync {
+            let modelId = try resolveWhisperModelId(model)
+
+            print("Loading audio: \(audioFile)")
+            let audio = try AudioFileLoader.load(
+                url: URL(fileURLWithPath: audioFile), targetSampleRate: 16000)
+            let duration = Float(audio.count) / 16000.0
+            print("  Loaded \(audio.count) samples (\(String(format: "%.2f", duration))s)")
+
+            print("Loading Whisper model: \(modelId)")
+            let asrModel = try await WhisperASRModel.fromPretrained(
+                modelId: modelId, progressHandler: reportProgress)
+
+            print("Transcribing...")
+            let startTime = CFAbsoluteTimeGetCurrent()
+            let result = try await asrModel.transcribeAudio(audio, sampleRate: 16000, language: language)
+            let elapsed = CFAbsoluteTimeGetCurrent() - startTime
+            let rtf = elapsed / Double(duration)
+
+            print("Result: \(result)")
+            print(String(format: "  Time: %.2fs, RTF: %.3f", elapsed, rtf))
+        }
+    }
+
     private func runOmnilingualTranscription() throws {
         if backend.lowercased() == "mlx" {
             try runOmnilingualMLXTranscription()
@@ -387,5 +415,19 @@ public func resolveASRModelId(_ specifier: String) -> String {
         return "aufklarer/Qwen3-ASR-1.7B-MLX-4bit"
     default:
         return specifier
+    }
+}
+
+/// Resolve Whisper model aliases to the CoreML repo layout used by WhisperASR.
+public func resolveWhisperModelId(_ specifier: String) throws -> String {
+    switch specifier.lowercased() {
+    case "0.6b", "default", "turbo", "whisper", "whisper-turbo", "large-v3-turbo",
+         "large-v3-v20240930-turbo", "large-v3-v20240930_turbo":
+        return WhisperASRModel.defaultModelId
+    default:
+        if specifier.contains("/") {
+            return specifier
+        }
+        throw ValidationError("[whisper] --model must be 'default', 'turbo', or a full CoreML HuggingFace repo ID")
     }
 }

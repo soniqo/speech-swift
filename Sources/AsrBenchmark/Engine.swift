@@ -47,6 +47,7 @@ public enum EngineID: String, CaseIterable, Sendable {
     case omnilingualMLX1b4bit = "omnilingual-mlx-1b-4bit"
     case omnilingualMLX3b4bit = "omnilingual-mlx-3b-4bit"
     case omnilingualMLX7b4bit = "omnilingual-mlx-7b-4bit"
+    case whisperASRTurbo = "whisper-asr-turbo"
     case whisperKitLargeV3Turbo = "whisperkit-large-v3-turbo"
     case whisperKitLargeV3 = "whisperkit-large-v3"
     case whisperKitDistilLargeV3 = "whisperkit-distil-large-v3"
@@ -67,6 +68,7 @@ public enum EngineID: String, CaseIterable, Sendable {
         case .omnilingualMLX1b4bit: return OmnilingualMLXEngine(variant: .b1, bits: 4)
         case .omnilingualMLX3b4bit: return OmnilingualMLXEngine(variant: .b3, bits: 4)
         case .omnilingualMLX7b4bit: return OmnilingualMLXEngine(variant: .b7, bits: 4)
+        case .whisperASRTurbo: return WhisperASREngine()
         case .whisperKitLargeV3Turbo: return WhisperKitEngine(model: "openai_whisper-large-v3-v20240930_turbo")
         case .whisperKitLargeV3: return WhisperKitEngine(model: "openai_whisper-large-v3")
         case .whisperKitDistilLargeV3: return WhisperKitEngine(model: "distil-whisper_distil-large-v3")

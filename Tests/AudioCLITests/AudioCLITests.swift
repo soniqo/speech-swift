@@ -158,6 +158,34 @@ final class TranscribeCommandTests: XCTestCase {
         }())
     }
 
+    // MARK: --engine whisper
+
+    func testParsesWhisperEngine() throws {
+        let cmd = try AudioCLI.parseAsRoot(["transcribe", "audio.wav", "--engine", "whisper"])
+        let transcribe = try XCTUnwrap(cmd as? TranscribeCommand)
+        XCTAssertEqual(transcribe.engine, "whisper")
+        XCTAssertNoThrow(try transcribe.validate())
+    }
+
+    func testWhisperModelAliasesResolveDefaultCoreMLRepo() throws {
+        for alias in ["default", "turbo", "whisper", "large-v3-turbo"] {
+            XCTAssertEqual(
+                try resolveWhisperModelId(alias),
+                "aufklarer/Whisper-Large-v3-Turbo-CoreML",
+                "\(alias) should resolve to the default Whisper CoreML repo")
+        }
+    }
+
+    func testWhisperAcceptsFullModelId() throws {
+        XCTAssertEqual(
+            try resolveWhisperModelId("org/custom-whisper-coreml"),
+            "org/custom-whisper-coreml")
+    }
+
+    func testWhisperRejectsUnknownShortModelName() {
+        XCTAssertThrowsError(try resolveWhisperModelId("medium"))
+    }
+
     // MARK: --engine omnilingual --backend mlx
 
     func testOmnilingualDefaultBackendIsCoreML() throws {
