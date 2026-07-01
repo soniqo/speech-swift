@@ -28,6 +28,9 @@ struct AsrBench: AsyncParsableCommand {
           help: "Run each engine in a separate process. The peak RSS column then reflects each engine's true cost instead of the sequential high-water mark.")
     var isolated: Bool = false
 
+    @Flag(name: .long, help: "Print reference/hypothesis pairs for utterances with WER errors.")
+    var printErrors: Bool = false
+
     mutating func run() async throws {
         // stdout is block-buffered when the process runs with redirected
         // output (background tasks, tee, etc.); progress lines get lost if
@@ -104,6 +107,16 @@ struct AsrBench: AsyncParsableCommand {
                     let ref = Normalizer.normalize(item.utt.reference)
                     let b = WER.compute(reference: ref, hypothesis: hyp)
                     let c = CER.compute(reference: ref, hypothesis: hyp)
+                    if printErrors && b.totalErrors > 0 {
+                        print(String(format: "  %@ WER=%.2f%% S/I/D=%d/%d/%d",
+                                     item.utt.id as NSString,
+                                     b.wer * 100,
+                                     b.substitutions,
+                                     b.insertions,
+                                     b.deletions))
+                        print("    ref: \(ref)")
+                        print("    hyp: \(hyp)")
+                    }
                     subs += b.substitutions
                     ins += b.insertions
                     dels += b.deletions

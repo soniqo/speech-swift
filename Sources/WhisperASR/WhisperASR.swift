@@ -1,26 +1,22 @@
 import AudioCommon
 import Foundation
-import WhisperKit
 
-/// Whisper large-v3 turbo ASR via WhisperKit/CoreML.
-///
-/// The default model repo is staged with the CoreML bundle at the repository
-/// root, so this wrapper downloads the root files with `HuggingFaceDownloader`
-/// and passes the local folder directly to WhisperKit.
+/// Whisper large-v3 turbo ASR through speech-swift's native CoreML runtime.
 public final class WhisperASRModel: SpeechRecognitionModel, @unchecked Sendable {
     public static let defaultModelId = "aufklarer/Whisper-Large-v3-Turbo-CoreML"
     public static let defaultModelVariant = "large-v3-v20240930_turbo"
+    public static let tokenizerModelId = "openai/whisper-large-v3"
 
-    public let inputSampleRate = WhisperKit.sampleRate
+    public let inputSampleRate = WhisperCoreMLRuntime.sampleRate
     public let modelId: String
     public let modelFolder: URL
 
-    private let pipeline: WhisperKit
+    private let runtime: WhisperCoreMLRuntime
 
-    private init(modelId: String, modelFolder: URL, pipeline: WhisperKit) {
+    private init(modelId: String, modelFolder: URL, runtime: WhisperCoreMLRuntime) {
         self.modelId = modelId
         self.modelFolder = modelFolder
-        self.pipeline = pipeline
+        self.runtime = runtime
     }
 
     /// Load Whisper large-v3 turbo from the published CoreML bundle.
@@ -62,7 +58,14 @@ public final class WhisperASRModel: SpeechRecognitionModel, @unchecked Sendable 
                 ],
                 offlineMode: offlineMode
             ) { fraction in
-                progressHandler?(fraction * 0.8, "Downloading Whisper CoreML bundle...")
+                progressHandler?(fraction * 0.75, "Downloading Whisper CoreML bundle...")
+            }
+
+            try await ensureTokenizer(
+                in: resolvedCacheDir,
+                offlineMode: offlineMode
+            ) { fraction in
+                progressHandler?(0.75 + fraction * 0.10, "Downloading Whisper tokenizer...")
             }
         } catch {
             throw AudioModelError.modelLoadFailed(
@@ -71,19 +74,17 @@ public final class WhisperASRModel: SpeechRecognitionModel, @unchecked Sendable 
                 underlying: error)
         }
 
-        progressHandler?(0.80, "Loading WhisperKit...")
-        let config = WhisperKitConfig(
-            modelFolder: resolvedCacheDir.path,
-            verbose: false,
-            logLevel: .error,
-            prewarm: false,
-            load: true,
-            download: false
-        )
-        let pipeline = try await WhisperKit(config)
-
-        progressHandler?(1.0, "Model loaded")
-        return WhisperASRModel(modelId: effectiveModelId, modelFolder: resolvedCacheDir, pipeline: pipeline)
+        progressHandler?(0.90, "Loading Whisper CoreML runtime...")
+        do {
+            let runtime = try WhisperCoreMLRuntime(modelFolder: resolvedCacheDir)
+            progressHandler?(1.0, "Model loaded")
+            return WhisperASRModel(modelId: effectiveModelId, modelFolder: resolvedCacheDir, runtime: runtime)
+        } catch {
+            throw AudioModelError.modelLoadFailed(
+                modelId: effectiveModelId,
+                reason: "Failed to initialize native Whisper runtime",
+                underlying: error)
+        }
     }
 
     /// Transcribe PCM Float32 audio. Input is resampled to 16 kHz when needed.
@@ -95,13 +96,10 @@ public final class WhisperASRModel: SpeechRecognitionModel, @unchecked Sendable 
             normalizedAudio = AudioFileLoader.resample(audio, from: sampleRate, to: inputSampleRate)
         }
 
-        let languageHint = language?.isEmpty == true ? nil : language
-        let options = DecodingOptions(task: .transcribe, language: languageHint, temperatureFallbackCount: 0)
-        let results = try await pipeline.transcribe(audioArray: normalizedAudio, decodeOptions: options)
-        return results.map(\.text).joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        return try runtime.transcribe(audio: normalizedAudio, languageHint: normalizedLanguage(language)).text
     }
 
-    /// Transcribe and return WhisperKit's detected language when available.
+    /// Transcribe and return the detected or hinted Whisper language code when available.
     public func transcribeWithLanguageAsync(
         audio: [Float],
         sampleRate: Int,
@@ -114,12 +112,8 @@ public final class WhisperASRModel: SpeechRecognitionModel, @unchecked Sendable 
             normalizedAudio = AudioFileLoader.resample(audio, from: sampleRate, to: inputSampleRate)
         }
 
-        let languageHint = language?.isEmpty == true ? nil : language
-        let options = DecodingOptions(task: .transcribe, language: languageHint, temperatureFallbackCount: 0)
-        let results = try await pipeline.transcribe(audioArray: normalizedAudio, decodeOptions: options)
-        let text = results.map(\.text).joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
-        let detectedLanguage = results.first?.language
-        return AudioCommon.TranscriptionResult(text: text, language: detectedLanguage, confidence: 0)
+        let result = try runtime.transcribe(audio: normalizedAudio, languageHint: normalizedLanguage(language))
+        return AudioCommon.TranscriptionResult(text: result.text, language: result.language, confidence: 0)
     }
 
     public func transcribe(audio: [Float], sampleRate: Int, language: String?) -> String {
@@ -142,6 +136,60 @@ public final class WhisperASRModel: SpeechRecognitionModel, @unchecked Sendable 
             AudioLog.inference.error("Whisper transcription failed: \(error)")
             return AudioCommon.TranscriptionResult(text: "")
         }
+    }
+
+    private static func ensureTokenizer(
+        in modelFolder: URL,
+        offlineMode: Bool,
+        progressHandler: ((Double) -> Void)? = nil
+    ) async throws {
+        let files = ["tokenizer.json", "tokenizer_config.json"]
+        let missingFiles = files.filter {
+            !FileManager.default.fileExists(atPath: modelFolder.appendingPathComponent($0).path)
+        }
+        if missingFiles.isEmpty {
+            progressHandler?(1.0)
+            return
+        }
+        if offlineMode {
+            throw AudioModelError.modelLoadFailed(
+                modelId: tokenizerModelId,
+                reason: "Offline tokenizer cache miss: \(missingFiles.joined(separator: ", "))")
+        }
+
+        try FileManager.default.createDirectory(at: modelFolder, withIntermediateDirectories: true)
+        for (index, file) in missingFiles.enumerated() {
+            let escaped = file.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? file
+            let endpoint = (HuggingFaceDownloader.resolvedEndpoint() ?? "https://huggingface.co")
+                .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            guard let url = URL(string: "\(endpoint)/\(tokenizerModelId)/resolve/main/\(escaped)") else {
+                throw AudioModelError.modelLoadFailed(modelId: tokenizerModelId, reason: "Invalid tokenizer URL for \(file)")
+            }
+
+            var request = URLRequest(url: url)
+            let env = ProcessInfo.processInfo.environment
+            if let token = env["HF_TOKEN"] ?? env["HUGGING_FACE_HUB_TOKEN"],
+               !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            }
+
+            let (data, response) = try await URLSession.shared.data(for: request)
+            if let http = response as? HTTPURLResponse,
+               !(200..<300).contains(http.statusCode) {
+                throw AudioModelError.modelLoadFailed(
+                    modelId: tokenizerModelId,
+                    reason: "\(file): HTTP \(http.statusCode)")
+            }
+            try data.write(to: modelFolder.appendingPathComponent(file), options: .atomic)
+            progressHandler?(Double(index + 1) / Double(missingFiles.count))
+        }
+    }
+
+    private func normalizedLanguage(_ language: String?) -> String? {
+        guard let language else { return nil }
+        let trimmed = language.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return trimmed
     }
 }
 
