@@ -10,7 +10,7 @@ AI speech models for Apple Silicon (MLX Swift). ASR, TTS, speech-to-speech, VAD,
 
 ## Git Conventions
 
-- Never mention Claude, AI, or any AI tool in commit messages, PR descriptions, or co-author tags
+- Never mention Claude, Codex, AI, or any AI tool in commit messages, PR titles, PR descriptions, comments, docs, or co-author tags. Do not add tool-name prefixes such as `[codex]`; use neutral project wording.
 - No `Co-Authored-By` lines in commits
 - **Never amend commits or force push** unless the user explicitly asks for it
 - Always use branches and PRs — commit history must be preserved

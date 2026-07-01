@@ -36,6 +36,29 @@ The `asr-bench` tool runs each engine in a separate child process (`--isolated`)
 
 The Qwen3-ASR-CoreML row in the table above is the **rebuilt** encoder (chunked block-attention export, [`aufklarer/Qwen3-ASR-CoreML`](https://huggingface.co/aufklarer/Qwen3-ASR-CoreML)). The previous export ran unmasked global self-attention over the zero-padded mel input under `EnumeratedShapes`; padding-derived audio tokens contaminated the real ones via attention, causing the text decoder to emit `<|im_end|>` right after the first sentence-final period — **24.88% WER** on the same n=200 fixture. The rebuilt encoder mirrors upstream's 100-frame chunks + 800-frame attention windows (in-graph block-attention bias from a new `mel_length` input; outputs `(audio_embeddings, output_length)`); encoder time also drops from 113 ms to 24 ms per call.
 
+### WhisperASR native runtime comparison
+
+The `whisper-asr-turbo` engine loads the published `aufklarer/Whisper-Large-v3-Turbo-CoreML` bundle through speech-swift's native `WhisperASRModel` CoreML runtime. It no longer calls WhisperKit for inference. The direct WhisperKit baseline remains in the benchmark harness as an external comparison via `WhisperKitConfig(model: "openai_whisper-large-v3-v20240930_turbo")`.
+
+Current native runtime scope: fixed 30 s CoreML mel input, CoreML encoder, CoreML decoder prefill, explicit KV-cache updates, WhisperKit-style CoreML compute placement (mel on CPU/GPU; encoder/decoder on CPU/Neural Engine), greedy no-timestamp decoding, byte-level tokenizer decode, optional language detection, and a narrow repeated-word stop guard for greedy hallucination loops. Timestamp decoding, word timestamps, VAD/chunk seeking, and temperature fallback heuristics are not yet parity with WhisperKit.
+
+Quick LibriSpeech test-clean slice on Apple M5 Pro, 48 GB, macOS 26.5.1, debug build, 2026-07-01:
+
+```bash
+.build/debug/asr-bench \
+  --dataset ~/Library/Caches/qwen3-speech/datasets/LibriSpeech/test-clean \
+  --engines whisper-asr-turbo whisperkit-large-v3-turbo \
+  --language en \
+  --limit 100
+```
+
+| Engine | WER% | CER% | Mean RTF | Median RTF | Overall xRT | Load | Peak RSS | RSS Delta |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| WhisperASR native | 1.40 | 0.39 | 0.089 | 0.078 | 14.0x | 6.1s | 384 MB | +295 MB |
+| Direct WhisperKit | 1.53 | 0.46 | 0.085 | 0.074 | 15.5x | 100.2s | 507 MB | +418 MB |
+
+The native runtime is memory-competitive on this slice after switching away from `.all` compute units and adding per-chunk autorelease pools; peak RSS drops from 4.8 GB to 384 MB. The first run after a model or compute-unit change can still pay CoreML specialization time. It also avoids the previous repeated-token hallucination on `again again`. Remaining errors are mostly decoding-policy/normalization-sensitive variants (`10` vs `ten`, `ardor` vs `ardour`, `st` vs `saint`, name spellings). Re-run the full isolated release benchmark before using these quick-slice numbers as release data.
+
 ## Comparison with published models
 
 | Model | Params | Size | Precision | WER% (test-clean) | Source |
@@ -137,6 +160,7 @@ Available engine IDs (see `Sources/AsrBenchmark/Engine.swift::EngineID`):
 - `nemotron` — Nemotron Streaming ASR
 - `omnilingual` — Omnilingual CTC 300M CoreML INT8
 - `omnilingual-mlx-{300m,1b,3b,7b}-4bit` — Omnilingual CTC MLX variants
+- `whisper-asr-turbo` — speech-swift native WhisperASR CoreML runtime over `aufklarer/Whisper-Large-v3-Turbo-CoreML`
 - `whisperkit-large-v3-turbo` / `whisperkit-large-v3` / `whisperkit-distil-large-v3` — Argmax WhisperKit
 
 Without `--isolated`, peak RSS reflects the sequential high-water mark across the whole run (MLX/CoreML caches don't release between engines). With `--isolated`, each engine runs in a child process and its peak RSS is its own.

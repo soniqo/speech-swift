@@ -381,6 +381,11 @@ Sources/
 │   ├── Qwen3ASR+Protocols.swift
 │   └── ForcedAligner+Protocols.swift
 │
+├── WhisperASR/                Speech-to-text (Whisper Large-v3 Turbo CoreML)
+│   ├── WhisperASR.swift       WhisperASRModel: SpeechRecognitionModel
+│   ├── WhisperCoreMLRuntime.swift  Native CoreML mel/encoder/decoder runtime
+│   └── WhisperByteLevelTokenizer.swift  Whisper byte-level BPE decoder
+│
 ├── OmnilingualASR/            Speech-to-text (Meta wav2vec2 + CTC, 1,672 languages)
 │   ├── OmnilingualASR.swift   OmnilingualASRModel: SpeechRecognitionModel (CoreML backend, 300M)
 │   ├── Configuration.swift    Decodes published `config.json` (5 s / 10 s window variants)
@@ -435,6 +440,7 @@ Sources/
 
 ```
 AudioCommon  ← Qwen3ASR         ─┐
+             ← WhisperASR       │
              ← Qwen3TTS         │
              ← CosyVoiceTTS     │
              ← VoxCPM2TTS       │

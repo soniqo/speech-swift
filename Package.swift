@@ -77,6 +77,10 @@ let package = Package(
             targets: ["NemotronStreamingASR"]
         ),
         .library(
+            name: "WhisperASR",
+            targets: ["WhisperASR"]
+        ),
+        .library(
             name: "VibeVoiceTTS",
             targets: ["VibeVoiceTTS"]
         ),
@@ -188,7 +192,7 @@ let package = Package(
         // without declaring swift-nio-ssl as a target dependency, so the module is unresolvable
         // on a clean checkout. https://github.com/hummingbird-project/swift-websocket
         .package(url: "https://github.com/hummingbird-project/swift-websocket.git", "1.5.0"..<"1.6.0"),
-        // WhisperKit (Argmax) — used by the AsrBenchmark target only, for competitor comparison.
+        // WhisperKit (Argmax) — retained for benchmark comparison against the native WhisperASR runtime.
         .package(url: "https://github.com/argmaxinc/WhisperKit", from: "1.0.0")
     ],
     targets: [
@@ -522,6 +526,12 @@ let package = Package(
             dependencies: ["AudioCommon"]
         ),
         .target(
+            name: "WhisperASR",
+            dependencies: [
+                "AudioCommon"
+            ]
+        ),
+        .target(
             name: "AudioCLILib",
             dependencies: [
                 "Qwen3ASR",
@@ -537,6 +547,7 @@ let package = Package(
                 "ParakeetASR",
                 "ParakeetStreamingASR",
                 "NemotronStreamingASR",
+                "WhisperASR",
                 "OmnilingualASR",
                 "KokoroTTS",
                 "VibeVoiceTTS",
@@ -567,6 +578,7 @@ let package = Package(
                 "ParakeetASR",
                 "NemotronStreamingASR",
                 "OmnilingualASR",
+                "WhisperASR",
                 .product(name: "WhisperKit", package: "WhisperKit"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser")
             ]

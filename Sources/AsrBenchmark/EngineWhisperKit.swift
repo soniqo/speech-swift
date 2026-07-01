@@ -25,7 +25,8 @@ final class WhisperKitEngine: BenchEngine, @unchecked Sendable {
         guard let pipe = pipe else { throw BenchError.notLoaded(name) }
         // WhisperKit expects 16 kHz mono Float32 — caller is responsible.
         let t0 = Date()
-        let results = try await pipe.transcribe(audioArray: audio)
+        let options = DecodingOptions(task: .transcribe, language: language, temperatureFallbackCount: 0)
+        let results = try await pipe.transcribe(audioArray: audio, decodeOptions: options)
         let elapsed = Date().timeIntervalSince(t0)
         let text = results.map { $0.text }.joined(separator: " ")
         let dur = Double(audio.count) / Double(sampleRate)
