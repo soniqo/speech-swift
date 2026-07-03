@@ -46,7 +46,7 @@ final class PersonaPlexDemoCachePolicyTests: XCTestCase {
                 requiresWeights: true))
     }
 
-    func testCacheCompleteRequiresDirectoryEntries() throws {
+    func testCacheCompleteRequiresNestedRequiredFiles() throws {
         let dir = try makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: dir) }
 
@@ -54,28 +54,31 @@ final class PersonaPlexDemoCachePolicyTests: XCTestCase {
         try touch("config.json", in: dir)
         let voices = dir.appendingPathComponent("voices", isDirectory: true)
         try FileManager.default.createDirectory(at: voices, withIntermediateDirectories: true)
-        try touch("NATM0.safetensors", in: voices)
-
-        let requirement = CacheDirectoryRequirement(
-            relativePath: "voices",
-            fileExtension: "safetensors",
-            minimumCount: 2)
+        try touch("NATF0.safetensors", in: voices)
 
         XCTAssertFalse(
             PersonaPlexDemoCachePolicy.cacheComplete(
                 in: dir,
-                requiredFiles: ["temporal.safetensors", "config.json"],
-                requiresWeights: false,
-                directoryRequirements: [requirement]))
+                requiredFiles: [
+                    "temporal.safetensors",
+                    "config.json",
+                    "voices/NATF0.safetensors",
+                    "voices/NATM0.safetensors",
+                ],
+                requiresWeights: false))
 
-        try touch("NATF0.safetensors", in: voices)
+        try touch("NATM0.safetensors", in: voices)
 
         XCTAssertTrue(
             PersonaPlexDemoCachePolicy.cacheComplete(
                 in: dir,
-                requiredFiles: ["temporal.safetensors", "config.json"],
-                requiresWeights: false,
-                directoryRequirements: [requirement]))
+                requiredFiles: [
+                    "temporal.safetensors",
+                    "config.json",
+                    "voices/NATF0.safetensors",
+                    "voices/NATM0.safetensors",
+                ],
+                requiresWeights: false))
     }
 
     private func makeTempDirectory() throws -> URL {

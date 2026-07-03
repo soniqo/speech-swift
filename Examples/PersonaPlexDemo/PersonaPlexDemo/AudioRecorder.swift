@@ -20,10 +20,17 @@ final class AudioRecorder {
     private let vadProcessor: StreamingVADProcessor?
     private var speechActive = false
 
-    init(targetSampleRate: Double = 24000, vadProcessor: StreamingVADProcessor? = nil) {
+    init(targetSampleRate: Double = 24000, vadProcessor: StreamingVADProcessor) {
         self.targetSampleRate = targetSampleRate
         self.vadProcessor = vadProcessor
     }
+
+    #if DEBUG
+    init(targetSampleRate: Double = 24000) {
+        self.targetSampleRate = targetSampleRate
+        self.vadProcessor = nil
+    }
+    #endif
 
     func startRecording() {
         lock.lock()

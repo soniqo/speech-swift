@@ -4,12 +4,6 @@ import PersonaPlex
 import Qwen3ASR
 import SpeechVAD
 
-struct CacheDirectoryRequirement {
-    var relativePath: String
-    var fileExtension: String
-    var minimumCount: Int
-}
-
 enum PersonaPlexDemoCachePolicy {
     static func personaPlexOfflineModeAvailable(
         modelId: String = PersonaPlexModel.modelId8bit
@@ -27,14 +21,8 @@ enum PersonaPlexDemoCachePolicy {
                 "mimi.safetensors",
                 "tokenizer_spm_32k_3.model",
                 "config.json",
-            ],
-            requiresWeights: false,
-            directoryRequirements: [
-                CacheDirectoryRequirement(
-                    relativePath: "voices",
-                    fileExtension: "safetensors",
-                    minimumCount: PersonaPlexVoice.allCases.count)
-            ])
+            ] + PersonaPlexVoice.allCases.map { "voices/\($0.rawValue).safetensors" },
+            requiresWeights: false)
     }
 
     static func asrOfflineModeAvailable(
@@ -46,7 +34,13 @@ enum PersonaPlexDemoCachePolicy {
 
         return cacheComplete(
             in: directory,
-            requiredFiles: ["vocab.json", "merges.txt", "tokenizer_config.json"],
+            requiredFiles: [
+                "config.json",
+                "model.safetensors",
+                "vocab.json",
+                "merges.txt",
+                "tokenizer_config.json",
+            ],
             requiresWeights: true)
     }
 
@@ -59,15 +53,14 @@ enum PersonaPlexDemoCachePolicy {
 
         return cacheComplete(
             in: directory,
-            requiredFiles: ["config.json"],
+            requiredFiles: ["config.json", "model.safetensors"],
             requiresWeights: true)
     }
 
     static func cacheComplete(
         in directory: URL,
         requiredFiles: [String],
-        requiresWeights: Bool,
-        directoryRequirements: [CacheDirectoryRequirement] = []
+        requiresWeights: Bool
     ) -> Bool {
         let fm = FileManager.default
 
@@ -82,24 +75,6 @@ enum PersonaPlexDemoCachePolicy {
         for file in requiredFiles {
             let url = directory.appendingPathComponent(file)
             guard fm.fileExists(atPath: url.path) else {
-                return false
-            }
-        }
-
-        for requirement in directoryRequirements {
-            let dir = directory.appendingPathComponent(requirement.relativePath, isDirectory: true)
-            let entries: [URL]
-            do {
-                entries = try fm.contentsOfDirectory(
-                    at: dir,
-                    includingPropertiesForKeys: nil,
-                    options: [.skipsHiddenFiles])
-            } catch {
-                return false
-            }
-
-            let count = entries.filter { $0.pathExtension == requirement.fileExtension }.count
-            guard count >= requirement.minimumCount else {
                 return false
             }
         }
