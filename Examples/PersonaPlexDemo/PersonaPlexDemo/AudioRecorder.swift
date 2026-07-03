@@ -17,10 +17,10 @@ final class AudioRecorder {
     private let targetSampleRate: Double
 
     // VAD
-    private let vadProcessor: StreamingVADProcessor
+    private let vadProcessor: StreamingVADProcessor?
     private var speechActive = false
 
-    init(targetSampleRate: Double = 24000, vadProcessor: StreamingVADProcessor) {
+    init(targetSampleRate: Double = 24000, vadProcessor: StreamingVADProcessor? = nil) {
         self.targetSampleRate = targetSampleRate
         self.vadProcessor = vadProcessor
     }
@@ -31,7 +31,7 @@ final class AudioRecorder {
         lock.unlock()
 
         speechActive = false
-        vadProcessor.reset()
+        vadProcessor?.reset()
 
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
@@ -111,7 +111,7 @@ final class AudioRecorder {
                 let vadCount = Int(vadBuffer.frameLength)
                 let vadChunk = Array(UnsafeBufferPointer(start: vadData, count: vadCount))
 
-                let events = self.vadProcessor.process(samples: vadChunk)
+                let events = self.vadProcessor?.process(samples: vadChunk) ?? []
                 for event in events {
                     switch event {
                     case .speechStarted(let time):
