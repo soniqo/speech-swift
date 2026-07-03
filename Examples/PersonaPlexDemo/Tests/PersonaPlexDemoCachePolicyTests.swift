@@ -7,21 +7,27 @@ final class PersonaPlexDemoCachePolicyTests: XCTestCase {
         let dir = try makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        try touch("model.safetensors", in: dir)
-        try touch("vocab.json", in: dir)
+        try write("model.safetensors", byteCount: 4, in: dir)
+        try write("vocab.json", byteCount: 2, in: dir)
 
         XCTAssertFalse(
             PersonaPlexDemoCachePolicy.cacheComplete(
                 in: dir,
-                requiredFiles: ["vocab.json", "merges.txt"],
+                requiredFiles: [
+                    CacheFileRequirement(relativePath: "vocab.json", byteCount: 2),
+                    CacheFileRequirement(relativePath: "merges.txt", byteCount: 3),
+                ],
                 requiresWeights: true))
 
-        try touch("merges.txt", in: dir)
+        try write("merges.txt", byteCount: 3, in: dir)
 
         XCTAssertTrue(
             PersonaPlexDemoCachePolicy.cacheComplete(
                 in: dir,
-                requiredFiles: ["vocab.json", "merges.txt"],
+                requiredFiles: [
+                    CacheFileRequirement(relativePath: "vocab.json", byteCount: 2),
+                    CacheFileRequirement(relativePath: "merges.txt", byteCount: 3),
+                ],
                 requiresWeights: true))
     }
 
@@ -29,20 +35,46 @@ final class PersonaPlexDemoCachePolicyTests: XCTestCase {
         let dir = try makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        try touch("config.json", in: dir)
+        try write("config.json", byteCount: 2, in: dir)
 
         XCTAssertFalse(
             PersonaPlexDemoCachePolicy.cacheComplete(
                 in: dir,
-                requiredFiles: ["config.json"],
+                requiredFiles: [CacheFileRequirement(relativePath: "config.json", byteCount: 2)],
                 requiresWeights: true))
 
-        try touch("weights.safetensors", in: dir)
+        try write("weights.safetensors", byteCount: 5, in: dir)
 
         XCTAssertTrue(
             PersonaPlexDemoCachePolicy.cacheComplete(
                 in: dir,
-                requiredFiles: ["config.json"],
+                requiredFiles: [CacheFileRequirement(relativePath: "config.json", byteCount: 2)],
+                requiresWeights: true))
+    }
+
+    func testCacheCompleteRequiresExpectedByteCount() throws {
+        let dir = try makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        try write("config.json", byteCount: 2, in: dir)
+        try write("model.safetensors", byteCount: 5, in: dir)
+
+        XCTAssertFalse(
+            PersonaPlexDemoCachePolicy.cacheComplete(
+                in: dir,
+                requiredFiles: [
+                    CacheFileRequirement(relativePath: "config.json", byteCount: 3),
+                    CacheFileRequirement(relativePath: "model.safetensors", byteCount: 5),
+                ],
+                requiresWeights: true))
+
+        XCTAssertTrue(
+            PersonaPlexDemoCachePolicy.cacheComplete(
+                in: dir,
+                requiredFiles: [
+                    CacheFileRequirement(relativePath: "config.json", byteCount: 2),
+                    CacheFileRequirement(relativePath: "model.safetensors", byteCount: 5),
+                ],
                 requiresWeights: true))
     }
 
@@ -50,33 +82,33 @@ final class PersonaPlexDemoCachePolicyTests: XCTestCase {
         let dir = try makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        try touch("temporal.safetensors", in: dir)
-        try touch("config.json", in: dir)
+        try write("temporal.safetensors", byteCount: 5, in: dir)
+        try write("config.json", byteCount: 2, in: dir)
         let voices = dir.appendingPathComponent("voices", isDirectory: true)
         try FileManager.default.createDirectory(at: voices, withIntermediateDirectories: true)
-        try touch("NATF0.safetensors", in: voices)
+        try write("NATF0.safetensors", byteCount: 7, in: voices)
 
         XCTAssertFalse(
             PersonaPlexDemoCachePolicy.cacheComplete(
                 in: dir,
                 requiredFiles: [
-                    "temporal.safetensors",
-                    "config.json",
-                    "voices/NATF0.safetensors",
-                    "voices/NATM0.safetensors",
+                    CacheFileRequirement(relativePath: "temporal.safetensors", byteCount: 5),
+                    CacheFileRequirement(relativePath: "config.json", byteCount: 2),
+                    CacheFileRequirement(relativePath: "voices/NATF0.safetensors", byteCount: 7),
+                    CacheFileRequirement(relativePath: "voices/NATM0.safetensors", byteCount: 6),
                 ],
                 requiresWeights: false))
 
-        try touch("NATM0.safetensors", in: voices)
+        try write("NATM0.safetensors", byteCount: 6, in: voices)
 
         XCTAssertTrue(
             PersonaPlexDemoCachePolicy.cacheComplete(
                 in: dir,
                 requiredFiles: [
-                    "temporal.safetensors",
-                    "config.json",
-                    "voices/NATF0.safetensors",
-                    "voices/NATM0.safetensors",
+                    CacheFileRequirement(relativePath: "temporal.safetensors", byteCount: 5),
+                    CacheFileRequirement(relativePath: "config.json", byteCount: 2),
+                    CacheFileRequirement(relativePath: "voices/NATF0.safetensors", byteCount: 7),
+                    CacheFileRequirement(relativePath: "voices/NATM0.safetensors", byteCount: 6),
                 ],
                 requiresWeights: false))
     }
@@ -88,9 +120,9 @@ final class PersonaPlexDemoCachePolicyTests: XCTestCase {
         return dir
     }
 
-    private func touch(_ name: String, in directory: URL) throws {
+    private func write(_ name: String, byteCount: Int, in directory: URL) throws {
         let url = directory.appendingPathComponent(name)
-        try Data().write(to: url)
+        try Data(repeating: 0, count: byteCount).write(to: url)
     }
 }
 #endif
