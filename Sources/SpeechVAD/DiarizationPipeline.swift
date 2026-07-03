@@ -339,27 +339,43 @@ public final class PyannoteDiarizationPipeline {
 
         let emptyResult = DiarizationResult(segments: [], numSpeakers: 0, speakerEmbeddings: [])
 
-        for (posIdx, (start, end)) in positions.enumerated() {
-            completedUnits += 1
-            if progressHandler?(Float(completedUnits) / Float(totalUnits), "Segmenting \(posIdx + 1)/\(positions.count)") == false {
+        // Windows are batched through the segmentation model: the BiLSTM runs
+        // ~600 sequential timesteps of tiny ops per window, so per-op dispatch
+        // overhead dominates a batch-of-1 forward pass. Stacking windows on the
+        // batch axis amortizes it (measured ~5x on the segmentation stage).
+        let segmentationBatch = 8
+        var batchStart = 0
+        while batchStart < positions.count {
+            let batchEnd = min(batchStart + segmentationBatch, positions.count)
+            if progressHandler?(Float(completedUnits) / Float(totalUnits), "Segmenting \(batchStart + 1)/\(positions.count)") == false {
                 return emptyResult
             }
 
-            var window = Array(samples[start..<end])
-            if window.count < windowSamples {
-                window.append(contentsOf: [Float](repeating: 0, count: windowSamples - window.count))
+            var flat = [Float]()
+            flat.reserveCapacity((batchEnd - batchStart) * windowSamples)
+            for p in batchStart..<batchEnd {
+                let (start, end) = positions[p]
+                flat.append(contentsOf: samples[start..<end])
+                if end - start < windowSamples {
+                    flat.append(contentsOf: [Float](repeating: 0, count: windowSamples - (end - start)))
+                }
             }
 
-            let input = MLXArray(window).reshaped(1, 1, windowSamples)
+            let input = MLXArray(flat).reshaped(batchEnd - batchStart, 1, windowSamples)
             let posteriors = segmentationModel(input)
             let speakerProbs = PowersetDecoder.speakerProbabilities(from: posteriors)
             eval(speakerProbs)
 
-            var tracks = [[Float]]()
-            for spk in 0..<3 {
-                tracks.append(speakerProbs[0, 0..., spk].asArray(Float.self))
+            for (bi, p) in (batchStart..<batchEnd).enumerated() {
+                var tracks = [[Float]]()
+                for spk in 0..<3 {
+                    tracks.append(speakerProbs[bi, 0..., spk].asArray(Float.self))
+                }
+                windowProbs.append(WindowProbs(startSample: positions[p].start,
+                                               endSample: positions[p].end, tracks: tracks))
             }
-            windowProbs.append(WindowProbs(startSample: start, endSample: end, tracks: tracks))
+            completedUnits += batchEnd - batchStart
+            batchStart = batchEnd
         }
 
         guard !windowProbs.isEmpty else {
