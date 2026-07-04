@@ -2,6 +2,14 @@
 
 AI speech models for Apple Silicon (MLX Swift). ASR, TTS, speech-to-speech, VAD, diarization, speech enhancement.
 
+## Communication Style
+
+- Communicate at the conceptual level first: what changed, why it matters, risk, tests, and recommendation.
+- Keep status updates short and understandable. Do not dump command logs, low-level mechanics, or long implementation detail unless directly asked.
+- For PRs and fixes, default to this summary shape: what changed, architecture fit, regression risk, tests run or needed, and recommendation.
+- If there are bugs, blockers, or regression risks, lead with them clearly and briefly.
+- When the user asks a direct question, answer it directly before adding supporting detail.
+
 ## Workflow
 
 - **Always work in a separate git worktree** so concurrent agents don't fight over the same working directory. Create one with `git worktree add ../speech-swift-<task> <branch>`, do all edits there, push from there. Multiple agents may be running against this repo at the same time — checking out branches in the shared working copy clobbers their state and silently loses WIP files. Delete the worktree (`git worktree remove`) when the task is done.
@@ -51,6 +59,7 @@ Project skills in `.claude/skills/`:
 | `/test` or `/test unit` | Run unit tests (skip E2E) |
 | `/test e2e` | Full test suite with model downloads |
 | `/test FilterName` | Run specific test filter |
+| `/review-pr <PR>` | Review PR architecture fit, regression risk, tests, and merge readiness |
 | `/benchmark asr` | Benchmark ASR speed |
 | `/benchmark tts` | Benchmark TTS speed |
 | `/benchmark vad` | VAD benchmark on VoxConverse |
