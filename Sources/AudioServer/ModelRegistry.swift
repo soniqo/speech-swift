@@ -66,6 +66,79 @@ public struct ModelVariant: Sendable, Equatable {
     }
 }
 
+/// Voice profile shape a TTS model can consume.
+public enum TTSVoiceProfileMode: String, Sendable, Equatable, CaseIterable {
+    case referenceClone = "reference-clone"
+    case presetVoice = "preset-voice"
+    case designedVoice = "designed-voice"
+}
+
+/// Text-side style control exposed by a TTS model.
+public enum TTSStyleMode: String, Sendable, Equatable, CaseIterable {
+    /// Natural-language instruction/caption.
+    case instruction
+    /// Scalar expressiveness control, not a specific emotion.
+    case intensity
+    /// The model accepts tags appended to the utterance, e.g. `text <happy>`.
+    case suffixTag = "suffix-tag"
+    /// The model accepts bracket tags in text, e.g. `[excited] text`.
+    case bracketTag = "bracket-tag"
+    /// No explicit style/emotion control is exposed.
+    case none
+}
+
+/// Runtime-relevant capabilities for a selectable TTS model.
+///
+/// This mirrors the product-facing model registry shape: clients should be
+/// able to decide whether a voice profile is compatible, which languages to
+/// offer, and whether style markers/instructions are meaningful without
+/// hardcoding per-engine behavior.
+public struct TTSModelCapabilities: Sendable, Equatable {
+    public let modelName: String
+    public let displayName: String
+    public let modelSize: String
+    public let languages: [String]
+    public let voiceProfileModes: [TTSVoiceProfileMode]
+    public let requiresReferenceAudio: Bool
+    public let requiresReferenceTranscript: Bool
+    public let supportsInstruct: Bool
+    public let styleMode: TTSStyleMode
+    public let supportedMarkers: [String]
+    public let needsTrim: Bool
+    public let usePolicy: String
+    public let readiness: String
+
+    public init(
+        modelName: String,
+        displayName: String,
+        modelSize: String,
+        languages: [String],
+        voiceProfileModes: [TTSVoiceProfileMode],
+        requiresReferenceAudio: Bool,
+        requiresReferenceTranscript: Bool,
+        supportsInstruct: Bool,
+        styleMode: TTSStyleMode,
+        supportedMarkers: [String],
+        needsTrim: Bool,
+        usePolicy: String = "commercial-safe",
+        readiness: String = "production"
+    ) {
+        self.modelName = modelName
+        self.displayName = displayName
+        self.modelSize = modelSize
+        self.languages = languages
+        self.voiceProfileModes = voiceProfileModes
+        self.requiresReferenceAudio = requiresReferenceAudio
+        self.requiresReferenceTranscript = requiresReferenceTranscript
+        self.supportsInstruct = supportsInstruct
+        self.styleMode = styleMode
+        self.supportedMarkers = supportedMarkers
+        self.needsTrim = needsTrim
+        self.usePolicy = usePolicy
+        self.readiness = readiness
+    }
+}
+
 /// Every model name the Realtime API accepts.
 ///
 /// `modelId` values reference each engine module's `defaultModelId` /
@@ -163,7 +236,15 @@ public let MODEL_REGISTRY: [ModelVariant] = [
           modelId: Qwen3TTSModel.defaultModelId,
           // "qwen3" is shared with the ASR variant — bare "qwen3" lands in
           // both slots so naming the family pairs ASR + TTS in one update.
-          aliases: ["qwen3", "qwen3-tts", "qwen3-speech", "qwen3-tts-1.7b"],
+          aliases: [
+              "qwen3", "qwen3-tts", "qwen3-speech", "qwen3-tts-1.7b",
+              "qwen3-tts-base-1.7b", "qwen3-tts-1.7b-bf16",
+          ],
+          kind: .tts),
+    .init(name: "qwen3-tts-0.6b-base-mlx-8bit",
+          engine: "qwen3-tts",
+          modelId: TTSModelVariant.base.rawValue,
+          aliases: ["qwen3-tts-0.6b", "qwen3-tts-base-0.6b", "qwen3-speech-0.6b"],
           kind: .tts),
     // Magpie ships as a fixed bundle today (the `MagpieTTSVariant.int8`
     // default; int4 was decommissioned). Listing it here keeps it selectable
@@ -346,6 +427,206 @@ public let MODEL_REGISTRY: [ModelVariant] = [
           aliases: ["flashsr-int8"],
           kind: .sr),
 ]
+
+private let qwenTTSLanguages = ["zh", "en", "ja", "ko", "de", "fr", "ru", "pt", "es", "it"]
+
+/// Capability metadata for TTS variants in `MODEL_REGISTRY`.
+///
+/// This is intentionally keyed by canonical `ModelVariant.name` so protocol
+/// responses can attach capabilities after name resolution. Aliases remain
+/// routing-only.
+public let TTS_MODEL_CAPABILITIES: [String: TTSModelCapabilities] = [
+    "kokoro-82m-coreml": .init(
+        modelName: "kokoro-82m-coreml",
+        displayName: "Kokoro 82M CoreML",
+        modelSize: "82M",
+        languages: ["en", "es", "fr", "hi", "it", "pt", "ja", "zh"],
+        voiceProfileModes: [.presetVoice],
+        requiresReferenceAudio: false,
+        requiresReferenceTranscript: false,
+        supportsInstruct: false,
+        styleMode: .none,
+        supportedMarkers: [],
+        needsTrim: false
+    ),
+    "cosyvoice-3-0.5b-mlx-bf16": .init(
+        modelName: "cosyvoice-3-0.5b-mlx-bf16",
+        displayName: "CosyVoice 3 0.5B MLX bf16",
+        modelSize: "0.5B",
+        languages: ["en", "zh"],
+        voiceProfileModes: [.referenceClone],
+        requiresReferenceAudio: true,
+        requiresReferenceTranscript: true,
+        supportsInstruct: true,
+        styleMode: .instruction,
+        supportedMarkers: ["angry", "calm", "excited", "happy", "sad", "serious", "soft", "whispering"],
+        needsTrim: false
+    ),
+    "cosyvoice-3-0.5b-mlx-8bit": .init(
+        modelName: "cosyvoice-3-0.5b-mlx-8bit",
+        displayName: "CosyVoice 3 0.5B MLX 8bit",
+        modelSize: "0.5B",
+        languages: ["en", "zh"],
+        voiceProfileModes: [.referenceClone],
+        requiresReferenceAudio: true,
+        requiresReferenceTranscript: true,
+        supportsInstruct: true,
+        styleMode: .instruction,
+        supportedMarkers: ["angry", "calm", "excited", "happy", "sad", "serious", "soft", "whispering"],
+        needsTrim: false
+    ),
+    "cosyvoice-3-0.5b-mlx-8bit-full": .init(
+        modelName: "cosyvoice-3-0.5b-mlx-8bit-full",
+        displayName: "CosyVoice 3 0.5B MLX 8bit full",
+        modelSize: "0.5B",
+        languages: ["en", "zh"],
+        voiceProfileModes: [.referenceClone],
+        requiresReferenceAudio: true,
+        requiresReferenceTranscript: true,
+        supportsInstruct: true,
+        styleMode: .instruction,
+        supportedMarkers: ["angry", "calm", "excited", "happy", "sad", "serious", "soft", "whispering"],
+        needsTrim: false
+    ),
+    "voxcpm2-mlx-bf16": .init(
+        modelName: "voxcpm2-mlx-bf16",
+        displayName: "VoxCPM2 MLX bf16",
+        modelSize: "1.7B",
+        languages: ["en", "zh"],
+        voiceProfileModes: [.referenceClone],
+        requiresReferenceAudio: true,
+        requiresReferenceTranscript: false,
+        supportsInstruct: true,
+        styleMode: .instruction,
+        supportedMarkers: ["angry", "calm", "excited", "happy", "sad", "serious", "soft", "whispering"],
+        needsTrim: false
+    ),
+    "voxcpm2-mlx-int8": .init(
+        modelName: "voxcpm2-mlx-int8",
+        displayName: "VoxCPM2 MLX int8",
+        modelSize: "1.7B",
+        languages: ["en", "zh"],
+        voiceProfileModes: [.referenceClone],
+        requiresReferenceAudio: true,
+        requiresReferenceTranscript: false,
+        supportsInstruct: true,
+        styleMode: .instruction,
+        supportedMarkers: ["angry", "calm", "excited", "happy", "sad", "serious", "soft", "whispering"],
+        needsTrim: false
+    ),
+    "indic-mio-mlx-fp16": .init(
+        modelName: "indic-mio-mlx-fp16",
+        displayName: "Indic-Mio MLX fp16",
+        modelSize: "0.6B",
+        languages: ["hi", "en"],
+        voiceProfileModes: [.referenceClone],
+        requiresReferenceAudio: true,
+        requiresReferenceTranscript: false,
+        supportsInstruct: false,
+        styleMode: .suffixTag,
+        supportedMarkers: ["<happy>", "<sad>", "<angry>", "<disgust>", "<fear>", "<surprise>"],
+        needsTrim: false
+    ),
+    "qwen3-tts-1.7b-mlx-bf16": .init(
+        modelName: "qwen3-tts-1.7b-mlx-bf16",
+        displayName: "Qwen3-TTS 1.7B Base MLX bf16",
+        modelSize: "1.7B",
+        languages: qwenTTSLanguages,
+        voiceProfileModes: [.referenceClone],
+        requiresReferenceAudio: true,
+        requiresReferenceTranscript: true,
+        supportsInstruct: false,
+        styleMode: .none,
+        supportedMarkers: [],
+        needsTrim: false
+    ),
+    "qwen3-tts-0.6b-base-mlx-8bit": .init(
+        modelName: "qwen3-tts-0.6b-base-mlx-8bit",
+        displayName: "Qwen3-TTS 0.6B Base MLX 8bit",
+        modelSize: "0.6B",
+        languages: qwenTTSLanguages,
+        voiceProfileModes: [.referenceClone],
+        requiresReferenceAudio: true,
+        requiresReferenceTranscript: true,
+        supportsInstruct: false,
+        styleMode: .none,
+        supportedMarkers: [],
+        needsTrim: false,
+        readiness: "experimental"
+    ),
+    "magpie-tts-multilingual-mlx-int8": .init(
+        modelName: "magpie-tts-multilingual-mlx-int8",
+        displayName: "Magpie TTS Multilingual MLX int8",
+        modelSize: "multilingual",
+        languages: ["en"],
+        voiceProfileModes: [.presetVoice],
+        requiresReferenceAudio: false,
+        requiresReferenceTranscript: false,
+        supportsInstruct: false,
+        styleMode: .none,
+        supportedMarkers: [],
+        needsTrim: false
+    ),
+    "magpie-tts-multilingual-357m-coreml-int8": .init(
+        modelName: "magpie-tts-multilingual-357m-coreml-int8",
+        displayName: "Magpie TTS 357M CoreML int8",
+        modelSize: "357M",
+        languages: ["en"],
+        voiceProfileModes: [.presetVoice],
+        requiresReferenceAudio: false,
+        requiresReferenceTranscript: false,
+        supportsInstruct: false,
+        styleMode: .none,
+        supportedMarkers: [],
+        needsTrim: false
+    ),
+    "qwen3-tts-coreml": .init(
+        modelName: "qwen3-tts-coreml",
+        displayName: "Qwen3-TTS CoreML",
+        modelSize: "0.6B",
+        languages: qwenTTSLanguages,
+        voiceProfileModes: [.presetVoice],
+        requiresReferenceAudio: false,
+        requiresReferenceTranscript: false,
+        supportsInstruct: false,
+        styleMode: .none,
+        supportedMarkers: [],
+        needsTrim: false
+    ),
+    "vibevoice-realtime-0.5b-mlx-int4": .init(
+        modelName: "vibevoice-realtime-0.5b-mlx-int4",
+        displayName: "VibeVoice Realtime 0.5B MLX int4",
+        modelSize: "0.5B",
+        languages: ["en"],
+        voiceProfileModes: [.presetVoice],
+        requiresReferenceAudio: false,
+        requiresReferenceTranscript: false,
+        supportsInstruct: false,
+        styleMode: .none,
+        supportedMarkers: [],
+        needsTrim: false,
+        readiness: "experimental"
+    ),
+    "vibevoice-1.5b-mlx-int4": .init(
+        modelName: "vibevoice-1.5b-mlx-int4",
+        displayName: "VibeVoice 1.5B MLX int4",
+        modelSize: "1.5B",
+        languages: ["en"],
+        voiceProfileModes: [.presetVoice],
+        requiresReferenceAudio: false,
+        requiresReferenceTranscript: false,
+        supportsInstruct: false,
+        styleMode: .none,
+        supportedMarkers: [],
+        needsTrim: false,
+        readiness: "experimental"
+    ),
+]
+
+public func ttsCapabilities(for variant: ModelVariant) -> TTSModelCapabilities? {
+    guard variant.kind == .tts else { return nil }
+    return TTS_MODEL_CAPABILITIES[variant.name]
+}
 
 /// Look up a model name (canonical or alias) in the registry.
 ///

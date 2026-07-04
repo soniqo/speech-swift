@@ -92,7 +92,7 @@ public struct AudioServer {
         // apart in shape.
         @Sendable
         func modelRow(_ v: ModelVariant) -> [String: Any] {
-            return [
+            var row: [String: Any] = [
                 "id": v.name,
                 "object": "model",
                 "engine": v.engine,
@@ -100,6 +100,21 @@ public struct AudioServer {
                 "model_id": v.modelId,
                 "aliases": v.aliases
             ]
+            if let caps = ttsCapabilities(for: v) {
+                row["display_name"] = caps.displayName
+                row["model_size"] = caps.modelSize
+                row["languages"] = caps.languages
+                row["voice_profile_modes"] = caps.voiceProfileModes.map(\.rawValue)
+                row["requires_reference_audio"] = caps.requiresReferenceAudio
+                row["requires_reference_transcript"] = caps.requiresReferenceTranscript
+                row["supports_instruct"] = caps.supportsInstruct
+                row["style_mode"] = caps.styleMode.rawValue
+                row["supported_markers"] = caps.supportedMarkers
+                row["needs_trim"] = caps.needsTrim
+                row["use_policy"] = caps.usePolicy
+                row["readiness"] = caps.readiness
+            }
+            return row
         }
 
         router.get("/v1/models") { _, _ in

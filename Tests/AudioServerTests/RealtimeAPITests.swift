@@ -694,6 +694,22 @@ final class RealtimeAPITests: XCTestCase {
                        "aufklarer/Parakeet-TDT-v3-CoreML-INT8-30s")
         XCTAssertEqual(parakeet["aliases"] as? [String],
                        ["parakeet", "parakeet-tdt", "parakeet-tdt-v3"])
+
+        guard let qwenTTS = rows.first(where: {
+            ($0["id"] as? String) == "qwen3-tts-0.6b-base-mlx-8bit"
+        }) else {
+            return XCTFail("Qwen3-TTS 0.6B Base variant missing from /v1/realtime/models")
+        }
+        XCTAssertEqual(qwenTTS["engine"] as? String, "qwen3-tts")
+        XCTAssertEqual(qwenTTS["model_size"] as? String, "0.6B")
+        XCTAssertEqual(qwenTTS["voice_profile_modes"] as? [String], ["reference-clone"])
+        XCTAssertEqual(qwenTTS["requires_reference_audio"] as? Bool, true)
+        XCTAssertEqual(qwenTTS["requires_reference_transcript"] as? Bool, true)
+        XCTAssertEqual(qwenTTS["supports_instruct"] as? Bool, false)
+        XCTAssertEqual(qwenTTS["style_mode"] as? String, "none")
+        XCTAssertEqual(qwenTTS["readiness"] as? String, "experimental")
+        XCTAssertTrue((qwenTTS["languages"] as? [String] ?? []).contains("en"))
+        XCTAssertTrue((qwenTTS["languages"] as? [String] ?? []).contains("ru"))
     }
 }
 
@@ -814,6 +830,39 @@ final class ResolveModelToEngineTests: XCTestCase {
                        "aufklarer/Qwen3-ASR-0.6B-MLX-4bit")
         XCTAssertEqual(resolveModelVariant("qwen3-1.7b")?.modelId,
                        "aufklarer/Qwen3-ASR-1.7B-MLX-8bit")
+    }
+
+    func testQwenBaseTTSVariantsAreRegisteredForVoiceCloning() {
+        XCTAssertEqual(resolveModelToTTSEngine("qwen3-tts-1.7b"), "qwen3-tts")
+        XCTAssertEqual(resolveModelVariant("qwen3-tts-1.7b")?.modelId,
+                       "aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-bf16")
+        XCTAssertNil(resolveModelVariant("qwen3-tts-1.7b-8bit"))
+        XCTAssertEqual(resolveModelVariant("qwen3-tts-0.6b")?.modelId,
+                       "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-8bit")
+    }
+
+    func testTTSRegistryHasCapabilityRows() throws {
+        let ttsVariants = MODEL_REGISTRY.filter { $0.kind == .tts }
+        for variant in ttsVariants {
+            let caps = try XCTUnwrap(ttsCapabilities(for: variant),
+                                     "\(variant.name) is missing TTS capability metadata")
+            XCTAssertEqual(caps.modelName, variant.name)
+            XCTAssertFalse(caps.displayName.isEmpty)
+            XCTAssertFalse(caps.modelSize.isEmpty)
+            XCTAssertFalse(caps.readiness.isEmpty)
+        }
+    }
+
+    func testQwenBaseCloneCapabilitiesDoNotClaimInstructControl() throws {
+        let variant = try XCTUnwrap(resolveModelVariant("qwen3-tts-0.6b"))
+        let caps = try XCTUnwrap(ttsCapabilities(for: variant))
+        XCTAssertEqual(caps.voiceProfileModes, [.referenceClone])
+        XCTAssertTrue(caps.requiresReferenceAudio)
+        XCTAssertTrue(caps.requiresReferenceTranscript)
+        XCTAssertFalse(caps.supportsInstruct)
+        XCTAssertEqual(caps.styleMode, .none)
+        XCTAssertTrue(caps.languages.contains("en"))
+        XCTAssertTrue(caps.languages.contains("ru"))
     }
 
     func testStreamingAndCoreMLVariantsRegistered() {
