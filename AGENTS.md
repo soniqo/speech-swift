@@ -52,6 +52,8 @@ The metallib step compiles MLX Metal shaders — without it, inference runs ~5x 
 
 Project skills in `.claude/skills/`:
 
+The same skills are exposed to agents that scan `.codex/skills/` through relative symlinks; keep both paths in sync when adding or renaming a project skill.
+
 | Command | Description |
 |---------|-------------|
 | `/build` or `/build release` | Release build with metallib |
