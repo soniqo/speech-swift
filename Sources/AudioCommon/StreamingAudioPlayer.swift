@@ -110,6 +110,14 @@ public final class StreamingAudioPlayer: @unchecked Sendable {
     /// Number of samples written for external diagnostics.
     public var totalWrittenSamples: Int { totalWritten }
     private var totalRead: Int = 0
+    private var underflowEvents: Int = 0
+
+    /// Number of render callbacks that had to output silence while playback was active.
+    public var underflowCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return underflowEvents
+    }
 
     public private(set) var isPlaying = false
     private var playbackFinishedFired = false
@@ -117,6 +125,12 @@ public final class StreamingAudioPlayer: @unchecked Sendable {
     /// Pre-buffer duration in seconds. Playback starts after this much audio accumulates.
     /// Default 1.0s — sufficient for streaming TTS at RTF < 0.6.
     public var preBufferDuration: Double = 1.0
+
+    /// Silence prepended to the first audible chunk so CoreAudio starts from a stable zero signal.
+    public var startupPrerollDuration: Double = 0.024
+
+    /// Fade-in applied to the first audible chunk to avoid a discontinuity from silence to waveform.
+    public var startupFadeInDuration: Double = 0.048
 
     /// Callback when all audio has finished playing.
     public var onPlaybackFinished: (() -> Void)?
@@ -205,12 +219,13 @@ public final class StreamingAudioPlayer: @unchecked Sendable {
             let rms = sqrt(sumSq / Float(samples.count))
             if rms < 0.005 { return }  // Only drop near-silence (codec init noise)
             isFirstChunk = false
-            // 5ms fade-in to prevent pop
+            // Start from explicit silence and fade in the first real waveform to prevent pops/clicks.
             if let fmt = format {
-                let fadeFrames = min(samples.count, Int(fmt.sampleRate * 0.005))
-                for i in 0..<fadeFrames {
-                    output[i] *= Float(i) / Float(fadeFrames)
-                }
+                output = Self.startupDeclick(
+                    samples,
+                    sampleRate: fmt.sampleRate,
+                    prerollDuration: startupPrerollDuration,
+                    fadeInDuration: startupFadeInDuration)
             }
         }
 
@@ -227,6 +242,30 @@ public final class StreamingAudioPlayer: @unchecked Sendable {
             playbackStarted = true
         }
         lock.unlock()
+    }
+
+    static func startupDeclick(
+        _ samples: [Float],
+        sampleRate: Double,
+        prerollDuration: Double = 0.024,
+        fadeInDuration: Double = 0.048
+    ) -> [Float] {
+        guard !samples.isEmpty, sampleRate > 0 else { return samples }
+        var conditioned = samples
+        let fadeFrames = min(
+            conditioned.count,
+            max(2, Int((sampleRate * max(0, fadeInDuration)).rounded(.up))))
+        for i in 0..<fadeFrames {
+            let x = Float(i) / Float(max(fadeFrames - 1, 1))
+            let gain = x * x * (3 - 2 * x)
+            conditioned[i] *= gain
+        }
+        let prerollFrames = max(0, Int((sampleRate * max(0, prerollDuration)).rounded(.up)))
+        guard prerollFrames > 0 else { return conditioned }
+        var output = [Float](repeating: 0, count: prerollFrames)
+        output.reserveCapacity(prerollFrames + conditioned.count)
+        output.append(contentsOf: conditioned)
+        return output
     }
 
     /// Write samples with resampling from sourceSampleRate to the player's rate.
@@ -361,6 +400,7 @@ public final class StreamingAudioPlayer: @unchecked Sendable {
         isFirstChunk = true
         totalWritten = 0
         totalRead = 0
+        underflowEvents = 0
         ringBuffer?.reset()
         lock.unlock()
     }
@@ -380,6 +420,7 @@ public final class StreamingAudioPlayer: @unchecked Sendable {
         isFirstChunk = true
         totalWritten = 0
         totalRead = 0
+        underflowEvents = 0
         ringBuffer?.reset()
         lock.unlock()
         isPlaying = false
@@ -404,6 +445,7 @@ public final class StreamingAudioPlayer: @unchecked Sendable {
         isFirstChunk = true
         totalWritten = 0
         totalRead = 0
+        underflowEvents = 0
         ringBuffer?.reset()
         lock.unlock()
         isPlaying = false
@@ -443,6 +485,11 @@ public final class StreamingAudioPlayer: @unchecked Sendable {
                 // Zero-fill remainder if not enough
                 if read < frames {
                     dst.advanced(by: read).update(repeating: 0, count: frames - read)
+                    if !complete {
+                        self.lock.lock()
+                        self.underflowEvents += 1
+                        self.lock.unlock()
+                    }
                 }
                 self.lock.lock()
                 self.totalRead += read
@@ -458,6 +505,11 @@ public final class StreamingAudioPlayer: @unchecked Sendable {
             } else {
                 // Underflow — output silence, keep waiting for more data
                 dst.update(repeating: 0, count: frames)
+                if !complete {
+                    self.lock.lock()
+                    self.underflowEvents += 1
+                    self.lock.unlock()
+                }
             }
 
             return noErr
