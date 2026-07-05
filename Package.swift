@@ -148,6 +148,10 @@ let package = Package(
             name: "SpeechWakeWord",
             targets: ["SpeechWakeWord"]
         ),
+        .library(
+            name: "Audio2Face3D",
+            targets: ["Audio2Face3D"]
+        ),
         .executable(
             name: "speech",
             targets: ["AudioCLI"]
@@ -532,6 +536,13 @@ let package = Package(
             ]
         ),
         .target(
+            name: "Audio2Face3D",
+            dependencies: [
+                "AudioCommon",
+                .product(name: "MLX", package: "mlx-swift")
+            ]
+        ),
+        .target(
             name: "AudioCLILib",
             dependencies: [
                 "Qwen3ASR",
@@ -560,6 +571,7 @@ let package = Package(
                 "MagpieTTSCoreML",
                 "MADLADTranslation",
                 "SpeechWakeWord",
+                "Audio2Face3D",
                 "AudioCommon",
                 .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "MLXRandom", package: "mlx-swift"),
@@ -934,6 +946,13 @@ let package = Package(
                 .copy("Resources/kws_light_up.wav"),
                 .copy("Resources/kws_lovely_child.wav"),
                 .copy("Resources/ref_encoder_light_up.bin")
+            ]
+        ),
+        .testTarget(
+            name: "Audio2Face3DTests",
+            dependencies: [
+                "Audio2Face3D",
+                "AudioCommon"
             ]
         )
     ]
