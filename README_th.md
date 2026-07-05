@@ -46,8 +46,8 @@
 - **[VibeVoice TTS](https://soniqo.audio/guides/vibevoice)** — TTS แบบยาว / หลายผู้พูด (Microsoft VibeVoice Realtime-0.5B + 1.5B, MLX สังเคราะห์พอดแคสต์/หนังสือเสียงได้นานสูงสุด 90 นาที, EN/ZH)
 - **[Magpie TTS](https://soniqo.audio/guides/magpie)** — TTS หลายภาษา (NVIDIA Magpie-TTS Multilingual 357M, MLX INT8 411 MB หรือ CoreML INT8 342 MB, 9 ภาษา, 5 ผู้พูดสำเร็จรูป สตรีมมิ่งบน MLX)
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — TTS แบบ flow-matching บนอุปกรณ์ (Supertone Supertonic-3 99M, CoreML/Neural Engine, 31 ภาษา, 10 เสียง, G2P-free, 44.1 kHz)
-- **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — TTS หลายภาษาพร้อมการโคลนเสียงแบบ zero-shot (Resemble AI Chatterbox Multilingual, MLX fp16 ~1.3 GB, 23 ภาษา, MIT)
-- **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-int8)** — TTS แบบ diffusion non-autoregressive พร้อมการโคลนเสียงแบบ zero-shot (k2-fsa OmniVoice, backbone Qwen3, MLX int8 ~1 GB / fp16, 600+ ภาษา, Apache-2.0)
+- **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — TTS หลายภาษาพร้อมการโคลนเสียงแบบ zero-shot (Resemble AI Chatterbox Multilingual, MLX fp16 ~1.3 GB, 23 ภาษาที่รันไทม์; ภาษาฮีบรูต้องมี niqqud, MIT)
+- **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-fp16)** — TTS แบบ diffusion non-autoregressive พร้อมการโคลนเสียงแบบ zero-shot (k2-fsa OmniVoice, backbone Qwen3, MLX fp16 เป็นค่าเริ่มต้น / มี int8, 600+ ภาษา, Apache-2.0)
 - **[Indic-Mio](docs/models/indic-mio-tts.md)** — Hindi/Indic TTS with inline emotion markers and optional reference-voice cloning (MLX, 24 kHz)
 
 **LLM และการแปล**
@@ -168,7 +168,8 @@ struct DictateView: View {
 | [VibeVoice Realtime-0.5B](https://soniqo.audio/guides/vibevoice) | ข้อความ → เสียงพูด (รูปแบบยาว หลายผู้พูด) | MLX | 0.5B | EN/ZH |
 | [VibeVoice 1.5B](https://soniqo.audio/guides/vibevoice) | ข้อความ → เสียงพูด (พอดแคสต์ยาวสุด 90 นาที) | MLX | 1.5B | EN/ZH |
 | [Magpie-TTS Multilingual](https://soniqo.audio/guides/magpie) | ข้อความ → เสียงพูด (5 ผู้พูดสำเร็จรูป สตรีมมิ่ง) | MLX / CoreML | 357M (MLX INT8, CoreML INT8) | 9 (CoreML ไม่รวม JA) |
-| [OmniVoice](https://huggingface.co/aufklarer/OmniVoice-MLX-int8) | ข้อความ → เสียงพูด (diffusion NAR, การโคลนแบบ zero-shot) | MLX | 0.8B (int8/fp16) | 600+ |
+| [Chatterbox Multilingual](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16) | ข้อความ → เสียงพูด (โคลนแบบ zero-shot) | MLX | 0.8B (fp16) | 23 (HE ต้องมี niqqud) |
+| [OmniVoice](https://huggingface.co/aufklarer/OmniVoice-MLX-fp16) | ข้อความ → เสียงพูด (diffusion NAR, การโคลนแบบ zero-shot) | MLX | 0.8B (fp16 ค่าเริ่มต้น / int8) | 600+ |
 | [Indic-Mio](docs/models/indic-mio-tts.md) | Text → Speech (Hindi/Indic, emotion tags, voice cloning) | MLX | fp16 | Hindi / Indic |
 | [Fish Audio S2 Pro](docs/models/fish-audio-s2-pro.md) | ข้อความ → เสียงพูด (การโคลนแบบ zero-shot, marker สไตล์แบบชัดเจน) | MLX | 0.5B-class (fp16) | หลายภาษา |
 | [Qwen3.5 Chat](docs/models/qwen35-chat.md) | Text → Text (LLM) | MLX, CoreML | 0.8B | Multi |

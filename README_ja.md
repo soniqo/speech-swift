@@ -46,8 +46,8 @@ Mac・iOS向けのオンデバイス音声認識・合成・理解。Apple Silic
 - **[VibeVoice TTS](https://soniqo.audio/ja/guides/vibevoice)** — 長尺・マルチスピーカーTTS（Microsoft VibeVoice Realtime-0.5B + 1.5B、MLX、最長90分のポッドキャスト／オーディオブック生成、EN/ZH）
 - **[Magpie TTS](https://soniqo.audio/ja/guides/magpie)** — 多言語 TTS（NVIDIA Magpie-TTS Multilingual 357M、MLX INT8 411 MB または CoreML INT8 342 MB、9 言語、5 つの組み込みスピーカー、MLX でストリーミング）
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — オンデバイスのフローマッチングTTS（Supertone Supertonic-3 99M、CoreML/Neural Engine、31言語、10ボイス、G2P-free、44.1 kHz）
-- **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — ゼロショット音声クローン対応の多言語TTS（Resemble AI Chatterbox Multilingual、MLX fp16 ~1.3 GB、23言語、MIT）
-- **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-int8)** — ゼロショット音声クローンに対応した非自己回帰拡散TTS（k2-fsa OmniVoice、Qwen3バックボーン、MLX int8 ~1 GB / fp16、600+言語、Apache-2.0）
+- **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — ゼロショット音声クローン対応の多言語TTS（Resemble AI Chatterbox Multilingual、MLX fp16 ~1.3 GB、23ランタイム言語、ヘブライ語はニクダーが必要、MIT）
+- **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-fp16)** — ゼロショット音声クローンに対応した非自己回帰拡散TTS（k2-fsa OmniVoice、Qwen3バックボーン、MLX fp16デフォルト / int8利用可、600+言語、Apache-2.0）
 - **[Indic-Mio](docs/models/indic-mio-tts.md)** — Hindi/Indic TTS with inline emotion markers and optional reference-voice cloning (MLX, 24 kHz)
 
 **LLM と翻訳**
@@ -168,7 +168,8 @@ struct DictateView: View {
 | [VibeVoice Realtime-0.5B](https://soniqo.audio/ja/guides/vibevoice) | テキスト → 音声（長尺・マルチスピーカー） | MLX | 0.5B | EN/ZH |
 | [VibeVoice 1.5B](https://soniqo.audio/ja/guides/vibevoice) | テキスト → 音声（最長90分のポッドキャスト） | MLX | 1.5B | EN/ZH |
 | [Magpie-TTS Multilingual](https://soniqo.audio/ja/guides/magpie) | テキスト → 音声（5 つの組み込みスピーカー、ストリーミング） | MLX / CoreML | 357M (MLX INT8, CoreML INT8) | 9（CoreML は日本語を除く） |
-| [OmniVoice](https://huggingface.co/aufklarer/OmniVoice-MLX-int8) | テキスト → 音声（NAR 拡散、ゼロショットクローン） | MLX | 0.8B (int8/fp16) | **600+** |
+| [Chatterbox Multilingual](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16) | テキスト → 音声（ゼロショットクローン） | MLX | 0.8B (fp16) | 23（HEはニクダー必須） |
+| [OmniVoice](https://huggingface.co/aufklarer/OmniVoice-MLX-fp16) | テキスト → 音声（NAR 拡散、ゼロショットクローン） | MLX | 0.8B (fp16デフォルト / int8) | **600+** |
 | [Indic-Mio](docs/models/indic-mio-tts.md) | Text → Speech (Hindi/Indic, emotion tags, voice cloning) | MLX | fp16 | Hindi / Indic |
 | [Fish Audio S2 Pro](docs/models/fish-audio-s2-pro.md) | テキスト → 音声（ゼロショットクローン、明示的スタイルマーカー） | MLX | 0.5B-class (fp16) | 多言語 |
 | [Qwen3.5 Chat](docs/models/qwen35-chat.md) | Text → Text (LLM) | MLX, CoreML | 0.8B | Multi |

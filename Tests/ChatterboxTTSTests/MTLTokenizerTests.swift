@@ -46,7 +46,9 @@ final class MTLTokenizerTests: XCTestCase {
         ]
         XCTAssertEqual(MTLTokenizer.upstreamLanguages, expected)
         XCTAssertEqual(MTLTokenizer.upstreamLanguages.count, 23)
-        XCTAssertFalse(MTLTokenizer.supportedLanguages.contains("he"))
+        XCTAssertEqual(MTLTokenizer.supportedLanguages, expected)
+        XCTAssertEqual(MTLTokenizer.supportedLanguages.count, 23)
+        XCTAssertTrue(MTLTokenizer.supportedLanguages.contains("he"))
         XCTAssertTrue(MTLTokenizer.supportedLanguages.contains("ja"))
         XCTAssertTrue(MTLTokenizer.supportedLanguages.contains("zh"))
 
@@ -105,6 +107,7 @@ final class MTLTokenizerTests: XCTestCase {
             "es": "Hoy probamos si el habla es clara y fácil de entender.",
             "fi": "Tänään testaamme, onko puhe selkeää ja helppoa ymmärtää.",
             "fr": "Aujourd'hui, nous testons si la parole est claire et facile à comprendre.",
+            "he": "הַיּוֹם אֲנַחְנוּ בּוֹדְקִים אִם הַדִּבּוּר בָּרוּר וְקַל לַהֲבָנָה.",
             "hi": "आज हम जाँचते हैं कि आवाज़ साफ़ और समझने में आसान है या नहीं।",
             "it": "Oggi testiamo se il parlato è chiaro e facile da capire.",
             "ja": "今日は音声が明瞭で理解しやすいかを確認します。",
@@ -123,8 +126,26 @@ final class MTLTokenizerTests: XCTestCase {
 
         XCTAssertEqual(Set(samples.keys), MTLTokenizer.supportedLanguages)
         for (language, text) in samples {
-            let encoded = tok.encode(text, languageId: language)
+            let encoded = try tok.encodeStrict(text, languageId: language)
             XCTAssertFalse(encoded.contains(1), "\(language) should not emit [UNK]")
         }
+    }
+
+    func testHebrewRequiresDiacriticsForStrictEncoding() async throws {
+        let tok = try await loadTokenizer()
+
+        XCTAssertThrowsError(try tok.encodeStrict("שלום עולם", languageId: "he")) { error in
+            guard case ChatterboxTokenizerError.hebrewRequiresDiacritics = error else {
+                return XCTFail("expected Hebrew diacritics error, got \(error)")
+            }
+        }
+    }
+
+    func testHebrewDiacriticsEncodeWithoutUnknownTokens() async throws {
+        let tok = try await loadTokenizer()
+        let encoded = try tok.encodeStrict("שָׁלוֹם עוֹלָם", languageId: "he")
+
+        XCTAssertEqual(encoded.first, 2110)
+        XCTAssertFalse(encoded.contains(1), "diacritized Hebrew should not emit [UNK]")
     }
 }

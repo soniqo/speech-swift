@@ -46,8 +46,8 @@
 - **[VibeVoice TTS](https://soniqo.audio/ru/guides/vibevoice)** — Длинный формат / многоголосый TTS (Microsoft VibeVoice Realtime-0.5B + 1.5B, MLX, синтез подкастов/аудиокниг до 90 минут, EN/ZH)
 - **[Magpie TTS](https://soniqo.audio/ru/guides/magpie)** — Многоязычный TTS (NVIDIA Magpie-TTS Multilingual 357M, MLX INT8 411 МБ или CoreML INT8 342 МБ, 9 языков, 5 встроенных голосов, стриминг на MLX)
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — Синтез речи на устройстве на основе flow-matching (Supertone Supertonic-3 99M, CoreML/Neural Engine, 31 язык, 10 голосов, G2P-free, 44.1 кГц)
-- **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — Многоязычный TTS с zero-shot клонированием голоса (Resemble AI Chatterbox Multilingual, MLX fp16 ~1,3 ГБ, 23 языка, MIT)
-- **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-int8)** — Неавторегрессионный диффузионный TTS с zero-shot клонированием голоса (k2-fsa OmniVoice, бэкбон Qwen3, MLX int8 ~1 ГБ / fp16, 600+ языков, Apache-2.0)
+- **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — Многоязычный TTS с zero-shot клонированием голоса (Resemble AI Chatterbox Multilingual, MLX fp16 ~1,3 ГБ, 23 языка в рантайме; для иврита нужен никкуд, MIT)
+- **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-fp16)** — Неавторегрессионный диффузионный TTS с zero-shot клонированием голоса (k2-fsa OmniVoice, бэкбон Qwen3, MLX fp16 по умолчанию / доступен int8, 600+ языков, Apache-2.0)
 - **[Indic-Mio](docs/models/indic-mio-tts.md)** — Hindi/Indic TTS with inline emotion markers and optional reference-voice cloning (MLX, 24 kHz)
 
 **LLM и перевод**
@@ -168,7 +168,8 @@ struct DictateView: View {
 | [VibeVoice Realtime-0.5B](https://soniqo.audio/ru/guides/vibevoice) | Текст → Речь (длинный формат, многоголосый) | MLX | 0.5B | EN/ZH |
 | [VibeVoice 1.5B](https://soniqo.audio/ru/guides/vibevoice) | Текст → Речь (подкаст до 90 минут) | MLX | 1.5B | EN/ZH |
 | [Magpie-TTS Multilingual](https://soniqo.audio/ru/guides/magpie) | Текст → Речь (5 встроенных голосов, стриминг) | MLX / CoreML | 357M (MLX INT8, CoreML INT8) | 9 (CoreML без JA) |
-| [OmniVoice](https://huggingface.co/aufklarer/OmniVoice-MLX-int8) | Текст → Речь (NAR-диффузия, zero-shot клонирование) | MLX | 0.8B (int8/fp16) | **600+** |
+| [Chatterbox Multilingual](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16) | Текст → Речь (zero-shot клонирование) | MLX | 0.8B (fp16) | 23 (HE нужен никкуд) |
+| [OmniVoice](https://huggingface.co/aufklarer/OmniVoice-MLX-fp16) | Текст → Речь (NAR-диффузия, zero-shot клонирование) | MLX | 0.8B (fp16 по умолчанию / int8) | **600+** |
 | [Indic-Mio](docs/models/indic-mio-tts.md) | Text → Speech (Hindi/Indic, emotion tags, voice cloning) | MLX | fp16 | Hindi / Indic |
 | [Fish Audio S2 Pro](docs/models/fish-audio-s2-pro.md) | Текст → Речь (zero-shot клонирование, явные маркеры стиля) | MLX | 0.5B-class (fp16) | Многоязычный |
 | [Qwen3.5 Chat](docs/models/qwen35-chat.md) | Text → Text (LLM) | MLX, CoreML | 0.8B | Multi |

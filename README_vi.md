@@ -46,8 +46,8 @@ Nhận dạng, tổng hợp và hiểu giọng nói trên thiết bị cho Mac v
 - **[VibeVoice TTS](https://soniqo.audio/guides/vibevoice)** — TTS định dạng dài / nhiều người nói (Microsoft VibeVoice Realtime-0.5B + 1.5B, MLX, tổng hợp podcast/sách nói lên đến 90 phút, EN/ZH)
 - **[Magpie TTS](https://soniqo.audio/guides/magpie)** — TTS đa ngôn ngữ (NVIDIA Magpie-TTS Multilingual 357M, MLX INT8 411 MB hoặc CoreML INT8 342 MB, 9 ngôn ngữ, 5 giọng nói có sẵn, streaming trên MLX)
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — TTS flow-matching trên thiết bị (Supertone Supertonic-3 99M, CoreML/Neural Engine, 31 ngôn ngữ, 10 giọng, không cần G2P, 44,1 kHz)
-- **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — TTS đa ngôn ngữ với nhân bản giọng nói zero-shot (Resemble AI Chatterbox Multilingual, MLX fp16 ~1,3 GB, 23 ngôn ngữ, MIT)
-- **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-int8)** — TTS khuếch tán phi tự hồi quy với nhân bản giọng nói zero-shot (k2-fsa OmniVoice, backbone Qwen3, MLX int8 ~1 GB / fp16, 600+ ngôn ngữ, Apache-2.0)
+- **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — TTS đa ngôn ngữ với nhân bản giọng nói zero-shot (Resemble AI Chatterbox Multilingual, MLX fp16 ~1,3 GB, 23 ngôn ngữ runtime; tiếng Hebrew cần niqqud, MIT)
+- **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-fp16)** — TTS khuếch tán phi tự hồi quy với nhân bản giọng nói zero-shot (k2-fsa OmniVoice, backbone Qwen3, MLX fp16 mặc định / có int8, 600+ ngôn ngữ, Apache-2.0)
 - **[Indic-Mio](docs/models/indic-mio-tts.md)** — Hindi/Indic TTS with inline emotion markers and optional reference-voice cloning (MLX, 24 kHz)
 
 **LLM và dịch thuật**
@@ -168,7 +168,8 @@ Xem tổng quan gọn bên dưới. **[Danh mục mô hình đầy đủ với k
 | [VibeVoice Realtime-0.5B](https://soniqo.audio/guides/vibevoice) | Văn bản → Giọng nói (định dạng dài, nhiều người nói) | MLX | 0.5B | EN/ZH |
 | [VibeVoice 1.5B](https://soniqo.audio/guides/vibevoice) | Văn bản → Giọng nói (podcast đến 90 phút) | MLX | 1.5B | EN/ZH |
 | [Magpie-TTS Multilingual](https://soniqo.audio/guides/magpie) | Văn bản → Giọng nói (5 giọng có sẵn, streaming) | MLX / CoreML | 357M (MLX INT8, CoreML INT8) | 9 (CoreML loại trừ JA) |
-| [OmniVoice](https://huggingface.co/aufklarer/OmniVoice-MLX-int8) | Văn bản → Giọng nói (khuếch tán NAR, nhân bản zero-shot) | MLX | 0.8B (int8/fp16) | **600+** |
+| [Chatterbox Multilingual](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16) | Văn bản → Giọng nói (nhân bản zero-shot) | MLX | 0.8B (fp16) | 23 (HE cần niqqud) |
+| [OmniVoice](https://huggingface.co/aufklarer/OmniVoice-MLX-fp16) | Văn bản → Giọng nói (khuếch tán NAR, nhân bản zero-shot) | MLX | 0.8B (fp16 mặc định / int8) | **600+** |
 | [Indic-Mio](docs/models/indic-mio-tts.md) | Text → Speech (Hindi/Indic, emotion tags, voice cloning) | MLX | fp16 | Hindi / Indic |
 | [Fish Audio S2 Pro](docs/models/fish-audio-s2-pro.md) | Văn bản → Giọng nói (nhân bản zero-shot, marker phong cách tường minh) | MLX | 0.5B-class (fp16) | Đa ngôn ngữ |
 | [Qwen3.5 Chat](docs/models/qwen35-chat.md) | Text → Text (LLM) | MLX, CoreML | 0.8B | Multi |

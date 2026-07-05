@@ -46,8 +46,8 @@ Mac과 iOS를 위한 온디바이스 음성 인식, 합성 및 이해. Apple Sil
 - **[VibeVoice TTS](https://soniqo.audio/ko/guides/vibevoice)** — 장문 / 멀티 스피커 TTS (Microsoft VibeVoice Realtime-0.5B + 1.5B, MLX, 최대 90분 팟캐스트 / 오디오북 합성, EN/ZH)
 - **[Magpie TTS](https://soniqo.audio/ko/guides/magpie)** — 다국어 TTS (NVIDIA Magpie-TTS Multilingual 357M, MLX INT8 411 MB 또는 CoreML INT8 342 MB, 9개 언어, 5개 내장 스피커, MLX 스트리밍)
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — 온디바이스 flow-matching TTS (Supertone Supertonic-3 99M, CoreML/Neural Engine, 31개 언어, 10개 음색, G2P-free, 44.1 kHz)
-- **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — 제로샷 음성 복제를 지원하는 다국어 TTS (Resemble AI Chatterbox Multilingual, MLX fp16 ~1.3 GB, 23개 언어, MIT)
-- **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-int8)** — 제로샷 음성 복제를 지원하는 비자기회귀 확산 TTS (k2-fsa OmniVoice, Qwen3 백본, MLX int8 ~1 GB / fp16, 600+개 언어, Apache-2.0)
+- **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — 제로샷 음성 복제를 지원하는 다국어 TTS (Resemble AI Chatterbox Multilingual, MLX fp16 ~1.3 GB, 런타임 23개 언어, 히브리어는 niqqud 필요, MIT)
+- **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-fp16)** — 제로샷 음성 복제를 지원하는 비자기회귀 확산 TTS (k2-fsa OmniVoice, Qwen3 백본, MLX fp16 기본 / int8 사용 가능, 600+개 언어, Apache-2.0)
 - **[Indic-Mio](docs/models/indic-mio-tts.md)** — Hindi/Indic TTS with inline emotion markers and optional reference-voice cloning (MLX, 24 kHz)
 
 **LLM 및 번역**
@@ -168,7 +168,8 @@ struct DictateView: View {
 | [VibeVoice Realtime-0.5B](https://soniqo.audio/ko/guides/vibevoice) | 텍스트 → 음성 (장문, 멀티 스피커) | MLX | 0.5B | EN/ZH |
 | [VibeVoice 1.5B](https://soniqo.audio/ko/guides/vibevoice) | 텍스트 → 음성 (최대 90분 팟캐스트) | MLX | 1.5B | EN/ZH |
 | [Magpie-TTS Multilingual](https://soniqo.audio/ko/guides/magpie) | 텍스트 → 음성 (5개 내장 스피커, 스트리밍) | MLX / CoreML | 357M (MLX INT8, CoreML INT8) | 9 (CoreML은 일본어 제외) |
-| [OmniVoice](https://huggingface.co/aufklarer/OmniVoice-MLX-int8) | 텍스트 → 음성 (NAR 확산, 제로샷 복제) | MLX | 0.8B (int8/fp16) | **600+** |
+| [Chatterbox Multilingual](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16) | 텍스트 → 음성 (제로샷 복제) | MLX | 0.8B (fp16) | 23 (HE는 niqqud 필요) |
+| [OmniVoice](https://huggingface.co/aufklarer/OmniVoice-MLX-fp16) | 텍스트 → 음성 (NAR 확산, 제로샷 복제) | MLX | 0.8B (fp16 기본 / int8) | **600+** |
 | [Indic-Mio](docs/models/indic-mio-tts.md) | Text → Speech (Hindi/Indic, emotion tags, voice cloning) | MLX | fp16 | Hindi / Indic |
 | [Fish Audio S2 Pro](docs/models/fish-audio-s2-pro.md) | 텍스트 → 음성 (제로샷 복제, 명시적 스타일 마커) | MLX | 0.5B-class (fp16) | 다국어 |
 | [Qwen3.5 Chat](docs/models/qwen35-chat.md) | Text → Text (LLM) | MLX, CoreML | 0.8B | Multi |

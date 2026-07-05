@@ -100,6 +100,7 @@ final class E2ERoundtripTests: XCTestCase {
         let cases: [(String, String)] = [
             ("en", "Hello there, this is a cloned voice."),
             ("ar", "مرحبا، هذا صوت مستنسخ."),
+            ("he", "שָׁלוֹם, זֶה קוֹל מְשֻׁבָּט."),
             ("hi", "नमस्ते, यह एक क्लोन की गई आवाज़ है।"),
             ("ja", "今日は音声が明瞭で理解しやすいかを確認します。"),
             ("zh", "今天我们测试中文语音是否清楚且容易理解。"),

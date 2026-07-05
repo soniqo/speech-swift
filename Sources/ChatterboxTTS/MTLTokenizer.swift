@@ -10,9 +10,21 @@ public enum ChatterboxToken {
     public static let space = "[SPACE]"
 }
 
-public enum ChatterboxTokenizerError: Error {
+public enum ChatterboxTokenizerError: Error, LocalizedError {
     case malformedTokenizerJSON
     case missingCangjieMap
+    case hebrewRequiresDiacritics
+
+    public var errorDescription: String? {
+        switch self {
+        case .malformedTokenizerJSON:
+            return "Malformed Chatterbox tokenizer.json"
+        case .missingCangjieMap:
+            return "Chatterbox tokenizer is missing Cangjie5_TC.json"
+        case .hebrewRequiresDiacritics:
+            return "Chatterbox Hebrew input must include niqqud/diacritics; automatic diacritization is not bundled yet"
+        }
+    }
 }
 
 /// Multilingual grapheme tokenizer for Chatterbox — a self-contained Swift port
@@ -50,11 +62,11 @@ public final class MTLTokenizer {
     ]
 
     /// Languages whose text frontend is implemented locally without falling
-    /// back to raw text. Keep languages with missing external frontends out of
-    /// this runtime gate: `he` needs Dicta-style diacritization.
+    /// back to raw text. Hebrew is accepted only when the caller supplies
+    /// pre-diacritized text; automatic Dicta ONNX diacritization is not ported.
     public static let supportedLanguages: Set<String> = [
-        "ar", "da", "de", "el", "en", "es", "fi", "fr", "hi", "it",
-        "ja", "ko", "ms", "nl", "no", "pl", "pt", "ru", "sv", "sw",
+        "ar", "da", "de", "el", "en", "es", "fi", "fr", "he", "hi",
+        "it", "ja", "ko", "ms", "nl", "no", "pl", "pt", "ru", "sv", "sw",
         "tr", "zh",
     ]
 
@@ -127,6 +139,19 @@ public final class MTLTokenizer {
         }
         s = s.replacingOccurrences(of: " ", with: ChatterboxToken.space)
         return tokenize(s)
+    }
+
+    /// Strict encode path used by synthesis. It preserves `encode`'s legacy
+    /// behaviour for tests/debugging, but rejects Hebrew text that has not been
+    /// pre-diacritized; upstream relies on Dicta before tokenization for this.
+    public func encodeStrict(_ text: String, languageId: String? = nil) throws -> [Int] {
+        let lang = languageId?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if lang == "he",
+           Self.containsHebrewLetters(text),
+           !Self.containsHebrewDiacritics(text) {
+            throw ChatterboxTokenizerError.hebrewRequiresDiacritics
+        }
+        return encode(text, languageId: languageId)
     }
 
     /// Inverse of `encode` for debugging.
@@ -274,6 +299,27 @@ public final class MTLTokenizer {
         text.unicodeScalars.contains { scalar in
             (0x4E00...0x9FFF).contains(scalar.value)
         }
+    }
+
+    public static func containsHebrewLetters(_ text: String) -> Bool {
+        text.unicodeScalars.contains { scalar in
+            (0x05D0...0x05EA).contains(scalar.value)
+        }
+    }
+
+    public static func containsHebrewDiacritics(_ text: String) -> Bool {
+        text.unicodeScalars.contains { scalar in
+            switch scalar.value {
+            case 0x0591...0x05BD, 0x05BF, 0x05C1...0x05C2, 0x05C4...0x05C5, 0x05C7:
+                return true
+            default:
+                return false
+            }
+        }
+    }
+
+    public static func isHebrewTextDiacritized(_ text: String) -> Bool {
+        !containsHebrewLetters(text) || containsHebrewDiacritics(text)
     }
 
     private static func decomposeHangulToJamo(_ text: String) -> String {

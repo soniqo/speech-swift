@@ -4,10 +4,10 @@
 
 Chatterbox Multilingual (Resemble AI, MIT) is a zero-shot voice-cloning TTS that
 synthesizes a target text in the timbre of a short reference clip. The upstream
-model publishes 23 language tags; the Swift runtime enables the 22 languages
-whose required text frontends are implemented locally. The MLX bundle is a
-genuine fp16
-conversion (~1.3 GB) of the three upstream checkpoints, published at
+model publishes 23 language tags; the Swift runtime enables all 23, with Hebrew
+requiring pre-diacritized text (niqqud) until automatic Dicta ONNX
+diacritization is bundled. The MLX bundle is a genuine fp16 conversion
+(~1.3 GB) of the three upstream checkpoints, published at
 [`aufklarer/Chatterbox-Multilingual-MLX-fp16`](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16).
 
 The Swift port is built component-by-component, with token ids, mel features, and
@@ -16,7 +16,7 @@ speaker embeddings checked against a known-good reference at each stage.
 ## Languages
 
 Runtime-enabled languages: Arabic, Chinese, Danish, Dutch, English, Finnish,
-French, German, Greek, Hindi, Italian, Japanese, Korean, Malay, Norwegian,
+French, German, Greek, Hebrew, Hindi, Italian, Japanese, Korean, Malay, Norwegian,
 Polish, Portuguese, Russian, Spanish, Swahili, Swedish, Turkish.
 
 Text encodes through a grapheme path: NFKD normalization → a per-language
@@ -25,8 +25,8 @@ Text encodes through a grapheme path: NFKD normalization → a per-language
 - Chinese uses word segmentation plus the published Cangjie-5 token map.
 - Japanese converts kanji readings to hiragana through `CFStringTokenizer`.
 - Korean decomposes Hangul syllables to Jamo.
-- Hebrew remains disabled until the runtime includes the diacritization frontend
-  needed by the upstream model.
+- Hebrew accepts pre-diacritized input with niqqud. Raw Hebrew is rejected with a
+  clear error until the runtime includes automatic Dicta ONNX diacritization.
 
 ## Pipeline Stages
 

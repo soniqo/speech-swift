@@ -19,12 +19,15 @@ import MLXNN
 public enum ChatterboxModelError: Error, LocalizedError {
     case missingFile(String)
     case unsupportedLanguage(String)
+    case invalidText(String)
 
     public var errorDescription: String? {
         switch self {
         case let .missingFile(p): return "Chatterbox: required file not found: \(p)"
         case let .unsupportedLanguage(l):
             return "Chatterbox: language '\(l)' is not supported"
+        case let .invalidText(message):
+            return "Chatterbox: \(message)"
         }
     }
 }
@@ -333,7 +336,13 @@ public final class ChatterboxTTSModel {
         let t3PromptTokens = Array(s3gen.tokenizer.encode(ref16kEnc).prefix(Self.speechCondPromptLen))
 
         // --- text tokenization: [sot] + ids + [eot] ---
-        let ids = tokenizer.encode(text, languageId: lang)
+        let ids: [Int]
+        do {
+            ids = try tokenizer.encodeStrict(text, languageId: lang)
+        } catch ChatterboxTokenizerError.hebrewRequiresDiacritics {
+            throw ChatterboxModelError.invalidText(
+                "Hebrew input must include niqqud/diacritics; automatic Dicta diacritization is not bundled yet")
+        }
         let textTokens = [Self.startTextToken] + ids + [Self.stopTextToken]
 
         // --- T3: text -> speech tokens ---

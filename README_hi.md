@@ -46,8 +46,8 @@ Mac और iOS के लिए ऑन-डिवाइस स्पीच रि
 - **[VibeVoice TTS](https://soniqo.audio/hi/guides/vibevoice)** — लंबे-रूप / बहु-वक्ता TTS (Microsoft VibeVoice Realtime-0.5B + 1.5B, MLX, 90 मिनट तक के पॉडकास्ट / ऑडियोबुक संश्लेषण, EN/ZH)
 - **[Magpie TTS](https://soniqo.audio/hi/guides/magpie)** — बहुभाषी TTS (NVIDIA Magpie-TTS Multilingual 357M, MLX INT8 411 MB या CoreML INT8 342 MB, 9 भाषाएँ, 5 पूर्व-निर्धारित वक्ता, MLX पर स्ट्रीमिंग)
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — ऑन-डिवाइस फ़्लो-मैचिंग TTS (Supertone Supertonic-3 99M, CoreML/Neural Engine, 31 भाषाएँ, 10 वॉयस, G2P-free, 44.1 kHz)
-- **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — ज़ीरो-शॉट वॉयस क्लोनिंग के साथ बहुभाषी TTS (Resemble AI Chatterbox Multilingual, MLX fp16 ~1.3 GB, 23 भाषाएँ, MIT)
-- **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-int8)** — ज़ीरो-शॉट वॉयस क्लोनिंग के साथ नॉन-ऑटोरिग्रेसिव डिफ्यूज़न TTS (k2-fsa OmniVoice, Qwen3 बैकबोन, MLX int8 ~1 GB / fp16, 600+ भाषाएँ, Apache-2.0)
+- **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — ज़ीरो-शॉट वॉयस क्लोनिंग के साथ बहुभाषी TTS (Resemble AI Chatterbox Multilingual, MLX fp16 ~1.3 GB, 23 रनटाइम भाषाएँ; हिब्रू के लिए niqqud आवश्यक, MIT)
+- **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-fp16)** — ज़ीरो-शॉट वॉयस क्लोनिंग के साथ नॉन-ऑटोरिग्रेसिव डिफ्यूज़न TTS (k2-fsa OmniVoice, Qwen3 बैकबोन, MLX fp16 डिफ़ॉल्ट / int8 उपलब्ध, 600+ भाषाएँ, Apache-2.0)
 - **[Indic-Mio](docs/models/indic-mio-tts.md)** — Hindi/Indic TTS with inline emotion markers and optional reference-voice cloning (MLX, 24 kHz)
 
 **LLM और अनुवाद**
@@ -163,8 +163,8 @@ struct DictateView: View {
 | [Qwen3-TTS](https://soniqo.audio/hi/guides/speak) | टेक्स्ट → स्पीच | MLX, CoreML | 0.6B, 1.7B | 10 |
 | [CosyVoice3](https://soniqo.audio/hi/guides/cosyvoice) | टेक्स्ट → स्पीच | MLX | 0.5B | 9 |
 | [VoxCPM2](https://soniqo.audio/hi/speech-generation) | टेक्स्ट → स्पीच (48 kHz, वॉयस डिज़ाइन + क्लोनिंग) | MLX | 2B (bf16/int8) | 30 |
-| [Chatterbox Multilingual](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16) | टेक्स्ट → स्पीच (ज़ीरो-शॉट क्लोनिंग) | MLX | 0.8B (fp16) | 23 |
-| [OmniVoice](https://huggingface.co/aufklarer/OmniVoice-MLX-int8) | टेक्स्ट → स्पीच (NAR डिफ्यूज़न, ज़ीरो-शॉट क्लोनिंग) | MLX | 0.8B (int8/fp16) | 600+ |
+| [Chatterbox Multilingual](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16) | टेक्स्ट → स्पीच (ज़ीरो-शॉट क्लोनिंग) | MLX | 0.8B (fp16) | 23 (HE के लिए niqqud आवश्यक) |
+| [OmniVoice](https://huggingface.co/aufklarer/OmniVoice-MLX-fp16) | टेक्स्ट → स्पीच (NAR डिफ्यूज़न, ज़ीरो-शॉट क्लोनिंग) | MLX | 0.8B (fp16 डिफ़ॉल्ट / int8) | 600+ |
 | [Indic-Mio](docs/models/indic-mio-tts.md) | Text → Speech (Hindi/Indic, emotion tags, voice cloning) | MLX | fp16 | Hindi / Indic |
 | [Fish Audio S2 Pro](docs/models/fish-audio-s2-pro.md) | टेक्स्ट → स्पीच (ज़ीरो-शॉट क्लोनिंग, स्पष्ट स्टाइल मार्कर) | MLX | 0.5B-class (fp16) | बहुभाषी |
 | [Kokoro-82M](https://soniqo.audio/hi/guides/kokoro) | टेक्स्ट → स्पीच | CoreML (ANE) | 82M | 10 |
