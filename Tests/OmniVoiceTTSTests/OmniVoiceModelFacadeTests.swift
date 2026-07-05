@@ -6,9 +6,14 @@ import XCTest
 
 /// Exercises the high-level `OmniVoiceTTSModel` facade the Studio sidecar drives:
 /// load a local bundle, then synthesize cloned speech from a reference WAV + text.
-/// Writes the waveform for an external ASR check. Uses the int8 bundle so the
-/// quantization-from-config load path is covered too.
+/// Writes the waveform for an external ASR check. The optional bundle test below
+/// still uses int8 so the quantization-from-config load path remains covered.
 final class OmniVoiceModelFacadeTests: XCTestCase {
+    func testDefaultModelIdUsesFp16Bundle() {
+        XCTAssertEqual(OmniVoiceTTSModel.defaultModelId, OmniVoiceConfig.defaultModelId)
+        XCTAssertEqual(OmniVoiceTTSModel.defaultModelId, "aufklarer/OmniVoice-MLX-fp16")
+    }
+
     func testFromBundleAndGenerate() async throws {
         let bundleDir = "/tmp/omnivoice-int8"
         let refWav = "/tmp/cbx_swift_en.wav"

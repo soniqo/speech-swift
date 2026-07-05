@@ -8,9 +8,9 @@ import MLXNN
 /// Qwen3 diffusion backbone, the Higgs-audio v2 codec (encode + decode), and the
 /// text front-end. This is the entry point the Studio sidecar drives.
 public final class OmniVoiceTTSModel {
-    /// Default published bundle (int8 backbone + fp16 codec). The fp16 backbone
-    /// bundle is `aufklarer/OmniVoice-MLX-fp16`.
-    public static let defaultModelId = "aufklarer/OmniVoice-MLX-int8"
+    /// Default published bundle (fp16 backbone + fp16 codec). The int8 backbone
+    /// remains loadable by passing `aufklarer/OmniVoice-MLX-int8` explicitly.
+    public static let defaultModelId = OmniVoiceConfig.defaultModelId
 
     let cfg: OmniVoiceConfig
     let model: OmniVoiceModel
