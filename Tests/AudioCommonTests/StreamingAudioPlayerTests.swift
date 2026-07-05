@@ -85,6 +85,16 @@ final class StreamingAudioPlayerTests: XCTestCase {
         // Without engine, can't truly test — but should not crash
     }
 
+    func testStartupDeclickDefaultDoesNotAddLatency() {
+        let input = [Float](repeating: 1, count: 100)
+        let output = StreamingAudioPlayer.startupDeclick(input, sampleRate: 1000)
+
+        XCTAssertEqual(output.count, input.count)
+        XCTAssertEqual(output.first ?? -1, 0, accuracy: 0.0001)
+        XCTAssertEqual(output[4], 1, accuracy: 0.0001)
+        XCTAssertEqual(output.last ?? 0, 1, accuracy: 0.0001)
+    }
+
     func testStartupDeclickPrependsSilenceAndFadesFirstChunk() {
         let input = [Float](repeating: 1, count: 100)
         let output = StreamingAudioPlayer.startupDeclick(

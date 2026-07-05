@@ -126,11 +126,13 @@ public final class StreamingAudioPlayer: @unchecked Sendable {
     /// Default 1.0s — sufficient for streaming TTS at RTF < 0.6.
     public var preBufferDuration: Double = 1.0
 
-    /// Silence prepended to the first audible chunk so CoreAudio starts from a stable zero signal.
-    public var startupPrerollDuration: Double = 0.024
+    /// Optional silence prepended to the first audible chunk so CoreAudio starts from a stable zero signal.
+    /// Default 0 preserves existing playback latency for models that already start cleanly.
+    public var startupPrerollDuration: Double = 0
 
     /// Fade-in applied to the first audible chunk to avoid a discontinuity from silence to waveform.
-    public var startupFadeInDuration: Double = 0.048
+    /// Default 5 ms preserves the previous first-chunk fade behavior.
+    public var startupFadeInDuration: Double = 0.005
 
     /// Callback when all audio has finished playing.
     public var onPlaybackFinished: (() -> Void)?
@@ -247,8 +249,8 @@ public final class StreamingAudioPlayer: @unchecked Sendable {
     static func startupDeclick(
         _ samples: [Float],
         sampleRate: Double,
-        prerollDuration: Double = 0.024,
-        fadeInDuration: Double = 0.048
+        prerollDuration: Double = 0,
+        fadeInDuration: Double = 0.005
     ) -> [Float] {
         guard !samples.isEmpty, sampleRate > 0 else { return samples }
         var conditioned = samples
