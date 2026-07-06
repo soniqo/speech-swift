@@ -35,6 +35,11 @@ Three-stage pipeline: LLM → DiT Flow Matching → HiFi-GAN Vocoder → 24kHz a
 - Affine projection (192 → 80) conditions DiT flow model on target voice
 - Model: `aufklarer/CamPlusPlus-Speaker-CoreML` (~14 MB, FP16)
 - CLI: `--voice-sample reference.wav`
+- Long-form cloning splits text into sentence segments, seeds MLX before each
+  segment when `seed:` is passed (`--seed` on the CLI) so repeated runs are
+  reproducible, and stitches with edge fades so no output path ends on an
+  audible click. The prompt region is sliced off in the mel domain before
+  vocoding (upstream parity), so no audio-domain prompt trim is applied
 
 ## Multi-Speaker Dialogue
 - `DialogueParser` parses `[S1] text [S2] text` speaker tags into `DialogueSegment` structs

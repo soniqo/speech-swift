@@ -29,8 +29,8 @@ final class LongFormSplitTests: XCTestCase {
 
     // MARK: - Sentence-terminator splits
     //
-    // Each fixture sentence is ≥ 4 words so the short-fragment merge logic
-    // doesn't collapse them into a single segment.
+    // Most fixture sentences are ≥ 6 words so the short-fragment merge logic
+    // doesn't collapse them into a single segment unless the test says so.
 
     func testSplitsOnPeriod() {
         let s = split("This is the first sentence here. " +
@@ -50,12 +50,14 @@ final class LongFormSplitTests: XCTestCase {
         XCTAssertTrue(s.last!.hasSuffix("?"))
     }
 
-    func testSplitsOnExclamation() {
+    func testShortQuestionMergesForward() {
         let s = split("Hello there how nice to see! " +
                       "How are you doing today? " +
                       "I am doing fine thanks for asking.")
-        XCTAssertEqual(s.count, 3)
-        XCTAssertTrue(s.first!.hasSuffix("!"))
+        XCTAssertEqual(s.count, 2)
+        XCTAssertEqual(s.first, "Hello there how nice to see!")
+        XCTAssertTrue(s.last!.contains("How are you doing today?"))
+        XCTAssertTrue(s.last!.contains("I am doing fine thanks for asking."))
     }
 
     func testTrailingTextWithoutTerminatorIsKept() {
@@ -71,10 +73,17 @@ final class LongFormSplitTests: XCTestCase {
     // MARK: - Short-segment merging
 
     func testShortLeadFragmentMergesIntoNext() {
-        // "Hi." is 1 word (< minWordsPerSegment=4) and should merge forward.
+        // "Hi." is 1 word and should merge forward.
         let s = split("Hi. This is the second sentence which is longer.")
         XCTAssertEqual(s.count, 1)
         XCTAssertEqual(s[0], "Hi. This is the second sentence which is longer.")
+    }
+
+    func testShortQuestionLeadMergesIntoFollowingSentence() {
+        let text = "Why does this matter? " +
+                   "Because the next decade of audio software is going to look very different."
+        let s = split(text)
+        XCTAssertEqual(s, [text])
     }
 
     func testTwoVeryShortSegmentsMerge() {
@@ -125,5 +134,84 @@ final class LongFormSplitTests: XCTestCase {
         let joined = first.joined(separator: " ")
         let second = split(joined)
         XCTAssertEqual(first, second)
+    }
+
+    // MARK: - Long-form audio stitching
+
+    func testStitchLongFormSegmentsFadesInsertedGapEdges() {
+        let left = [Float](repeating: 1.0, count: 100)
+        let right = [Float](repeating: -1.0, count: 100)
+
+        let stitched = CosyVoiceTTSModel.stitchLongFormSegments(
+            [left, right],
+            sampleRate: 1_000,
+            gapSeconds: 0.2,
+            fadeSeconds: 0.03
+        )
+
+        XCTAssertEqual(stitched.count, 400)
+        XCTAssertEqual(stitched[100..<300].allSatisfy { $0 == 0 }, true)
+
+        // The pre-fix stitch jumped from full-scale segment audio straight to
+        // zero-gap silence. The fade should leave both sides near zero instead.
+        XCTAssertLessThan(abs(stitched[99]), 0.1)
+        XCTAssertLessThan(abs(stitched[300]), 0.1)
+        XCTAssertLessThan(abs(stitched[100] - stitched[99]), 0.1)
+        XCTAssertLessThan(abs(stitched[300] - stitched[299]), 0.1)
+
+        // Every edge is faded — including the first segment's head (the
+        // vocoder starts from zero left-context, so an unfaded head is an
+        // audible click at utterance start) and the final tail.
+        XCTAssertLessThan(abs(stitched[0]), 0.1)
+        XCTAssertLessThan(abs(stitched[399]), 0.1)
+    }
+
+    func testStitchLongFormSegmentsFadesTailOfSingleSegment() {
+        // Regression: a multi-segment split can render down to ONE surviving
+        // segment. That path must still fade both edges — the head (start
+        // click) and the tail (end click) — matching `cleanCloneOutput`.
+        let single = [Float](repeating: 1.0, count: 100)
+        let stitched = CosyVoiceTTSModel.stitchLongFormSegments(
+            [single],
+            sampleRate: 1_000,
+            gapSeconds: 0.2,
+            fadeSeconds: 0.03
+        )
+        XCTAssertEqual(stitched.count, 100)
+        XCTAssertLessThan(abs(stitched[0]), 0.1)
+        XCTAssertEqual(stitched[69], 1.0, "interior samples must be untouched")
+        XCTAssertLessThan(abs(stitched[99]), 0.1)
+    }
+
+    func testStitchLongFormSegmentsCollapsedMultiSegmentStillFades() {
+        // Two rendered segments where one came back empty — the collapsed
+        // result must behave like the single-segment case above, not skip
+        // the fades via an early exit.
+        let survivor = [Float](repeating: -1.0, count: 100)
+        let stitched = CosyVoiceTTSModel.stitchLongFormSegments(
+            [[], survivor],
+            sampleRate: 1_000,
+            gapSeconds: 0.2,
+            fadeSeconds: 0.03
+        )
+        XCTAssertEqual(stitched.count, 100)
+        XCTAssertLessThan(abs(stitched[0]), 0.1)
+        XCTAssertLessThan(abs(stitched[99]), 0.1)
+    }
+
+    func testCleanCloneOutputFadesEdgesWithoutTrimming() {
+        // The prompt region is sliced off in the mel domain before vocoding,
+        // so cleanup must NOT drop samples — only fade the edges.
+        let samples = [Float](repeating: 1.0, count: 700)
+        let cleaned = CosyVoiceTTSModel.cleanCloneOutput(
+            samples,
+            sampleRate: 1_000,
+            edgeFadeSeconds: 0.03
+        )
+
+        XCTAssertEqual(cleaned.count, 700)
+        XCTAssertLessThan(abs(cleaned.first ?? 1.0), 0.1)
+        XCTAssertLessThan(abs(cleaned.last ?? 1.0), 0.1)
+        XCTAssertEqual(cleaned[350], 1.0, "interior samples must be untouched")
     }
 }

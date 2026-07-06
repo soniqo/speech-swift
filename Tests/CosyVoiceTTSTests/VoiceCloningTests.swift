@@ -224,4 +224,71 @@ final class VoiceCloningTests: XCTestCase {
         XCTAssertGreaterThan(styledPeak, 0.01, "Instructed clone must not be silence")
         XCTAssertLessThan(styledPeak, 1.0001, "Instructed clone must not overflow")
     }
+
+    /// Same gating as `testE2ECloneProducesAudio`. Exercises the long-form
+    /// multi-segment clone path end-to-end against the real model, asserting
+    /// the two contracts this path promises:
+    /// 1. Seeded runs are reproducible (same seed → same audio).
+    /// 2. Every output leaves with a faded tail (no audible end click).
+    func testE2ESeededLongFormCloneIsReproducibleAndFadesTail() async throws {
+        guard let refPath = ProcessInfo.processInfo.environment["COSY_TEST_VOICE_REF"],
+              FileManager.default.fileExists(atPath: refPath) else {
+            throw XCTSkip("Set COSY_TEST_VOICE_REF to a wav file to enable this E2E test")
+        }
+        let transcript = ProcessInfo.processInfo.environment["COSY_TEST_VOICE_TRANSCRIPT"]
+            ?? "This is a reference audio recording used for voice cloning."
+        let modelId = ProcessInfo.processInfo.environment["COSY_TEST_MODEL_ID"]
+            ?? "aufklarer/CosyVoice3-0.5B-MLX-bf16"
+        guard let tokFile = ProcessInfo.processInfo.environment["COSY_TEST_SPEECH_TOKENIZER"],
+              FileManager.default.fileExists(atPath: tokFile) else {
+            throw XCTSkip("Set COSY_TEST_SPEECH_TOKENIZER to speech_tokenizer.safetensors")
+        }
+
+        let model = try await CosyVoiceTTSModel.fromPretrained(modelId: modelId)
+        let tokenizer = try SpeechTokenizerModel.fromSafetensors(
+            at: URL(fileURLWithPath: tokFile))
+        let refSamples16k = try AudioFileLoader.load(
+            url: URL(fileURLWithPath: refPath), targetSampleRate: 16_000)
+        let profile = try model.extractVoiceProfile(
+            audio: refSamples16k, sampleRate: 16_000,
+            speechTokenizer: tokenizer,
+            referenceTranscript: transcript)
+
+        // Two sentences, each above the merge threshold, so the long-form
+        // splitter genuinely produces multiple segments.
+        let text = "The quick brown fox jumps over the lazy sleeping dog. "
+            + "Pack my box with five dozen bright liquid jugs today."
+        XCTAssertGreaterThan(
+            CosyVoiceTTSModel.splitForLongForm(text).count, 1,
+            "Fixture text must exercise the multi-segment path")
+
+        let first = model.synthesize(
+            text: text, voiceProfile: profile, language: "english", seed: 7)
+        let second = model.synthesize(
+            text: text, voiceProfile: profile, language: "english", seed: 7)
+
+        XCTAssertFalse(first.isEmpty, "Long-form clone must produce audio")
+        XCTAssertGreaterThan(first.map { abs($0) }.max() ?? 0, 0.01, "Must not be silence")
+
+        // Contract 1: reproducibility. Same seed re-seeds MLX before each
+        // segment, so both renders must match sample-for-sample (tolerate
+        // tiny numeric drift, fail on any real divergence).
+        XCTAssertEqual(first.count, second.count, "Same seed must produce same-length audio")
+        if first.count == second.count && !first.isEmpty {
+            var absDiff: Float = 0
+            var absRef: Float = 0
+            for i in 0..<first.count {
+                absDiff += abs(first[i] - second[i])
+                absRef += abs(first[i])
+            }
+            XCTAssertLessThan(
+                absDiff, max(absRef, 1) * 0.01,
+                "Same-seed renders must be near-identical")
+        }
+
+        // Contract 2: no end click. The stitcher fades every output tail,
+        // so the final samples must sit near zero.
+        let tailPeak = first.suffix(8).map { abs($0) }.max() ?? 0
+        XCTAssertLessThan(tailPeak, 0.05, "Long-form output must end faded (no end click)")
+    }
 }

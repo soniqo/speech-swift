@@ -1076,6 +1076,7 @@ public struct SpeakCommand: ParsableCommand {
                         audio: refSamples16k,
                         sampleRate: 16000,
                         speechTokenizer: tokenizer,
+                        camppSpeaker: campp,
                         referenceTranscript: cosyReferenceTranscript
                     )
                     if let p = defaultVoiceProfile {
@@ -1228,6 +1229,7 @@ public struct SpeakCommand: ParsableCommand {
                         voiceProfile: profile,
                         language: effectiveLanguage,
                         instruction: instruction,
+                        seed: self.seed,
                         verbose: verbose
                     )
                 } else {

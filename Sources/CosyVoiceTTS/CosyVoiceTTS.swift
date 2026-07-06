@@ -79,6 +79,7 @@ public final class CosyVoiceTTSModel {
                 additionalFiles: [
                     "llm.safetensors", "flow.safetensors", "hifigan.safetensors",
                     "vocab.json", "merges.txt", "tokenizer_config.json", "config.json",
+                    "flow_noise.bin",
                 ],
                 offlineMode: offlineMode
             ) { progress in
@@ -150,6 +151,32 @@ public final class CosyVoiceTTSModel {
         progressHandler?(0.7, "Loading flow weights...")
         let flowURL = cacheDir.appendingPathComponent("flow.safetensors")
         try CosyVoiceWeightLoader.loadFlow(model.flow, from: flowURL)
+
+        // Fixed flow noise (upstream parity): prefer an explicit
+        // COSY_FIXED_NOISE override, else a bundle-provided flow_noise.bin
+        // (raw float32, upstream's torch-seed-0 rand_noise [1, 80, N]).
+        // Without either, the solver uses a deterministic keyed draw.
+        let envNoise = ProcessInfo.processInfo.environment["COSY_FIXED_NOISE"]
+        let bundleNoisePath = cacheDir.appendingPathComponent("flow_noise.bin").path
+        if envNoise == nil, !FileManager.default.fileExists(atPath: bundleNoisePath) {
+            // Caches created before the bundles shipped flow_noise.bin lack it
+            // (the main download is skipped once weights exist). Fetch it
+            // best-effort — the glob snapshot matches nothing on bundles
+            // without the file, so this cannot fail a load.
+            try? await HuggingFaceDownloader.downloadFiles(
+                modelId: modelId, to: cacheDir,
+                files: ["flow_noise.bin"], offlineMode: offlineMode)
+        }
+        let noisePath = envNoise
+            ?? (FileManager.default.fileExists(atPath: bundleNoisePath) ? bundleNoisePath : nil)
+        if let noisePath {
+            if let noise = ConditionalFlowMatching.loadFixedNoise(path: noisePath) {
+                model.flow.decoder.fixedNoise = noise
+                print("  Fixed flow noise: \(URL(fileURLWithPath: noisePath).lastPathComponent) [1, 80, \(noise.dim(2))]")
+            } else {
+                print("  WARNING: could not load fixed flow noise from \(noisePath); using keyed draw")
+            }
+        }
 
         progressHandler?(0.9, "Loading vocoder weights...")
         let hifiganURL = cacheDir.appendingPathComponent("hifigan.safetensors")
@@ -262,10 +289,13 @@ public final class CosyVoiceTTSModel {
         //    instruction. Upstream: `min_len = (text_len - prompt_text_len) * ratio`.
         let contentTokens = tokenizer.encode(text).map { Int32($0) }
 
-        // For an unstyled zero-shot clone, upstream's text input is literally
-        //   concat(transcript_tokens + [<|endofprompt|>], content_tokens)
-        // with the reference speech tokens included in the LLM prefix. This
-        // is the highest-fidelity identity path.
+        // For an unstyled zero-shot clone, upstream CosyVoice3's text input is
+        //   "You are a helpful assistant.<|endofprompt|>" + transcript + content
+        // (example.py passes exactly that as prompt_text; llm.py concatenates
+        // prompt_text + text). Everything after <|endofprompt|> must BEGIN
+        // with the words the prompt audio speaks — placing the marker between
+        // transcript and content makes the model recite the transcript
+        // instead of the content (prompt regurgitation).
         //
         // A non-default instruction selects CosyVoice's `instruct2` layout:
         // the framed instruction becomes the LLM text prefix and the reference
@@ -280,8 +310,10 @@ public final class CosyVoiceTTSModel {
         if useInstructionConditionedClone {
             textTokens = tokenizeText(text, language: language, instruction: instruction)
         } else if let pt = promptText, !pt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let instructionTokens = tokenizer.encode(Self.assistantPrefix).map { Int32($0) }
             let promptTextTokens = tokenizer.encode(pt).map { Int32($0) }
-            textTokens = promptTextTokens + [Self.endOfPromptToken] + contentTokens
+            textTokens = instructionTokens + [Self.endOfPromptToken]
+                + promptTextTokens + contentTokens
         } else {
             textTokens = tokenizeText(text, language: language, instruction: instruction)
         }
@@ -339,20 +371,24 @@ public final class CosyVoiceTTSModel {
         )
         eval(fullMel)
 
-        // Pass the FULL mel (prompt + generation) to HiFi-GAN. Slicing the mel
-        // here means HiFi-GAN's causal convolutions warm up against zero-padded
-        // boundaries, producing a click/transient ~10 mel frames into the
-        // generated audio (the convolutional receptive field). Instead we let
-        // HiFi-GAN render both regions continuously and trim the prompt-region
-        // audio AFTER, where the boundary is smooth.
-        let mel = fullMel
-        let promptAudioSamples: Int
+        // Slice off the prompt region in the MEL domain, exactly like
+        // upstream (`feat = feat[:, :, mel_len1:]`), and vocode only the
+        // generation. Cutting the rendered AUDIO at the prompt boundary
+        // instead leaves a hard, unfaded mid-waveform cut — an audible
+        // click — and re-renders the whole reference through HiFi-GAN for
+        // nothing. The vocoder is causal and trained to start from zero
+        // left-context, so the sliced mel is its in-distribution input.
+        let mel: MLXArray
         if let pf = promptFeat {
             let promptMelLen = pf.dim(2)
-            // mel-rate is 50 Hz, audio sample rate is 24 kHz → 480 samples/mel
-            promptAudioSamples = promptMelLen * (config.sampleRate / 50)
+            let totalMelLen = fullMel.dim(2)
+            if promptMelLen < totalMelLen {
+                mel = fullMel[0..., 0..., promptMelLen...]
+            } else {
+                mel = fullMel
+            }
         } else {
-            promptAudioSamples = 0
+            mel = fullMel
         }
 
         // Optional debug dump of the mel that reaches HiFi-GAN.
@@ -377,16 +413,9 @@ public final class CosyVoiceTTSModel {
             print(String(format: "  HiFi-GAN: %.0fms", (CFAbsoluteTimeGetCurrent() - t0) * 1000))
         }
 
-        // 5. Extract float samples, trimming the prompt-region audio so the
-        //    caller only sees the synthesised content. The boundary inside
-        //    HiFi-GAN's continuous render is smoother than a pre-sliced mel,
-        //    so trimming here removes the slice-boundary click that appeared
-        //    ~10 mel frames into the audio in the old path.
-        var samples = audio.reshaped(-1).asArray(Float.self)
-        if promptAudioSamples > 0 && promptAudioSamples < samples.count {
-            samples = Array(samples[promptAudioSamples...])
-        }
-        return samples
+        // 5. Extract float samples — the mel was already sliced to the
+        //    generation region, so the render is content-only.
+        return audio.reshaped(-1).asArray(Float.self)
     }
 
     /// Synthesize with streaming output.
