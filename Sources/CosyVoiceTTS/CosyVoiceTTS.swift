@@ -79,6 +79,7 @@ public final class CosyVoiceTTSModel {
                 additionalFiles: [
                     "llm.safetensors", "flow.safetensors", "hifigan.safetensors",
                     "vocab.json", "merges.txt", "tokenizer_config.json", "config.json",
+                    "flow_noise.bin",
                 ],
                 offlineMode: offlineMode
             ) { progress in
@@ -133,6 +134,15 @@ public final class CosyVoiceTTSModel {
         // Without either, the solver uses a deterministic keyed draw.
         let envNoise = ProcessInfo.processInfo.environment["COSY_FIXED_NOISE"]
         let bundleNoisePath = cacheDir.appendingPathComponent("flow_noise.bin").path
+        if envNoise == nil, !FileManager.default.fileExists(atPath: bundleNoisePath) {
+            // Caches created before the bundles shipped flow_noise.bin lack it
+            // (the main download is skipped once weights exist). Fetch it
+            // best-effort — the glob snapshot matches nothing on bundles
+            // without the file, so this cannot fail a load.
+            try? await HuggingFaceDownloader.downloadFiles(
+                modelId: modelId, to: cacheDir,
+                files: ["flow_noise.bin"], offlineMode: offlineMode)
+        }
         let noisePath = envNoise
             ?? (FileManager.default.fileExists(atPath: bundleNoisePath) ? bundleNoisePath : nil)
         if let noisePath {
