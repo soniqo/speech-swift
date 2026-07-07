@@ -46,7 +46,7 @@ On-device speech recognition, synthesis, and understanding for Mac and iOS. Runs
 - **[VibeVoice TTS](https://soniqo.audio/guides/vibevoice)** — Long-form / multi-speaker TTS (Microsoft VibeVoice Realtime-0.5B + 1.5B, MLX, up to 90-min podcast/audiobook synthesis, EN/ZH)
 - **[Magpie TTS](https://soniqo.audio/guides/magpie)** — Multilingual TTS (NVIDIA Magpie-TTS Multilingual 357M, MLX INT8 411 MB or CoreML INT8 342 MB, 9 languages, 5 baked speakers, streaming on MLX)
 - **[Supertonic TTS](https://soniqo.audio/guides/supertonic)** — On-device flow-matching TTS (Supertone Supertonic-3 99M, CoreML/Neural Engine, 31 languages, 10 voices, G2P-free, 44.1 kHz)
-- **[Chatterbox TTS](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16)** — Multilingual TTS with zero-shot voice cloning (Resemble AI Chatterbox Multilingual, MLX fp16 ~1.3 GB, 23 runtime languages; Hebrew requires niqqud, MIT)
+- **[Chatterbox TTS](docs/models/chatterbox-tts.md)** — Multilingual TTS with zero-shot voice cloning (Resemble AI Chatterbox Multilingual, MLX fp16 ~1.3 GB, 23 runtime languages; Hebrew requires niqqud, MIT) plus Chatterbox Flash Core ML text-to-waveform from precomputed reference conditioning.
 - **[OmniVoice TTS](https://huggingface.co/aufklarer/OmniVoice-MLX-fp16)** — Non-autoregressive diffusion TTS with zero-shot voice cloning (k2-fsa OmniVoice, Qwen3 backbone, MLX fp16 default / int8 available, 600+ languages, Apache-2.0)
 - **[Indic-Mio](docs/models/indic-mio-tts.md)** — Hindi/Indic TTS with inline emotion markers and optional reference-voice cloning (MLX, 24 kHz)
 
@@ -169,7 +169,8 @@ Compact view below. **[Full model catalogue with sizes, quantisations, download 
 | [VibeVoice Realtime-0.5B](https://soniqo.audio/guides/vibevoice) | Text → Speech (long-form, multi-speaker) | MLX | 0.5B | EN/ZH |
 | [VibeVoice 1.5B](https://soniqo.audio/guides/vibevoice) | Text → Speech (up to 90-min podcast) | MLX | 1.5B | EN/ZH |
 | [Magpie-TTS Multilingual](https://soniqo.audio/guides/magpie) | Text → Speech (5 baked speakers, streaming) | MLX / CoreML | 357M (MLX INT8, CoreML INT8) | 9 (CoreML excludes JA) |
-| [Chatterbox Multilingual](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16) | Text → Speech (zero-shot cloning) | MLX | 0.8B (fp16) | 23 (HE requires niqqud) |
+| [Chatterbox Multilingual](docs/models/chatterbox-tts.md) | Text → Speech (zero-shot cloning) | MLX | 0.8B (fp16) | 23 (HE requires niqqud) |
+| [Chatterbox Flash](docs/models/chatterbox-tts.md#chatterbox-flash-core-ml) | Text → Speech (voice cloning with external reference conditioning) | CoreML + MLX conditioning bridge | 0.8B (fp16 Core ML) | EN |
 | [OmniVoice](https://huggingface.co/aufklarer/OmniVoice-MLX-fp16) | Text → Speech (NAR diffusion, zero-shot cloning) | MLX | 0.8B (fp16 default / int8) | **600+** |
 | [Indic-Mio](docs/models/indic-mio-tts.md) | Text → Speech (Hindi/Indic, emotion tags, voice cloning) | MLX | fp16 | Hindi / Indic |
 | [Fish Audio S2 Pro](docs/models/fish-audio-s2-pro.md) | Text → Speech (zero-shot cloning, explicit style markers) | MLX | 0.5B-class (fp16) | Multilingual |

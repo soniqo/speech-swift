@@ -63,6 +63,69 @@ Zero-shot: a single reference clip is encoded to a speaker embedding (VoiceEncod
 and to S3Gen reference features (S3TokenizerV2 + CAM++). No fine-tuning. The
 reference is resampled to 16 kHz and silence-trimmed before the speaker encoder.
 
+## Chatterbox Flash Core ML
+
+`ChatterboxFlashCoreMLModel` loads the published
+[`aufklarer/Chatterbox-Flash-CoreML`](https://huggingface.co/aufklarer/Chatterbox-Flash-CoreML)
+bundle from the `ChatterboxTTS` product. It exports the Flash T3 block decoder
+and the S3Gen audio back half as compiled Core ML graphs:
+
+- `t3/ConditioningEncoder.mlmodelc`
+- `t3/TextPrefill.mlmodelc`
+- `t3/BlockDecoder.mlmodelc`
+- `audio/FlowSpeakerProjector.mlmodelc`
+- `audio/FlowEncoder.mlmodelc`
+- `audio/FlowEstimator.mlmodelc`
+- `audio/HiFTVocoder.mlmodelc`
+
+The Swift runtime owns the host-side Flash loop: BPE text tokenization,
+fixed-length text padding, PMI ranking against `uncond_block_prior.npy`,
+block unmask scheduling, EOS trimming, and S3Gen waveform synthesis.
+
+```swift
+import ChatterboxTTS
+
+let flash = try await ChatterboxFlashCoreMLModel.fromPretrained()
+
+// Reference-audio encoding is supplied by the MLX Chatterbox model.
+let mlx = try await ChatterboxTTSModel.fromPretrained()
+let conditioning = try mlx.prepareFlashConditioning(
+    referenceSamples: referenceAudio,
+    sampleRate: referenceSampleRate
+)
+
+let audio24k = try flash.generate(
+    text: "Core ML speech test.",
+    conditioning: conditioning
+)
+```
+
+Voice cloning is supported when the caller provides reference conditioning
+tensors. The convenience bridge above uses the existing MLX VoiceEncoder,
+S3Tokenizer, and S3Gen reference encoder to create those tensors from a
+reference waveform. Fully Core ML `ref.wav -> cloned wav` is not complete yet
+because the reference-audio encoders are not included in the Flash Core ML
+bundle.
+
+The exact Chatterbox Flash CFG null branch requires a separate zero-text prefill
+graph, so the Swift Core ML path currently supports `cfgScale == 0`. Passing a
+positive CFG scale fails fast instead of using an approximate null branch.
+
+Opt-in E2E tests:
+
+```bash
+CHATTERBOX_FLASH_COREML_PATH=/path/to/Chatterbox-Flash-CoreML \
+  swift test --filter E2EChatterboxFlashCoreMLTests
+```
+
+Regression tests that do not require model files:
+
+```bash
+swift test --filter ChatterboxFlashCoreMLTests
+swift test --skip E2E
+```
+
 ## References
 
 - [Chatterbox](https://github.com/resemble-ai/chatterbox) (Resemble AI, MIT)
+- [Chatterbox Flash](https://github.com/resemble-ai/chatterbox-flash) (Resemble AI, MIT)

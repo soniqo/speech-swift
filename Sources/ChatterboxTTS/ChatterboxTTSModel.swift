@@ -32,6 +32,54 @@ public enum ChatterboxModelError: Error, LocalizedError {
     }
 }
 
+#if canImport(CoreML)
+public extension ChatterboxTTSModel {
+    /// Build the reference conditioning tensors consumed by Chatterbox Flash Core ML.
+    ///
+    /// The Flash Core ML export starts after reference-audio encoding: it expects
+    /// a VoiceEncoder speaker embedding, T3 prompt speech tokens, and an S3Gen
+    /// reference dictionary. This helper reuses the MLX Chatterbox front-end to
+    /// produce those tensors from a mono reference waveform.
+    func prepareFlashConditioning(
+        referenceSamples: [Float],
+        sampleRate: Int,
+        exaggeration: Float = 0.5
+    ) throws -> ChatterboxFlashConditioning {
+        let ref24kFull = sampleRate == ChatterboxS3Gen.sampleRate
+            ? referenceSamples
+            : AudioFileLoader.resample(referenceSamples, from: sampleRate, to: ChatterboxS3Gen.sampleRate)
+        let ref24k = Array(ref24kFull.prefix(Self.decCondLen))
+        let ref16kFromRef24k = AudioFileLoader.resample(
+            ref24k,
+            from: ChatterboxS3Gen.sampleRate,
+            to: ChatterboxS3Gen.tokenSampleRate
+        )
+        let ref16kFull = sampleRate == ChatterboxS3Gen.tokenSampleRate
+            ? referenceSamples
+            : AudioFileLoader.resample(referenceSamples, from: sampleRate, to: ChatterboxS3Gen.tokenSampleRate)
+        let ref16kEnc = Array(ref16kFull.prefix(Self.encCondLen))
+
+        let s3Ref = s3gen.embedRef(refWav24k: ref24k, refWav16k: ref16kFromRef24k)
+        let speakerArray = voiceEncoder.embed(samples: ref16kFull).asType(.float32)
+        MLX.eval(speakerArray)
+        let speakerEmbedding = speakerArray.asArray(Float.self)
+        var promptTokens = Array(s3gen.tokenizer.encode(ref16kEnc).prefix(Self.speechCondPromptLen))
+        if promptTokens.count < Self.speechCondPromptLen {
+            promptTokens.append(contentsOf: Array(repeating: 0, count: Self.speechCondPromptLen - promptTokens.count))
+        }
+
+        return ChatterboxFlashConditioning(
+            t3: ChatterboxFlashT3Conditioning(
+                speakerEmbedding: speakerEmbedding,
+                promptSpeechTokens: promptTokens,
+                emotionAdv: exaggeration
+            ),
+            audio: ChatterboxFlashS3GenReference(s3Ref)
+        )
+    }
+}
+#endif
+
 public final class ChatterboxTTSModel {
     public let tokenizer: MTLTokenizer
     public let voiceEncoder: ChatterboxVoiceEncoder
