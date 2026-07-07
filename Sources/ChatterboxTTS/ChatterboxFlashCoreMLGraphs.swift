@@ -5,6 +5,8 @@ import Foundation
 import MLX
 
 enum ChatterboxFlashCoreMLBridge {
+    private static let int8DataTypeRawValue = 0x20000 | 8
+
     static func loadCompiledModel(
         relativePath: String,
         in directory: URL,
@@ -50,6 +52,11 @@ enum ChatterboxFlashCoreMLBridge {
 
     static func toFloat32(_ arr: MLMultiArray) throws -> [Float] {
         let count = arr.count
+        if arr.dataType.rawValue == int8DataTypeRawValue {
+            let ptr = arr.dataPointer.bindMemory(to: Int8.self, capacity: count)
+            return (0..<count).map { Float(ptr[$0]) }
+        }
+
         switch arr.dataType {
         case .float32:
             let ptr = arr.dataPointer.bindMemory(to: Float.self, capacity: count)
@@ -63,10 +70,7 @@ enum ChatterboxFlashCoreMLBridge {
         case .int32:
             let ptr = arr.dataPointer.bindMemory(to: Int32.self, capacity: count)
             return (0..<count).map { Float(ptr[$0]) }
-        case .int8:
-            let ptr = arr.dataPointer.bindMemory(to: Int8.self, capacity: count)
-            return (0..<count).map { Float(ptr[$0]) }
-        @unknown default:
+        default:
             throw ChatterboxFlashCoreMLError.unsupportedConfiguration("Unsupported MLMultiArray data type \(arr.dataType)")
         }
     }

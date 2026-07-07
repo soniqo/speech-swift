@@ -1,4 +1,5 @@
 #if canImport(CoreML)
+import CoreML
 import Foundation
 import XCTest
 
@@ -207,6 +208,28 @@ final class ChatterboxFlashCoreMLTests: XCTestCase {
         for (lhs, rhs) in zip(parsed, values) {
             XCTAssertEqual(lhs, rhs, accuracy: 1e-6)
         }
+    }
+
+    func testToFloat32ReadsInt8MultiArrayWithoutSDKCaseReference() throws {
+        guard let int8DataType = MLMultiArrayDataType(rawValue: 0x20000 | 8) else {
+            throw XCTSkip("CoreML SDK does not expose the int8 data type raw value")
+        }
+
+        let array: MLMultiArray
+        do {
+            array = try MLMultiArray(shape: [4], dataType: int8DataType)
+        } catch {
+            throw XCTSkip("CoreML runtime does not support int8 MLMultiArray allocation")
+        }
+        guard array.dataType.rawValue == int8DataType.rawValue else {
+            throw XCTSkip("CoreML runtime does not preserve int8 MLMultiArray allocation")
+        }
+
+        let values: [Int8] = [-8, -1, 0, 127]
+        let pointer = array.dataPointer.bindMemory(to: Int8.self, capacity: values.count)
+        pointer.update(from: values, count: values.count)
+
+        XCTAssertEqual(try ChatterboxFlashCoreMLBridge.toFloat32(array), [-8, -1, 0, 127])
     }
 
     private func makeTempDirectory() throws -> URL {
