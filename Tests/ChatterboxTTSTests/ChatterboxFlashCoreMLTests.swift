@@ -221,6 +221,9 @@ final class ChatterboxFlashCoreMLTests: XCTestCase {
         } catch {
             throw XCTSkip("CoreML runtime does not support int8 MLMultiArray allocation")
         }
+        guard array.dataType.rawValue == int8DataType.rawValue else {
+            throw XCTSkip("CoreML runtime does not preserve int8 MLMultiArray allocation")
+        }
 
         let values: [Int8] = [-8, -1, 0, 127]
         let pointer = array.dataPointer.bindMemory(to: Int8.self, capacity: values.count)
