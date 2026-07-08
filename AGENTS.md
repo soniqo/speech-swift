@@ -146,18 +146,26 @@ The same skills are exposed to agents that scan `.codex/skills/` through relativ
 
 ## Testing
 
-Unit tests only — what CI runs (no GPU, no model downloads):
+Curated local smoke/regression suite. This builds debug + metallib first and
+runs a focused no-download filter, not the full CI matrix:
 ```bash
 make test
 ```
+
+CI builds tests, builds the debug metallib, then runs `swift test --skip-build`
+with explicit skips for E2E and model-heavy suites. Treat
+`.github/workflows/tests.yml` as the source of truth for the exact hosted
+runner command.
 
 Run a single test:
 ```bash
 swift test --filter TestClassName/testMethodName --disable-sandbox
 ```
 
-Full test suite including E2E (requires metallib + model downloads):
+Full local suite including E2E. Build the debug metallib first; tests may
+download models and require Apple Silicon GPU/ANE support:
 ```bash
+make debug
 swift test --disable-sandbox
 ```
 
@@ -171,7 +179,7 @@ swift test --disable-sandbox
 
 **Test organization**: Place tests in `Tests/<ModuleName>Tests/`. Follow existing patterns (e.g., `Qwen3ASRTests/`, `SpeechVADTests/`).
 
-**E2E test naming**: Prefix E2E test classes with `E2E` (e.g., `E2ETranscriptionTests`, `E2EDiarizationTests`). CI uses `--skip E2E` regex to filter out all E2E tests that require model downloads — only unit tests run in the pipeline. E2E tests run locally with `make test` (full suite). **CRITICAL**: Any test class that downloads models or requires GPU inference MUST be prefixed with `E2E`. Unit test classes must NOT contain `E2E` in their name.
+**E2E test naming**: Prefix E2E test classes with `E2E` (e.g., `E2ETranscriptionTests`, `E2EDiarizationTests`). CI uses `--skip E2E` regex to filter out all E2E tests that require model downloads — only unit tests run in the pipeline. E2E tests run locally with the full-suite command above, not `make test`. **CRITICAL**: Any test class that downloads models or requires GPU inference MUST be prefixed with `E2E`. Unit test classes must NOT contain `E2E` in their name.
 
 **What to test per category:**
 | Change | Required tests |
