@@ -14,7 +14,7 @@ AI speech models for Apple Silicon (MLX Swift). ASR, TTS, speech-to-speech, VAD,
 
 - **Always work in a separate git worktree** so concurrent agents don't fight over the same working directory. Create one with `git worktree add ../speech-swift-<task> <branch>`, do all edits there, push from there. Multiple agents may be running against this repo at the same time — checking out branches in the shared working copy clobbers their state and silently loses WIP files. Delete the worktree (`git worktree remove`) when the task is done.
 - **Never commit, push, or comment on GitHub without explicit user confirmation.** Draft first, ask to confirm, then execute.
-- **Every README.md change must update all 10 translations** (`README_zh.md`, `README_ja.md`, `README_ko.md`, `README_es.md`, `README_de.md`, `README_fr.md`, `README_hi.md`, `README_pt.md`, `README_ru.md`, `README_ar.md`). No exceptions.
+- **Every README.md change must update all 13 translations** (`README_zh.md`, `README_ja.md`, `README_ko.md`, `README_es.md`, `README_de.md`, `README_fr.md`, `README_hi.md`, `README_pt.md`, `README_ru.md`, `README_ar.md`, `README_th.md`, `README_tr.md`, `README_vi.md`). No exceptions.
 - **Keep docs and comments scoped to this package.** Model docs, code comments, and PR descriptions describe this package's models, APIs, and formats only — never downstream consumer apps or their integration rules.
 
 ## Git Conventions
@@ -70,23 +70,66 @@ The same skills are exposed to agents that scan `.codex/skills/` through relativ
 
 ## Project Structure
 
-- `Sources/Qwen3ASR/` — Speech-to-text (Qwen3-ASR)
+**ASR**
+- `Sources/Qwen3ASR/` — Speech-to-text (Qwen3-ASR, MLX)
 - `Sources/ParakeetASR/` — Speech-to-text (Parakeet TDT, CoreML)
 - `Sources/ParakeetStreamingASR/` — Streaming speech-to-text (Parakeet EOU 120M, CoreML)
+- `Sources/NemotronStreamingASR/` — Streaming speech-to-text (Nemotron, CoreML)
 - `Sources/OmnilingualASR/` — Speech-to-text (Meta wav2vec2 CTC, 1,672 languages, CoreML 300M + MLX 300M/1B/3B/7B)
-- `Sources/Qwen3TTS/` — Text-to-speech (Qwen3-TTS)
-- `Sources/CosyVoiceTTS/` — Text-to-speech (CosyVoice3, streaming)
+- `Sources/WhisperASR/` — Speech-to-text (Whisper Large-v3 Turbo, native CoreML runtime)
+
+**TTS**
+- `Sources/Qwen3TTS/` — Text-to-speech (Qwen3-TTS, MLX)
+- `Sources/Qwen3TTSCoreML/` — Text-to-speech (Qwen3-TTS 0.6B, CoreML, 6-model pipeline)
+- `Sources/CosyVoiceTTS/` — Text-to-speech (CosyVoice3, streaming, MLX)
 - `Sources/VoxCPM2TTS/` — Text-to-speech (VoxCPM2, MLX, 48 kHz, voice cloning + voice design)
 - `Sources/KokoroTTS/` — Text-to-speech (Kokoro-82M, CoreML, iOS-ready)
-- `Sources/Qwen3TTSCoreML/` — Text-to-speech (Qwen3-TTS 0.6B, CoreML, 6-model pipeline)
-- `Sources/PersonaPlex/` — Speech-to-speech (PersonaPlex 7B, full-duplex)
+- `Sources/MagpieTTS/` — Multilingual TTS (MLX, 8 codebooks, NanoCodec)
+- `Sources/MagpieTTSCoreML/` — Magpie TTS CoreML variant
+- `Sources/ChatterboxTTS/` — Text-to-speech (MLX)
+- `Sources/OmniVoiceTTS/` — Text-to-speech (MLX)
+- `Sources/VibeVoiceTTS/` — Text-to-speech (MLX)
+- `Sources/SupertonicTTS/` — Text-to-speech (CoreML)
+- `Sources/FishAudioTTS/` — Text-to-speech (Fish Audio S2 Pro, MLX, 44.1 kHz, voice cloning; research/non-commercial license)
+- `Sources/IndicMioTTS/` — Text-to-speech (Indic-Mio, Hindi/Indic with inline emotion markers, MLX, 24 kHz, voice cloning)
+
+**Speech-to-Speech & Translation**
+- `Sources/PersonaPlex/` — Speech-to-speech (PersonaPlex 7B, full-duplex, MLX)
+- `Sources/HibikiTranslate/` — Speech-to-speech translation (depends on PersonaPlex + MLX)
+- `Sources/MADLADTranslation/` — Text translation (MLX)
+
+**Audio Processing**
 - `Sources/SpeechVAD/` — VAD (Silero + Pyannote), speaker diarization, speaker embedding (WeSpeaker)
 - `Sources/SpeechEnhancement/` — Noise suppression (DeepFilterNet3, CoreML)
+- `Sources/SpeechRestoration/` — Audio restoration (CoreML)
+- `Sources/SourceSeparation/` — Source separation (MLX)
+- `Sources/SpeechWakeWord/` — Wake-word detection
+
+**Music Generation**
+- `Sources/MAGNeTMusicGen/` — Text-to-music (MAGNeT, 30 s, 32 kHz, MLX)
+- `Sources/StableAudio3MusicGen/` — Music generation (Stable Audio 3, MLX)
+- `Sources/FlashSR/` — Audio super-resolution (MLX)
+
+**Avatar**
+- `Sources/Audio2Face3D/` — Speech-driven avatar motion (NVIDIA Audio2Face-3D, timestamped coefficient frames, MLX; `speech avatar-motion` CLI command)
+
+**On-Device LLM**
 - `Sources/Qwen3Chat/` — On-device LLM chat (Qwen3.5-0.8B, MLX + CoreML, INT4/INT8)
+- `Sources/FunctionGemma/` — On-device Gemma function-calling (swift-transformers)
+
+**Infrastructure**
 - `Sources/MLXCommon/` — Shared MLX utilities (weight loading, quantized layers, memory estimation, `SDPA` multi-head attention helper)
 - `Sources/AudioCommon/` — Audio I/O, protocols, HuggingFace downloader, shared `SentencePieceModel` protobuf reader
-- `Sources/AudioCLILib/` — CLI commands
+- `Sources/SpeechCore/` — Swift wrapper around `CSpeechCore` XCFramework (pre-built binary from `soniqo/speech-core` — cannot be modified in this repo)
+- `Sources/SpeechUI/` — SwiftUI components for speech apps
+- `Sources/AudioServer/` — Hummingbird HTTP + WebSocket server (backs `speech-server` binary)
+- `Sources/AudioCLILib/` — CLI command implementations
 - `Sources/AudioCLI/` — CLI entry point (`speech` binary; `audio` is a deprecated alias)
+- `Sources/AudioServerCLI/` — Server entry point (`speech-server` binary)
+- `Sources/AsrBenchmark/` — Multi-engine WER/RTF benchmark tool, includes WhisperKit comparison (backs `asr-bench` binary)
+- `Sources/BenchmarkSupport/` — Shared benchmark utilities (dataset handling, metrics) for the benchmark binaries
+- `Sources/VadBenchmark/` — VAD benchmark (backs `vad-bench` binary)
+- `Sources/DiarizationBenchmark/` — Diarization DER benchmark (backs `diarization-bench` binary)
 - `Tests/` — Unit and integration tests
 - `scripts/` — Model conversion (PyTorch → MLX/CoreML), benchmarking
 - `Examples/` — Demo apps (PersonaPlexDemo, SpeechDemo, iOSEchoDemo)
@@ -99,17 +142,23 @@ The same skills are exposed to agents that scan `.codex/skills/` through relativ
 - All audio processing uses Float32 PCM, resampled to model-specific rates internally
 - `DiarizedSegment`, `SpeechSegment`, protocol types defined in `Sources/AudioCommon/Protocols.swift`
 - Tests that use MLX arrays require the compiled metallib; config/logic-only tests work without it
+- `CSpeechCore` is a pre-built XCFramework downloaded from `soniqo/speech-core` releases — `Sources/SpeechCore/` is only a thin Swift wrapper. Changes to core behavior require a new release of that separate repo.
 
 ## Testing
 
-Safe tests (no GPU/model download required):
+Unit tests only — what CI runs (no GPU, no model downloads):
 ```bash
 make test
 ```
 
-Full test suite (requires metallib + model downloads):
+Run a single test:
 ```bash
-make test
+swift test --filter TestClassName/testMethodName --disable-sandbox
+```
+
+Full test suite including E2E (requires metallib + model downloads):
+```bash
+swift test --disable-sandbox
 ```
 
 ### Testing requirements for new code
@@ -151,6 +200,18 @@ The `speech` binary is the main entry point (`audio` is a deprecated alias that 
 .build/release/speech compose "happy rock" -o music.wav # MAGNeT text-to-music (30s, 32 kHz)
 .build/release/speech kokoro "Hello" --voice af_heart   # Kokoro TTS (iOS)
 .build/release/speech qwen3-tts-coreml "Hello"          # Qwen3-TTS CoreML (6-model pipeline)
+```
+
+The `speech-server` binary exposes an HTTP + WebSocket API (Hummingbird):
+
+```bash
+.build/release/speech-server --port 8080
+```
+
+The `asr-bench` binary benchmarks multiple ASR engines (WER, RTF, peak RSS) including WhisperKit comparison:
+
+```bash
+.build/release/asr-bench --help
 ```
 
 ## Documentation
@@ -235,7 +296,7 @@ soniqo-web/public/
 
 ### README translations
 
-Translated READMEs live in the repo root: `README_zh.md`, `README_ja.md`, `README_ko.md`, `README_es.md`, `README_de.md`, `README_fr.md`, `README_hi.md`, `README_pt.md`, `README_ru.md`, `README_ar.md`. **Whenever README.md is updated, all translations must be updated to match.** Each translation links back to the main README and lists all available languages at the top.
+Translated READMEs live in the repo root: `README_zh.md`, `README_ja.md`, `README_ko.md`, `README_es.md`, `README_de.md`, `README_fr.md`, `README_hi.md`, `README_pt.md`, `README_ru.md`, `README_ar.md`, `README_th.md`, `README_tr.md`, `README_vi.md`. **Whenever README.md is updated, all translations must be updated to match.** Each translation links back to the main README and lists all available languages at the top.
 
 ### Mapping: code changes → docs pages
 
