@@ -41,6 +41,22 @@ let package = Package(
             targets: ["FishAudioTTS"]
         ),
         .library(
+            name: "VoiceCloneTTSCommon",
+            targets: ["VoiceCloneTTSCommon"]
+        ),
+        .library(
+            name: "IndexTTS2TTS",
+            targets: ["IndexTTS2TTS"]
+        ),
+        .library(
+            name: "HiggsAudioTTS",
+            targets: ["HiggsAudioTTS"]
+        ),
+        .library(
+            name: "F5TTS",
+            targets: ["F5TTS"]
+        ),
+        .library(
             name: "PersonaPlex",
             targets: ["PersonaPlex"]
         ),
@@ -304,6 +320,33 @@ let package = Package(
             ]
         ),
         .target(
+            name: "VoiceCloneTTSCommon",
+            dependencies: [
+                "AudioCommon",
+            ]
+        ),
+        .target(
+            name: "IndexTTS2TTS",
+            dependencies: [
+                "AudioCommon",
+                "VoiceCloneTTSCommon",
+            ]
+        ),
+        .target(
+            name: "HiggsAudioTTS",
+            dependencies: [
+                "AudioCommon",
+                "VoiceCloneTTSCommon",
+            ]
+        ),
+        .target(
+            name: "F5TTS",
+            dependencies: [
+                "AudioCommon",
+                "VoiceCloneTTSCommon",
+            ]
+        ),
+        .target(
             name: "PersonaPlex",
             dependencies: [
                 "AudioCommon",
@@ -563,6 +606,7 @@ let package = Package(
                 "KokoroTTS",
                 "VibeVoiceTTS",
                 "VoxCPM2TTS",
+                "IndexTTS2TTS",
                 "IndicMioTTS",
                 "MAGNeTMusicGen",
                 "StableAudio3MusicGen",
@@ -724,6 +768,16 @@ let package = Package(
             dependencies: [
                 "FishAudioTTS", "AudioCommon", "MLXCommon", "Qwen3ASR",
                 .product(name: "MLX", package: "mlx-swift")
+            ]
+        ),
+        .testTarget(
+            name: "VoiceCloneCandidateTTSTests",
+            dependencies: [
+                "VoiceCloneTTSCommon",
+                "IndexTTS2TTS",
+                "HiggsAudioTTS",
+                "F5TTS",
+                "AudioCommon",
             ]
         ),
         .testTarget(

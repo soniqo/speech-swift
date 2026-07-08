@@ -26,6 +26,8 @@ The `AudioCommon` module defines shared protocols that provide model-agnostic in
    │CosyVoice│        │ParakeetASR│       └───────────┘       └───────────┘
    │VoxCPM2  │        │ForcedAlign│
    │Kokoro   │
+   │IndexTTS2│
+   │Higgs/F5 │
    └─────────┘        └───────────┘
 ```
 
@@ -43,7 +45,9 @@ public protocol SpeechGenerationModel: AnyObject {
 }
 ```
 
-**Conforming types:** `Qwen3TTSModel`, `CosyVoiceTTSModel`, `VoxCPM2TTSModel`, `KokoroTTSModel`
+**Conforming types:** `Qwen3TTSModel`, `CosyVoiceTTSModel`, `VoxCPM2TTSModel`, `KokoroTTSModel`, `IndexTTS2TTSModel`, `HiggsAudioTTSModel`, `F5TTSModel`
+
+`IndexTTS2TTSModel`, `HiggsAudioTTSModel`, and `F5TTSModel` currently implement bundle loading, manifest validation, metadata access, and `ModelMemoryManageable`. `speech speak --engine indextts2` routes through the IndexTTS2 loader for published-bundle validation. Their `generate` methods intentionally throw a clear unsupported-runtime error until the native Swift inference graphs are ported.
 
 ### SpeechRecognitionModel (STT)
 
@@ -413,6 +417,11 @@ Sources/
 │   ├── AudioVAE.swift         AudioVAE V2 encode/decode
 │   └── Configuration.swift    ModelArgs / config decoding for VoxCPM2 snapshots
 │
+├── VoiceCloneTTSCommon/       Shared manifest + bundle validation for candidate TTS ports
+├── IndexTTS2TTS/              IndexTTS2 bundle loader (inference not ported)
+├── HiggsAudioTTS/             Higgs Audio v3 bundle loader (inference not ported)
+├── F5TTS/                     F5-TTS v1 bundle loader (inference not ported)
+│
 ├── PersonaPlex/               Speech-to-speech (Temporal + Depformer + Mimi)
 │   ├── PersonaPlex.swift      PersonaPlexModel: SpeechToSpeechModel
 │   └── PersonaPlex+Protocols.swift
@@ -444,6 +453,7 @@ AudioCommon  ← Qwen3ASR         ─┐
              ← Qwen3TTS         │
              ← CosyVoiceTTS     │
              ← VoxCPM2TTS       │
+             ← VoiceCloneTTSCommon ← IndexTTS2TTS, HiggsAudioTTS, F5TTS
              ← KokoroTTS        ├── AudioCLILib ── AudioCLI (executable)
              ← ParakeetASR      │
              ← ParakeetStreamingASR │
@@ -467,6 +477,7 @@ All model classes are **not thread-safe** by design. ML inference is inherently 
 - `Qwen3TTSModel`
 - `CosyVoiceTTSModel`
 - `VoxCPM2TTSModel`
+- `IndexTTS2TTSModel`, `HiggsAudioTTSModel`, `F5TTSModel`
 - `PersonaPlexModel`
 - `OmnilingualASRModel` (CoreML), `OmnilingualASRMLXModel` (MLX)
 - `ParakeetASRModel`, `ParakeetStreamingASRModel`, `NemotronStreamingASRModel`

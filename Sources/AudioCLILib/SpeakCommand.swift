@@ -5,6 +5,7 @@ import MLX
 import Qwen3TTS
 import CosyVoiceTTS
 import VoxCPM2TTS
+import IndexTTS2TTS
 import IndicMioTTS
 import MagpieTTS
 import MagpieTTSCoreML
@@ -14,13 +15,13 @@ import SpeechRestoration
 public struct SpeakCommand: ParsableCommand {
     public static let configuration = CommandConfiguration(
         commandName: "speak",
-        abstract: "Text-to-speech synthesis (Qwen3-TTS, CosyVoice, VoxCPM2, Indic-Mio, or Magpie). For CoreML, use the `qwen3-tts-coreml` subcommand."
+        abstract: "Text-to-speech synthesis (Qwen3-TTS, CosyVoice, VoxCPM2, IndexTTS2 bundle validation, Indic-Mio, or Magpie). For CoreML, use the `qwen3-tts-coreml` subcommand."
     )
 
     @Argument(help: "Text to synthesize (omit when using --list-speakers or --batch-file)")
     public var text: String?
 
-    @Option(name: .long, help: "TTS engine: qwen3 (default), cosyvoice, voxcpm2, indic-mio, magpie, or magpie-coreml")
+    @Option(name: .long, help: "TTS engine: qwen3 (default), cosyvoice, voxcpm2, indextts2, indic-mio, magpie, or magpie-coreml")
     public var engine: String = "qwen3"
 
     @Option(name: .shortAndLong, help: "Output WAV file path")
@@ -146,6 +147,17 @@ public struct SpeakCommand: ParsableCommand {
     @Option(name: .long, help: "[voxcpm2] Warmup patches to skip before emitting audio")
     public var voxcpm2WarmupPatches: Int = 0
 
+    // MARK: - IndexTTS2-specific options
+
+    @Option(name: .long, help: "[indextts2] HuggingFace model ID for the exported MLX bundle")
+    public var indextts2ModelId: String = IndexTTS2TTSModel.defaultModelId
+
+    @Option(name: .long, help: "[indextts2] Load an exported bundle from this local directory instead of HuggingFace")
+    public var indextts2BundleDir: String?
+
+    @Option(name: .long, help: "[indextts2] Optional emotion/style reference audio. Native Swift synthesis is not implemented yet.")
+    public var indextts2EmotionAudio: String?
+
     // MARK: - Indic-Mio-specific options
 
     @Option(name: .long, help: "[indic-mio] HuggingFace model ID")
@@ -201,8 +213,8 @@ public struct SpeakCommand: ParsableCommand {
     public func validate() throws {
         let eng = engine.lowercased()
         guard eng == "qwen3" || eng == "cosyvoice" || eng == "voxcpm2"
-                || eng == "indic-mio" || eng == "magpie" || eng == "magpie-coreml" else {
-            throw ValidationError("--engine must be 'qwen3', 'cosyvoice', 'voxcpm2', 'indic-mio', 'magpie', or 'magpie-coreml'. For Qwen3-TTS CoreML, use the `qwen3-tts-coreml` subcommand.")
+                || eng == "indextts2" || eng == "indic-mio" || eng == "magpie" || eng == "magpie-coreml" else {
+            throw ValidationError("--engine must be 'qwen3', 'cosyvoice', 'voxcpm2', 'indextts2', 'indic-mio', 'magpie', or 'magpie-coreml'. For Qwen3-TTS CoreML, use the `qwen3-tts-coreml` subcommand.")
         }
         if text == nil && batchFile == nil && !listSpeakers {
             throw ValidationError("Either a text argument, --batch-file, or --list-speakers must be provided")
@@ -213,6 +225,26 @@ public struct SpeakCommand: ParsableCommand {
             }
             if (voxcpm2PromptAudio == nil) != (voxcpm2PromptText == nil) {
                 throw ValidationError("--voxcpm2-prompt-audio and --voxcpm2-prompt-text must be provided together")
+            }
+        }
+        if eng == "indextts2" {
+            if batchFile != nil || listSpeakers {
+                throw ValidationError("--engine indextts2 only supports a single text input")
+            }
+            if stream {
+                throw ValidationError("--engine indextts2 does not support --stream yet")
+            }
+            if voiceSample == nil {
+                throw ValidationError("--engine indextts2 requires --voice-sample because IndexTTS2 is a zero-shot voice-cloning model")
+            }
+            if cleanReference {
+                throw ValidationError("--clean-reference is not wired for --engine indextts2 yet")
+            }
+            if speaker != nil {
+                throw ValidationError("--engine indextts2 does not support --speaker; use --voice-sample")
+            }
+            if instruct != nil {
+                throw ValidationError("--engine indextts2 does not support --instruct; use --indextts2-emotion-audio once native synthesis is implemented")
             }
         }
         if eng == "indic-mio" {
@@ -305,6 +337,8 @@ public struct SpeakCommand: ParsableCommand {
             try runCosyVoice()
         case "voxcpm2":
             try runVoxCPM2()
+        case "indextts2":
+            try runIndexTTS2()
         case "indic-mio":
             try runIndicMio()
         case "magpie":
@@ -865,6 +899,59 @@ public struct SpeakCommand: ParsableCommand {
                 }
             } else {
                 try await body()
+            }
+        }
+    }
+
+    // MARK: - IndexTTS2 engine
+
+    private func runIndexTTS2() throws {
+        try runAsync {
+            guard let inputText = text else {
+                print("Error: text argument is required for IndexTTS2")
+                throw ExitCode(1)
+            }
+            guard let voiceSample else {
+                print("Error: --voice-sample is required for IndexTTS2")
+                throw ExitCode(1)
+            }
+
+            let model: IndexTTS2TTSModel
+            if let bundleDir = indextts2BundleDir {
+                let bundleURL = URL(fileURLWithPath: bundleDir)
+                print("Loading IndexTTS2 exported bundle (\(bundleURL.path))...")
+                model = try await IndexTTS2TTSModel.fromBundle(
+                    bundleURL,
+                    progressHandler: reportProgress)
+            } else {
+                print("Loading IndexTTS2 exported bundle (\(indextts2ModelId))...")
+                model = try await IndexTTS2TTSModel.fromPretrained(
+                    modelId: indextts2ModelId,
+                    progressHandler: reportProgress)
+            }
+
+            print("  Model: \(model.manifest.displayName)")
+            print("  Source: \(model.manifest.sourceRepo)")
+            if let publishRepo = model.manifest.publishRepo {
+                print("  Bundle: \(publishRepo)")
+            }
+            print("  Params: \(model.manifest.parameterCount ?? "unknown")")
+            print("  Sample rate: \(model.sampleRate) Hz")
+            print("  Runtime status: \(model.manifest.runtimeStatus ?? "unknown")")
+
+            let voiceURL = URL(fileURLWithPath: voiceSample)
+            let emotionURL = indextts2EmotionAudio.map { URL(fileURLWithPath: $0) }
+            let audio = try await model.generate(
+                text: inputText,
+                referenceAudio: voiceURL,
+                emotionReferenceAudio: emotionURL,
+                language: effectiveLanguage)
+            let outputURL = URL(fileURLWithPath: output)
+            if play {
+                playAudio(samples: audio, sampleRate: model.sampleRate)
+            } else {
+                try WAVWriter.write(samples: audio, sampleRate: model.sampleRate, to: outputURL)
+                print("Saved audio to \(output)")
             }
         }
     }
