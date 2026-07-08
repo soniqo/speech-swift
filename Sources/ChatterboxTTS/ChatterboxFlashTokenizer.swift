@@ -68,7 +68,7 @@ public final class ChatterboxFlashTokenizer: @unchecked Sendable {
                 "text encodes to \(ids.count) tokens, exceeding exported text_len \(config.textLen)"
             )
         }
-        return (ids + Array(repeating: config.stopTextToken, count: config.textLen - ids.count)).map(Int32.init)
+        return (ids + Array(repeating: config.stopTextToken, count: config.textLen - ids.count)).map { Int32($0) }
     }
 
     public func decode(_ ids: [Int]) -> String {

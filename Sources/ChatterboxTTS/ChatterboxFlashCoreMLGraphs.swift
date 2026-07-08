@@ -163,7 +163,7 @@ public struct ChatterboxFlashT3Conditioning: Sendable {
     ) {
         self.init(
             speakerEmbedding: speakerEmbedding,
-            promptSpeechTokens: promptSpeechTokens.map(Int32.init),
+            promptSpeechTokens: promptSpeechTokens.map { Int32($0) },
             promptSpeechTokenCount: promptSpeechTokenCount,
             emotionAdv: emotionAdv
         )
@@ -303,7 +303,7 @@ public final class ChatterboxFlashT3Graphs: @unchecked Sendable {
             )
         }
 
-        var positionIds = (0..<fixedPrefixLen).map(Int32.init)
+        var positionIds = (0..<fixedPrefixLen).map { Int32($0) }
         positionIds[fixedPrefixLen - 1] = Int32(compactPrefixLen - 1)
 
         var keyPaddingMask = Array(repeating: Float(-1.0e4), count: fixedPrefixLen)
@@ -445,7 +445,7 @@ public final class ChatterboxFlashT3Graphs: @unchecked Sendable {
             )
         }
         let padding = Array(repeating: config.stopTextToken, count: config.textLen - encodedTextIds.count)
-        let textTokenIds = (encodedTextIds + padding).map(Int32.init)
+        let textTokenIds = (encodedTextIds + padding).map { Int32($0) }
         let prefixLen = try Self.makePrefixPlan(config: config, encodedTextCount: encodedTextIds.count).compactPrefixLen
         let maxByCache = max(0, config.maxSeq - prefixLen)
         let requested = options.maxSpeechTokens ?? max(300, encodedTextIds.count * 6)
