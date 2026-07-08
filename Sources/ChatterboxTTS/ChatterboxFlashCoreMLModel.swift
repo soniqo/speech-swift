@@ -115,7 +115,7 @@ public final class ChatterboxFlashCoreMLModel: @unchecked Sendable {
         let maxByTokenBuffer = audio.config.tokenLen - reference.promptToken.count
         let maxTotalTokensByMel = audio.config.melLen / audio.config.tokenMelRatio
         let maxByMel = maxTotalTokensByMel - reference.promptToken.count
-        let maxByT3Cache = t3.config.maxSeq - t3.config.prefixLen
+        let maxByT3Cache = t3.config.maxSeq - t3.config.condLen - 1
         return max(0, min(maxByTokenBuffer, maxByMel, maxByT3Cache))
     }
 }

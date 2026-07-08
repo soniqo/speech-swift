@@ -47,16 +47,24 @@ public extension ChatterboxTTSModel {
     ) throws -> ChatterboxFlashConditioning {
         let ref24kFull = sampleRate == ChatterboxS3Gen.sampleRate
             ? referenceSamples
-            : AudioFileLoader.resample(referenceSamples, from: sampleRate, to: ChatterboxS3Gen.sampleRate)
-        let ref24k = Array(ref24kFull.prefix(Self.decCondLen))
+            : AudioFileLoader.resample(
+                referenceSamples, from: sampleRate, to: ChatterboxS3Gen.sampleRate,
+                quality: .mastering)
+        // The public Flash audio graph has a shorter mel buffer than full MLX
+        // S3Gen. Use the 6 s conditioning window so the prompt leaves room for
+        // generated speech frames.
+        let ref24k = Array(ref24kFull.prefix(Self.flashDecCondLen))
         let ref16kFromRef24k = AudioFileLoader.resample(
             ref24k,
             from: ChatterboxS3Gen.sampleRate,
-            to: ChatterboxS3Gen.tokenSampleRate
+            to: ChatterboxS3Gen.tokenSampleRate,
+            quality: .mastering
         )
         let ref16kFull = sampleRate == ChatterboxS3Gen.tokenSampleRate
             ? referenceSamples
-            : AudioFileLoader.resample(referenceSamples, from: sampleRate, to: ChatterboxS3Gen.tokenSampleRate)
+            : AudioFileLoader.resample(
+                referenceSamples, from: sampleRate, to: ChatterboxS3Gen.tokenSampleRate,
+                quality: .mastering)
         let ref16kEnc = Array(ref16kFull.prefix(Self.encCondLen))
 
         let s3Ref = s3gen.embedRef(refWav24k: ref24k, refWav16k: ref16kFromRef24k)
@@ -64,6 +72,7 @@ public extension ChatterboxTTSModel {
         MLX.eval(speakerArray)
         let speakerEmbedding = speakerArray.asArray(Float.self)
         var promptTokens = Array(s3gen.tokenizer.encode(ref16kEnc).prefix(Self.speechCondPromptLen))
+        let promptTokenCount = promptTokens.count
         if promptTokens.count < Self.speechCondPromptLen {
             promptTokens.append(contentsOf: Array(repeating: 0, count: Self.speechCondPromptLen - promptTokens.count))
         }
@@ -72,6 +81,7 @@ public extension ChatterboxTTSModel {
             t3: ChatterboxFlashT3Conditioning(
                 speakerEmbedding: speakerEmbedding,
                 promptSpeechTokens: promptTokens,
+                promptSpeechTokenCount: promptTokenCount,
                 emotionAdv: exaggeration
             ),
             audio: ChatterboxFlashS3GenReference(s3Ref)
@@ -101,6 +111,8 @@ public final class ChatterboxTTSModel {
     public static let encCondLen = 6 * 16000
     /// 10 s at 24 kHz — the S3Gen-conditioning reference window.
     public static let decCondLen = 10 * 24000
+    /// 6 s at 24 kHz — Flash Core ML S3Gen conditioning window.
+    private static let flashDecCondLen = 6 * 24000
 
     public init(
         tokenizer: MTLTokenizer,
@@ -128,7 +140,8 @@ public final class ChatterboxTTSModel {
     /// - Parameters:
     ///   - bundleDir: directory with `model.safetensors` + `tokenizer.json`.
     ///   - s3TokenizerWeights: `model.safetensors` for S3TokenizerV2 (encoder /
-    ///     quantizer). Required — the bundle does not carry tokenizer weights.
+    ///     quantizer), or Flash `s3gen.safetensors` with `tokenizer.*` keys.
+    ///     Required — the bundle does not carry tokenizer weights.
     ///   - conformerWeights: optional checkpoint carrying the flow-encoder
     ///     conformer blocks (`flow.encoder.encoders.* / up_encoders.*`). The
     ///     the bundle ships these as `conformer.safetensors`, which is used by
@@ -221,9 +234,10 @@ public final class ChatterboxTTSModel {
         let matcha = MatchaCFM()
         try matcha.update(parameters: ModuleParameters.unflattened(cfm), verify: .all)
 
-        // S3TokenizerV2 weights (separate repo).
-        let tokRaw = try MLX.loadArrays(url: s3TokenizerWeights)
-        let tokW = tokRaw.mapValues { $0.asType(.float32) }
+        // S3TokenizerV2 weights. Accept the converted standalone tokenizer repo
+        // and Flash's raw s3gen.safetensors, whose tokenizer submodule is stored
+        // with PyTorch Conv1d layouts and upstream Sequential/FSQ key names.
+        let tokW = try Self.s3TokenizerWeights(from: s3TokenizerWeights)
         let s3Tokenizer = S3TokenizerV2()
         try s3Tokenizer.update(parameters: ModuleParameters.unflattened(tokW), verify: .all)
 
@@ -317,6 +331,39 @@ public final class ChatterboxTTSModel {
         return out
     }
 
+    /// Load S3TokenizerV2 weights from either the converted standalone MLX
+    /// safetensors (`encoder.*`, `quantizer.*`) or Chatterbox Flash's raw
+    /// `s3gen.safetensors` (`tokenizer.*` in PyTorch Conv1d layout).
+    private static func s3TokenizerWeights(from url: URL) throws -> [String: MLXArray] {
+        let raw = try MLX.loadArrays(url: url)
+        let flashPrefix = "tokenizer."
+        let hasFlashTokenizer = raw.keys.contains { $0.hasPrefix(flashPrefix) }
+        guard hasFlashTokenizer else {
+            return raw.mapValues { $0.asType(.float32) }
+        }
+
+        var out: [String: MLXArray] = [:]
+        for (rawKey, rawValue) in raw where rawKey.hasPrefix(flashPrefix) {
+            var key = String(rawKey.dropFirst(flashPrefix.count))
+            if key.hasPrefix("_") || key == "window" { continue }
+            key = key.replacingOccurrences(of: ".mlp.0.", with: ".mlp.layers.0.")
+            key = key.replacingOccurrences(of: ".mlp.2.", with: ".mlp.layers.2.")
+            key = key.replacingOccurrences(
+                of: "quantizer._codebook.",
+                with: "quantizer.fsq_codebook.")
+
+            var value = rawValue.asType(.float32)
+            if key == "encoder.conv1.weight"
+                || key == "encoder.conv2.weight"
+                || key.hasSuffix(".attn.fsmn_block.weight")
+            {
+                value = value.transposed(0, 2, 1)
+            }
+            out[key] = value
+        }
+        return out
+    }
+
     // MARK: - Inference
 
     /// Drop the SOS(6561)/EOS(6562) boundary markers from a flat token sequence,
@@ -342,6 +389,7 @@ public final class ChatterboxTTSModel {
     ///   - exaggeration: emotion-advance scalar (T3 `emotion_adv`).
     ///   - cfgWeight: T3 classifier-free-guidance weight.
     ///   - temperature: T3 sampling temperature (0 = greedy).
+    ///   - memoryOptions: temporary MLX cache policy for this generation.
     /// - Returns: 24 kHz mono waveform.
     public func clone(
         referenceSamples: [Float],
@@ -354,63 +402,72 @@ public final class ChatterboxTTSModel {
         topP: Float = 1.0,
         minP: Float = 0.05,
         repetitionPenalty: Float = 1.2,
-        cfgWeight: Float = 0.5
+        cfgWeight: Float = 0.5,
+        memoryOptions: ChatterboxMemoryOptions = .balanced
     ) throws -> [Float] {
-        let lang = languageId.lowercased()
-        guard MTLTokenizer.supportedLanguages.contains(lang) else {
-            throw ChatterboxModelError.unsupportedLanguage(lang)
+        try ChatterboxMemory.withOptions(memoryOptions) {
+            let lang = languageId.lowercased()
+            guard MTLTokenizer.supportedLanguages.contains(lang) else {
+                throw ChatterboxModelError.unsupportedLanguage(lang)
+            }
+
+            // --- prepare_conditionals: reference at the required sample rates ---
+            // 24 kHz (truncated to 10 s) for the S3Gen prompt mel.
+            let ref24kFull = sampleRate == ChatterboxS3Gen.sampleRate
+                ? referenceSamples
+                : AudioFileLoader.resample(
+                    referenceSamples, from: sampleRate, to: ChatterboxS3Gen.sampleRate,
+                    quality: .mastering)
+            let ref24k = Array(ref24kFull.prefix(Self.decCondLen))
+            // 24 kHz -> 16 kHz for the S3Gen tokenizer + CAMPPlus.
+            let ref16kFromRef24k = AudioFileLoader.resample(
+                ref24k, from: ChatterboxS3Gen.sampleRate, to: ChatterboxS3Gen.tokenSampleRate,
+                quality: .mastering)
+            // original -> 16 kHz (untruncated) for the VoiceEncoder; 6 s slice for T3 cond tokens.
+            let ref16kFull = sampleRate == ChatterboxS3Gen.tokenSampleRate
+                ? referenceSamples
+                : AudioFileLoader.resample(
+                    referenceSamples, from: sampleRate, to: ChatterboxS3Gen.tokenSampleRate,
+                    quality: .mastering)
+            let ref16kEnc = Array(ref16kFull.prefix(Self.encCondLen))
+
+            // S3Gen conditioning (x-vector, prompt tokens, prompt mel).
+            let s3Ref = s3gen.embedRef(refWav24k: ref24k, refWav16k: ref16kFromRef24k)
+
+            // T3 conditioning: speaker emb (full 16 kHz) + prompt-speech tokens (6 s).
+            let speakerEmb = voiceEncoder.embed(samples: ref16kFull)  // [256]
+            let t3PromptTokens = Array(s3gen.tokenizer.encode(ref16kEnc).prefix(Self.speechCondPromptLen))
+
+            // --- text tokenization: [sot] + ids + [eot] ---
+            let ids: [Int]
+            do {
+                ids = try tokenizer.encodeStrict(text, languageId: lang)
+            } catch ChatterboxTokenizerError.hebrewRequiresDiacritics {
+                throw ChatterboxModelError.invalidText(
+                    "Hebrew input must include niqqud/diacritics; automatic Dicta diacritization is not bundled yet")
+            }
+            let textTokens = [Self.startTextToken] + ids + [Self.stopTextToken]
+
+            // --- T3: text -> speech tokens ---
+            let rawSpeech = t3.inference(
+                textTokens: textTokens,
+                speakerEmb: speakerEmb,
+                promptSpeechTokens: t3PromptTokens,
+                emotionAdv: exaggeration,
+                maxNewTokens: maxNewTokens,
+                temperature: temperature,
+                topP: topP,
+                minP: minP,
+                repetitionPenalty: repetitionPenalty,
+                cfgWeight: cfgWeight)
+
+            // drop SOS/EOS, then keep only valid codes (< SPEECH_VOCAB_SIZE), order-preserving.
+            let dropped = Self.dropInvalidTokens(rawSpeech)
+            let speechTokens = dropped.filter { $0 < Self.speechVocabSize }
+            ChatterboxMemory.clearStageCache(memoryOptions)
+
+            // --- S3Gen: speech tokens -> waveform ---
+            return s3gen.synthesize(speechTokens: speechTokens, ref: s3Ref, memoryOptions: memoryOptions)
         }
-
-        // --- prepare_conditionals: reference at the required sample rates ---
-        // 24 kHz (truncated to 10 s) for the S3Gen prompt mel.
-        let ref24kFull = sampleRate == ChatterboxS3Gen.sampleRate
-            ? referenceSamples
-            : AudioFileLoader.resample(referenceSamples, from: sampleRate, to: ChatterboxS3Gen.sampleRate)
-        let ref24k = Array(ref24kFull.prefix(Self.decCondLen))
-        // 24 kHz -> 16 kHz for the S3Gen tokenizer + CAMPPlus.
-        let ref16kFromRef24k = AudioFileLoader.resample(
-            ref24k, from: ChatterboxS3Gen.sampleRate, to: ChatterboxS3Gen.tokenSampleRate)
-        // original -> 16 kHz (untruncated) for the VoiceEncoder; 6 s slice for T3 cond tokens.
-        let ref16kFull = sampleRate == ChatterboxS3Gen.tokenSampleRate
-            ? referenceSamples
-            : AudioFileLoader.resample(referenceSamples, from: sampleRate, to: ChatterboxS3Gen.tokenSampleRate)
-        let ref16kEnc = Array(ref16kFull.prefix(Self.encCondLen))
-
-        // S3Gen conditioning (x-vector, prompt tokens, prompt mel).
-        let s3Ref = s3gen.embedRef(refWav24k: ref24k, refWav16k: ref16kFromRef24k)
-
-        // T3 conditioning: speaker emb (full 16 kHz) + prompt-speech tokens (6 s).
-        let speakerEmb = voiceEncoder.embed(samples: ref16kFull)  // [256]
-        let t3PromptTokens = Array(s3gen.tokenizer.encode(ref16kEnc).prefix(Self.speechCondPromptLen))
-
-        // --- text tokenization: [sot] + ids + [eot] ---
-        let ids: [Int]
-        do {
-            ids = try tokenizer.encodeStrict(text, languageId: lang)
-        } catch ChatterboxTokenizerError.hebrewRequiresDiacritics {
-            throw ChatterboxModelError.invalidText(
-                "Hebrew input must include niqqud/diacritics; automatic Dicta diacritization is not bundled yet")
-        }
-        let textTokens = [Self.startTextToken] + ids + [Self.stopTextToken]
-
-        // --- T3: text -> speech tokens ---
-        let rawSpeech = t3.inference(
-            textTokens: textTokens,
-            speakerEmb: speakerEmb,
-            promptSpeechTokens: t3PromptTokens,
-            emotionAdv: exaggeration,
-            maxNewTokens: maxNewTokens,
-            temperature: temperature,
-            topP: topP,
-            minP: minP,
-            repetitionPenalty: repetitionPenalty,
-            cfgWeight: cfgWeight)
-
-        // drop SOS/EOS, then keep only valid codes (< SPEECH_VOCAB_SIZE), order-preserving.
-        let dropped = Self.dropInvalidTokens(rawSpeech)
-        let speechTokens = dropped.filter { $0 < Self.speechVocabSize }
-
-        // --- S3Gen: speech tokens -> waveform ---
-        return s3gen.synthesize(speechTokens: speechTokens, ref: s3Ref)
     }
 }

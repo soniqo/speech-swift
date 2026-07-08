@@ -52,24 +52,44 @@ enum ChatterboxFlashCoreMLBridge {
 
     static func toFloat32(_ arr: MLMultiArray) throws -> [Float] {
         let count = arr.count
+        let shape = arr.shape.map(\.intValue)
+        let strides = arr.strides.map(\.intValue)
+        func logicalOffsets() -> [Int] {
+            guard !shape.isEmpty else { return [0] }
+            var offsets: [Int] = []
+            offsets.reserveCapacity(count)
+            func appendOffsets(dim: Int, base: Int) {
+                if dim == shape.count {
+                    offsets.append(base)
+                    return
+                }
+                for index in 0..<shape[dim] {
+                    appendOffsets(dim: dim + 1, base: base + index * strides[dim])
+                }
+            }
+            appendOffsets(dim: 0, base: 0)
+            return offsets
+        }
+        let offsets = logicalOffsets()
+        let storageCount = (offsets.max() ?? 0) + 1
         if arr.dataType.rawValue == int8DataTypeRawValue {
-            let ptr = arr.dataPointer.bindMemory(to: Int8.self, capacity: count)
-            return (0..<count).map { Float(ptr[$0]) }
+            let ptr = arr.dataPointer.bindMemory(to: Int8.self, capacity: storageCount)
+            return offsets.map { Float(ptr[$0]) }
         }
 
         switch arr.dataType {
         case .float32:
-            let ptr = arr.dataPointer.bindMemory(to: Float.self, capacity: count)
-            return Array(UnsafeBufferPointer(start: ptr, count: count))
+            let ptr = arr.dataPointer.bindMemory(to: Float.self, capacity: storageCount)
+            return offsets.map { ptr[$0] }
         case .float16:
-            let ptr = arr.dataPointer.bindMemory(to: UInt16.self, capacity: count)
-            return (0..<count).map { Float(Float16(bitPattern: ptr[$0])) }
+            let ptr = arr.dataPointer.bindMemory(to: UInt16.self, capacity: storageCount)
+            return offsets.map { Float(Float16(bitPattern: ptr[$0])) }
         case .double:
-            let ptr = arr.dataPointer.bindMemory(to: Double.self, capacity: count)
-            return (0..<count).map { Float(ptr[$0]) }
+            let ptr = arr.dataPointer.bindMemory(to: Double.self, capacity: storageCount)
+            return offsets.map { Float(ptr[$0]) }
         case .int32:
-            let ptr = arr.dataPointer.bindMemory(to: Int32.self, capacity: count)
-            return (0..<count).map { Float(ptr[$0]) }
+            let ptr = arr.dataPointer.bindMemory(to: Int32.self, capacity: storageCount)
+            return offsets.map { Float(ptr[$0]) }
         default:
             throw ChatterboxFlashCoreMLError.unsupportedConfiguration("Unsupported MLMultiArray data type \(arr.dataType)")
         }
@@ -120,27 +140,48 @@ public struct ChatterboxFlashS3GenReference: Sendable {
 public struct ChatterboxFlashT3Conditioning: Sendable {
     public let speakerEmbedding: [Float]
     public let promptSpeechTokens: [Int32]
+    public let promptSpeechTokenCount: Int
     public let emotionAdv: Float
 
-    public init(speakerEmbedding: [Float], promptSpeechTokens: [Int32], emotionAdv: Float = 0.5) {
+    public init(
+        speakerEmbedding: [Float],
+        promptSpeechTokens: [Int32],
+        promptSpeechTokenCount: Int? = nil,
+        emotionAdv: Float = 0.5
+    ) {
         self.speakerEmbedding = speakerEmbedding
         self.promptSpeechTokens = promptSpeechTokens
+        self.promptSpeechTokenCount = promptSpeechTokenCount ?? promptSpeechTokens.count
         self.emotionAdv = emotionAdv
     }
 
-    public init(speakerEmbedding: [Float], promptSpeechTokens: [Int], emotionAdv: Float = 0.5) {
+    public init(
+        speakerEmbedding: [Float],
+        promptSpeechTokens: [Int],
+        promptSpeechTokenCount: Int? = nil,
+        emotionAdv: Float = 0.5
+    ) {
         self.init(
             speakerEmbedding: speakerEmbedding,
-            promptSpeechTokens: promptSpeechTokens.map(Int32.init),
+            promptSpeechTokens: promptSpeechTokens.map { Int32($0) },
+            promptSpeechTokenCount: promptSpeechTokenCount,
             emotionAdv: emotionAdv
         )
     }
+}
+
+struct ChatterboxFlashT3PrefixPlan: Sendable {
+    let compactPrefixLen: Int
+    let positionIds: [Int32]
+    let keyPaddingMask: [Float]
+    let prefixCacheMap: [Float]
 }
 
 public final class ChatterboxFlashT3Graphs: @unchecked Sendable {
     public let config: ChatterboxFlashT3Config
     private let conditioningEncoder: MLModel
     private let textPrefill: MLModel
+    private let nullTextPrefill: MLModel?
     private let blockDecoder: MLModel
     public let tokenizerURL: URL
     public let unconditionalBlockPriorURL: URL
@@ -165,6 +206,17 @@ public final class ChatterboxFlashT3Graphs: @unchecked Sendable {
             computeUnits: computeUnits,
             name: "ChatterboxFlash.TextPrefill"
         )
+        let nullTextPrefillPath = directory.appendingPathComponent("t3/NullTextPrefill.mlmodelc")
+        if FileManager.default.fileExists(atPath: nullTextPrefillPath.path) {
+            self.nullTextPrefill = try ChatterboxFlashCoreMLBridge.loadCompiledModel(
+                relativePath: "t3/NullTextPrefill.mlmodelc",
+                in: directory,
+                computeUnits: computeUnits,
+                name: "ChatterboxFlash.NullTextPrefill"
+            )
+        } else {
+            self.nullTextPrefill = nil
+        }
         self.blockDecoder = try ChatterboxFlashCoreMLBridge.loadCompiledModel(
             relativePath: "t3/BlockDecoder.mlmodelc",
             in: directory,
@@ -197,6 +249,16 @@ public final class ChatterboxFlashT3Graphs: @unchecked Sendable {
         guard conditioning.promptSpeechTokens.count == 150 else {
             throw ChatterboxFlashCoreMLError.invalidShape("prompt speech tokens must contain 150 ids")
         }
+        guard conditioning.promptSpeechTokenCount >= 0,
+              conditioning.promptSpeechTokenCount <= conditioning.promptSpeechTokens.count else {
+            throw ChatterboxFlashCoreMLError.invalidShape(
+                "prompt speech token count must be in 0...\(conditioning.promptSpeechTokens.count)"
+            )
+        }
+        var promptMask = Array(repeating: Float(0), count: conditioning.promptSpeechTokens.count)
+        for index in 0..<conditioning.promptSpeechTokenCount {
+            promptMask[index] = 1
+        }
 
         let provider = try ChatterboxFlashCoreMLBridge.predict(
             conditioningEncoder,
@@ -216,22 +278,100 @@ public final class ChatterboxFlashT3Graphs: @unchecked Sendable {
                     shape: [1, 1, 1],
                     label: "emotion_adv"
                 ),
+                "prompt_speech_mask": ChatterboxFlashCoreMLBridge.float32(
+                    promptMask,
+                    shape: [1, conditioning.promptSpeechTokens.count],
+                    label: "prompt_speech_mask"
+                ),
             ]
         )
         return try ChatterboxFlashCoreMLBridge.output(provider, named: "cond_emb")
     }
 
-    public func prefill(textTokenIds: [Int32], conditioningEmbedding: MLMultiArray) throws -> MLFeatureProvider {
+    static func makePrefixPlan(config: ChatterboxFlashT3Config, encodedTextCount: Int) throws -> ChatterboxFlashT3PrefixPlan {
+        guard encodedTextCount > 0, encodedTextCount <= config.textLen else {
+            throw ChatterboxFlashCoreMLError.invalidShape(
+                "encoded text count \(encodedTextCount) must be in 1...\(config.textLen)"
+            )
+        }
+
+        let fixedPrefixLen = config.prefixLen
+        let compactPrefixLen = config.condLen + encodedTextCount + 1
+        guard compactPrefixLen <= config.maxSeq else {
+            throw ChatterboxFlashCoreMLError.invalidShape(
+                "compact prefix length \(compactPrefixLen) exceeds max_seq \(config.maxSeq)"
+            )
+        }
+
+        var positionIds = (0..<fixedPrefixLen).map { Int32($0) }
+        positionIds[fixedPrefixLen - 1] = Int32(compactPrefixLen - 1)
+
+        var keyPaddingMask = Array(repeating: Float(-1.0e4), count: fixedPrefixLen)
+        let visiblePrefixWithoutSOS = config.condLen + encodedTextCount
+        for index in 0..<visiblePrefixWithoutSOS {
+            keyPaddingMask[index] = 0
+        }
+        keyPaddingMask[fixedPrefixLen - 1] = 0
+
+        var prefixCacheMap = Array(repeating: Float(0), count: fixedPrefixLen * config.maxSeq)
+        for row in 0..<visiblePrefixWithoutSOS {
+            prefixCacheMap[row * config.maxSeq + row] = 1
+        }
+        prefixCacheMap[(fixedPrefixLen - 1) * config.maxSeq + compactPrefixLen - 1] = 1
+
+        return ChatterboxFlashT3PrefixPlan(
+            compactPrefixLen: compactPrefixLen,
+            positionIds: positionIds,
+            keyPaddingMask: keyPaddingMask,
+            prefixCacheMap: prefixCacheMap
+        )
+    }
+
+    static func makeBlockPositionIds(prefixLen: Int, blockStart: Int, blockSize: Int) -> [Int32] {
+        (0..<blockSize).map { Int32(prefixLen + blockStart + $0) }
+    }
+
+    public func prefill(
+        textTokenIds: [Int32],
+        encodedTextCount: Int,
+        conditioningEmbedding: MLMultiArray,
+        nullBranch: Bool = false
+    ) throws -> MLFeatureProvider {
         guard textTokenIds.count == config.textLen else {
             throw ChatterboxFlashCoreMLError.invalidShape("text tokens must contain \(config.textLen) ids")
         }
+        let model: MLModel
+        if nullBranch {
+            guard let nullTextPrefill else {
+                throw ChatterboxFlashCoreMLError.missingFile("t3/NullTextPrefill.mlmodelc")
+            }
+            model = nullTextPrefill
+        } else {
+            model = textPrefill
+        }
+        let plan = try Self.makePrefixPlan(config: config, encodedTextCount: encodedTextCount)
         return try ChatterboxFlashCoreMLBridge.predict(
-            textPrefill,
+            model,
             inputs: [
                 "text_token_ids": ChatterboxFlashCoreMLBridge.int32(
                     textTokenIds,
                     shape: [1, config.textLen],
                     label: "text_token_ids"
+                ),
+                "position_ids": ChatterboxFlashCoreMLBridge.int32(
+                    plan.positionIds,
+                    shape: [1, config.prefixLen],
+                    label: "position_ids"
+                ),
+                "key_padding_mask": ChatterboxFlashCoreMLBridge.float32(
+                    plan.keyPaddingMask,
+                    shape: [1, config.prefixLen],
+                    label: "key_padding_mask"
+                ),
+                "prefix_cache_map": ChatterboxFlashCoreMLBridge.float32(
+                    plan.prefixCacheMap,
+                    shape: [config.prefixLen, config.maxSeq],
+                    label: "prefix_cache_map"
                 ),
                 "cond_emb": conditioningEmbedding,
             ]
@@ -298,18 +438,44 @@ public final class ChatterboxFlashT3Graphs: @unchecked Sendable {
         options: ChatterboxFlashGenerationOptions = ChatterboxFlashGenerationOptions()
     ) throws -> [Int] {
         try validateGenerationOptions(options)
-        let textTokenIds = try tokenizer.encodePadded(text, config: config)
-        let encodedTextCount = tokenizer.encode(text, addSpecialTokens: true, config: config).count
-        let maxByCache = max(0, config.maxSeq - config.prefixLen)
-        let requested = options.maxSpeechTokens ?? max(300, encodedTextCount * 6)
+        let encodedTextIds = tokenizer.encode(text, addSpecialTokens: true, config: config)
+        guard encodedTextIds.count <= config.textLen else {
+            throw ChatterboxFlashCoreMLError.unsupportedConfiguration(
+                "text encodes to \(encodedTextIds.count) tokens, exceeding exported text_len \(config.textLen)"
+            )
+        }
+        let padding = Array(repeating: config.stopTextToken, count: config.textLen - encodedTextIds.count)
+        let textTokenIds = (encodedTextIds + padding).map { Int32($0) }
+        let prefixLen = try Self.makePrefixPlan(config: config, encodedTextCount: encodedTextIds.count).compactPrefixLen
+        let maxByCache = max(0, config.maxSeq - prefixLen)
+        let requested = options.maxSpeechTokens ?? max(300, encodedTextIds.count * 6)
         let totalSpeechLen = min(maxByCache, requested)
         guard totalSpeechLen > 0 else { return [] }
 
         let conditioningEmbedding = try encodeConditioning(conditioning)
-        let prefillProvider = try prefill(textTokenIds: textTokenIds, conditioningEmbedding: conditioningEmbedding)
+        let prefillProvider = try prefill(
+            textTokenIds: textTokenIds,
+            encodedTextCount: encodedTextIds.count,
+            conditioningEmbedding: conditioningEmbedding
+        )
         var shiftContext = try ChatterboxFlashCoreMLBridge.output(prefillProvider, named: "shift_ctx")
         var keyCache = try ChatterboxFlashCoreMLBridge.output(prefillProvider, named: "key_cache")
         var valueCache = try ChatterboxFlashCoreMLBridge.output(prefillProvider, named: "value_cache")
+        let usesCFG = options.cfgScale > 0
+        var nullShiftContext: MLMultiArray?
+        var nullKeyCache: MLMultiArray?
+        var nullValueCache: MLMultiArray?
+        if usesCFG {
+            let nullPrefillProvider = try prefill(
+                textTokenIds: textTokenIds,
+                encodedTextCount: encodedTextIds.count,
+                conditioningEmbedding: conditioningEmbedding,
+                nullBranch: true
+            )
+            nullShiftContext = try ChatterboxFlashCoreMLBridge.output(nullPrefillProvider, named: "shift_ctx")
+            nullKeyCache = try ChatterboxFlashCoreMLBridge.output(nullPrefillProvider, named: "key_cache")
+            nullValueCache = try ChatterboxFlashCoreMLBridge.output(nullPrefillProvider, named: "value_cache")
+        }
 
         var rng = ChatterboxFlashGaussianRNG(seed: options.seed)
         var speech = Array(repeating: config.maskTokenId, count: totalSpeechLen)
@@ -325,14 +491,22 @@ public final class ChatterboxFlashT3Graphs: @unchecked Sendable {
 
             var rowHitEOS = false
             for step in 0..<options.numSteps {
+                let speechTokenIds = blockTokenIds(speech, start: blockStart, length: blockLen)
+                let speechPositionIds = Self.makeBlockPositionIds(
+                    prefixLen: prefixLen,
+                    blockStart: blockStart,
+                    blockSize: config.blockSize
+                )
+                let paddingMask = keyPaddingMask(blockStart: blockStart, blockLen: blockLen, prefixLen: prefixLen)
+                let cacheMap = blockCacheMap(blockStart: blockStart, blockLen: blockLen, prefixLen: prefixLen)
                 let provider = try decodeBlock(
-                    speechTokenIds: blockTokenIds(speech, start: blockStart, length: blockLen),
-                    speechPositionIds: blockPositionIds(start: blockStart),
+                    speechTokenIds: speechTokenIds,
+                    speechPositionIds: speechPositionIds,
                     shiftContext: shiftContext,
                     keyCache: keyCache,
                     valueCache: valueCache,
-                    keyPaddingMask: keyPaddingMask(blockStart: blockStart, blockLen: blockLen),
-                    blockCacheMap: blockCacheMap(blockStart: blockStart, blockLen: blockLen)
+                    keyPaddingMask: paddingMask,
+                    blockCacheMap: cacheMap
                 )
                 let logits = try ChatterboxFlashCoreMLBridge.toFloat32(
                     ChatterboxFlashCoreMLBridge.output(provider, named: "logits")
@@ -342,8 +516,34 @@ public final class ChatterboxFlashT3Graphs: @unchecked Sendable {
                         "logits expected \(config.blockSize * config.speechVocabSize) values, got \(logits.count)"
                     )
                 }
+                var nullLogits: [Float]?
+                if usesCFG {
+                    guard let currentNullShiftContext = nullShiftContext,
+                          let currentNullKeyCache = nullKeyCache,
+                          let currentNullValueCache = nullValueCache else {
+                        throw ChatterboxFlashCoreMLError.invalidShape("missing null CFG cache state")
+                    }
+                    let nullProvider = try decodeBlock(
+                        speechTokenIds: speechTokenIds,
+                        speechPositionIds: speechPositionIds,
+                        shiftContext: currentNullShiftContext,
+                        keyCache: currentNullKeyCache,
+                        valueCache: currentNullValueCache,
+                        keyPaddingMask: paddingMask,
+                        blockCacheMap: cacheMap
+                    )
+                    nullLogits = try ChatterboxFlashCoreMLBridge.toFloat32(
+                        ChatterboxFlashCoreMLBridge.output(nullProvider, named: "logits")
+                    )
+                    guard nullLogits?.count == config.blockSize * config.speechVocabSize else {
+                        throw ChatterboxFlashCoreMLError.invalidShape(
+                            "null logits expected \(config.blockSize * config.speechVocabSize) values"
+                        )
+                    }
+                }
                 let result = try denoiseBlockStep(
                     logits: logits,
+                    nullLogits: nullLogits,
                     tokens: Array(speech[blockStart ..< blockStart + blockLen]),
                     blockLen: blockLen,
                     step: step,
@@ -351,6 +551,7 @@ public final class ChatterboxFlashT3Graphs: @unchecked Sendable {
                     scheduleCount: schedule[step],
                     temperature: options.temperature,
                     timeShiftTau: options.timeShiftTau,
+                    cfgScale: options.cfgScale,
                     positionTemperature: options.positionTemperature,
                     rng: &rng
                 )
@@ -373,19 +574,56 @@ public final class ChatterboxFlashT3Graphs: @unchecked Sendable {
 
             let isLastBlock = blockStart + blockLen >= totalSpeechLen
             if !isLastBlock {
+                let speechTokenIds = blockTokenIds(speech, start: blockStart, length: blockLen)
+                let speechPositionIds = Self.makeBlockPositionIds(
+                    prefixLen: prefixLen,
+                    blockStart: blockStart,
+                    blockSize: config.blockSize
+                )
+                let paddingMask = keyPaddingMask(blockStart: blockStart, blockLen: blockLen, prefixLen: prefixLen)
+                let cacheMap = blockCacheMap(blockStart: blockStart, blockLen: blockLen, prefixLen: prefixLen)
                 let finalizeProvider = try decodeBlock(
-                    speechTokenIds: blockTokenIds(speech, start: blockStart, length: blockLen),
-                    speechPositionIds: blockPositionIds(start: blockStart),
+                    speechTokenIds: speechTokenIds,
+                    speechPositionIds: speechPositionIds,
                     shiftContext: shiftContext,
                     keyCache: keyCache,
                     valueCache: valueCache,
-                    keyPaddingMask: keyPaddingMask(blockStart: blockStart, blockLen: blockLen),
-                    blockCacheMap: blockCacheMap(blockStart: blockStart, blockLen: blockLen)
+                    keyPaddingMask: paddingMask,
+                    blockCacheMap: cacheMap
                 )
                 keyCache = try ChatterboxFlashCoreMLBridge.output(finalizeProvider, named: "new_key_cache")
                 valueCache = try ChatterboxFlashCoreMLBridge.output(finalizeProvider, named: "new_value_cache")
                 let blockHidden = try ChatterboxFlashCoreMLBridge.output(finalizeProvider, named: "block_hidden")
                 shiftContext = try sliceHidden(blockHidden, row: blockLen - 1)
+                if usesCFG {
+                    guard let currentNullShiftContext = nullShiftContext,
+                          let currentNullKeyCache = nullKeyCache,
+                          let currentNullValueCache = nullValueCache else {
+                        throw ChatterboxFlashCoreMLError.invalidShape("missing null CFG cache state")
+                    }
+                    let nullFinalizeProvider = try decodeBlock(
+                        speechTokenIds: speechTokenIds,
+                        speechPositionIds: speechPositionIds,
+                        shiftContext: currentNullShiftContext,
+                        keyCache: currentNullKeyCache,
+                        valueCache: currentNullValueCache,
+                        keyPaddingMask: paddingMask,
+                        blockCacheMap: cacheMap
+                    )
+                    nullKeyCache = try ChatterboxFlashCoreMLBridge.output(
+                        nullFinalizeProvider,
+                        named: "new_key_cache"
+                    )
+                    nullValueCache = try ChatterboxFlashCoreMLBridge.output(
+                        nullFinalizeProvider,
+                        named: "new_value_cache"
+                    )
+                    let nullBlockHidden = try ChatterboxFlashCoreMLBridge.output(
+                        nullFinalizeProvider,
+                        named: "block_hidden"
+                    )
+                    nullShiftContext = try sliceHidden(nullBlockHidden, row: blockLen - 1)
+                }
             }
 
             blockStart += blockLen
@@ -401,9 +639,12 @@ public final class ChatterboxFlashT3Graphs: @unchecked Sendable {
         guard options.temperature >= 0 else {
             throw ChatterboxFlashCoreMLError.unsupportedConfiguration("temperature must be non-negative")
         }
-        guard options.cfgScale == 0 else {
+        guard options.cfgScale >= 0 else {
+            throw ChatterboxFlashCoreMLError.unsupportedConfiguration("cfgScale must be non-negative")
+        }
+        if options.cfgScale > 0, nullTextPrefill == nil {
             throw ChatterboxFlashCoreMLError.unsupportedConfiguration(
-                "cfgScale > 0 requires a zero-text null prefill graph that is not included in this export"
+                "cfgScale > 0 requires t3/NullTextPrefill.mlmodelc in the Core ML bundle"
             )
         }
     }
@@ -416,12 +657,8 @@ public final class ChatterboxFlashT3Graphs: @unchecked Sendable {
         return ids
     }
 
-    private func blockPositionIds(start: Int) -> [Int32] {
-        (0..<config.blockSize).map { Int32(start + $0) }
-    }
-
-    private func keyPaddingMask(blockStart: Int, blockLen: Int) -> [Float] {
-        let validCount = min(config.maxSeq, config.prefixLen + blockStart + blockLen)
+    private func keyPaddingMask(blockStart: Int, blockLen: Int, prefixLen: Int) -> [Float] {
+        let validCount = min(config.maxSeq, prefixLen + blockStart + blockLen)
         var mask = Array(repeating: Float(-1.0e4), count: config.maxSeq)
         for index in 0..<validCount {
             mask[index] = 0
@@ -429,10 +666,10 @@ public final class ChatterboxFlashT3Graphs: @unchecked Sendable {
         return mask
     }
 
-    private func blockCacheMap(blockStart: Int, blockLen: Int) -> [Float] {
+    private func blockCacheMap(blockStart: Int, blockLen: Int, prefixLen: Int) -> [Float] {
         var cacheMap = Array(repeating: Float(0), count: config.blockSize * config.maxSeq)
         for row in 0..<blockLen {
-            let column = config.prefixLen + blockStart + row
+            let column = prefixLen + blockStart + row
             if column < config.maxSeq {
                 cacheMap[row * config.maxSeq + column] = 1
             }
@@ -448,6 +685,7 @@ public final class ChatterboxFlashT3Graphs: @unchecked Sendable {
 
     private func denoiseBlockStep(
         logits: [Float],
+        nullLogits: [Float]?,
         tokens: [Int],
         blockLen: Int,
         step: Int,
@@ -455,18 +693,38 @@ public final class ChatterboxFlashT3Graphs: @unchecked Sendable {
         scheduleCount: Int,
         temperature: Float,
         timeShiftTau: Float,
+        cfgScale: Float,
         positionTemperature: Float,
         rng: inout ChatterboxFlashGaussianRNG
     ) throws -> DenoiseResult {
+        let useCFG = cfgScale > 0
+        if useCFG {
+            guard let nullLogits, nullLogits.count == logits.count else {
+                throw ChatterboxFlashCoreMLError.invalidShape("null logits must match conditional logits")
+            }
+        }
         var sampled = Array(repeating: 0, count: blockLen)
-        var probabilities = Array(repeating: Array<Float>(), count: blockLen)
+        var conditionalProbabilities = Array(repeating: Array<Float>(), count: blockLen)
+        var unconditionalProbabilities = Array(repeating: Array<Float>(), count: blockLen)
 
         for row in 0..<blockLen {
             let start = row * config.speechVocabSize
             let end = start + config.speechVocabSize
             let rowLogits = Array(logits[start..<end])
-            probabilities[row] = Self.softmax(rowLogits)
-            sampled[row] = Self.sample(logits: rowLogits, temperature: temperature, rng: &rng)
+            conditionalProbabilities[row] = Self.softmax(rowLogits)
+            let samplingLogits: [Float]
+            if useCFG, let nullLogits {
+                let rowNullLogits = Array(nullLogits[start..<end])
+                unconditionalProbabilities[row] = Self.softmax(rowNullLogits)
+                let condLogProbs = Self.logSoftmax(rowLogits)
+                let nullLogProbs = Self.logSoftmax(rowNullLogits)
+                samplingLogits = zip(condLogProbs, nullLogProbs).map { cond, uncond in
+                    cond + cfgScale * (cond - uncond)
+                }
+            } else {
+                samplingLogits = rowLogits
+            }
+            sampled[row] = Self.sample(logits: samplingLogits, temperature: temperature, rng: &rng)
         }
 
         let maskedIndexes = (0..<blockLen).filter { tokens[$0] == config.maskTokenId }
@@ -477,9 +735,14 @@ public final class ChatterboxFlashT3Graphs: @unchecked Sendable {
         var pmi = Array(repeating: -Float.greatestFiniteMagnitude, count: blockLen)
         for row in maskedIndexes {
             let token = sampled[row]
-            let probability = probabilities[row][token]
             let prior = unconditionalBlockPrior[token]
-            pmi[row] = log(max(probability, 1.0e-8)) - log(max(prior, 1.0e-8))
+            let condPMI = log(max(conditionalProbabilities[row][token], 1.0e-8)) - log(max(prior, 1.0e-8))
+            if useCFG {
+                let uncondPMI = log(max(unconditionalProbabilities[row][token], 1.0e-8)) - log(max(prior, 1.0e-8))
+                pmi[row] = (1 + cfgScale) * condPMI - cfgScale * uncondPMI
+            } else {
+                pmi[row] = condPMI
+            }
             if positionTemperature > 0 {
                 pmi[row] += Self.gumbel(rng: &rng)
             }
@@ -592,6 +855,20 @@ public final class ChatterboxFlashT3Graphs: @unchecked Sendable {
             values[index] /= total
         }
         return values
+    }
+
+    private static func logSoftmax(_ logits: [Float]) -> [Float] {
+        let maxLogit = logits.max() ?? 0
+        var total = Float(0)
+        for value in logits {
+            total += exp(value - maxLogit)
+        }
+        guard total > 0, total.isFinite else {
+            let fallback = -log(Float(max(1, logits.count)))
+            return Array(repeating: fallback, count: logits.count)
+        }
+        let logTotal = log(total) + maxLogit
+        return logits.map { $0 - logTotal }
     }
 
     private static func sample(

@@ -139,6 +139,10 @@ final class ChatterboxFlashCoreMLTests: XCTestCase {
         XCTAssertFalse(a.allSatisfy { $0 == 0 })
     }
 
+    func testGenerationOptionsDefaultKeepsNullPrefillOptional() {
+        XCTAssertEqual(ChatterboxFlashGenerationOptions().cfgScale, 0)
+    }
+
     func testFlashTokenizerUsesWhitespaceBPEAndSpecialTokens() throws {
         let directory = try makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -150,6 +154,7 @@ final class ChatterboxFlashCoreMLTests: XCTestCase {
             "vocab": {
               "[STOP]": 0,
               "[UNK]": 1,
+              "[SPACE]": 2,
               "[START]": 255,
               "C": 10,
               "o": 11,
@@ -166,6 +171,7 @@ final class ChatterboxFlashCoreMLTests: XCTestCase {
           "added_tokens": [
             {"id": 0, "content": "[STOP]"},
             {"id": 1, "content": "[UNK]"},
+            {"id": 2, "content": "[SPACE]"},
             {"id": 255, "content": "[START]"}
           ]
         }
@@ -173,7 +179,7 @@ final class ChatterboxFlashCoreMLTests: XCTestCase {
         try json.write(to: url, atomically: true, encoding: .utf8)
         let tokenizer = try ChatterboxFlashTokenizer(tokenizerURL: url)
 
-        XCTAssertEqual(tokenizer.encode("Core ML."), [255, 12, 15, 16, 17, 18, 0])
+        XCTAssertEqual(tokenizer.encode("Core ML."), [255, 12, 15, 2, 16, 17, 18, 0])
         let padded = try tokenizer.encodePadded(
             "Core",
             config: ChatterboxFlashT3Config(
@@ -200,14 +206,45 @@ final class ChatterboxFlashCoreMLTests: XCTestCase {
         XCTAssertEqual(padded, [255, 12, 15, 0, 0, 0, 0, 0])
     }
 
-    func testNumpyFloat32VectorReader() throws {
-        let values: [Float] = [0.25, -1.5, 3.0]
-        let parsed = try ChatterboxFlashNumpy.parseFloat32Vector(makeNpy(values), label: "fixture.npy")
+    func testT3PrefixPlanCompactsPaddedText() throws {
+        let config = ChatterboxFlashT3Config(
+            textLen: 8,
+            maxSeq: 32,
+            blockSize: 4,
+            condLen: 2,
+            promptSpeechLen: 4,
+            hiddenSize: 8,
+            numLayers: 1,
+            numAttentionHeads: 1,
+            numKeyValueHeads: 1,
+            headDim: 8,
+            kvCacheShape: [1, 8, 1, 32],
+            textVocabSize: 256,
+            speechVocabSize: 16,
+            maskTokenId: 16,
+            startSpeechToken: 10,
+            stopSpeechToken: 11,
+            startTextToken: 255,
+            stopTextToken: 0
+        )
 
-        XCTAssertEqual(parsed.count, values.count)
-        for (lhs, rhs) in zip(parsed, values) {
-            XCTAssertEqual(lhs, rhs, accuracy: 1e-6)
-        }
+        let plan = try ChatterboxFlashT3Graphs.makePrefixPlan(config: config, encodedTextCount: 3)
+
+        XCTAssertEqual(plan.compactPrefixLen, 6)
+        XCTAssertEqual(plan.positionIds.count, config.prefixLen)
+        XCTAssertEqual(plan.positionIds.last, 5)
+        XCTAssertEqual(plan.keyPaddingMask[0..<5], Array(repeating: Float(0), count: 5)[...])
+        XCTAssertEqual(plan.keyPaddingMask[5..<10], Array(repeating: Float(-1.0e4), count: 5)[...])
+        XCTAssertEqual(plan.keyPaddingMask[10], 0)
+        XCTAssertEqual(plan.prefixCacheMap[0 * config.maxSeq + 0], 1)
+        XCTAssertEqual(plan.prefixCacheMap[4 * config.maxSeq + 4], 1)
+        XCTAssertEqual(plan.prefixCacheMap[10 * config.maxSeq + 5], 1)
+        XCTAssertEqual(plan.prefixCacheMap[(5 * config.maxSeq)..<(6 * config.maxSeq)].reduce(0, +), 0)
+    }
+
+    func testT3BlockPositionsUseCacheOffset() {
+        let ids = ChatterboxFlashT3Graphs.makeBlockPositionIds(prefixLen: 39, blockStart: 16, blockSize: 4)
+        XCTAssertEqual(ids, [55, 56, 57, 58])
     }
 
     func testToFloat32ReadsInt8MultiArrayWithoutSDKCaseReference() throws {
@@ -230,6 +267,16 @@ final class ChatterboxFlashCoreMLTests: XCTestCase {
         pointer.update(from: values, count: values.count)
 
         XCTAssertEqual(try ChatterboxFlashCoreMLBridge.toFloat32(array), [-8, -1, 0, 127])
+    }
+
+    func testNumpyFloat32VectorReader() throws {
+        let values: [Float] = [0.25, -1.5, 3.0]
+        let parsed = try ChatterboxFlashNumpy.parseFloat32Vector(makeNpy(values), label: "fixture.npy")
+
+        XCTAssertEqual(parsed.count, values.count)
+        for (lhs, rhs) in zip(parsed, values) {
+            XCTAssertEqual(lhs, rhs, accuracy: 1e-6)
+        }
     }
 
     private func makeTempDirectory() throws -> URL {

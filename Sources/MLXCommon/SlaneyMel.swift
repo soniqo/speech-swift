@@ -19,11 +19,15 @@ public struct SlaneyMelConfig: Sendable {
     public var logFloor: Float
     /// If true, reflect-pad the signal by `nFft/2` each side (librosa `center=True`).
     public var centerPad: Bool
+    /// If true, use PyTorch's default periodic Hann window. The default remains
+    /// symmetric for existing mel front-ends that were validated that way.
+    public var periodicHann: Bool
 
     public init(
         sampleRate: Int, nFft: Int, hop: Int, win: Int, nMels: Int,
         fmin: Float, fmax: Float, power: Float = 1.0,
-        logMel: Bool = false, logFloor: Float = 1e-5, centerPad: Bool = true
+        logMel: Bool = false, logFloor: Float = 1e-5, centerPad: Bool = true,
+        periodicHann: Bool = false
     ) {
         self.sampleRate = sampleRate
         self.nFft = nFft
@@ -36,6 +40,7 @@ public struct SlaneyMelConfig: Sendable {
         self.logMel = logMel
         self.logFloor = logFloor
         self.centerPad = centerPad
+        self.periodicHann = periodicHann
     }
 }
 
@@ -62,7 +67,7 @@ public enum SlaneyMel {
         let frames = max(0, (sig.count - c.nFft) / c.hop + 1)
 
         // Windowed frames [frames, nFft] (built on host; one rfft on the backend).
-        let window = hannWindow(length: c.win, nFft: c.nFft)
+        let window = hannWindow(length: c.win, nFft: c.nFft, periodic: c.periodicHann)
         var framed = [Float](repeating: 0, count: frames * c.nFft)
         for t in 0 ..< frames {
             let start = t * c.hop
@@ -86,11 +91,9 @@ public enum SlaneyMel {
 
     // MARK: - Internals (lifted from FlashSR/Mel.swift)
 
-    private static func hannWindow(length: Int, nFft: Int) -> [Float] {
+    private static func hannWindow(length: Int, nFft: Int, periodic: Bool) -> [Float] {
         var w = [Float](repeating: 0, count: nFft)
-        // Symmetric Hann (denominator length-1), matching the reference implementation's
-        // `hanning(size, periodic=False)` used by its STFT.
-        let denom = Float(max(length - 1, 1))
+        let denom = Float(max(periodic ? length : length - 1, 1))
         for i in 0 ..< length {
             w[i] = 0.5 * (1.0 - cos(2.0 * Float.pi * Float(i) / denom))
         }

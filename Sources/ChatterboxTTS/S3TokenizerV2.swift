@@ -53,7 +53,8 @@ enum S3Mel {
     /// `torch.stft(center=True)`. We drop the trailing frame after the call.
     static let melConfig = SlaneyMelConfig(
         sampleRate: sampleRate, nFft: nFft, hop: hop, win: win, nMels: nMels,
-        fmin: 0, fmax: Float(sampleRate) / 2, power: 2.0, logMel: false, centerPad: true)
+        fmin: 0, fmax: Float(sampleRate) / 2, power: 2.0, logMel: false,
+        centerPad: true, periodicHann: true)
 
     /// 16 kHz mono samples → log-mel `(nMels, T)` MLX float32, where
     /// `T = samples.count / hop`.
@@ -201,8 +202,8 @@ final class S3ResidualAttentionBlock: Module {
 
     init(nState: Int, nHead: Int, freqs: S3Freqs) {
         self._attn.wrappedValue = S3FSMNAttention(nState: nState, nHead: nHead, freqs: freqs)
-        // attn_ln uses eps 1e-6 in the reference; mlp_ln uses the default (1e-5).
-        self._attnLN.wrappedValue = LayerNorm(dimensions: nState, eps: 1e-6, affine: true)
+        // s3tokenizer.model_v2 uses eps=1e-5 for both layer norms.
+        self._attnLN.wrappedValue = LayerNorm(dimensions: nState, eps: 1e-5, affine: true)
         let nMLP = nState * 4
         self._mlp.wrappedValue = Sequential(layers: [
             Linear(nState, nMLP), GELU(), Linear(nMLP, nState),
