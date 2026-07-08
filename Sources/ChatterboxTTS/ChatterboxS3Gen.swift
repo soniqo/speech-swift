@@ -194,23 +194,30 @@ public final class ChatterboxS3Gen {
     /// Full synthesis: speech tokens + reference → 24 kHz waveform `[Float]`.
     ///
     /// Mirrors `S3Token2Wav.__call__`: flow mel → HiFTGenerator → 20 ms fade-in.
-    public func synthesize(speechTokens: [Int], ref: ChatterboxS3GenRef) -> [Float] {
-        let mel = flowMel(speechTokens: speechTokens, ref: ref)     // [1, 80, T]
-        var wav = vocoder.inference(mel: mel.asType(.float32))      // [1, samples]
+    public func synthesize(
+        speechTokens: [Int],
+        ref: ChatterboxS3GenRef,
+        memoryOptions: ChatterboxMemoryOptions = .balanced
+    ) -> [Float] {
+        ChatterboxMemory.withOptions(memoryOptions) {
+            let mel = flowMel(speechTokens: speechTokens, ref: ref)     // [1, 80, T]
+            ChatterboxMemory.clearStageCache(memoryOptions)
+            var wav = vocoder.inference(mel: mel.asType(.float32))      // [1, samples]
 
-        // trim_fade: zero the first 20 ms, raised-cosine fade-in over the next
-        // 20 ms. n_trim = sr/50 = 480; window length = 960.
-        let nTrim = Self.sampleRate / 50
-        let fadeLen = 2 * nTrim
-        if wav.dim(1) >= fadeLen {
-            let fade = Self.trimFade(nTrim: nTrim).asType(wav.dtype)  // [960]
-            let head = wav[0..., 0 ..< fadeLen] * fade.reshaped([1, fadeLen])
-            let tail = wav[0..., fadeLen...]
-            wav = concatenated([head, tail], axis: 1)
+            // trim_fade: zero the first 20 ms, raised-cosine fade-in over the next
+            // 20 ms. n_trim = sr/50 = 480; window length = 960.
+            let nTrim = Self.sampleRate / 50
+            let fadeLen = 2 * nTrim
+            if wav.dim(1) >= fadeLen {
+                let fade = Self.trimFade(nTrim: nTrim).asType(wav.dtype)  // [960]
+                let head = wav[0..., 0 ..< fadeLen] * fade.reshaped([1, fadeLen])
+                let tail = wav[0..., fadeLen...]
+                wav = concatenated([head, tail], axis: 1)
+            }
+            eval(wav)
+            let flat = wav.reshaped([wav.size]).asType(.float32).asArray(Float.self)
+            return flat
         }
-        eval(wav)
-        let flat = wav.reshaped([wav.size]).asType(.float32).asArray(Float.self)
-        return flat
     }
 
     /// The reference `trim_fade` window: `n_trim` zeros followed by an

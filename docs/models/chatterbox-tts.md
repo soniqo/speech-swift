@@ -63,6 +63,17 @@ Zero-shot: a single reference clip is encoded to a speaker embedding (VoiceEncod
 and to S3Gen reference features (S3TokenizerV2 + CAM++). No fine-tuning. The
 reference is resampled to 16 kHz and silence-trimmed before the speaker encoder.
 
+The MLX clone path uses `ChatterboxMemoryOptions.balanced` by default. During
+`clone(...)` and standalone `ChatterboxS3Gen.synthesize(...)`, the runtime
+temporarily caps MLX cache memory at up to 512 MB without raising a stricter
+caller cap, clears reusable buffers between T3, S3Gen flow, and vocoder stages,
+then restores the caller's previous cache limit. This keeps long-form synthesis
+from retaining large stage-local Metal buffers. A 72 s Russian clone on the
+local M-series test machine dropped from ~39.0 GB process footprint to ~7.4 GB
+with this policy. Pass
+`memoryOptions: .unrestricted` to preserve MLX's default cache behavior for
+maximum-throughput experiments.
+
 ## Chatterbox Flash Core ML
 
 `ChatterboxFlashCoreMLModel` loads the published

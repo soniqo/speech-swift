@@ -389,6 +389,7 @@ public final class ChatterboxTTSModel {
     ///   - exaggeration: emotion-advance scalar (T3 `emotion_adv`).
     ///   - cfgWeight: T3 classifier-free-guidance weight.
     ///   - temperature: T3 sampling temperature (0 = greedy).
+    ///   - memoryOptions: temporary MLX cache policy for this generation.
     /// - Returns: 24 kHz mono waveform.
     public func clone(
         referenceSamples: [Float],
@@ -401,68 +402,72 @@ public final class ChatterboxTTSModel {
         topP: Float = 1.0,
         minP: Float = 0.05,
         repetitionPenalty: Float = 1.2,
-        cfgWeight: Float = 0.5
+        cfgWeight: Float = 0.5,
+        memoryOptions: ChatterboxMemoryOptions = .balanced
     ) throws -> [Float] {
-        let lang = languageId.lowercased()
-        guard MTLTokenizer.supportedLanguages.contains(lang) else {
-            throw ChatterboxModelError.unsupportedLanguage(lang)
-        }
+        try ChatterboxMemory.withOptions(memoryOptions) {
+            let lang = languageId.lowercased()
+            guard MTLTokenizer.supportedLanguages.contains(lang) else {
+                throw ChatterboxModelError.unsupportedLanguage(lang)
+            }
 
-        // --- prepare_conditionals: reference at the required sample rates ---
-        // 24 kHz (truncated to 10 s) for the S3Gen prompt mel.
-        let ref24kFull = sampleRate == ChatterboxS3Gen.sampleRate
-            ? referenceSamples
-            : AudioFileLoader.resample(
-                referenceSamples, from: sampleRate, to: ChatterboxS3Gen.sampleRate,
+            // --- prepare_conditionals: reference at the required sample rates ---
+            // 24 kHz (truncated to 10 s) for the S3Gen prompt mel.
+            let ref24kFull = sampleRate == ChatterboxS3Gen.sampleRate
+                ? referenceSamples
+                : AudioFileLoader.resample(
+                    referenceSamples, from: sampleRate, to: ChatterboxS3Gen.sampleRate,
+                    quality: .mastering)
+            let ref24k = Array(ref24kFull.prefix(Self.decCondLen))
+            // 24 kHz -> 16 kHz for the S3Gen tokenizer + CAMPPlus.
+            let ref16kFromRef24k = AudioFileLoader.resample(
+                ref24k, from: ChatterboxS3Gen.sampleRate, to: ChatterboxS3Gen.tokenSampleRate,
                 quality: .mastering)
-        let ref24k = Array(ref24kFull.prefix(Self.decCondLen))
-        // 24 kHz -> 16 kHz for the S3Gen tokenizer + CAMPPlus.
-        let ref16kFromRef24k = AudioFileLoader.resample(
-            ref24k, from: ChatterboxS3Gen.sampleRate, to: ChatterboxS3Gen.tokenSampleRate,
-            quality: .mastering)
-        // original -> 16 kHz (untruncated) for the VoiceEncoder; 6 s slice for T3 cond tokens.
-        let ref16kFull = sampleRate == ChatterboxS3Gen.tokenSampleRate
-            ? referenceSamples
-            : AudioFileLoader.resample(
-                referenceSamples, from: sampleRate, to: ChatterboxS3Gen.tokenSampleRate,
-                quality: .mastering)
-        let ref16kEnc = Array(ref16kFull.prefix(Self.encCondLen))
+            // original -> 16 kHz (untruncated) for the VoiceEncoder; 6 s slice for T3 cond tokens.
+            let ref16kFull = sampleRate == ChatterboxS3Gen.tokenSampleRate
+                ? referenceSamples
+                : AudioFileLoader.resample(
+                    referenceSamples, from: sampleRate, to: ChatterboxS3Gen.tokenSampleRate,
+                    quality: .mastering)
+            let ref16kEnc = Array(ref16kFull.prefix(Self.encCondLen))
 
-        // S3Gen conditioning (x-vector, prompt tokens, prompt mel).
-        let s3Ref = s3gen.embedRef(refWav24k: ref24k, refWav16k: ref16kFromRef24k)
+            // S3Gen conditioning (x-vector, prompt tokens, prompt mel).
+            let s3Ref = s3gen.embedRef(refWav24k: ref24k, refWav16k: ref16kFromRef24k)
 
-        // T3 conditioning: speaker emb (full 16 kHz) + prompt-speech tokens (6 s).
-        let speakerEmb = voiceEncoder.embed(samples: ref16kFull)  // [256]
-        let t3PromptTokens = Array(s3gen.tokenizer.encode(ref16kEnc).prefix(Self.speechCondPromptLen))
+            // T3 conditioning: speaker emb (full 16 kHz) + prompt-speech tokens (6 s).
+            let speakerEmb = voiceEncoder.embed(samples: ref16kFull)  // [256]
+            let t3PromptTokens = Array(s3gen.tokenizer.encode(ref16kEnc).prefix(Self.speechCondPromptLen))
 
-        // --- text tokenization: [sot] + ids + [eot] ---
-        let ids: [Int]
-        do {
-            ids = try tokenizer.encodeStrict(text, languageId: lang)
-        } catch ChatterboxTokenizerError.hebrewRequiresDiacritics {
-            throw ChatterboxModelError.invalidText(
-                "Hebrew input must include niqqud/diacritics; automatic Dicta diacritization is not bundled yet")
+            // --- text tokenization: [sot] + ids + [eot] ---
+            let ids: [Int]
+            do {
+                ids = try tokenizer.encodeStrict(text, languageId: lang)
+            } catch ChatterboxTokenizerError.hebrewRequiresDiacritics {
+                throw ChatterboxModelError.invalidText(
+                    "Hebrew input must include niqqud/diacritics; automatic Dicta diacritization is not bundled yet")
+            }
+            let textTokens = [Self.startTextToken] + ids + [Self.stopTextToken]
+
+            // --- T3: text -> speech tokens ---
+            let rawSpeech = t3.inference(
+                textTokens: textTokens,
+                speakerEmb: speakerEmb,
+                promptSpeechTokens: t3PromptTokens,
+                emotionAdv: exaggeration,
+                maxNewTokens: maxNewTokens,
+                temperature: temperature,
+                topP: topP,
+                minP: minP,
+                repetitionPenalty: repetitionPenalty,
+                cfgWeight: cfgWeight)
+
+            // drop SOS/EOS, then keep only valid codes (< SPEECH_VOCAB_SIZE), order-preserving.
+            let dropped = Self.dropInvalidTokens(rawSpeech)
+            let speechTokens = dropped.filter { $0 < Self.speechVocabSize }
+            ChatterboxMemory.clearStageCache(memoryOptions)
+
+            // --- S3Gen: speech tokens -> waveform ---
+            return s3gen.synthesize(speechTokens: speechTokens, ref: s3Ref, memoryOptions: memoryOptions)
         }
-        let textTokens = [Self.startTextToken] + ids + [Self.stopTextToken]
-
-        // --- T3: text -> speech tokens ---
-        let rawSpeech = t3.inference(
-            textTokens: textTokens,
-            speakerEmb: speakerEmb,
-            promptSpeechTokens: t3PromptTokens,
-            emotionAdv: exaggeration,
-            maxNewTokens: maxNewTokens,
-            temperature: temperature,
-            topP: topP,
-            minP: minP,
-            repetitionPenalty: repetitionPenalty,
-            cfgWeight: cfgWeight)
-
-        // drop SOS/EOS, then keep only valid codes (< SPEECH_VOCAB_SIZE), order-preserving.
-        let dropped = Self.dropInvalidTokens(rawSpeech)
-        let speechTokens = dropped.filter { $0 < Self.speechVocabSize }
-
-        // --- S3Gen: speech tokens -> waveform ---
-        return s3gen.synthesize(speechTokens: speechTokens, ref: s3Ref)
     }
 }
