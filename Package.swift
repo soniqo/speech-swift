@@ -329,7 +329,11 @@ let package = Package(
             name: "IndexTTS2TTS",
             dependencies: [
                 "AudioCommon",
+                "ChatterboxTTS",
+                "MLXCommon",
+                "SpeechRestoration",
                 "VoiceCloneTTSCommon",
+                .product(name: "MLX", package: "mlx-swift"),
             ]
         ),
         .target(
@@ -778,6 +782,7 @@ let package = Package(
                 "HiggsAudioTTS",
                 "F5TTS",
                 "AudioCommon",
+                "Qwen3ASR",
             ]
         ),
         .testTarget(

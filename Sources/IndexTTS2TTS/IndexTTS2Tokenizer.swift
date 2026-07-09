@@ -31,8 +31,8 @@ public enum IndexTTS2TokenizerError: Error, LocalizedError, Equatable {
 /// SentencePiece tokenizer scaffold for IndexTTS2's `bpe.model`.
 ///
 /// Upstream applies additional Chinese text normalization before SentencePiece.
-/// This Swift port starts with the model-compatible Unigram Viterbi path used
-/// by English and already gives the GPT stage stable token IDs.
+/// This Swift port starts with the model-compatible Unigram Viterbi path and
+/// mirrors the upstream Latin uppercasing used before BPE lookup.
 public struct IndexTTS2Tokenizer: Sendable {
     public static let maxInputScalars = 2_048
 
@@ -117,6 +117,7 @@ public struct IndexTTS2Tokenizer: Sendable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .split(whereSeparator: { $0.isWhitespace })
             .joined(separator: " ")
+            .uppercased()
         guard !normalized.isEmpty else { return "" }
         return "▁" + normalized.replacingOccurrences(of: " ", with: "▁")
     }

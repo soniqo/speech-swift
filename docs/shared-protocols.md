@@ -47,7 +47,7 @@ public protocol SpeechGenerationModel: AnyObject {
 
 **Conforming types:** `Qwen3TTSModel`, `CosyVoiceTTSModel`, `VoxCPM2TTSModel`, `KokoroTTSModel`, `IndexTTS2TTSModel`, `HiggsAudioTTSModel`, `F5TTSModel`
 
-`IndexTTS2TTSModel`, `HiggsAudioTTSModel`, and `F5TTSModel` currently implement bundle loading, manifest validation, metadata access, and `ModelMemoryManageable`. `speech speak --engine indextts2` routes through the IndexTTS2 loader for published-bundle validation. Their `generate` methods intentionally throw a clear unsupported-runtime error until the native Swift inference graphs are ported.
+`IndexTTS2TTSModel`, `HiggsAudioTTSModel`, and `F5TTSModel` implement bundle loading, manifest validation, metadata access, and `ModelMemoryManageable`. `IndexTTS2TTSModel` additionally exposes a reference-audio `generate` overload for the expanded IndexTTS2 bundle and runs native reference conditioning, optional `IndexTTS2EmotionControl` preset/vector blending, `IndexTTS2SynthesisOptions` speaking-rate and internal-pause controls, semantic GPT beam sampling, S2Mel decoding, and BigVGAN vocoding. The protocol-only `generate(text:language:)` entry point throws a reference-required error for IndexTTS2; Higgs Audio and F5-TTS intentionally throw clear unsupported-runtime errors until their native Swift inference graphs are ported.
 
 ### SpeechRecognitionModel (STT)
 
@@ -418,7 +418,7 @@ Sources/
 │   └── Configuration.swift    ModelArgs / config decoding for VoxCPM2 snapshots
 │
 ├── VoiceCloneTTSCommon/       Shared manifest + bundle validation for candidate TTS ports
-├── IndexTTS2TTS/              IndexTTS2 bundle loader (inference not ported)
+├── IndexTTS2TTS/              IndexTTS2 voice cloning (reference conditioning + synthesis)
 ├── HiggsAudioTTS/             Higgs Audio v3 bundle loader (inference not ported)
 ├── F5TTS/                     F5-TTS v1 bundle loader (inference not ported)
 │

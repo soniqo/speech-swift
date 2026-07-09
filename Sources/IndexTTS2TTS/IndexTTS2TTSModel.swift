@@ -91,16 +91,19 @@ public final class IndexTTS2TTSModel: SpeechGenerationModel, ModelMemoryManageab
     public let bundleDirectory: URL
     public let manifest: VoiceCloneExportManifest
     public let sampleRate: Int
+    public let runtimeConfig: IndexTTS2RuntimeConfig?
     public let tokenizer: IndexTTS2Tokenizer?
 
     private let bundleInfo: VoiceCloneBundleInfo
+    private var nativeRuntime: IndexTTS2NativeRuntime?
     private var loaded = true
 
     private init(bundleInfo: VoiceCloneBundleInfo) {
         self.bundleInfo = bundleInfo
         self.bundleDirectory = bundleInfo.directory
         self.manifest = bundleInfo.manifest
-        self.sampleRate = bundleInfo.sampleRate
+        self.runtimeConfig = try? IndexTTS2RuntimeConfig.load(from: bundleInfo.directory)
+        self.sampleRate = runtimeConfig?.outputSampleRate ?? bundleInfo.sampleRate
         self.tokenizer = try? IndexTTS2Tokenizer(
             modelURL: bundleInfo.directory.appendingPathComponent("bpe.model"))
     }
@@ -142,12 +145,164 @@ public final class IndexTTS2TTSModel: SpeechGenerationModel, ModelMemoryManageab
     }
 
     public func unload() {
+        nativeRuntime = nil
         loaded = false
+    }
+
+    @discardableResult
+    public func prepareRuntime(
+        progressHandler: ((Double, String) -> Void)? = nil
+    ) throws -> IndexTTS2RuntimeInventory {
+        try ensureLoaded()
+        return try runtime(progressHandler: progressHandler).inventory
+    }
+
+    public func prepareReferenceConditioning(
+        referenceAudio: URL,
+        emotionReferenceAudio: URL? = nil,
+        emotionControl: IndexTTS2EmotionControl? = nil,
+        progressHandler: ((Double, String) -> Void)? = nil
+    ) throws -> IndexTTS2ReferenceConditioning {
+        try ensureLoaded()
+        return try runtime { progress, message in
+            progressHandler?(progress * 0.65, message)
+        }
+        .prepareReferenceConditioning(
+            referenceAudio: referenceAudio,
+            emotionReferenceAudio: emotionReferenceAudio,
+            emotionControl: emotionControl) { progress, message in
+                progressHandler?(0.65 + progress * 0.35, message)
+            }
+    }
+
+    public func generateSemanticCodes(
+        text: String,
+        referenceAudio: URL,
+        emotionReferenceAudio: URL? = nil,
+        emotionControl: IndexTTS2EmotionControl? = nil,
+        options: IndexTTS2SemanticGenerationOptions = IndexTTS2SemanticGenerationOptions(),
+        progressHandler: ((Double, String) -> Void)? = nil
+    ) throws -> IndexTTS2SemanticGeneration {
+        try ensureLoaded()
+        guard let tokenizer else {
+            throw AudioModelError.inferenceFailed(
+                operation: "IndexTTS2 semantic generation",
+                reason: "Tokenizer could not be initialized from bpe.model.")
+        }
+        let textTokens = try tokenizer.encode(text)
+        let runtime = try runtime { progress, message in
+            progressHandler?(progress * 0.45, message)
+        }
+        let conditioning = try runtime.prepareReferenceConditioning(
+            referenceAudio: referenceAudio,
+            emotionReferenceAudio: emotionReferenceAudio,
+            emotionControl: emotionControl) { progress, message in
+                progressHandler?(0.45 + progress * 0.35, message)
+            }
+        progressHandler?(0.82, "Generating IndexTTS2 semantic tokens")
+        let generated = try runtime.semanticGPT.generateSemanticCodes(
+            textTokens: textTokens,
+            conditioning: conditioning,
+            options: options)
+        progressHandler?(1.0, "IndexTTS2 semantic tokens ready")
+        return generated
+    }
+
+    public func generateSemanticCodes(
+        text: String,
+        conditioning: IndexTTS2ReferenceConditioning,
+        options: IndexTTS2SemanticGenerationOptions = IndexTTS2SemanticGenerationOptions()
+    ) throws -> IndexTTS2SemanticGeneration {
+        try ensureLoaded()
+        guard let tokenizer else {
+            throw AudioModelError.inferenceFailed(
+                operation: "IndexTTS2 semantic generation",
+                reason: "Tokenizer could not be initialized from bpe.model.")
+        }
+        return try runtime().semanticGPT.generateSemanticCodes(
+            textTokens: try tokenizer.encode(text),
+            conditioning: conditioning,
+            options: options)
+    }
+
+    public func synthesize(
+        text: String,
+        conditioning: IndexTTS2ReferenceConditioning,
+        semanticOptions: IndexTTS2SemanticGenerationOptions = IndexTTS2SemanticGenerationOptions(),
+        synthesisOptions: IndexTTS2SynthesisOptions = .default
+    ) throws -> [Float] {
+        try ensureLoaded()
+        guard let tokenizer else {
+            throw AudioModelError.inferenceFailed(
+                operation: "IndexTTS2 synthesis",
+                reason: "Tokenizer could not be initialized from bpe.model.")
+        }
+        return try runtime().synthesize(
+            textTokens: try tokenizer.encode(text),
+            conditioning: conditioning,
+            semanticOptions: semanticOptions,
+            synthesisOptions: synthesisOptions)
+    }
+
+    public func synthesize(
+        text: String,
+        conditioning: IndexTTS2ReferenceConditioning,
+        semantic: IndexTTS2SemanticGeneration,
+        synthesisOptions: IndexTTS2SynthesisOptions = .default
+    ) throws -> [Float] {
+        try ensureLoaded()
+        guard let tokenizer else {
+            throw AudioModelError.inferenceFailed(
+                operation: "IndexTTS2 synthesis",
+                reason: "Tokenizer could not be initialized from bpe.model.")
+        }
+        return try runtime().synthesize(
+            textTokens: try tokenizer.encode(text),
+            conditioning: conditioning,
+            semantic: semantic,
+            synthesisOptions: synthesisOptions)
+    }
+
+    public func synthesize(
+        text: String,
+        conditioning: IndexTTS2ReferenceConditioning,
+        semanticCodes: [Int32],
+        synthesisOptions: IndexTTS2SynthesisOptions = .default
+    ) throws -> [Float] {
+        try ensureLoaded()
+        guard let tokenizer else {
+            throw AudioModelError.inferenceFailed(
+                operation: "IndexTTS2 synthesis",
+                reason: "Tokenizer could not be initialized from bpe.model.")
+        }
+        return try runtime().synthesize(
+            textTokens: try tokenizer.encode(text),
+            semanticCodes: semanticCodes,
+            conditioning: conditioning,
+            synthesisOptions: synthesisOptions)
+    }
+
+    private func runtime(
+        progressHandler: ((Double, String) -> Void)? = nil
+    ) throws -> IndexTTS2NativeRuntime {
+        if let nativeRuntime {
+            progressHandler?(1.0, "IndexTTS2 runtime weights ready")
+            return nativeRuntime
+        }
+
+        let runtime = try IndexTTS2NativeRuntime.load(
+            from: bundleDirectory,
+            config: runtimeConfig ?? .fallback,
+            progressHandler: progressHandler)
+        nativeRuntime = runtime
+        return runtime
     }
 
     public func generate(text: String, language: String?) async throws -> [Float] {
         try ensureLoaded()
-        throw VoiceCloneBundleLoader.runtimeNotImplemented(modelName: "IndexTTS2")
+        throw AudioModelError.inferenceFailed(
+            operation: "IndexTTS2 synthesis",
+            reason: "IndexTTS2 requires a reference audio sample. Use generate(text:referenceAudio:referenceText:emotionReferenceAudio:language:).")
     }
 
     public func generate(
@@ -155,10 +310,26 @@ public final class IndexTTS2TTSModel: SpeechGenerationModel, ModelMemoryManageab
         referenceAudio: URL,
         referenceText: String? = nil,
         emotionReferenceAudio: URL? = nil,
+        emotionControl: IndexTTS2EmotionControl? = nil,
+        synthesisOptions: IndexTTS2SynthesisOptions = .default,
         language: String? = nil
     ) async throws -> [Float] {
         try ensureLoaded()
-        throw VoiceCloneBundleLoader.runtimeNotImplemented(modelName: "IndexTTS2")
+        guard let tokenizer else {
+            throw AudioModelError.inferenceFailed(
+                operation: "IndexTTS2 synthesis",
+                reason: "Tokenizer could not be initialized from bpe.model.")
+        }
+        let textTokens = try tokenizer.encode(text)
+        let runtime = try runtime()
+        let conditioning = try runtime.prepareReferenceConditioning(
+            referenceAudio: referenceAudio,
+            emotionReferenceAudio: emotionReferenceAudio,
+            emotionControl: emotionControl)
+        return try runtime.synthesize(
+            textTokens: textTokens,
+            conditioning: conditioning,
+            synthesisOptions: synthesisOptions)
     }
 
     private func ensureLoaded() throws {

@@ -15,7 +15,7 @@ import SpeechRestoration
 public struct SpeakCommand: ParsableCommand {
     public static let configuration = CommandConfiguration(
         commandName: "speak",
-        abstract: "Text-to-speech synthesis (Qwen3-TTS, CosyVoice, VoxCPM2, IndexTTS2 bundle validation, Indic-Mio, or Magpie). For CoreML, use the `qwen3-tts-coreml` subcommand."
+        abstract: "Text-to-speech synthesis (Qwen3-TTS, CosyVoice, VoxCPM2, IndexTTS2, Indic-Mio, or Magpie). For CoreML, use the `qwen3-tts-coreml` subcommand."
     )
 
     @Argument(help: "Text to synthesize (omit when using --list-speakers or --batch-file)")
@@ -155,8 +155,20 @@ public struct SpeakCommand: ParsableCommand {
     @Option(name: .long, help: "[indextts2] Load an exported bundle from this local directory instead of HuggingFace")
     public var indextts2BundleDir: String?
 
-    @Option(name: .long, help: "[indextts2] Optional emotion/style reference audio. Native Swift synthesis is not implemented yet.")
+    @Option(name: .long, help: "[indextts2] Optional emotion/style reference audio. Defaults to --voice-sample when omitted.")
     public var indextts2EmotionAudio: String?
+
+    @Option(name: .long, help: "[indextts2] Emotion preset or 8-value vector. Presets: eager, happy, excited, angry, sad, afraid, disgusted, melancholic, surprised, calm.")
+    public var indextts2Emotion: String?
+
+    @Option(name: .long, help: "[indextts2] Strength for --indextts2-emotion, from 0.0 to 1.0 (default 1.0).")
+    public var indextts2EmotionWeight: Float = 1.0
+
+    @Option(name: .long, help: "[indextts2] Speaking rate multiplier, from 0.5 to 1.5 (default 1.0). Values above 1.0 shorten generated speech.")
+    public var indextts2SpeakingRate: Float = 1.0
+
+    @Option(name: .long, help: "[indextts2] Optional cap for long internal pauses, in seconds, from 0.05 to 2.0. Omit to keep raw model timing.")
+    public var indextts2MaxPause: Float?
 
     // MARK: - Indic-Mio-specific options
 
@@ -237,6 +249,11 @@ public struct SpeakCommand: ParsableCommand {
             if voiceSample == nil {
                 throw ValidationError("--engine indextts2 requires --voice-sample because IndexTTS2 is a zero-shot voice-cloning model")
             }
+            if indextts2Emotion != nil && indextts2EmotionAudio != nil {
+                throw ValidationError("--indextts2-emotion and --indextts2-emotion-audio are mutually exclusive")
+            }
+            _ = try parseIndexTTS2EmotionControl()
+            _ = try parseIndexTTS2SynthesisOptions()
             if cleanReference {
                 throw ValidationError("--clean-reference is not wired for --engine indextts2 yet")
             }
@@ -244,7 +261,7 @@ public struct SpeakCommand: ParsableCommand {
                 throw ValidationError("--engine indextts2 does not support --speaker; use --voice-sample")
             }
             if instruct != nil {
-                throw ValidationError("--engine indextts2 does not support --instruct; use --indextts2-emotion-audio once native synthesis is implemented")
+                throw ValidationError("--engine indextts2 does not support --instruct; use --indextts2-emotion-audio for a separate style reference")
             }
         }
         if eng == "indic-mio" {
@@ -937,14 +954,27 @@ public struct SpeakCommand: ParsableCommand {
             }
             print("  Params: \(model.manifest.parameterCount ?? "unknown")")
             print("  Sample rate: \(model.sampleRate) Hz")
-            print("  Runtime status: \(model.manifest.runtimeStatus ?? "unknown")")
+            print("  Runtime status: native Swift synthesis enabled")
 
             let voiceURL = URL(fileURLWithPath: voiceSample)
             let emotionURL = indextts2EmotionAudio.map { URL(fileURLWithPath: $0) }
+            let emotionControl = try parseIndexTTS2EmotionControl()
+            let synthesisOptions = try parseIndexTTS2SynthesisOptions()
+            if let indextts2Emotion {
+                print("  Emotion: \(indextts2Emotion) @ \(indextts2EmotionWeight)")
+            }
+            if indextts2SpeakingRate != 1.0 {
+                print("  Speaking rate: \(indextts2SpeakingRate)x")
+            }
+            if let maxPause = indextts2MaxPause {
+                print("  Max internal pause: \(maxPause)s")
+            }
             let audio = try await model.generate(
                 text: inputText,
                 referenceAudio: voiceURL,
                 emotionReferenceAudio: emotionURL,
+                emotionControl: emotionControl,
+                synthesisOptions: synthesisOptions,
                 language: effectiveLanguage)
             let outputURL = URL(fileURLWithPath: output)
             if play {
@@ -953,6 +983,60 @@ public struct SpeakCommand: ParsableCommand {
                 try WAVWriter.write(samples: audio, sampleRate: model.sampleRate, to: outputURL)
                 print("Saved audio to \(output)")
             }
+        }
+    }
+
+    private func parseIndexTTS2SynthesisOptions() throws -> IndexTTS2SynthesisOptions {
+        do {
+            return try IndexTTS2SynthesisOptions(
+                speakingRate: indextts2SpeakingRate,
+                maxInternalPauseDuration: indextts2MaxPause)
+        } catch let error as AudioModelError {
+            throw ValidationError(error.localizedDescription)
+        }
+    }
+
+    private func parseIndexTTS2EmotionControl() throws -> IndexTTS2EmotionControl? {
+        guard let rawEmotion = indextts2Emotion?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !rawEmotion.isEmpty else {
+            guard indextts2EmotionWeight.isFinite,
+                  indextts2EmotionWeight >= 0,
+                  indextts2EmotionWeight <= 1 else {
+                throw ValidationError("--indextts2-emotion-weight must be in [0, 1]")
+            }
+            return nil
+        }
+
+        do {
+            if let preset = IndexTTS2EmotionPreset(named: rawEmotion) {
+                return try IndexTTS2EmotionControl(preset: preset, weight: indextts2EmotionWeight)
+            }
+            let vector = try parseIndexTTS2EmotionVector(rawEmotion)
+            return try IndexTTS2EmotionControl(vector: vector, weight: indextts2EmotionWeight)
+        } catch let error as IndexTTS2EmotionControlError {
+            throw ValidationError(error.localizedDescription)
+        }
+    }
+
+    private func parseIndexTTS2EmotionVector(_ raw: String) throws -> [Float] {
+        var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.hasPrefix("[") && text.hasSuffix("]") {
+            text.removeFirst()
+            text.removeLast()
+        }
+        let parts = text.split(separator: ",", omittingEmptySubsequences: false)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        guard parts.count == 8 else {
+            if IndexTTS2EmotionPreset(named: raw) == nil, !raw.contains(",") {
+                throw ValidationError(IndexTTS2EmotionControlError.unknownPreset(raw).localizedDescription)
+            }
+            throw ValidationError("--indextts2-emotion vector must contain exactly 8 comma-separated values")
+        }
+        return try parts.map { part in
+            guard let value = Float(part), value.isFinite else {
+                throw ValidationError("--indextts2-emotion vector entries must be numeric")
+            }
+            return value
         }
     }
 

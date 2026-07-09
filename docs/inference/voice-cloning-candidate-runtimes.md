@@ -1,8 +1,10 @@
 # Voice Cloning Candidate Runtimes - Inference
 
-These modules are loadable runtime contracts, not complete synthesis engines.
-They are useful for wiring downloads, cache validation, model-size reporting,
-CLI surfacing, and native-port tests before the full inference graphs land.
+These modules are loadable runtime contracts. IndexTTS2 now includes the native
+reference-conditioning and synthesis path, while Higgs Audio and F5-TTS remain
+bundle-loader surfaces. They are useful for wiring downloads, cache validation,
+model-size reporting, CLI surfacing, and native-port tests before each full
+inference graph lands.
 
 ```swift
 import IndexTTS2TTS
@@ -16,15 +18,24 @@ print(IndexTTS2TTSModel.auxiliaryModels.map(\.repository))
 
 let tokenIds = try model.tokenizer?.encode("Hello from IndexTTS2")
 
-// Throws until the native graph port is implemented.
-_ = try await model.generate(text: "Hello", language: "en")
+let conditioning = try model.prepareReferenceConditioning(
+    referenceAudio: URL(fileURLWithPath: "/path/to/reference.wav"))
+print(conditioning.promptConditionShape)
+
+let audio = try await model.generate(
+    text: "Hello from IndexTTS2",
+    referenceAudio: URL(fileURLWithPath: "/path/to/reference.wav"),
+    synthesisOptions: try IndexTTS2SynthesisOptions(
+        speakingRate: 1.35,
+        maxInternalPauseDuration: 0.05))
+print(audio.count)
 ```
 
-The same shape is available for `HiggsAudioTTSModel` and `F5TTSModel`.
+The bundle-loading shape is available for `HiggsAudioTTSModel` and `F5TTSModel`.
 
 ## CLI Surface
 
-IndexTTS2 is exposed through `speech speak` as a bundle-validation engine:
+IndexTTS2 is exposed through `speech speak` as a native voice-cloning engine:
 
 ```bash
 speech speak "Hello from IndexTTS2" \
@@ -39,19 +50,25 @@ or, after the expanded bundle is published:
 speech speak "Hello from IndexTTS2" \
   --engine indextts2 \
   --voice-sample reference.wav \
+  --indextts2-speaking-rate 1.35 \
+  --indextts2-max-pause 0.05 \
   --indextts2-model-id aufklarer/IndexTTS2-MLX-fp16
 ```
 
-The command downloads or loads the exported bundle, prints manifest metadata,
-then throws the same explicit unsupported-runtime error as the Swift API. This
-keeps CLI behavior honest while making the published artifact testable through
-the normal cache path.
+The command downloads or loads the exported bundle, prepares native IndexTTS2
+reference conditioning, generates semantic codes with the native GPT path using
+upstream-style beam sampling (`beams=3`, `top_k=30`, `top_p=0.8`,
+`temperature=0.8`, `repetition_penalty=10`, seed `11` by default), decodes
+80-band mels with the S2Mel CFM flow, and vocodes the result with BigVGAN.
 
 The expanded IndexTTS2 export layout contains base artifacts at the root plus
 w2v-BERT, MaskGCT semantic codec, CAMPPlus, and BigVGAN under `aux/`. Those
-paths are exposed through
-`IndexTTS2TTSModel.auxiliaryModels` for the native port, but the graph execution
-is not yet wired into `generate`.
+paths are exposed through `IndexTTS2TTSModel.auxiliaryModels` and validated when
+the runtime prepares the native inventory. The current Swift path covers
+reference conditioning, GPT semantic-code generation, S2Mel length regulation
+and flow decoding, semantic code embedding, and final BigVGAN waveform assembly.
+Numerical parity with upstream PyTorch and subjective listening quality still
+need broader validation.
 
 | Flag | Scope | Notes |
 |---|---|---|
@@ -59,7 +76,11 @@ is not yet wired into `generate`.
 | `--voice-sample <wav>` | `indextts2` | Required because IndexTTS2 is a zero-shot voice-cloning model. |
 | `--indextts2-model-id <repo>` | `indextts2` | Defaults to `aufklarer/IndexTTS2-MLX-fp16`. |
 | `--indextts2-bundle-dir <path>` | `indextts2` | Loads a local exported bundle instead of Hugging Face. |
-| `--indextts2-emotion-audio <wav>` | `indextts2` | Accepted for the future native port; not used until synthesis is implemented. |
+| `--indextts2-emotion-audio <wav>` | `indextts2` | Optional separate emotion reference; defaults to the speaker reference. |
+| `--indextts2-emotion <preset-or-vector>` | `indextts2` | Optional upstream-style emotion vector control. Presets: `eager`, `happy`, `excited`, `angry`, `sad`, `afraid`, `disgusted`, `melancholic`, `surprised`, `calm`; custom vectors use the 8-value order `happy,angry,sad,afraid,disgusted,melancholic,surprised,calm` and must sum to `<= 0.8`. Mutually exclusive with `--indextts2-emotion-audio`. |
+| `--indextts2-emotion-weight <0...1>` | `indextts2` | Scales `--indextts2-emotion`; defaults to `1.0`. Identity-first cloning should omit explicit emotion or keep this modest because high weights can reduce speaker similarity. |
+| `--indextts2-speaking-rate <0.5...1.5>` | `indextts2` | Shortens or lengthens generated speech by changing the S2Mel frame expansion. Values above `1.0` are faster. Defaults to `1.0`. |
+| `--indextts2-max-pause <0.05...2.0>` | `indextts2` | Optional post-vocoder cap for long internal low-energy spans. Omit to keep raw model timing; use small values such as `0.05` only when generated speech has audible dead pauses. |
 
 ## Download Defaults
 
@@ -93,4 +114,30 @@ INDEXTTS2_E2E_DOWNLOAD=1 \
 ```
 
 The E2E verifies bundle metadata, auxiliary model records, tokenizer loading,
-and the current explicit native-synthesis-not-ported error.
+runtime tensor inventory, native reference conditioning
+(`w2v-BERT -> MaskGCT -> length regulator`, CAMPPlus style, prompt mel), native
+semantic-code generation, and a bounded waveform synthesis smoke through S2Mel
+and BigVGAN. The optional ASR roundtrip path writes the generated WAV, reports
+RTF and resident-memory deltas, and gates intelligibility with Qwen3-ASR:
+
+```bash
+INDEXTTS2_E2E_BUNDLE=/path/to/IndexTTS2-MLX-fp16 \
+INDEXTTS2_E2E_REFERENCE=/path/to/reference.wav \
+INDEXTTS2_E2E_OUTPUT=/tmp/indextts2.wav \
+INDEXTTS2_E2E_TEXT='This is a test.' \
+INDEXTTS2_E2E_EMOTION=eager \
+INDEXTTS2_E2E_EMOTION_WEIGHT=0.25 \
+INDEXTTS2_E2E_SPEAKING_RATE=1.15 \
+INDEXTTS2_E2E_ROUNDTRIP=1 \
+  swift test --filter E2EIndexTTS2BundleTests/testFullSynthesisBenchmarkAndOptionalASRRoundtrip --disable-sandbox
+```
+
+Useful diagnostic overrides are `INDEXTTS2_E2E_SEED`,
+`INDEXTTS2_E2E_BEAMS`, `INDEXTTS2_E2E_TEMPERATURE`,
+`INDEXTTS2_E2E_TOP_K`, `INDEXTTS2_E2E_TOP_P`,
+`INDEXTTS2_E2E_REPETITION_PENALTY`, `INDEXTTS2_E2E_LENGTH_PENALTY`,
+`INDEXTTS2_E2E_EMOTION`, `INDEXTTS2_E2E_EMOTION_WEIGHT`,
+`INDEXTTS2_E2E_SPEAKING_RATE`,
+`INDEXTTS2_E2E_SEMANTIC_CODES` for supplying a known code sequence,
+`INDEXTTS2_E2E_SEMANTIC_ONLY=1` for semantic-generation-only checks, and
+`INDEXTTS2_E2E_SEED_SWEEP=0-20` for in-process seed sweeps.

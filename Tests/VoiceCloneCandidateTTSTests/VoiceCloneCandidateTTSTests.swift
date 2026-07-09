@@ -37,6 +37,29 @@ final class VoiceCloneCandidateTTSTests: XCTestCase {
         XCTAssertTrue(aux[3].files.contains("aux/bigvgan/bigvgan_generator.safetensors"))
     }
 
+    func testIndexTTS2RuntimeConfigParsesUpstreamYamlShape() throws {
+        let config = try IndexTTS2RuntimeConfig(
+            document: IndexTTS2YAMLDocument(Self.indexTTS2ConfigYAML))
+
+        XCTAssertEqual(config.dataset.sampleRate, 24_000)
+        XCTAssertEqual(config.dataset.bpeModel, "bpe.model")
+        XCTAssertEqual(config.gpt.modelDim, 1280)
+        XCTAssertEqual(config.gpt.layers, 24)
+        XCTAssertEqual(config.gpt.heads, 20)
+        XCTAssertEqual(config.gpt.numberMelCodes, 8194)
+        XCTAssertEqual(config.gpt.conditionType, "conformer_perceiver")
+        XCTAssertEqual(config.gpt.conditionBlocks, 6)
+        XCTAssertEqual(config.gpt.emotionConditionBlocks, 4)
+        XCTAssertEqual(config.semanticCodec.codebookSize, 8192)
+        XCTAssertEqual(config.semanticCodec.hiddenSize, 1024)
+        XCTAssertEqual(config.s2Mel.sampleRate, 22_050)
+        XCTAssertEqual(config.s2Mel.nMels, 80)
+        XCTAssertEqual(config.s2Mel.depth, 13)
+        XCTAssertEqual(config.emotionBucketCounts, [3, 17, 2, 8, 4, 5, 10, 24])
+        XCTAssertEqual(config.qwenEmotionPath, "qwen0.6bemo4-merge/")
+        XCTAssertEqual(config.outputSampleRate, 22_050)
+    }
+
     func testManifestDecodesAuxiliaryModels() async throws {
         let dir = try makeBundle(
             modelKey: "indextts2",
@@ -87,17 +110,75 @@ final class VoiceCloneCandidateTTSTests: XCTestCase {
         let pieces = [
             SentencePieceModel.Piece(text: "<unk>", score: 0, type: SentencePieceModel.PieceType.unknown.rawValue),
             SentencePieceModel.Piece(text: "▁", score: -10, type: SentencePieceModel.PieceType.normal.rawValue),
-            SentencePieceModel.Piece(text: "hello", score: -5, type: SentencePieceModel.PieceType.normal.rawValue),
-            SentencePieceModel.Piece(text: "world", score: -5, type: SentencePieceModel.PieceType.normal.rawValue),
-            SentencePieceModel.Piece(text: "▁hello", score: -1, type: SentencePieceModel.PieceType.normal.rawValue),
-            SentencePieceModel.Piece(text: "▁world", score: -1, type: SentencePieceModel.PieceType.normal.rawValue),
+            SentencePieceModel.Piece(text: "HELLO", score: -5, type: SentencePieceModel.PieceType.normal.rawValue),
+            SentencePieceModel.Piece(text: "WORLD", score: -5, type: SentencePieceModel.PieceType.normal.rawValue),
+            SentencePieceModel.Piece(text: "▁HELLO", score: -1, type: SentencePieceModel.PieceType.normal.rawValue),
+            SentencePieceModel.Piece(text: "▁WORLD", score: -1, type: SentencePieceModel.PieceType.normal.rawValue),
         ]
         let tokenizer = try IndexTTS2Tokenizer(pieces: pieces)
 
-        let ids = try tokenizer.encode("hello world")
+        let ids = try tokenizer.encode("Hello world")
 
         XCTAssertEqual(ids, [4, 5])
-        XCTAssertEqual(tokenizer.decode(ids), "hello world")
+        XCTAssertEqual(tokenizer.decode(ids), "HELLO WORLD")
+    }
+
+    func testIndexTTS2EmotionPresetVectors() throws {
+        let eager = try IndexTTS2EmotionControl(preset: .eager, weight: 0.5)
+
+        XCTAssertEqual(IndexTTS2EmotionPreset(named: "excited"), .excited)
+        XCTAssertEqual(IndexTTS2EmotionPreset(named: "fear"), .afraid)
+        XCTAssertEqual(eager.vector, [0.65, 0, 0, 0, 0, 0, 0.15, 0])
+        XCTAssertEqual(eager.scaledVectorSum, 0.4, accuracy: 0.0001)
+    }
+
+    func testIndexTTS2EmotionVectorValidation() {
+        XCTAssertThrowsError(try IndexTTS2EmotionControl(vector: [0.5, 0.5, 0, 0, 0, 0, 0, 0])) { error in
+            XCTAssertEqual(error as? IndexTTS2EmotionControlError, .invalidVectorSum(1.0))
+        }
+        XCTAssertThrowsError(try IndexTTS2EmotionControl(vector: [0.1], weight: 1.0)) { error in
+            XCTAssertEqual(error as? IndexTTS2EmotionControlError, .invalidVectorCount(1))
+        }
+        XCTAssertThrowsError(try IndexTTS2EmotionControl(vector: [0, 0, 0, 0, 0, 0, 0, 0], weight: 1.2)) { error in
+            XCTAssertEqual(error as? IndexTTS2EmotionControlError, .invalidWeight(1.2))
+        }
+    }
+
+    func testIndexTTS2SynthesisOptionsValidateSpeakingRate() throws {
+        let options = try IndexTTS2SynthesisOptions(
+            speakingRate: 1.15,
+            maxInternalPauseDuration: 0.18)
+        XCTAssertEqual(options.speakingRate, 1.15, accuracy: 0.001)
+        XCTAssertEqual(try XCTUnwrap(options.maxInternalPauseDuration), 0.18, accuracy: 0.001)
+        XCTAssertThrowsError(try IndexTTS2SynthesisOptions(speakingRate: 2.0)) { error in
+            guard case AudioModelError.invalidConfiguration(let model, let reason) = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+            XCTAssertEqual(model, "IndexTTS2")
+            XCTAssertTrue(reason.contains("speakingRate"))
+        }
+        XCTAssertThrowsError(try IndexTTS2SynthesisOptions(maxInternalPauseDuration: 0.01)) { error in
+            guard case AudioModelError.invalidConfiguration(let model, let reason) = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+            XCTAssertEqual(model, "IndexTTS2")
+            XCTAssertTrue(reason.contains("maxInternalPauseDuration"))
+        }
+    }
+
+    func testIndexTTS2PauseCompressorCapsInternalSilence() {
+        let sampleRate = 1_000
+        let voiced = Array(repeating: Float(0.2), count: 250)
+        let silence = Array(repeating: Float(0), count: 500)
+        let samples = voiced + silence + voiced
+
+        let compressed = IndexTTS2PauseCompressor.compress(
+            samples,
+            sampleRate: sampleRate,
+            maxPauseDuration: 0.12)
+
+        XCTAssertLessThan(compressed.count, samples.count - 250)
+        XCTAssertGreaterThan(compressed.count, voiced.count * 2 + 90)
     }
 
     func testHiggsBundleRejectsWrongManifestKey() async throws {
@@ -220,4 +301,50 @@ final class VoiceCloneCandidateTTSTests: XCTestCase {
         try data.write(to: dir.appendingPathComponent("soniqo_manifest.json"))
         return dir
     }
+
+    private static let indexTTS2ConfigYAML = """
+    dataset:
+        bpe_model: bpe.model
+        sample_rate: 24000
+    gpt:
+        model_dim: 1280
+        max_mel_tokens: 1815
+        max_text_tokens: 600
+        heads: 20
+        layers: 24
+        number_text_tokens: 12000
+        number_mel_codes: 8194
+        start_mel_token: 8192
+        stop_mel_token: 8193
+        start_text_token: 0
+        stop_text_token: 1
+        condition_type: "conformer_perceiver"
+        condition_module:
+            num_blocks: 6
+        emo_condition_module:
+            num_blocks: 4
+    semantic_codec:
+        codebook_size: 8192
+        hidden_size: 1024
+        codebook_dim: 8
+        vocos_dim: 384
+        vocos_num_layers: 12
+    s2mel:
+        preprocess_params:
+            sr: 22050
+            spect_params:
+                n_fft: 1024
+                win_length: 1024
+                hop_length: 256
+                n_mels: 80
+        DiT:
+            hidden_dim: 512
+            num_heads: 8
+            depth: 13
+            in_channels: 80
+            content_dim: 512
+    emo_num: [3, 17, 2, 8, 4, 5, 10, 24]
+    qwen_emo_path: qwen0.6bemo4-merge/
+    version: 2.0
+    """
 }
