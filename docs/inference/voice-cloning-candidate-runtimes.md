@@ -2,9 +2,10 @@
 
 These modules are loadable runtime contracts. IndexTTS2 now includes the native
 reference-conditioning and synthesis path, while Higgs Audio and F5-TTS remain
-bundle-loader surfaces. They are useful for wiring downloads, cache validation,
-model-size reporting, CLI surfacing, and native-port tests before each full
-inference graph lands.
+bundle-loader surfaces. This page is the source of truth for runtime usage,
+CLI/API controls, and E2E validation. Bundle layout, architecture coverage, and
+port status live in
+[`docs/models/voice-cloning-candidate-runtimes.md`](../models/voice-cloning-candidate-runtimes.md).
 
 ```swift
 import IndexTTS2TTS
@@ -61,15 +62,6 @@ upstream-style beam sampling (`beams=3`, `top_k=30`, `top_p=0.8`,
 `temperature=0.8`, `repetition_penalty=10`, seed `11` by default), decodes
 80-band mels with the S2Mel CFM flow, and vocodes the result with BigVGAN.
 
-The expanded IndexTTS2 export layout contains base artifacts at the root plus
-w2v-BERT, MaskGCT semantic codec, CAMPPlus, and BigVGAN under `aux/`. Those
-paths are exposed through `IndexTTS2TTSModel.auxiliaryModels` and validated when
-the runtime prepares the native inventory. The current Swift path covers
-reference conditioning, GPT semantic-code generation, S2Mel length regulation
-and flow decoding, semantic code embedding, and final BigVGAN waveform assembly.
-Numerical parity with upstream PyTorch and subjective listening quality still
-need broader validation.
-
 | Flag | Scope | Notes |
 |---|---|---|
 | `--engine indextts2` | `speech speak` | Selects the IndexTTS2 exported-bundle loader. |
@@ -82,17 +74,9 @@ need broader validation.
 | `--indextts2-speaking-rate <0.5...1.5>` | `indextts2` | Shortens or lengthens generated speech by changing the S2Mel frame expansion. Values above `1.0` are faster. Defaults to `1.0`. |
 | `--indextts2-max-pause <0.05...2.0>` | `indextts2` | Optional post-vocoder cap for long internal low-energy spans. Omit to keep raw model timing; use small values such as `0.05` only when generated speech has audible dead pauses. |
 
-## Download Defaults
-
-| Module | Default model id |
-|---|---|
-| `IndexTTS2TTSModel` | `aufklarer/IndexTTS2-MLX-fp16` |
-| `HiggsAudioTTSModel` | `aufklarer/Higgs-Audio-v3-TTS-4B-MLX-fp16` |
-| `F5TTSModel` | `aufklarer/F5-TTS-v1-Base-MLX-fp16` |
-
-The default IDs are the expected outputs of the `speech-models`
-`voice-cloning-candidates` exporter. Uploading those bundles to Hugging Face is
-a separate release step and is not performed by the runtime.
+Default model IDs are listed in the model bundle status table. The CLI defaults
+to `aufklarer/IndexTTS2-MLX-fp16` for IndexTTS2 and can be pointed at a local
+bundle with `--indextts2-bundle-dir`.
 
 ## Tests
 
@@ -124,10 +108,9 @@ RTF and resident-memory deltas, and gates intelligibility with Qwen3-ASR:
 INDEXTTS2_E2E_BUNDLE=/path/to/IndexTTS2-MLX-fp16 \
 INDEXTTS2_E2E_REFERENCE=/path/to/reference.wav \
 INDEXTTS2_E2E_OUTPUT=/tmp/indextts2.wav \
-INDEXTTS2_E2E_TEXT='This is a test.' \
-INDEXTTS2_E2E_EMOTION=eager \
-INDEXTTS2_E2E_EMOTION_WEIGHT=0.25 \
-INDEXTTS2_E2E_SPEAKING_RATE=1.15 \
+INDEXTTS2_E2E_TEXT='I am ready to help right now with clear energetic speech' \
+INDEXTTS2_E2E_SPEAKING_RATE=1.35 \
+INDEXTTS2_E2E_MAX_PAUSE=0.05 \
 INDEXTTS2_E2E_ROUNDTRIP=1 \
   swift test --filter E2EIndexTTS2BundleTests/testFullSynthesisBenchmarkAndOptionalASRRoundtrip --disable-sandbox
 ```
@@ -137,7 +120,7 @@ Useful diagnostic overrides are `INDEXTTS2_E2E_SEED`,
 `INDEXTTS2_E2E_TOP_K`, `INDEXTTS2_E2E_TOP_P`,
 `INDEXTTS2_E2E_REPETITION_PENALTY`, `INDEXTTS2_E2E_LENGTH_PENALTY`,
 `INDEXTTS2_E2E_EMOTION`, `INDEXTTS2_E2E_EMOTION_WEIGHT`,
-`INDEXTTS2_E2E_SPEAKING_RATE`,
+`INDEXTTS2_E2E_SPEAKING_RATE`, `INDEXTTS2_E2E_MAX_PAUSE`,
 `INDEXTTS2_E2E_SEMANTIC_CODES` for supplying a known code sequence,
 `INDEXTTS2_E2E_SEMANTIC_ONLY=1` for semantic-generation-only checks, and
 `INDEXTTS2_E2E_SEED_SWEEP=0-20` for in-process seed sweeps.
