@@ -55,12 +55,14 @@ public struct F5TTSBundleFiles: Codable, Equatable, Sendable {
     public let vocoder: String
     public let vocoderConfig: String
     public let vocab: String
+    public let pinyinLexicon: String?
 
     enum CodingKeys: String, CodingKey {
         case model
         case vocoder
         case vocoderConfig = "vocoder_config"
         case vocab
+        case pinyinLexicon = "pinyin_lexicon"
     }
 }
 

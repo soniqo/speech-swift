@@ -80,6 +80,23 @@ Vocos, and writes 24 kHz mono WAV.
 `--stream`, `--speaker`, and `--instruct` are intentionally rejected for
 `--engine f5`.
 
+## Languages
+
+English and Mandarin Chinese, matching the zh/en-trained v1 Base weights.
+Mixed EN/ZH text works in a single request. Mandarin requires the bundle's
+`pinyin_lexicon.tsv` (present in the published bundle); older bundles without
+it stay English-only and reject CJK input with a clear error. The reference
+transcript may be either language. Other languages are out of distribution for
+the upstream checkpoint and are not supported.
+
+```bash
+speech speak "你好，这是一个在苹果芯片上本地运行的语音克隆测试。" \
+  --engine f5 \
+  --voice-sample reference.wav \
+  --f5-reference-text "The words spoken in the reference recording." \
+  --output f5-zh.wav
+```
+
 ## E2E Tests
 
 Fast unit tests avoid model downloads:
@@ -98,6 +115,18 @@ F5TTS_TARGET_TEXT='This is a short F five TTS voice cloning test.' \
 F5TTS_E2E_WAV=/tmp/f5.wav \
 F5TTS_ASR_E2E=1 \
   swift test --filter E2EF5TTSTests/testLocalBundleSynthesizesEnglishCloneAndOptionalASRRoundTrip --disable-sandbox
+```
+
+Mandarin synthesis with a CER-checked Qwen3-ASR roundtrip (same bundle and
+reference variables; the test skips if the bundle lacks `pinyin_lexicon.tsv`):
+
+```bash
+F5TTS_E2E_BUNDLE=/path/to/F5TTS-v1-Base-MLX-fp16 \
+F5TTS_REFERENCE_WAV=/path/to/reference.wav \
+F5TTS_REFERENCE_TEXT='The words spoken in the reference recording.' \
+F5TTS_ZH_E2E_WAV=/tmp/f5-zh.wav \
+F5TTS_ASR_E2E=1 \
+  swift test --filter E2EF5TTSTests/testLocalBundleSynthesizesMandarinCloneAndOptionalASRRoundTrip --disable-sandbox
 ```
 
 Parity diagnostics:

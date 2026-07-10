@@ -77,7 +77,27 @@ final class F5TTSTests: XCTestCase {
         }
     }
 
-    private func makeBundle(writeVocoder: Bool = true) throws -> URL {
+    func testBundleLoadsPinyinLexiconWhenPresent() async throws {
+        let dir = try makeBundle(writePinyinLexicon: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let model = try await F5TTSModel.fromBundle(dir)
+
+        XCTAssertNotNil(model.tokenizer.pinyin)
+        XCTAssertEqual(
+            try model.tokenizer.tokenize("你好!").symbols,
+            [" ", "ni2", " ", "hao3", "!"])
+    }
+
+    func testBundleWithoutLexiconStaysEnglishOnly() async throws {
+        let dir = try makeBundle()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let model = try await F5TTSModel.fromBundle(dir)
+
+        XCTAssertNil(model.tokenizer.pinyin)
+        XCTAssertThrowsError(try model.tokenizer.encode("你好"))
+    }
+
+    private func makeBundle(writeVocoder: Bool = true, writePinyinLexicon: Bool = false) throws -> URL {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("f5tts-tests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -152,6 +172,12 @@ final class F5TTSTests: XCTestCase {
             try Data(repeating: 0, count: 16).write(to: dir.appendingPathComponent("vocos.safetensors"))
         }
         try "sample_rate: 24000\n".write(to: dir.appendingPathComponent("vocos_config.yaml"), atomically: true, encoding: .utf8)
+        if writePinyinLexicon {
+            try "# test lexicon\n好\thao3\n你\tni3\n你好\tni2 hao3\n".write(
+                to: dir.appendingPathComponent("pinyin_lexicon.tsv"),
+                atomically: true,
+                encoding: .utf8)
+        }
         return dir
     }
 }

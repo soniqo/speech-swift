@@ -13,8 +13,9 @@ public struct F5TTSTokenizedText: Equatable, Sendable {
 public struct F5TTSTokenizer: Sendable {
     public let vocab: [String: Int32]
     public let symbols: [String]
+    public let pinyin: F5TTSPinyinConverter?
 
-    public init(vocabURL: URL) throws {
+    public init(vocabURL: URL, pinyinLexiconURL: URL? = nil) throws {
         let text = try String(contentsOf: vocabURL, encoding: .utf8)
         var vocab: [String: Int32] = [:]
         var symbols: [String] = []
@@ -40,24 +41,30 @@ public struct F5TTSTokenizer: Sendable {
         }
         self.vocab = vocab
         self.symbols = symbols
+        if let pinyinLexiconURL {
+            self.pinyin = try F5TTSPinyinConverter(lexiconURL: pinyinLexiconURL)
+        } else {
+            self.pinyin = nil
+        }
     }
 
-    public init(vocab: [String: Int32]) {
+    public init(vocab: [String: Int32], pinyin: F5TTSPinyinConverter? = nil) {
         self.vocab = vocab
         self.symbols = vocab.sorted { $0.value < $1.value }.map(\.key)
+        self.pinyin = pinyin
     }
 
     public func tokenize(_ text: String) throws -> F5TTSTokenizedText {
         let normalized = Self.normalize(text)
-        guard !Self.containsCJK(normalized) else {
-            throw F5TTSError.unsupportedText(
-                "Mandarin and mixed CJK text require F5's pinyin segmentation path; current native tokenizer supports English/ASCII text.")
-        }
-
-        var out: [String] = []
-        out.reserveCapacity(normalized.count)
-        for ch in normalized {
-            out.append(String(ch))
+        let out: [String]
+        if Self.containsCJK(normalized) {
+            guard let pinyin else {
+                throw F5TTSError.unsupportedText(
+                    "Mandarin and mixed CJK text require the bundle's pinyin lexicon (pinyin_lexicon.tsv); this bundle predates the pinyin frontend.")
+            }
+            out = pinyin.convert(normalized)
+        } else {
+            out = normalized.map(String.init)
         }
         let ids = out.map { vocab[$0] ?? 0 }
         return F5TTSTokenizedText(symbols: out, ids: ids)

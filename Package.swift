@@ -762,6 +762,10 @@ let package = Package(
             dependencies: [
                 "F5TTS", "AudioCommon", "MLXCommon", "Qwen3ASR",
                 .product(name: "MLX", package: "mlx-swift")
+            ],
+            resources: [
+                .copy("Resources/pinyin_fixtures.json"),
+                .copy("Resources/pinyin_lexicon_subset.tsv"),
             ]
         ),
         .testTarget(
