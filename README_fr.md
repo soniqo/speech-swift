@@ -43,7 +43,7 @@ Reconnaissance, synthese et comprehension vocale embarquees pour Mac et iOS. S'e
 - **[CosyVoice TTS](https://soniqo.audio/fr/guides/cosyvoice)** -- TTS en streaming avec clonage vocal, dialogue multi-locuteurs, balises d'emotion (9 langues)
 - **[VoxCPM2](https://soniqo.audio/fr/speech-generation)** -- TTS qualite studio 48 kHz avec clonage vocal et conception de voix par instruction (2B, MLX bf16/int8, 30 langues)
 - **[IndexTTS2](docs/models/indextts2.md)** — Native MLX voice cloning from a reference voice (IndexTeam IndexTTS-2, 1.5B-class fp16 bundle, speaker/emotion/pause controls)
-- **[F5-TTS](docs/models/f5-tts.md)** — Zero-shot voice cloning from a short reference clip + transcript (SWivid F5-TTS v1 Base, DiT flow matching + Vocos, MLX fp16, 24 kHz, English; non-commercial license)
+- **[F5-TTS](docs/models/f5-tts.md)** — Zero-shot voice cloning from a short reference clip + transcript (SWivid F5-TTS v1 Base, DiT flow matching + Vocos, MLX fp16, 24 kHz, English + Mandarin; non-commercial license)
 - **[Kokoro TTS](https://soniqo.audio/fr/guides/kokoro)** -- TTS embarque (82M, CoreML/Neural Engine, 54 voix, compatible iOS, 10 langues)
 - **[VibeVoice TTS](https://soniqo.audio/fr/guides/vibevoice)** -- TTS long format / multi-locuteurs (Microsoft VibeVoice Realtime-0.5B + 1.5B, MLX, synthese de podcast/livre audio jusqu'a 90 min, EN/ZH)
 - **[Magpie TTS](https://soniqo.audio/fr/guides/magpie)** — TTS multilingue (NVIDIA Magpie-TTS Multilingual 357M, MLX INT8 411 Mo ou CoreML INT8 342 Mo, 9 langues, 5 voix prédéfinies, streaming sur MLX)
@@ -167,7 +167,7 @@ Vue compacte ci-dessous. **[Catalogue complet des modeles avec tailles, quantifi
 | [CosyVoice3](https://soniqo.audio/fr/guides/cosyvoice) | Texte → Parole | MLX | 0.5B | 9 |
 | [VoxCPM2](https://soniqo.audio/fr/speech-generation) | Texte → Parole (48 kHz, conception vocale + clonage) | MLX | 2B (bf16/int8) | 30 |
 | [IndexTTS2](docs/models/indextts2.md) | Text → Speech (zero-shot voice cloning) | MLX | 1.5B-class (fp16) | EN/ZH |
-| [F5-TTS](docs/models/f5-tts.md) | Text → Speech (zero-shot voice cloning) | MLX | 336M (fp16) | EN |
+| [F5-TTS](docs/models/f5-tts.md) | Text → Speech (zero-shot voice cloning) | MLX | 336M (fp16) | EN/ZH |
 | [Chatterbox Multilingual](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16) | Texte → Voix (clonage zero-shot) | MLX | 0.8B (fp16) | 23 (HE exige le niqqud) |
 | [OmniVoice](https://huggingface.co/aufklarer/OmniVoice-MLX-fp16) | Texte → Voix (diffusion NAR, clonage zero-shot) | MLX | 0.8B (fp16 par défaut / int8) | 600+ |
 | [Indic-Mio](docs/models/indic-mio-tts.md) | Text → Speech (Hindi/Indic, emotion tags, voice cloning) | MLX | fp16 | Hindi / Indic |

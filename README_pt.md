@@ -43,7 +43,7 @@ Reconhecimento, sintese e compreensao de fala no dispositivo para Mac e iOS. Exe
 - **[CosyVoice TTS](https://soniqo.audio/pt/guides/cosyvoice)** — TTS em streaming com clonagem de voz, dialogo multi-locutor, tags de emocao (9 idiomas)
 - **[VoxCPM2](https://soniqo.audio/pt/speech-generation)** — TTS de qualidade de estudio a 48 kHz com clonagem de voz e design de voz baseado em instrucoes (2B, MLX bf16/int8, 30 idiomas)
 - **[IndexTTS2](docs/models/indextts2.md)** — Native MLX voice cloning from a reference voice (IndexTeam IndexTTS-2, 1.5B-class fp16 bundle, speaker/emotion/pause controls)
-- **[F5-TTS](docs/models/f5-tts.md)** — Zero-shot voice cloning from a short reference clip + transcript (SWivid F5-TTS v1 Base, DiT flow matching + Vocos, MLX fp16, 24 kHz, English; non-commercial license)
+- **[F5-TTS](docs/models/f5-tts.md)** — Zero-shot voice cloning from a short reference clip + transcript (SWivid F5-TTS v1 Base, DiT flow matching + Vocos, MLX fp16, 24 kHz, English + Mandarin; non-commercial license)
 - **[Kokoro TTS](https://soniqo.audio/pt/guides/kokoro)** — TTS no dispositivo (82M, CoreML/Neural Engine, 54 vozes, pronto para iOS, 10 idiomas)
 - **[VibeVoice TTS](https://soniqo.audio/pt/guides/vibevoice)** — TTS de formato longo / multi-alto-falante (Microsoft VibeVoice Realtime-0.5B + 1.5B, MLX, sintese de podcast/audiolivro de ate 90 min, EN/ZH)
 - **[Magpie TTS](https://soniqo.audio/pt/guides/magpie)** — TTS multilíngue (NVIDIA Magpie-TTS Multilingual 357M, MLX INT8 411 MB ou CoreML INT8 342 MB, 9 idiomas, 5 oradores predefinidos, streaming em MLX)
@@ -167,7 +167,7 @@ Vista compacta abaixo. **[Catalogo completo de modelos com tamanhos, quantizacoe
 | [CosyVoice3](https://soniqo.audio/pt/guides/cosyvoice) | Texto → Fala | MLX | 0.5B | 9 |
 | [VoxCPM2](https://soniqo.audio/pt/speech-generation) | Texto → Fala (48 kHz, design de voz + clonagem) | MLX | 2B (bf16/int8) | 30 |
 | [IndexTTS2](docs/models/indextts2.md) | Text → Speech (zero-shot voice cloning) | MLX | 1.5B-class (fp16) | EN/ZH |
-| [F5-TTS](docs/models/f5-tts.md) | Text → Speech (zero-shot voice cloning) | MLX | 336M (fp16) | EN |
+| [F5-TTS](docs/models/f5-tts.md) | Text → Speech (zero-shot voice cloning) | MLX | 336M (fp16) | EN/ZH |
 | [Kokoro-82M](https://soniqo.audio/pt/guides/kokoro) | Texto → Fala | CoreML (ANE) | 82M | 10 |
 | [Supertonic-3](https://soniqo.audio/guides/supertonic) | Texto → Fala (44.1 kHz, flow-matching, sem G2P) | CoreML (ANE) | 99M | 31 |
 | [VibeVoice Realtime-0.5B](https://soniqo.audio/pt/guides/vibevoice) | Texto → Fala (formato longo, multi-alto-falante) | MLX | 0.5B | EN/ZH |

@@ -53,7 +53,7 @@
 - **[CosyVoice TTS](https://soniqo.audio/ar/guides/cosyvoice)** — تحويل تدفقي للنص إلى كلام مع استنساخ الصوت وحوار متعدد المتحدثين ووسوم المشاعر (9 لغات)
 - **[VoxCPM2](https://soniqo.audio/ar/speech-generation)** — تحويل النص إلى كلام بجودة استوديو 48 كيلوهرتز مع استنساخ الصوت وتصميم الصوت بالأوامر (2B، MLX bf16/int8، 30 لغة)
 - **[IndexTTS2](docs/models/indextts2.md)** — Native MLX voice cloning from a reference voice (IndexTeam IndexTTS-2, 1.5B-class fp16 bundle, speaker/emotion/pause controls)
-- **[F5-TTS](docs/models/f5-tts.md)** — Zero-shot voice cloning from a short reference clip + transcript (SWivid F5-TTS v1 Base, DiT flow matching + Vocos, MLX fp16, 24 kHz, English; non-commercial license)
+- **[F5-TTS](docs/models/f5-tts.md)** — Zero-shot voice cloning from a short reference clip + transcript (SWivid F5-TTS v1 Base, DiT flow matching + Vocos, MLX fp16, 24 kHz, English + Mandarin; non-commercial license)
 - **[Kokoro TTS](https://soniqo.audio/ar/guides/kokoro)** — تحويل النص إلى كلام على الجهاز (82M، CoreML/Neural Engine، 54 صوتاً، جاهز لـ iOS، 10 لغات)
 - **[VibeVoice TTS](https://soniqo.audio/ar/guides/vibevoice)** — تحويل النص إلى كلام للنصوص الطويلة / متعدد المتحدثين (Microsoft VibeVoice Realtime-0.5B + 1.5B، MLX، توليد بودكاست/كتب صوتية حتى 90 دقيقة، EN/ZH)
 - **[Magpie TTS](https://soniqo.audio/ar/guides/magpie)** — تحويل النص إلى كلام متعدد اللغات (NVIDIA Magpie-TTS Multilingual 357M، MLX INT8 411 ميغابايت أو CoreML INT8 342 ميغابايت، 9 لغات، 5 متحدثين جاهزين، تدفق على MLX)
@@ -211,7 +211,7 @@ struct DictateView: View {
 | [CosyVoice3](https://soniqo.audio/ar/guides/cosyvoice) | نص → كلام | MLX | 0.5B | 9 |
 | [VoxCPM2](https://soniqo.audio/ar/speech-generation) | نص → كلام (48 كيلوهرتز، تصميم + استنساخ صوت) | MLX | 2B (bf16/int8) | 30 |
 | [IndexTTS2](docs/models/indextts2.md) | Text → Speech (zero-shot voice cloning) | MLX | 1.5B-class (fp16) | EN/ZH |
-| [F5-TTS](docs/models/f5-tts.md) | Text → Speech (zero-shot voice cloning) | MLX | 336M (fp16) | EN |
+| [F5-TTS](docs/models/f5-tts.md) | Text → Speech (zero-shot voice cloning) | MLX | 336M (fp16) | EN/ZH |
 | [Chatterbox Multilingual](https://huggingface.co/aufklarer/Chatterbox-Multilingual-MLX-fp16) | نص → كلام (استنساخ صوت بدون تدريب) | MLX | 0.8B (fp16) | 23 (HE تتطلب النِّقُود) |
 | [OmniVoice](https://huggingface.co/aufklarer/OmniVoice-MLX-fp16) | نص → كلام (انتشار NAR، استنساخ بدون تدريب) | MLX | 0.8B (fp16 افتراضي / int8) | 600+ |
 | [Indic-Mio](docs/models/indic-mio-tts.md) | Text → Speech (Hindi/Indic, emotion tags, voice cloning) | MLX | fp16 | Hindi / Indic |

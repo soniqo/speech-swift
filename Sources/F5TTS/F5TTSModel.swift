@@ -15,6 +15,7 @@ public final class F5TTSModel: SpeechGenerationModel, ModelMemoryManageable, @un
         "vocos_config.yaml",
         "vocab.txt",
     ]
+    private static let pinyinLexiconFile = "pinyin_lexicon.tsv"
 
     public let bundleDirectory: URL
     public let config: F5TTSConfig
@@ -49,6 +50,14 @@ public final class F5TTSModel: SpeechGenerationModel, ModelMemoryManageable, @un
         ) { progress in
             progressHandler?(progress * 0.85, "Downloading F5-TTS")
         }
+        // Mandarin lexicon is absent from bundles that predate the pinyin
+        // frontend; without it the model stays English-only.
+        try? await HuggingFaceDownloader.downloadFiles(
+            modelId: modelId,
+            to: directory,
+            files: [pinyinLexiconFile],
+            offlineMode: offlineMode,
+            progressHandler: nil)
         return try await fromBundle(directory) { progress, message in
             progressHandler?(0.85 + progress * 0.15, message)
         }
@@ -60,8 +69,11 @@ public final class F5TTSModel: SpeechGenerationModel, ModelMemoryManageable, @un
     ) async throws -> F5TTSModel {
         progressHandler?(0.05, "Loading F5-TTS bundle")
         let info = try F5TTSBundleLoader.load(from: directory)
+        let lexiconName = info.config.files.pinyinLexicon ?? pinyinLexiconFile
+        let lexiconURL = directory.appendingPathComponent(lexiconName)
         let tokenizer = try F5TTSTokenizer(
-            vocabURL: directory.appendingPathComponent(info.config.files.vocab))
+            vocabURL: directory.appendingPathComponent(info.config.files.vocab),
+            pinyinLexiconURL: FileManager.default.fileExists(atPath: lexiconURL.path) ? lexiconURL : nil)
         progressHandler?(1.0, "F5-TTS bundle ready")
         return F5TTSModel(bundleInfo: info, tokenizer: tokenizer)
     }

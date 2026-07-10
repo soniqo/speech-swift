@@ -43,7 +43,7 @@ Nhận dạng, tổng hợp và hiểu giọng nói trên thiết bị cho Mac v
 - **[CosyVoice TTS](https://soniqo.audio/guides/cosyvoice)** — TTS streaming với nhân bản giọng nói, hội thoại nhiều người nói, thẻ cảm xúc (9 ngôn ngữ)
 - **[VoxCPM2](https://soniqo.audio/speech-generation)** — TTS chất lượng phòng thu 48 kHz với nhân bản giọng nói + thiết kế giọng nói theo chỉ dẫn (2B, MLX bf16/int8, 30 ngôn ngữ)
 - **[IndexTTS2](docs/models/indextts2.md)** — Native MLX voice cloning from a reference voice (IndexTeam IndexTTS-2, 1.5B-class fp16 bundle, speaker/emotion/pause controls)
-- **[F5-TTS](docs/models/f5-tts.md)** — Zero-shot voice cloning from a short reference clip + transcript (SWivid F5-TTS v1 Base, DiT flow matching + Vocos, MLX fp16, 24 kHz, English; non-commercial license)
+- **[F5-TTS](docs/models/f5-tts.md)** — Zero-shot voice cloning from a short reference clip + transcript (SWivid F5-TTS v1 Base, DiT flow matching + Vocos, MLX fp16, 24 kHz, English + Mandarin; non-commercial license)
 - **[Kokoro TTS](https://soniqo.audio/guides/kokoro)** — TTS trên thiết bị (82M, CoreML/Neural Engine, 54 giọng, sẵn sàng cho iOS, 10 ngôn ngữ)
 - **[VibeVoice TTS](https://soniqo.audio/guides/vibevoice)** — TTS định dạng dài / nhiều người nói (Microsoft VibeVoice Realtime-0.5B + 1.5B, MLX, tổng hợp podcast/sách nói lên đến 90 phút, EN/ZH)
 - **[Magpie TTS](https://soniqo.audio/guides/magpie)** — TTS đa ngôn ngữ (NVIDIA Magpie-TTS Multilingual 357M, MLX INT8 411 MB hoặc CoreML INT8 342 MB, 9 ngôn ngữ, 5 giọng nói có sẵn, streaming trên MLX)
@@ -167,7 +167,7 @@ Xem tổng quan gọn bên dưới. **[Danh mục mô hình đầy đủ với k
 | [CosyVoice3](https://soniqo.audio/guides/cosyvoice) | Văn bản → Giọng nói | MLX | 0.5B | 9 |
 | [VoxCPM2](https://soniqo.audio/speech-generation) | Văn bản → Giọng nói (48 kHz, thiết kế giọng + nhân bản) | MLX | 2B (bf16/int8) | 30 |
 | [IndexTTS2](docs/models/indextts2.md) | Text → Speech (zero-shot voice cloning) | MLX | 1.5B-class (fp16) | EN/ZH |
-| [F5-TTS](docs/models/f5-tts.md) | Text → Speech (zero-shot voice cloning) | MLX | 336M (fp16) | EN |
+| [F5-TTS](docs/models/f5-tts.md) | Text → Speech (zero-shot voice cloning) | MLX | 336M (fp16) | EN/ZH |
 | [Kokoro-82M](https://soniqo.audio/guides/kokoro) | Văn bản → Giọng nói | CoreML (ANE) | 82M | 10 |
 | [Supertonic-3](https://soniqo.audio/guides/supertonic) | Văn bản → Giọng nói (44,1 kHz, flow-matching, không cần G2P) | CoreML (ANE) | 99M | 31 |
 | [VibeVoice Realtime-0.5B](https://soniqo.audio/guides/vibevoice) | Văn bản → Giọng nói (định dạng dài, nhiều người nói) | MLX | 0.5B | EN/ZH |

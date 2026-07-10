@@ -59,29 +59,43 @@ coefficient, speaking-rate scaling, deterministic seed, and target RMS.
 
 ## Text Surface
 
-The current native tokenizer supports English/ASCII text and preserves F5's
-character-level ids from the published `vocab.txt`. The loader normalizes CRLF
-vocab files before splitting; without that, every ASCII symbol misses the vocab
-and collapses to token `0` (space), producing fluent but content-incorrect
-speech.
+The native tokenizer supports English/ASCII plus Mandarin (and mixed EN/ZH)
+text, preserving F5's character/pinyin ids from the published `vocab.txt`. The
+loader normalizes CRLF vocab files before splitting; without that, every ASCII
+symbol misses the vocab and collapses to token `0` (space), producing fluent
+but content-incorrect speech.
 
-Mandarin and mixed CJK text are rejected for now because upstream F5 uses a
-pinyin segmentation path that is not yet ported.
+Mandarin goes through `F5TTSPinyinConverter`, which replaces upstream's
+rjieba + pypinyin frontend with longest-match lookup over the bundle's
+`pinyin_lexicon.tsv` (declared as `files.pinyin_lexicon` in `config.json`).
+The lexicon is generated at export time: multi-character entries are jieba
+dictionary words and pypinyin phrases whose TONE3 reading differs from the
+per-character defaults, with tone sandhi baked in per word — so no tone rules
+run in Swift. Characters outside the lexicon fall back to the system
+Mandarin-Latin transform. Measured against upstream `convert_char_to_pinyin`
+on a 67-sentence polyphone/sandhi/code-switch corpus the converter reproduces
+99.2% of pinyin tokens exactly, with every residual difference tone-only
+(word-segmentation quirks); the corpus and lexicon subset ship as unit-test
+fixtures.
+
+Bundles that predate the lexicon stay English-only and reject CJK input with a
+clear error.
 
 ## Validation Status
 
-Current validation covers config parsing, CRLF vocab loading, reference-required
-API behavior, DiT fixed-input parity, Vocos mel decode parity, full local-bundle
-synthesis, and optional Qwen3-ASR roundtrip. A local English clone test with the
-exported bundle transcribed exactly as:
+Current validation covers config parsing, CRLF vocab loading, pinyin lexicon
+loading and parity fixtures, reference-required API behavior, DiT fixed-input
+parity, Vocos mel decode parity, full local-bundle synthesis, and optional
+Qwen3-ASR roundtrips for English and Mandarin. A local English clone test with
+the exported bundle transcribed exactly as:
 
 ```text
 This is a short F five TTS voice cloning test running locally on Apple Silicon.
 ```
 
-Remaining work before benchmark-grade multilingual coverage:
+Remaining work:
 
-- Port upstream pinyin segmentation for Mandarin/CJK.
-- Broaden subjective listening and ASR roundtrips across benchmark languages.
+- Broaden subjective listening and ASR roundtrips across longer zh/en corpora.
 - Add release benchmarks for memory and RTF on representative Apple Silicon
   devices.
+- Publish a quantized (int8) bundle variant behind the same roundtrip gate.

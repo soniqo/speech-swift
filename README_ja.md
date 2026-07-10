@@ -43,7 +43,7 @@ Mac・iOS向けのオンデバイス音声認識・合成・理解。Apple Silic
 - **[CosyVoice TTS](https://soniqo.audio/ja/guides/cosyvoice)** — 音声クローン、マルチスピーカー対話、感情タグを備えたストリーミングTTS（9言語）
 - **[VoxCPM2](https://soniqo.audio/ja/speech-generation)** — 48 kHz スタジオ品質の TTS。音声クローンと指示ベースのボイスデザインに対応（2B、MLX bf16/int8、30言語）
 - **[IndexTTS2](docs/models/indextts2.md)** — Native MLX voice cloning from a reference voice (IndexTeam IndexTTS-2, 1.5B-class fp16 bundle, speaker/emotion/pause controls)
-- **[F5-TTS](docs/models/f5-tts.md)** — Zero-shot voice cloning from a short reference clip + transcript (SWivid F5-TTS v1 Base, DiT flow matching + Vocos, MLX fp16, 24 kHz, English; non-commercial license)
+- **[F5-TTS](docs/models/f5-tts.md)** — Zero-shot voice cloning from a short reference clip + transcript (SWivid F5-TTS v1 Base, DiT flow matching + Vocos, MLX fp16, 24 kHz, English + Mandarin; non-commercial license)
 - **[Kokoro TTS](https://soniqo.audio/ja/guides/kokoro)** — オンデバイスTTS（82M、CoreML/Neural Engine、54ボイス、iOS対応、10言語）
 - **[VibeVoice TTS](https://soniqo.audio/ja/guides/vibevoice)** — 長尺・マルチスピーカーTTS（Microsoft VibeVoice Realtime-0.5B + 1.5B、MLX、最長90分のポッドキャスト／オーディオブック生成、EN/ZH）
 - **[Magpie TTS](https://soniqo.audio/ja/guides/magpie)** — 多言語 TTS（NVIDIA Magpie-TTS Multilingual 357M、MLX INT8 411 MB または CoreML INT8 342 MB、9 言語、5 つの組み込みスピーカー、MLX でストリーミング）
@@ -167,7 +167,7 @@ struct DictateView: View {
 | [CosyVoice3](https://soniqo.audio/ja/guides/cosyvoice) | テキスト → 音声 | MLX | 0.5B | 9 |
 | [VoxCPM2](https://soniqo.audio/ja/speech-generation) | テキスト → 音声 (48 kHz、ボイスデザイン + クローン) | MLX | 2B (bf16/int8) | 30 |
 | [IndexTTS2](docs/models/indextts2.md) | Text → Speech (zero-shot voice cloning) | MLX | 1.5B-class (fp16) | EN/ZH |
-| [F5-TTS](docs/models/f5-tts.md) | Text → Speech (zero-shot voice cloning) | MLX | 336M (fp16) | EN |
+| [F5-TTS](docs/models/f5-tts.md) | Text → Speech (zero-shot voice cloning) | MLX | 336M (fp16) | EN/ZH |
 | [Kokoro-82M](https://soniqo.audio/ja/guides/kokoro) | テキスト → 音声 | CoreML (ANE) | 82M | 10 |
 | [Supertonic-3](https://soniqo.audio/guides/supertonic) | テキスト → 音声（44.1 kHz、フローマッチング、G2P-free） | CoreML (ANE) | 99M | 31 |
 | [VibeVoice Realtime-0.5B](https://soniqo.audio/ja/guides/vibevoice) | テキスト → 音声（長尺・マルチスピーカー） | MLX | 0.5B | EN/ZH |
