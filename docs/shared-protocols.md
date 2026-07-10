@@ -27,6 +27,7 @@ The `AudioCommon` module defines shared protocols that provide model-agnostic in
    │VoxCPM2  │        │ForcedAlign│
    │Kokoro   │
    │IndexTTS2│
+   │F5TTS    │
    └─────────┘        └───────────┘
 ```
 
@@ -44,9 +45,11 @@ public protocol SpeechGenerationModel: AnyObject {
 }
 ```
 
-**Conforming types:** `Qwen3TTSModel`, `CosyVoiceTTSModel`, `VoxCPM2TTSModel`, `KokoroTTSModel`, `IndexTTS2TTSModel`
+**Conforming types:** `Qwen3TTSModel`, `CosyVoiceTTSModel`, `VoxCPM2TTSModel`, `KokoroTTSModel`, `IndexTTS2TTSModel`, `F5TTSModel`
 
 `IndexTTS2TTSModel` implements bundle loading, manifest validation, metadata access, and `ModelMemoryManageable`. It exposes a reference-audio `generate` overload for the expanded IndexTTS2 bundle and runs native reference conditioning, optional `IndexTTS2EmotionControl` preset/vector blending, `IndexTTS2SynthesisOptions` speaking-rate and internal-pause controls, semantic GPT beam sampling, S2Mel decoding, and BigVGAN vocoding. The protocol-only `generate(text:language:)` entry point throws a reference-required error because IndexTTS2 is a zero-shot voice-cloning model.
+
+`F5TTSModel` implements local bundle loading, config validation, `ModelMemoryManageable`, and a reference-audio `generate` overload for the exported F5-TTS bundle. The runtime prepares Vocos-style reference mels, samples target mels with the native DiT flow model, and decodes 24 kHz waveform audio with Vocos. The protocol-only `generate(text:language:)` entry point throws a reference-required error because F5-TTS requires reference audio plus a reference transcript.
 
 ### SpeechRecognitionModel (STT)
 
@@ -417,6 +420,7 @@ Sources/
 │   └── Configuration.swift    ModelArgs / config decoding for VoxCPM2 snapshots
 │
 ├── IndexTTS2TTS/              IndexTTS2 voice cloning (reference conditioning + synthesis)
+├── F5TTS/                     F5-TTS voice cloning (DiT flow + Vocos)
 │
 ├── PersonaPlex/               Speech-to-speech (Temporal + Depformer + Mimi)
 │   ├── PersonaPlex.swift      PersonaPlexModel: SpeechToSpeechModel

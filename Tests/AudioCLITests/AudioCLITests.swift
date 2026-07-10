@@ -722,6 +722,120 @@ final class SpeakCommandTests: XCTestCase {
             contains: "maxInternalPauseDuration")
     }
 
+    // MARK: - F5-TTS engine
+
+    func testF5Engine() throws {
+        let cmd = try AudioCLI.parseAsRoot([
+            "speak", "--engine", "f5", "Hello",
+            "--voice-sample", "ref.wav",
+            "--f5-reference-text", "Reference transcript.",
+        ])
+        let speak = try XCTUnwrap(cmd as? SpeakCommand)
+        XCTAssertEqual(speak.engine, "f5")
+        XCTAssertEqual(speak.voiceSample, "ref.wav")
+        XCTAssertEqual(speak.f5ReferenceText, "Reference transcript.")
+        XCTAssertEqual(speak.f5ModelId, "aufklarer/F5TTS-v1-Base-MLX-fp16")
+        XCTAssertNil(speak.f5BundleDir)
+        XCTAssertEqual(speak.f5Steps, 32)
+        XCTAssertEqual(speak.f5CfgStrength, 2.0, accuracy: 0.001)
+        XCTAssertEqual(speak.f5Sway, -1.0, accuracy: 0.001)
+        XCTAssertEqual(speak.f5Speed, 1.0, accuracy: 0.001)
+        XCTAssertEqual(speak.f5Seed, 0)
+        XCTAssertEqual(speak.f5TargetRMS, 0.1, accuracy: 0.001)
+    }
+
+    func testF5Options() throws {
+        let cmd = try AudioCLI.parseAsRoot([
+            "speak", "Hello",
+            "--engine", "f5",
+            "--voice-sample", "ref.wav",
+            "--f5-reference-text", "Reference transcript.",
+            "--f5-model-id", "org/F5TTS-v1-Base-MLX-fp16",
+            "--f5-bundle-dir", "/tmp/F5TTS-v1-Base-MLX-fp16",
+            "--f5-steps", "16",
+            "--f5-cfg-strength", "1.5",
+            "--f5-sway=-0.8",
+            "--f5-speed", "1.25",
+            "--f5-seed", "42",
+            "--f5-target-rms", "0.12",
+        ])
+        let speak = try XCTUnwrap(cmd as? SpeakCommand)
+        XCTAssertEqual(speak.f5ModelId, "org/F5TTS-v1-Base-MLX-fp16")
+        XCTAssertEqual(speak.f5BundleDir, "/tmp/F5TTS-v1-Base-MLX-fp16")
+        XCTAssertEqual(speak.f5Steps, 16)
+        XCTAssertEqual(speak.f5CfgStrength, 1.5, accuracy: 0.001)
+        XCTAssertEqual(speak.f5Sway, -0.8, accuracy: 0.001)
+        XCTAssertEqual(speak.f5Speed, 1.25, accuracy: 0.001)
+        XCTAssertEqual(speak.f5Seed, 42)
+        XCTAssertEqual(speak.f5TargetRMS, 0.12, accuracy: 0.001)
+    }
+
+    func testF5RejectsMissingVoiceSample() {
+        expectSpeakReject(
+            ["speak", "Hello", "--engine", "f5", "--f5-reference-text", "hi"],
+            contains: "--voice-sample")
+    }
+
+    func testF5RejectsMissingOrBlankReferenceText() {
+        expectSpeakReject(
+            ["speak", "Hello", "--engine", "f5", "--voice-sample", "ref.wav"],
+            contains: "--f5-reference-text")
+        expectSpeakReject(
+            [
+                "speak", "Hello", "--engine", "f5", "--voice-sample", "ref.wav",
+                "--f5-reference-text", "   ",
+            ],
+            contains: "--f5-reference-text")
+    }
+
+    func testF5RejectsUnsupportedControls() {
+        expectSpeakReject(
+            [
+                "speak", "Hello", "--engine", "f5", "--voice-sample", "ref.wav",
+                "--f5-reference-text", "hi", "--stream",
+            ],
+            contains: "--stream")
+        expectSpeakReject(
+            [
+                "speak", "Hello", "--engine", "f5", "--voice-sample", "ref.wav",
+                "--f5-reference-text", "hi", "--speaker", "someone",
+            ],
+            contains: "--speaker")
+        expectSpeakReject(
+            [
+                "speak", "Hello", "--engine", "f5", "--voice-sample", "ref.wav",
+                "--f5-reference-text", "hi", "--instruct", "friendly",
+            ],
+            contains: "--instruct")
+        expectSpeakReject(
+            [
+                "speak", "--engine", "f5", "--batch-file", "texts.txt",
+                "--voice-sample", "ref.wav", "--f5-reference-text", "hi",
+            ],
+            contains: "single text")
+    }
+
+    func testF5RejectsInvalidSamplingValues() {
+        expectSpeakReject(
+            [
+                "speak", "Hello", "--engine", "f5", "--voice-sample", "ref.wav",
+                "--f5-reference-text", "hi", "--f5-steps", "0",
+            ],
+            contains: "steps")
+        expectSpeakReject(
+            [
+                "speak", "Hello", "--engine", "f5", "--voice-sample", "ref.wav",
+                "--f5-reference-text", "hi", "--f5-speed", "0",
+            ],
+            contains: "speed")
+        expectSpeakReject(
+            [
+                "speak", "Hello", "--engine", "f5", "--voice-sample", "ref.wav",
+                "--f5-reference-text", "hi", "--f5-cfg-strength=-1",
+            ],
+            contains: "cfgStrength")
+    }
+
     func testIndicMioAcceptsVoiceSampleReference() throws {
         let cmd = try AudioCLI.parseAsRoot([
             "speak", "नमस्ते <happy>",

@@ -6,6 +6,7 @@ import Qwen3TTS
 import CosyVoiceTTS
 import VoxCPM2TTS
 import IndexTTS2TTS
+import F5TTS
 import IndicMioTTS
 import MagpieTTS
 import MagpieTTSCoreML
@@ -15,13 +16,13 @@ import SpeechRestoration
 public struct SpeakCommand: ParsableCommand {
     public static let configuration = CommandConfiguration(
         commandName: "speak",
-        abstract: "Text-to-speech synthesis (Qwen3-TTS, CosyVoice, VoxCPM2, IndexTTS2, Indic-Mio, or Magpie). For CoreML, use the `qwen3-tts-coreml` subcommand."
+        abstract: "Text-to-speech synthesis (Qwen3-TTS, CosyVoice, VoxCPM2, IndexTTS2, F5-TTS, Indic-Mio, or Magpie). For CoreML, use the `qwen3-tts-coreml` subcommand."
     )
 
     @Argument(help: "Text to synthesize (omit when using --list-speakers or --batch-file)")
     public var text: String?
 
-    @Option(name: .long, help: "TTS engine: qwen3 (default), cosyvoice, voxcpm2, indextts2, indic-mio, magpie, or magpie-coreml")
+    @Option(name: .long, help: "TTS engine: qwen3 (default), cosyvoice, voxcpm2, indextts2, f5, indic-mio, magpie, or magpie-coreml")
     public var engine: String = "qwen3"
 
     @Option(name: .shortAndLong, help: "Output WAV file path")
@@ -44,10 +45,10 @@ public struct SpeakCommand: ParsableCommand {
     @Option(name: .long, help: "[qwen3] Style instruction (requires CustomVoice model)")
     public var instruct: String?
 
-    @Option(name: .long, help: "Reference audio file for voice cloning (qwen3 Base, cosyvoice, voxcpm2, or indic-mio)")
+    @Option(name: .long, help: "Reference audio file for voice cloning (qwen3 Base, cosyvoice, voxcpm2, indextts2, f5, or indic-mio)")
     public var voiceSample: String?
 
-    @Flag(name: .long, help: "Restore (denoise + dereverb) the voice-cloning reference with Sidon before cloning. Opt-in; preserves speaker identity. Applies to qwen3/cosyvoice/voxcpm2/indic-mio references.")
+    @Flag(name: .long, help: "Restore (denoise + dereverb) the voice-cloning reference with Sidon before cloning. Opt-in; preserves speaker identity. Applies to qwen3/cosyvoice/voxcpm2/f5/indic-mio references.")
     public var cleanReference: Bool = false
 
     @Option(name: .long, help: "Sidon variant for --clean-reference: fp16 (default) or int8")
@@ -170,6 +171,35 @@ public struct SpeakCommand: ParsableCommand {
     @Option(name: .long, help: "[indextts2] Optional cap for long internal pauses, in seconds, from 0.05 to 2.0. Omit to keep raw model timing.")
     public var indextts2MaxPause: Float?
 
+    // MARK: - F5-TTS-specific options
+
+    @Option(name: .long, help: "[f5] HuggingFace model ID for the exported MLX bundle")
+    public var f5ModelId: String = F5TTSModel.defaultModelId
+
+    @Option(name: .long, help: "[f5] Load an exported bundle from this local directory instead of HuggingFace")
+    public var f5BundleDir: String?
+
+    @Option(name: .long, help: "[f5] Reference transcript: the text content of --voice-sample. Required for zero-shot cloning.")
+    public var f5ReferenceText: String?
+
+    @Option(name: .long, help: "[f5] Flow-matching steps (default 32)")
+    public var f5Steps: Int = 32
+
+    @Option(name: .long, help: "[f5] Classifier-free guidance strength (default 2.0)")
+    public var f5CfgStrength: Float = 2.0
+
+    @Option(name: .long, help: "[f5] Sway sampling coefficient (default -1.0)")
+    public var f5Sway: Float = -1.0
+
+    @Option(name: .long, help: "[f5] Speaking rate multiplier (default 1.0). Values above 1.0 shorten generated speech.")
+    public var f5Speed: Float = 1.0
+
+    @Option(name: .long, help: "[f5] MLX seed for deterministic flow sampling (default 0)")
+    public var f5Seed: UInt64 = 0
+
+    @Option(name: .long, help: "[f5] Reference RMS normalization target (default 0.1)")
+    public var f5TargetRMS: Float = 0.1
+
     // MARK: - Indic-Mio-specific options
 
     @Option(name: .long, help: "[indic-mio] HuggingFace model ID")
@@ -225,8 +255,8 @@ public struct SpeakCommand: ParsableCommand {
     public func validate() throws {
         let eng = engine.lowercased()
         guard eng == "qwen3" || eng == "cosyvoice" || eng == "voxcpm2"
-                || eng == "indextts2" || eng == "indic-mio" || eng == "magpie" || eng == "magpie-coreml" else {
-            throw ValidationError("--engine must be 'qwen3', 'cosyvoice', 'voxcpm2', 'indextts2', 'indic-mio', 'magpie', or 'magpie-coreml'. For Qwen3-TTS CoreML, use the `qwen3-tts-coreml` subcommand.")
+                || eng == "indextts2" || eng == "f5" || eng == "indic-mio" || eng == "magpie" || eng == "magpie-coreml" else {
+            throw ValidationError("--engine must be 'qwen3', 'cosyvoice', 'voxcpm2', 'indextts2', 'f5', 'indic-mio', 'magpie', or 'magpie-coreml'. For Qwen3-TTS CoreML, use the `qwen3-tts-coreml` subcommand.")
         }
         if text == nil && batchFile == nil && !listSpeakers {
             throw ValidationError("Either a text argument, --batch-file, or --list-speakers must be provided")
@@ -262,6 +292,27 @@ public struct SpeakCommand: ParsableCommand {
             }
             if instruct != nil {
                 throw ValidationError("--engine indextts2 does not support --instruct; use --indextts2-emotion-audio for a separate style reference")
+            }
+        }
+        if eng == "f5" {
+            if batchFile != nil || listSpeakers {
+                throw ValidationError("--engine f5 only supports a single text input")
+            }
+            if stream {
+                throw ValidationError("--engine f5 does not support --stream yet")
+            }
+            if voiceSample == nil {
+                throw ValidationError("--engine f5 requires --voice-sample because F5-TTS is a zero-shot voice-cloning model")
+            }
+            if f5ReferenceText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
+                throw ValidationError("--engine f5 requires --f5-reference-text with the transcript of --voice-sample")
+            }
+            _ = try parseF5SynthesisOptions()
+            if speaker != nil {
+                throw ValidationError("--engine f5 does not support --speaker; use --voice-sample")
+            }
+            if instruct != nil {
+                throw ValidationError("--engine f5 does not support --instruct")
             }
         }
         if eng == "indic-mio" {
@@ -356,6 +407,8 @@ public struct SpeakCommand: ParsableCommand {
             try runVoxCPM2()
         case "indextts2":
             try runIndexTTS2()
+        case "f5":
+            try runF5TTS()
         case "indic-mio":
             try runIndicMio()
         case "magpie":
@@ -1037,6 +1090,108 @@ public struct SpeakCommand: ParsableCommand {
                 throw ValidationError("--indextts2-emotion vector entries must be numeric")
             }
             return value
+        }
+    }
+
+    // MARK: - F5-TTS engine
+
+    private func runF5TTS() throws {
+        try runAsync {
+            guard let inputText = text else {
+                print("Error: text argument is required for F5-TTS")
+                throw ExitCode(1)
+            }
+            guard let voiceSample else {
+                print("Error: --voice-sample is required for F5-TTS")
+                throw ExitCode(1)
+            }
+            guard let referenceText = f5ReferenceText?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !referenceText.isEmpty else {
+                print("Error: --f5-reference-text is required for F5-TTS")
+                throw ExitCode(1)
+            }
+
+            let model: F5TTSModel
+            if let bundleDir = f5BundleDir {
+                let bundleURL = URL(fileURLWithPath: bundleDir)
+                print("Loading F5-TTS exported bundle (\(bundleURL.path))...")
+                model = try await F5TTSModel.fromBundle(
+                    bundleURL,
+                    progressHandler: reportProgress)
+            } else {
+                print("Loading F5-TTS exported bundle (\(f5ModelId))...")
+                model = try await F5TTSModel.fromPretrained(
+                    modelId: f5ModelId,
+                    progressHandler: reportProgress)
+            }
+
+            print("  Model: \(model.config.modelName)")
+            print("  Source: \(model.config.sourceRepo)")
+            print("  Vocoder: \(model.config.vocoderRepo)")
+            print("  Precision: \(model.config.precision)")
+            print(String(format: "  Bundle weights: %.1f MB", Double(model.memoryFootprint) / 1_000_000.0))
+            print("  Sample rate: \(model.sampleRate) Hz")
+            print("  Runtime status: native Swift synthesis enabled")
+
+            let options = try parseF5SynthesisOptions()
+            if f5Speed != 1.0 {
+                print("  Speaking rate: \(f5Speed)x")
+            }
+            if f5Steps != 32 || f5CfgStrength != 2.0 || f5Sway != -1.0 {
+                print("  Sampling: steps \(f5Steps), cfg \(f5CfgStrength), sway \(f5Sway)")
+            }
+
+            let start = CFAbsoluteTimeGetCurrent()
+            let audio: [Float]
+            if cleanReference {
+                let referenceAudio = try loadReference(path: voiceSample, targetSampleRate: model.sampleRate)
+                audio = try model.generate(
+                    text: inputText,
+                    referenceAudio: referenceAudio,
+                    referenceSampleRate: model.sampleRate,
+                    referenceText: referenceText,
+                    options: options,
+                    progressHandler: reportProgress)
+            } else {
+                audio = try await model.generate(
+                    text: inputText,
+                    referenceAudio: URL(fileURLWithPath: voiceSample),
+                    referenceText: referenceText,
+                    options: options,
+                    progressHandler: reportProgress)
+            }
+            let elapsed = CFAbsoluteTimeGetCurrent() - start
+
+            guard !audio.isEmpty else {
+                print("Error: No audio generated")
+                throw ExitCode(1)
+            }
+
+            let duration = Double(audio.count) / Double(model.sampleRate)
+            print(String(format: "  Duration: %.2fs, Time: %.2fs, RTF: %.2f",
+                         duration, elapsed, elapsed / max(duration, 0.001)))
+
+            let outputURL = URL(fileURLWithPath: output)
+            if play {
+                playAudio(samples: audio, sampleRate: model.sampleRate)
+            } else {
+                try WAVWriter.write(samples: audio, sampleRate: model.sampleRate, to: outputURL)
+                print("Saved \(audio.count) samples (\(formatDuration(audio.count, sampleRate: model.sampleRate))s) to \(output)")
+            }
+        }
+    }
+
+    private func parseF5SynthesisOptions() throws -> F5TTSSynthesisOptions {
+        do {
+            return try F5TTSSynthesisOptions(
+                steps: f5Steps,
+                cfgStrength: f5CfgStrength,
+                swaySamplingCoef: f5Sway,
+                speed: f5Speed,
+                seed: f5Seed,
+                targetRMS: f5TargetRMS)
+        } catch {
+            throw ValidationError(error.localizedDescription)
         }
     }
 

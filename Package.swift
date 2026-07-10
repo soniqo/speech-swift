@@ -41,6 +41,10 @@ let package = Package(
             targets: ["FishAudioTTS"]
         ),
         .library(
+            name: "F5TTS",
+            targets: ["F5TTS"]
+        ),
+        .library(
             name: "IndexTTS2TTS",
             targets: ["IndexTTS2TTS"]
         ),
@@ -305,6 +309,17 @@ let package = Package(
                 .product(name: "MLXFast", package: "mlx-swift"),
                 .product(name: "Hub", package: "swift-transformers"),
                 .product(name: "Tokenizers", package: "swift-transformers")
+            ]
+        ),
+        .target(
+            name: "F5TTS",
+            dependencies: [
+                "AudioCommon",
+                "MLXCommon",
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXNN", package: "mlx-swift"),
+                .product(name: "MLXFast", package: "mlx-swift"),
+                .product(name: "MLXFFT", package: "mlx-swift"),
             ]
         ),
         .target(
@@ -577,6 +592,7 @@ let package = Package(
                 "KokoroTTS",
                 "VibeVoiceTTS",
                 "VoxCPM2TTS",
+                "F5TTS",
                 "IndexTTS2TTS",
                 "IndicMioTTS",
                 "MAGNeTMusicGen",
@@ -738,6 +754,13 @@ let package = Package(
             name: "FishAudioTTSTests",
             dependencies: [
                 "FishAudioTTS", "AudioCommon", "MLXCommon", "Qwen3ASR",
+                .product(name: "MLX", package: "mlx-swift")
+            ]
+        ),
+        .testTarget(
+            name: "F5TTSTests",
+            dependencies: [
+                "F5TTS", "AudioCommon", "MLXCommon", "Qwen3ASR",
                 .product(name: "MLX", package: "mlx-swift")
             ]
         ),
