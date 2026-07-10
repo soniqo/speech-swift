@@ -45,6 +45,10 @@ let package = Package(
             targets: ["F5TTS"]
         ),
         .library(
+            name: "HiggsTTS",
+            targets: ["HiggsTTS"]
+        ),
+        .library(
             name: "IndexTTS2TTS",
             targets: ["IndexTTS2TTS"]
         ),
@@ -323,6 +327,18 @@ let package = Package(
             ]
         ),
         .target(
+            name: "HiggsTTS",
+            dependencies: [
+                "AudioCommon",
+                "MLXCommon",
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXNN", package: "mlx-swift"),
+                .product(name: "MLXFast", package: "mlx-swift"),
+                .product(name: "Hub", package: "swift-transformers"),
+                .product(name: "Tokenizers", package: "swift-transformers"),
+            ]
+        ),
+        .target(
             name: "IndexTTS2TTS",
             dependencies: [
                 "AudioCommon",
@@ -593,6 +609,7 @@ let package = Package(
                 "VibeVoiceTTS",
                 "VoxCPM2TTS",
                 "F5TTS",
+                "HiggsTTS",
                 "IndexTTS2TTS",
                 "IndicMioTTS",
                 "MAGNeTMusicGen",
@@ -766,6 +783,13 @@ let package = Package(
             resources: [
                 .copy("Resources/pinyin_fixtures.json"),
                 .copy("Resources/pinyin_lexicon_subset.tsv"),
+            ]
+        ),
+        .testTarget(
+            name: "HiggsTTSTests",
+            dependencies: [
+                "HiggsTTS", "AudioCommon", "Qwen3ASR",
+                .product(name: "MLX", package: "mlx-swift")
             ]
         ),
         .testTarget(

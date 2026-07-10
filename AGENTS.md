@@ -85,6 +85,7 @@ The same skills are exposed to agents that scan `.codex/skills/` through relativ
 - `Sources/VoxCPM2TTS/` — Text-to-speech (VoxCPM2, MLX, 48 kHz, voice cloning + voice design)
 - `Sources/IndexTTS2TTS/` — Text-to-speech (IndexTTS2, zero-shot voice cloning, MLX, speaker/emotion/pause controls)
 - `Sources/F5TTS/` — Text-to-speech (F5-TTS v1 Base, zero-shot voice cloning, DiT flow matching + Vocos, MLX, 24 kHz; non-commercial license)
+- `Sources/HiggsTTS/` — Text-to-speech (Higgs TTS 3 4B, conversational + zero-shot voice cloning, Qwen3 backbone + fused codebooks, MLX, 24 kHz; non-commercial license)
 - `Sources/KokoroTTS/` — Text-to-speech (Kokoro-82M, CoreML, iOS-ready)
 - `Sources/MagpieTTS/` — Multilingual TTS (MLX, 8 codebooks, NanoCodec)
 - `Sources/MagpieTTSCoreML/` — Magpie TTS CoreML variant

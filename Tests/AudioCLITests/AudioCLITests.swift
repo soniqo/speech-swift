@@ -836,6 +836,88 @@ final class SpeakCommandTests: XCTestCase {
             contains: "cfgStrength")
     }
 
+    // MARK: - Higgs engine
+
+    func testHiggsEngine() throws {
+        let cmd = try AudioCLI.parseAsRoot(["speak", "--engine", "higgs", "Hello"])
+        let speak = try XCTUnwrap(cmd as? SpeakCommand)
+        XCTAssertEqual(speak.engine, "higgs")
+        XCTAssertEqual(speak.higgsModelId, "aufklarer/Higgs-TTS-3-4B-MLX-bf16")
+        XCTAssertNil(speak.higgsBundleDir)
+        XCTAssertNil(speak.higgsRefText)
+        XCTAssertEqual(speak.higgsTemperature, 0.8, accuracy: 0.001)
+        XCTAssertNil(speak.higgsTopP)
+        XCTAssertNil(speak.higgsTopK)
+        XCTAssertEqual(speak.higgsMaxNewTokens, 2048)
+        XCTAssertEqual(speak.higgsSeed, 0)
+    }
+
+    func testHiggsOptions() throws {
+        let cmd = try AudioCLI.parseAsRoot([
+            "speak", "<|emotion:elation|>Hello!",
+            "--engine", "higgs",
+            "--voice-sample", "ref.wav",
+            "--higgs-ref-text", "Reference transcript.",
+            "--higgs-model-id", "org/Higgs-TTS-3-4B-MLX-bf16",
+            "--higgs-bundle-dir", "/tmp/Higgs-TTS-3-4B-MLX-bf16",
+            "--higgs-temperature", "1.0",
+            "--higgs-top-p", "0.95",
+            "--higgs-top-k", "50",
+            "--higgs-max-new-tokens", "512",
+            "--higgs-seed", "42",
+        ])
+        let speak = try XCTUnwrap(cmd as? SpeakCommand)
+        XCTAssertEqual(speak.voiceSample, "ref.wav")
+        XCTAssertEqual(speak.higgsRefText, "Reference transcript.")
+        XCTAssertEqual(speak.higgsModelId, "org/Higgs-TTS-3-4B-MLX-bf16")
+        XCTAssertEqual(speak.higgsBundleDir, "/tmp/Higgs-TTS-3-4B-MLX-bf16")
+        XCTAssertEqual(speak.higgsTemperature, 1.0, accuracy: 0.001)
+        XCTAssertEqual(try XCTUnwrap(speak.higgsTopP), 0.95, accuracy: 0.001)
+        XCTAssertEqual(speak.higgsTopK, 50)
+        XCTAssertEqual(speak.higgsMaxNewTokens, 512)
+        XCTAssertEqual(speak.higgsSeed, 42)
+    }
+
+    func testHiggsAllowsPlainTTSWithoutReference() throws {
+        XCTAssertNoThrow(try AudioCLI.parseAsRoot(["speak", "Hello", "--engine", "higgs"]))
+    }
+
+    func testHiggsRejectsRefTextWithoutVoiceSample() {
+        expectSpeakReject(
+            ["speak", "Hello", "--engine", "higgs", "--higgs-ref-text", "hi"],
+            contains: "--voice-sample")
+    }
+
+    func testHiggsRejectsUnsupportedControls() {
+        expectSpeakReject(
+            ["speak", "Hello", "--engine", "higgs", "--stream"],
+            contains: "--stream")
+        expectSpeakReject(
+            ["speak", "Hello", "--engine", "higgs", "--speaker", "someone"],
+            contains: "--speaker")
+        expectSpeakReject(
+            ["speak", "Hello", "--engine", "higgs", "--instruct", "friendly"],
+            contains: "--instruct")
+        expectSpeakReject(
+            ["speak", "--engine", "higgs", "--batch-file", "texts.txt"],
+            contains: "single text")
+    }
+
+    func testHiggsRejectsInvalidSamplingValues() {
+        expectSpeakReject(
+            ["speak", "Hello", "--engine", "higgs", "--higgs-temperature=-1"],
+            contains: "temperature")
+        expectSpeakReject(
+            ["speak", "Hello", "--engine", "higgs", "--higgs-top-p", "1.5"],
+            contains: "topP")
+        expectSpeakReject(
+            ["speak", "Hello", "--engine", "higgs", "--higgs-top-k", "0"],
+            contains: "topK")
+        expectSpeakReject(
+            ["speak", "Hello", "--engine", "higgs", "--higgs-max-new-tokens", "0"],
+            contains: "maxNewTokens")
+    }
+
     func testIndicMioAcceptsVoiceSampleReference() throws {
         let cmd = try AudioCLI.parseAsRoot([
             "speak", "नमस्ते <happy>",

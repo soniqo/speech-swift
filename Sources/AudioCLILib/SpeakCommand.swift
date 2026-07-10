@@ -7,6 +7,7 @@ import CosyVoiceTTS
 import VoxCPM2TTS
 import IndexTTS2TTS
 import F5TTS
+import HiggsTTS
 import IndicMioTTS
 import MagpieTTS
 import MagpieTTSCoreML
@@ -16,13 +17,13 @@ import SpeechRestoration
 public struct SpeakCommand: ParsableCommand {
     public static let configuration = CommandConfiguration(
         commandName: "speak",
-        abstract: "Text-to-speech synthesis (Qwen3-TTS, CosyVoice, VoxCPM2, IndexTTS2, F5-TTS, Indic-Mio, or Magpie). For CoreML, use the `qwen3-tts-coreml` subcommand."
+        abstract: "Text-to-speech synthesis (Qwen3-TTS, CosyVoice, VoxCPM2, IndexTTS2, F5-TTS, Higgs, Indic-Mio, or Magpie). For CoreML, use the `qwen3-tts-coreml` subcommand."
     )
 
     @Argument(help: "Text to synthesize (omit when using --list-speakers or --batch-file)")
     public var text: String?
 
-    @Option(name: .long, help: "TTS engine: qwen3 (default), cosyvoice, voxcpm2, indextts2, f5, indic-mio, magpie, or magpie-coreml")
+    @Option(name: .long, help: "TTS engine: qwen3 (default), cosyvoice, voxcpm2, indextts2, f5, higgs, indic-mio, magpie, or magpie-coreml")
     public var engine: String = "qwen3"
 
     @Option(name: .shortAndLong, help: "Output WAV file path")
@@ -45,10 +46,10 @@ public struct SpeakCommand: ParsableCommand {
     @Option(name: .long, help: "[qwen3] Style instruction (requires CustomVoice model)")
     public var instruct: String?
 
-    @Option(name: .long, help: "Reference audio file for voice cloning (qwen3 Base, cosyvoice, voxcpm2, indextts2, f5, or indic-mio)")
+    @Option(name: .long, help: "Reference audio file for voice cloning (qwen3 Base, cosyvoice, voxcpm2, indextts2, f5, higgs, or indic-mio)")
     public var voiceSample: String?
 
-    @Flag(name: .long, help: "Restore (denoise + dereverb) the voice-cloning reference with Sidon before cloning. Opt-in; preserves speaker identity. Applies to qwen3/cosyvoice/voxcpm2/f5/indic-mio references.")
+    @Flag(name: .long, help: "Restore (denoise + dereverb) the voice-cloning reference with Sidon before cloning. Opt-in; preserves speaker identity. Applies to qwen3/cosyvoice/voxcpm2/f5/higgs/indic-mio references.")
     public var cleanReference: Bool = false
 
     @Option(name: .long, help: "Sidon variant for --clean-reference: fp16 (default) or int8")
@@ -200,6 +201,32 @@ public struct SpeakCommand: ParsableCommand {
     @Option(name: .long, help: "[f5] Reference RMS normalization target (default 0.1)")
     public var f5TargetRMS: Float = 0.1
 
+    // MARK: - Higgs-specific options
+
+    @Option(name: .long, help: "[higgs] HuggingFace model ID for the MLX bundle")
+    public var higgsModelId: String = HiggsTTSModel.defaultModelId
+
+    @Option(name: .long, help: "[higgs] Load a bundle from this local directory instead of HuggingFace")
+    public var higgsBundleDir: String?
+
+    @Option(name: .long, help: "[higgs] Reference transcript: the text content of --voice-sample (improves cloning)")
+    public var higgsRefText: String?
+
+    @Option(name: .long, help: "[higgs] Sampling temperature (default 0.8; the upstream default 1.0 is more variable)")
+    public var higgsTemperature: Float = 0.8
+
+    @Option(name: .long, help: "[higgs] Nucleus sampling threshold (off by default)")
+    public var higgsTopP: Float?
+
+    @Option(name: .long, help: "[higgs] Top-k sampling cutoff (off by default)")
+    public var higgsTopK: Int?
+
+    @Option(name: .long, help: "[higgs] Maximum generated audio frames (default 2048, 25 frames/second)")
+    public var higgsMaxNewTokens: Int = 2048
+
+    @Option(name: .long, help: "[higgs] MLX sampling seed (default 0)")
+    public var higgsSeed: UInt64 = 0
+
     // MARK: - Indic-Mio-specific options
 
     @Option(name: .long, help: "[indic-mio] HuggingFace model ID")
@@ -255,8 +282,8 @@ public struct SpeakCommand: ParsableCommand {
     public func validate() throws {
         let eng = engine.lowercased()
         guard eng == "qwen3" || eng == "cosyvoice" || eng == "voxcpm2"
-                || eng == "indextts2" || eng == "f5" || eng == "indic-mio" || eng == "magpie" || eng == "magpie-coreml" else {
-            throw ValidationError("--engine must be 'qwen3', 'cosyvoice', 'voxcpm2', 'indextts2', 'f5', 'indic-mio', 'magpie', or 'magpie-coreml'. For Qwen3-TTS CoreML, use the `qwen3-tts-coreml` subcommand.")
+                || eng == "indextts2" || eng == "f5" || eng == "higgs" || eng == "indic-mio" || eng == "magpie" || eng == "magpie-coreml" else {
+            throw ValidationError("--engine must be 'qwen3', 'cosyvoice', 'voxcpm2', 'indextts2', 'f5', 'higgs', 'indic-mio', 'magpie', or 'magpie-coreml'. For Qwen3-TTS CoreML, use the `qwen3-tts-coreml` subcommand.")
         }
         if text == nil && batchFile == nil && !listSpeakers {
             throw ValidationError("Either a text argument, --batch-file, or --list-speakers must be provided")
@@ -313,6 +340,27 @@ public struct SpeakCommand: ParsableCommand {
             }
             if instruct != nil {
                 throw ValidationError("--engine f5 does not support --instruct")
+            }
+        }
+        if eng == "higgs" {
+            if batchFile != nil || listSpeakers {
+                throw ValidationError("--engine higgs only supports a single text input")
+            }
+            if stream {
+                throw ValidationError("--engine higgs does not support --stream yet")
+            }
+            if higgsRefText != nil && voiceSample == nil {
+                throw ValidationError("--higgs-ref-text requires --voice-sample")
+            }
+            if cleanReference && voiceSample == nil {
+                throw ValidationError("--clean-reference requires --voice-sample")
+            }
+            _ = try parseHiggsSynthesisOptions()
+            if speaker != nil {
+                throw ValidationError("--engine higgs does not support --speaker; use --voice-sample for cloning")
+            }
+            if instruct != nil {
+                throw ValidationError("--engine higgs does not support --instruct; use inline control tags such as '<|emotion:elation|>'")
             }
         }
         if eng == "indic-mio" {
@@ -409,6 +457,8 @@ public struct SpeakCommand: ParsableCommand {
             try runIndexTTS2()
         case "f5":
             try runF5TTS()
+        case "higgs":
+            try runHiggs()
         case "indic-mio":
             try runIndicMio()
         case "magpie":
@@ -1178,6 +1228,93 @@ public struct SpeakCommand: ParsableCommand {
                 try WAVWriter.write(samples: audio, sampleRate: model.sampleRate, to: outputURL)
                 print("Saved \(audio.count) samples (\(formatDuration(audio.count, sampleRate: model.sampleRate))s) to \(output)")
             }
+        }
+    }
+
+    // MARK: - Higgs engine
+
+    private func runHiggs() throws {
+        try runAsync {
+            guard let inputText = text else {
+                print("Error: text argument is required for Higgs")
+                throw ExitCode(1)
+            }
+
+            let model: HiggsTTSModel
+            if let bundleDir = higgsBundleDir {
+                let bundleURL = URL(fileURLWithPath: bundleDir)
+                print("Loading Higgs TTS 3 bundle (\(bundleURL.path))...")
+                model = try await HiggsTTSModel.fromBundle(
+                    bundleURL,
+                    progressHandler: reportProgress)
+            } else {
+                print("Loading Higgs TTS 3 bundle (\(higgsModelId))...")
+                model = try await HiggsTTSModel.fromPretrained(
+                    modelId: higgsModelId,
+                    progressHandler: reportProgress)
+            }
+
+            print("  Backbone: Qwen3 \(model.config.textConfig.numHiddenLayers) layers, hidden \(model.config.textConfig.hiddenSize)")
+            print("  Codebooks: \(model.config.audioNumCodebooks) x \(model.config.audioCodebookSize) at 25 fps")
+            print("  Sample rate: \(model.sampleRate) Hz")
+
+            let options = try parseHiggsSynthesisOptions()
+            if higgsTemperature != 0.8 || higgsTopP != nil || higgsTopK != nil {
+                print("  Sampling: temperature \(higgsTemperature)"
+                      + (higgsTopP.map { ", top-p \($0)" } ?? "")
+                      + (higgsTopK.map { ", top-k \($0)" } ?? ""))
+            }
+
+            var references: [HiggsTTSReference] = []
+            if let voiceSample {
+                print("  Encoding reference: \(voiceSample)")
+                if cleanReference {
+                    let cleaned = try loadReference(path: voiceSample, targetSampleRate: model.sampleRate)
+                    references = [try model.encodeReference(
+                        samples: cleaned, sampleRate: model.sampleRate, text: higgsRefText)]
+                } else {
+                    references = [try model.encodeReference(
+                        audio: URL(fileURLWithPath: voiceSample), text: higgsRefText)]
+                }
+            }
+
+            let start = CFAbsoluteTimeGetCurrent()
+            let audio = try model.generate(
+                text: inputText,
+                references: references,
+                options: options,
+                progressHandler: reportProgress)
+            let elapsed = CFAbsoluteTimeGetCurrent() - start
+
+            guard !audio.isEmpty else {
+                print("Error: No audio generated")
+                throw ExitCode(1)
+            }
+
+            let duration = Double(audio.count) / Double(model.sampleRate)
+            print(String(format: "  Duration: %.2fs, Time: %.2fs, RTF: %.2f",
+                         duration, elapsed, elapsed / max(duration, 0.001)))
+
+            let outputURL = URL(fileURLWithPath: output)
+            if play {
+                playAudio(samples: audio, sampleRate: model.sampleRate)
+            } else {
+                try WAVWriter.write(samples: audio, sampleRate: model.sampleRate, to: outputURL)
+                print("Saved \(audio.count) samples (\(formatDuration(audio.count, sampleRate: model.sampleRate))s) to \(output)")
+            }
+        }
+    }
+
+    private func parseHiggsSynthesisOptions() throws -> HiggsTTSSynthesisOptions {
+        do {
+            return try HiggsTTSSynthesisOptions(
+                temperature: higgsTemperature,
+                topP: higgsTopP,
+                topK: higgsTopK,
+                maxNewTokens: higgsMaxNewTokens,
+                seed: higgsSeed)
+        } catch {
+            throw ValidationError(error.localizedDescription)
         }
     }
 
