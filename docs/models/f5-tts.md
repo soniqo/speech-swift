@@ -78,9 +78,6 @@ on a 67-sentence polyphone/sandhi/code-switch corpus the converter reproduces
 (word-segmentation quirks); the corpus and lexicon subset ship as unit-test
 fixtures.
 
-Bundles that predate the lexicon stay English-only and reject CJK input with a
-clear error.
-
 ## Validation Status
 
 Current validation covers config parsing, CRLF vocab loading, pinyin lexicon

@@ -83,11 +83,10 @@ Vocos, and writes 24 kHz mono WAV.
 ## Languages
 
 English and Mandarin Chinese, matching the zh/en-trained v1 Base weights.
-Mixed EN/ZH text works in a single request. Mandarin requires the bundle's
-`pinyin_lexicon.tsv` (present in the published bundle); older bundles without
-it stay English-only and reject CJK input with a clear error. The reference
-transcript may be either language. Other languages are out of distribution for
-the upstream checkpoint and are not supported.
+Mixed EN/ZH text works in a single request; hanzi are converted through the
+bundle's `pinyin_lexicon.tsv` Mandarin frontend. The reference transcript may
+be either language. Other languages are out of distribution for the upstream
+checkpoint and are not supported.
 
 ```bash
 speech speak "你好，这是一个在苹果芯片上本地运行的语音克隆测试。" \
@@ -118,7 +117,7 @@ F5TTS_ASR_E2E=1 \
 ```
 
 Mandarin synthesis with a CER-checked Qwen3-ASR roundtrip (same bundle and
-reference variables; the test skips if the bundle lacks `pinyin_lexicon.tsv`):
+reference variables):
 
 ```bash
 F5TTS_E2E_BUNDLE=/path/to/F5TTS-v1-Base-MLX-fp16 \
