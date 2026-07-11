@@ -446,4 +446,30 @@ final class ParakeetASRUnitTests: XCTestCase {
         XCTAssertGreaterThan(words[0].confidence, words[1].confidence)
         XCTAssertGreaterThan(words[1].confidence, words[2].confidence)
     }
+
+    // MARK: - Language-Tag Steering
+
+    func testLanguageTagExtraction() {
+        // Control tokens live at ids 0..23; per-language `<|xx|>` tags start at 24.
+        let vocab = ParakeetVocabulary(idToToken: [
+            0: "<unk>",
+            5: "<|pnc|>",             // control token (id < 24) — not a language
+            16: "<|emo:neutral|>",    // colon — not a language
+            21: "<|unklang|>",        // control token — not a language
+            24: "<|aa|>",
+            26: "<|af|>",
+            100: "<|en|>",
+            150: "<|ru|>",
+            274: "\u{2581}the",       // text token
+        ])
+        let tags = vocab.languageTagIds
+        XCTAssertEqual(tags["en"], 100)
+        XCTAssertEqual(tags["ru"], 150)
+        XCTAssertEqual(tags["aa"], 24)
+        XCTAssertEqual(tags["af"], 26)
+        // Only the four `<|xx|>` tags at id >= 24 qualify; controls and text tokens are excluded.
+        XCTAssertEqual(tags.count, 4)
+        XCTAssertNil(tags["pnc"])      // id 5 < 24
+        XCTAssertNil(tags["unklang"])  // control + too long
+    }
 }
