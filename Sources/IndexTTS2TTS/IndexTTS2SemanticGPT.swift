@@ -134,9 +134,9 @@ final class IndexTTS2SemanticGPT {
         generated.reserveCapacity(options.maxSemanticTokens)
         var rng = IndexTTS2SeededRNG(seed: options.seed)
 
+        var cache = GPTKVCache(layerCount: config.gpt.layers)
+        var logits = prefillMelLogits(prefixText: prefixText, cache: &cache)
         for _ in 0..<options.maxSemanticTokens {
-            let melInput = [Int32(config.gpt.startMelToken)] + generated
-            let logits = nextMelLogits(prefixText: prefixText, melInput: melInput)
             let next = sampleToken(logits, previousTokens: generated, options: options, rng: &rng)
             if next == Int32(config.gpt.stopMelToken) {
                 break
@@ -145,9 +145,7 @@ final class IndexTTS2SemanticGPT {
                 break
             }
             generated.append(next)
-            if generated.count % 16 == 0 {
-                eval(logits)
-            }
+            logits = stepMelLogits(token: next, melIndex: generated.count, cache: &cache)
         }
         return generated
     }
@@ -158,62 +156,78 @@ final class IndexTTS2SemanticGPT {
     ) -> [Int32] {
         let width = max(1, options.beamWidth)
         let stop = Int32(config.gpt.stopMelToken)
-        var beams = [SemanticBeam(tokens: [], score: 0, ended: false)]
+        // Invariant: a state's cache covers the prefix, the start-mel token,
+        // and all of the beam's tokens (each fed exactly once); children fork
+        // the parent's cache by value.
+        var states = [(beam: SemanticBeam(tokens: [], score: 0, ended: false),
+                       cache: GPTKVCache(layerCount: config.gpt.layers),
+                       prefilled: false)]
 
         for _ in 0..<options.maxSemanticTokens {
-            var candidates: [SemanticBeam] = []
+            var candidates: [(beam: SemanticBeam, cache: GPTKVCache, prefilled: Bool)] = []
             candidates.reserveCapacity(width * width * 2)
 
-            for beam in beams {
-                if beam.ended {
-                    candidates.append(beam)
+            for state in states {
+                if state.beam.ended {
+                    candidates.append(state)
                     continue
                 }
 
-                let melInput = [Int32(config.gpt.startMelToken)] + beam.tokens
-                let logits = nextMelLogits(prefixText: prefixText, melInput: melInput)
+                var cache = state.cache
+                let logits: MLXArray
+                if !state.prefilled {
+                    logits = prefillMelLogits(prefixText: prefixText, cache: &cache)
+                } else {
+                    logits = stepMelLogits(
+                        token: state.beam.tokens[state.beam.tokens.count - 1],
+                        melIndex: state.beam.tokens.count,
+                        cache: &cache)
+                }
                 var values = logits.asType(.float32).asArray(Float.self)
-                applyRepetitionPenalty(&values, previousTokens: beam.tokens, penalty: options.repetitionPenalty)
+                applyRepetitionPenalty(&values, previousTokens: state.beam.tokens, penalty: options.repetitionPenalty)
                 let logProbs = Self.logSoftmax(values)
                 for (token, logProb) in Self.topLogProbs(logProbs, count: width * 2) {
                     if token == stop {
-                        candidates.append(SemanticBeam(
-                            tokens: beam.tokens,
-                            score: beam.score + logProb,
-                            ended: true))
+                        candidates.append((
+                            beam: SemanticBeam(
+                                tokens: state.beam.tokens,
+                                score: state.beam.score + logProb,
+                                ended: true),
+                            cache: cache,
+                            prefilled: true))
                     } else if token >= 0, token < Int32(config.semanticCodec.codebookSize) {
-                        candidates.append(SemanticBeam(
-                            tokens: beam.tokens + [token],
-                            score: beam.score + logProb,
-                            ended: false))
+                        candidates.append((
+                            beam: SemanticBeam(
+                                tokens: state.beam.tokens + [token],
+                                score: state.beam.score + logProb,
+                                ended: false),
+                            cache: cache,
+                            prefilled: true))
                     }
-                }
-                if beam.tokens.count % 16 == 0 {
-                    eval(logits)
                 }
             }
 
-            beams = candidates
+            states = candidates
                 .sorted { lhs, rhs in
-                    let lhsScore = lhs.rankingScore(lengthPenalty: options.lengthPenalty)
-                    let rhsScore = rhs.rankingScore(lengthPenalty: options.lengthPenalty)
+                    let lhsScore = lhs.beam.rankingScore(lengthPenalty: options.lengthPenalty)
+                    let rhsScore = rhs.beam.rankingScore(lengthPenalty: options.lengthPenalty)
                     if lhsScore != rhsScore { return lhsScore > rhsScore }
-                    return lhs.tokens.count > rhs.tokens.count
+                    return lhs.beam.tokens.count > rhs.beam.tokens.count
                 }
                 .prefix(width)
                 .map { $0 }
-            if beams.allSatisfy(\.ended) {
+            if states.allSatisfy(\.beam.ended) {
                 break
             }
         }
 
-        return beams
+        return states
             .sorted {
-                $0.rankingScore(lengthPenalty: options.lengthPenalty) >
-                    $1.rankingScore(lengthPenalty: options.lengthPenalty)
+                $0.beam.rankingScore(lengthPenalty: options.lengthPenalty) >
+                    $1.beam.rankingScore(lengthPenalty: options.lengthPenalty)
             }
             .first?
-            .tokens ?? []
+            .beam.tokens ?? []
     }
 
     private func beamSampleSemanticCodes(
@@ -224,16 +238,22 @@ final class IndexTTS2SemanticGPT {
         let stop = Int32(config.gpt.stopMelToken)
         let samplesPerStep = max(2, width * 2)
         var rng = IndexTTS2SeededRNG(seed: options.seed)
+        // All active beams share one batched cache: row i continues beam i's
+        // sequence (equal lengths by construction). Beam selection reorders
+        // rows with a gather instead of forking per-beam caches.
         var active = [SemanticBeam(tokens: [], score: 0, ended: false)]
+        var cache = GPTKVCache(layerCount: config.gpt.layers)
+        var batchedLogits = prefillMelLogits(prefixText: prefixText, cache: &cache)
         var completed: [SemanticBeam] = []
 
         for _ in 0..<options.maxSemanticTokens {
             var candidates: [SemanticCandidate] = []
+            let vocab = batchedLogits.dim(-1)
+            let allScores = batchedLogits.asType(.float32).asArray(Float.self)
 
             for (beamIndex, beam) in active.enumerated() {
-                let melInput = [Int32(config.gpt.startMelToken)] + beam.tokens
-                let logits = nextMelLogits(prefixText: prefixText, melInput: melInput)
-                var scores = Self.logSoftmax(logits.asType(.float32).asArray(Float.self))
+                var scores = Self.logSoftmax(
+                    Array(allScores[(beamIndex * vocab)..<((beamIndex + 1) * vocab)]))
                 applyRepetitionPenalty(&scores, previousTokens: beam.tokens, penalty: options.repetitionPenalty)
                 applyTemperature(&scores, temperature: options.temperature)
                 applyTopK(&scores, k: options.topK, minTokensToKeep: 2)
@@ -244,9 +264,6 @@ final class IndexTTS2SemanticGPT {
                         beamIndex: beamIndex,
                         token: Int32(token),
                         score: beam.score + scores[token]))
-                }
-                if beam.tokens.count % 16 == 0 {
-                    eval(logits)
                 }
             }
 
@@ -268,6 +285,8 @@ final class IndexTTS2SemanticGPT {
             sampled.sort { $0.score > $1.score }
 
             var nextActive: [SemanticBeam] = []
+            var parents: [Int] = []
+            var stepTokens: [Int32] = []
             nextActive.reserveCapacity(width)
             for (rank, candidate) in sampled.enumerated() {
                 let source = active[candidate.beamIndex]
@@ -287,6 +306,8 @@ final class IndexTTS2SemanticGPT {
                     tokens: source.tokens + [candidate.token],
                     score: candidate.score,
                     ended: false))
+                parents.append(candidate.beamIndex)
+                stepTokens.append(candidate.token)
                 if nextActive.count == width {
                     break
                 }
@@ -302,6 +323,12 @@ final class IndexTTS2SemanticGPT {
             ) {
                 break
             }
+
+            cache = gatherCache(cache, parents: parents)
+            batchedLogits = batchedStepMelLogits(
+                tokens: stepTokens,
+                melIndex: active[0].tokens.count,
+                cache: &cache)
         }
 
         let final = bestBeams(
@@ -705,12 +732,126 @@ final class IndexTTS2SemanticGPT {
 
     // MARK: - GPT
 
-    private func nextMelLogits(prefixText: MLXArray, melInput: [Int32]) -> MLXArray {
-        let mel = melGenerationEmbeddings(melInput)
-        let hidden = gpt(concatenated([prefixText, mel], axis: 1))
+    /// Per-layer key/value cache for incremental GPT decoding. Value
+    /// semantics: copying the struct shares the immutable arrays, so beam
+    /// branches can fork a parent's cache for free.
+    struct GPTKVCache {
+        var layers: [(keys: MLXArray, values: MLXArray)?]
+
+        init(layerCount: Int) {
+            layers = Array(repeating: nil, count: layerCount)
+        }
+    }
+
+    private func melLogits(fromHidden hidden: MLXArray) -> MLXArray {
         let last = hidden[0..., (hidden.dim(1) - 1)..<hidden.dim(1), 0...]
         let normalized = layerNorm(last, prefix: "final_norm")
         return linear(normalized, prefix: "mel_head").squeezed(axis: 1)
+    }
+
+    /// Embedding for one mel token at its melInput index, preserving the
+    /// generation-time position mapping (index 0 -> position 0, index i -> i + 1).
+    private func melTokenEmbedding(_ token: Int32, melIndex: Int) -> MLXArray {
+        let tok = embed([token], key: "mel_embedding.weight")
+        let position = melIndex == 0 ? 0 : melIndex + 1
+        let pos = weights["mel_pos_embedding.emb.weight"]!
+            .take(MLXArray([Int32(position)], [1]), axis: 0)
+            .expandedDimensions(axis: 0)
+            .asType(tok.dtype)
+        return tok + pos
+    }
+
+    /// Prefills the cache with the conditioning/text prefix plus the start-mel
+    /// token and returns logits for the first generated token.
+    private func prefillMelLogits(prefixText: MLXArray, cache: inout GPTKVCache) -> MLXArray {
+        let start = melTokenEmbedding(Int32(config.gpt.startMelToken), melIndex: 0)
+        let hidden = gptCachedForward(concatenated([prefixText, start], axis: 1), cache: &cache)
+        return melLogits(fromHidden: hidden)
+    }
+
+    /// Feeds one generated token through the cached GPT and returns logits
+    /// for the next token. `melIndex` is the token's index in the mel input
+    /// (`[start] + generated`).
+    private func stepMelLogits(token: Int32, melIndex: Int, cache: inout GPTKVCache) -> MLXArray {
+        let hidden = gptCachedForward(melTokenEmbedding(token, melIndex: melIndex), cache: &cache)
+        return melLogits(fromHidden: hidden)
+    }
+
+    /// Reorders/duplicates the cache's batch rows so row `i` of the result
+    /// continues `parents[i]`'s sequence — the beam-search shuffle.
+    private func gatherCache(_ cache: GPTKVCache, parents: [Int]) -> GPTKVCache {
+        var result = cache
+        let ids = MLXArray(parents.map(Int32.init))
+        for layer in cache.layers.indices {
+            if let entry = cache.layers[layer] {
+                result.layers[layer] = (
+                    keys: take(entry.keys, ids, axis: 0),
+                    values: take(entry.values, ids, axis: 0))
+            }
+        }
+        return result
+    }
+
+    /// Feeds one token per beam (all at the same mel index) through the
+    /// cached GPT as a single batched forward; returns `[beams, vocab]` logits.
+    private func batchedStepMelLogits(
+        tokens: [Int32], melIndex: Int, cache: inout GPTKVCache
+    ) -> MLXArray {
+        let tok = embed(tokens, key: "mel_embedding.weight").transposed(1, 0, 2)
+        let position = melIndex == 0 ? 0 : melIndex + 1
+        let pos = weights["mel_pos_embedding.emb.weight"]!
+            .take(MLXArray([Int32(position)], [1]), axis: 0)
+            .expandedDimensions(axis: 0)
+            .asType(tok.dtype)
+        let hidden = gptCachedForward(tok + pos, cache: &cache)
+        return melLogits(fromHidden: hidden)
+    }
+
+    private func gptCachedForward(_ x: MLXArray, cache: inout GPTKVCache) -> MLXArray {
+        var h = x
+        for i in 0..<config.gpt.layers {
+            h = gptBlockCached(h, prefix: "gpt.h.\(i)", layer: i, cache: &cache)
+        }
+        return layerNorm(h, prefix: "gpt.ln_f")
+    }
+
+    private func gptBlockCached(
+        _ x: MLXArray, prefix: String, layer: Int, cache: inout GPTKVCache
+    ) -> MLXArray {
+        var h = x + gptAttentionCached(
+            layerNorm(x, prefix: "\(prefix).ln_1"),
+            prefix: "\(prefix).attn", layer: layer, cache: &cache)
+        h = h + gptMLP(layerNorm(h, prefix: "\(prefix).ln_2"), prefix: "\(prefix).mlp")
+        return h
+    }
+
+    private func gptAttentionCached(
+        _ x: MLXArray, prefix: String, layer: Int, cache: inout GPTKVCache
+    ) -> MLXArray {
+        let b = x.dim(0)
+        let t = x.dim(1)
+        let qkv = conv1DLinear(x, prefix: "\(prefix).c_attn")
+        let parts = split(qkv, parts: 3, axis: -1)
+        let q = parts[0].reshaped([b, t, heads, headDim]).transposed(0, 2, 1, 3)
+        var k = parts[1].reshaped([b, t, heads, headDim]).transposed(0, 2, 1, 3)
+        var v = parts[2].reshaped([b, t, heads, headDim]).transposed(0, 2, 1, 3)
+        if let past = cache.layers[layer] {
+            k = concatenated([past.keys, k], axis: 2)
+            v = concatenated([past.values, v], axis: 2)
+        }
+        cache.layers[layer] = (k, v)
+        // Prefill runs with an empty cache (square causal mask); incremental
+        // steps are single-token and attend to everything.
+        let mask: MLXFast.ScaledDotProductAttentionMaskMode =
+            t <= 1 ? .none : causalMask(length: t, dtype: x.dtype)
+        let out = MLXFast.scaledDotProductAttention(
+            queries: q,
+            keys: k,
+            values: v,
+            scale: 1.0 / Foundation.sqrt(Float(headDim)),
+            mask: mask)
+        let merged = out.transposed(0, 2, 1, 3).reshaped([b, t, modelDim])
+        return conv1DLinear(merged, prefix: "\(prefix).c_proj")
     }
 
     private func gpt(_ embeddings: MLXArray) -> MLXArray {

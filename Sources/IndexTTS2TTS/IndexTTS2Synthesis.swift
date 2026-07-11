@@ -2,6 +2,19 @@ import AudioCommon
 import Foundation
 import MLX
 
+
+enum IndexTTS2StageTimer {
+    static let enabled = ProcessInfo.processInfo.environment["INDEXTTS2_TIMING"] == "1"
+
+    static func report(_ stage: String, since start: inout CFAbsoluteTime) {
+        let now = CFAbsoluteTimeGetCurrent()
+        if enabled {
+            FileHandle.standardError.write(Data("[itts2] \(stage): \(String(format: "%.2f", now - start))s\n".utf8))
+        }
+        start = now
+    }
+}
+
 public struct IndexTTS2SynthesisOptions: Equatable, Sendable {
     public var speakingRate: Float
     public var maxInternalPauseDuration: Float?
@@ -123,10 +136,12 @@ extension IndexTTS2NativeRuntime {
         semanticOptions: IndexTTS2SemanticGenerationOptions = IndexTTS2SemanticGenerationOptions(),
         synthesisOptions: IndexTTS2SynthesisOptions = .default
     ) throws -> [Float] {
+        var stageStart = CFAbsoluteTimeGetCurrent()
         let semantic = try semanticGPT.generateSemanticCodes(
             textTokens: textTokens,
             conditioning: conditioning,
             options: semanticOptions)
+        IndexTTS2StageTimer.report("semantic-gpt (\(semantic.codeCount) codes)", since: &stageStart)
         return try synthesize(
             textTokens: textTokens,
             conditioning: conditioning,
@@ -180,14 +195,20 @@ extension IndexTTS2NativeRuntime {
         let generatedCondition = lengthRegulator(semanticPrompt, targetLength: targetLength)
         let condition = concatenated([conditioning.promptCondition, generatedCondition], axis: 1)
 
+        var stageStart = CFAbsoluteTimeGetCurrent()
+        eval(condition)
+        IndexTTS2StageTimer.report("s2mel-prep", since: &stageStart)
         let mel = s2MelFlow.inference(
             condition: condition,
             promptMel: conditioning.promptMel,
             style: conditioning.styleEmbedding)
+        eval(mel)
+        IndexTTS2StageTimer.report("s2mel-flow", since: &stageStart)
         let promptFrames = conditioning.promptMel.dim(2)
         let generatedMel = mel[0..., 0..., promptFrames..<mel.dim(2)]
         let waveform = vocoder(generatedMel.transposed(0, 2, 1)).asType(.float32)
         eval(waveform)
+        IndexTTS2StageTimer.report("bigvgan", since: &stageStart)
         var samples = waveform.asArray(Float.self)
         if let maxPauseDuration = synthesisOptions.maxInternalPauseDuration {
             samples = IndexTTS2PauseCompressor.compress(

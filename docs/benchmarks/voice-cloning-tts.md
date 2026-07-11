@@ -17,15 +17,14 @@ afternoon sun."
 | F5-TTS (clone, 16 steps, default) | 336M fp16 | 0.8 GB | 5.09 s | 2.91 s | **0.57** | 1-word sub |
 | F5-TTS (clone, 32 steps) | 336M fp16 | 0.8 GB | 5.09 s | 5.75 s | 1.13 | 1-word sub |
 | F5-TTS (clone, 12 steps) | 336M fp16 | 0.8 GB | 5.09 s | 2.19 s | 0.43 | 1-word sub |
-| IndexTTS2 (clone) | 1.5B-class fp16 | 2.8 GB | 5.27 s | ~45 s * | ~9 * | exact |
+| IndexTTS2 (clone) | 1.5B-class fp16 | 2.8 GB | 5.39 s | 19.6 s | 3.6 | exact |
 
 **Machine**: Apple M5 Pro, 48 GB, release build with compiled metallib.
 Synth time excludes model load (Higgs/F5 report it directly); RSS from
 `/usr/bin/time -l`, includes weights.
 
-\* IndexTTS2's CLI does not report synthesis-only timing; the figure is wall
-clock minus an estimated ~10 s load of its expanded multi-stage bundle
-(GPT + S2Mel + BigVGAN + w2v-BERT/MaskGCT/CAMPPlus auxiliaries).
+IndexTTS2 stage timing (via `INDEXTTS2_TIMING=1`): reference conditioning
+0.6 s, semantic GPT 13.3 s, S2Mel flow 1.8 s, BigVGAN 3.9 s.
 
 ## Notes
 
@@ -42,8 +41,13 @@ clock minus an estimated ~10 s load of its expanded multi-stage bundle
   found them indistinguishable, so the default moved from 32 to **16**
   (`--f5-steps 32` remains for maximum fidelity). Steps run over the full
   reference+target sequence, so RTF also improves on longer utterances.
-- **IndexTTS2** is the heavyweight path (multi-stage GPT + diffusion +
-  vocoder); prefer it for its emotion-control surface rather than latency.
+- **IndexTTS2 dropped from ~9 to 3.6 RTF** by giving the semantic GPT a KV
+  cache (decode was quadratic — every token re-ran the full sequence) and
+  batching the three sampling beams into one forward per step with
+  gather-based beam reordering. Remaining cost: GPT kernel-launch overhead
+  (~46 ms/step), BigVGAN (fp32 by design — Snake activations are
+  fp16-fragile), and S2Mel's 25 upstream-default flow steps. Still the
+  heavyweight path; prefer it for its emotion-control surface.
 - Cloned-voice quality gates for Higgs and F5 (ASR roundtrips en/zh, plus
   es/de/ja for the Python reference) live in the E2E suites; see
   `docs/models/higgs-tts.md` and `docs/models/f5-tts.md`.

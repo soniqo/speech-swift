@@ -320,11 +320,14 @@ public final class IndexTTS2TTSModel: SpeechGenerationModel, ModelMemoryManageab
                 reason: "Tokenizer could not be initialized from bpe.model.")
         }
         let textTokens = try tokenizer.encode(text)
+        var stageStart = CFAbsoluteTimeGetCurrent()
         let runtime = try runtime()
+        IndexTTS2StageTimer.report("runtime-load", since: &stageStart)
         let conditioning = try runtime.prepareReferenceConditioning(
             referenceAudio: referenceAudio,
             emotionReferenceAudio: emotionReferenceAudio,
             emotionControl: emotionControl)
+        IndexTTS2StageTimer.report("reference-conditioning", since: &stageStart)
         return try runtime.synthesize(
             textTokens: textTokens,
             conditioning: conditioning,
