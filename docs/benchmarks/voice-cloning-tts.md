@@ -17,16 +17,23 @@ afternoon sun."
 | F5-TTS (clone, 16 steps, default) | 336M fp16 | 0.8 GB | 5.09 s | 2.91 s | **0.57** | 1-word sub |
 | F5-TTS (clone, 32 steps) | 336M fp16 | 0.8 GB | 5.09 s | 5.75 s | 1.13 | 1-word sub |
 | F5-TTS (clone, 12 steps) | 336M fp16 | 0.8 GB | 5.09 s | 2.19 s | 0.43 | 1-word sub |
-| IndexTTS2 (clone) | 1.5B-class fp16 | 2.8 GB | 5.39 s | 16.0 s | 3.0 | exact |
+| IndexTTS2 (clone) | 1.5B-class fp16 | 2.8 GB | 5.49 s | 14.9 s | **2.7** | exact |
 
 **Machine**: Apple M5 Pro, 48 GB, release build with compiled metallib.
 Synth time excludes model load (Higgs/F5 report it directly); RSS from
 `/usr/bin/time -l`, includes weights.
 
 IndexTTS2 stage timing (via `INDEXTTS2_TIMING=1`): reference conditioning
-0.6 s, semantic GPT 12.9 s, S2Mel flow 1.8 s, BigVGAN 0.7 s.
-S2Mel step sweep (`--indextts2-s2mel-steps`, word-identical roundtrips):
-25 steps 1.95 s, 15 steps 1.14 s, 10 steps 0.73 s.
+0.6 s, semantic GPT 12.7 s, S2Mel flow 1.0 s (15 steps, the default),
+BigVGAN 0.7 s. The GPT step floor improved ~15% (interleaved min-of-5,
+41.9 -> 35.6 ms/step) from fusing the hand-rolled layer norms into
+`MLX.layerNorm`, fusing matmul+bias via `addMM`, skipping the beam-cache
+gather when every beam continues its own row, and computing log-softmax
+on GPU so the host receives ready log-probs; wall-clock runs vary with
+thermal state, so per-step minima are the comparable metric.
+S2Mel step sweep (`--indextts2-s2mel-steps`, word-identical roundtrips,
+ear-validated): 25 steps 1.7 s, 15 steps 1.0 s, 10 steps 0.7 s —
+**default is now 15**; use 25 for upstream-exact flow.
 
 ## Notes
 

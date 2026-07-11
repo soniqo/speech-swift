@@ -75,7 +75,7 @@ mels with S2Mel, and vocodes the result with BigVGAN.
 | `--indextts2-emotion <preset-or-vector>` | Optional upstream-style emotion vector control. Presets: `eager`, `happy`, `excited`, `angry`, `sad`, `afraid`, `disgusted`, `melancholic`, `surprised`, `calm`. Custom vectors use the 8-value order `happy,angry,sad,afraid,disgusted,melancholic,surprised,calm` and must sum to `<= 0.8`. Mutually exclusive with `--indextts2-emotion-audio`. |
 | `--indextts2-emotion-weight <0...1>` | Scales `--indextts2-emotion`; defaults to `1.0`. Keep this modest when speaker identity matters. |
 | `--indextts2-speaking-rate <0.5...1.5>` | Shortens or lengthens generated speech by changing the S2Mel frame expansion. Values above `1.0` are faster. Defaults to `1.0`. |
-| `--indextts2-s2mel-steps <4...100>` | S2Mel flow steps. Defaults to the upstream `25`; `15` halves the S2Mel stage with word-identical ASR roundtrips in local testing. |
+| `--indextts2-s2mel-steps <4...100>` | S2Mel flow steps. Defaults to `15` (ear-validated, word-identical ASR roundtrips); `25` matches the upstream flow exactly. |
 | `--indextts2-max-pause <0.05...2.0>` | Optional post-vocoder cap for long internal low-energy spans. Omit to keep raw model timing; use small values such as `0.05` only when generated speech has audible dead pauses. |
 
 Default semantic generation uses upstream-style beam sampling with `beams=3`,

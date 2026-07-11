@@ -23,7 +23,7 @@ public struct IndexTTS2SynthesisOptions: Equatable, Sendable {
     public init(
         speakingRate: Float = 1.0,
         maxInternalPauseDuration: Float? = nil,
-        s2MelSteps: Int = 25
+        s2MelSteps: Int = 15
     ) throws {
         guard speakingRate.isFinite, speakingRate >= 0.5, speakingRate <= 1.5 else {
             throw AudioModelError.invalidConfiguration(

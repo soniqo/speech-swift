@@ -172,8 +172,8 @@ public struct SpeakCommand: ParsableCommand {
     @Option(name: .long, help: "[indextts2] Optional cap for long internal pauses, in seconds, from 0.05 to 2.0. Omit to keep raw model timing.")
     public var indextts2MaxPause: Float?
 
-    @Option(name: .customLong("indextts2-s2mel-steps"), help: "[indextts2] S2Mel flow steps (default 25; lower is faster)")
-    public var indextts2S2MelSteps: Int = 25
+    @Option(name: .customLong("indextts2-s2mel-steps"), help: "[indextts2] S2Mel flow steps (default 15, ear-validated; 25 matches upstream exactly)")
+    public var indextts2S2MelSteps: Int = 15
 
     // MARK: - F5-TTS-specific options
 

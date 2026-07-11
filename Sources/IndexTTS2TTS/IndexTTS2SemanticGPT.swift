@@ -249,11 +249,12 @@ final class IndexTTS2SemanticGPT {
         for _ in 0..<options.maxSemanticTokens {
             var candidates: [SemanticCandidate] = []
             let vocab = batchedLogits.dim(-1)
-            let allScores = batchedLogits.asType(.float32).asArray(Float.self)
+            let floatLogits = batchedLogits.asType(.float32)
+            let logProbs = floatLogits - floatLogits.logSumExp(axis: -1, keepDims: true)
+            let allScores = logProbs.asArray(Float.self)
 
             for (beamIndex, beam) in active.enumerated() {
-                var scores = Self.logSoftmax(
-                    Array(allScores[(beamIndex * vocab)..<((beamIndex + 1) * vocab)]))
+                var scores = Array(allScores[(beamIndex * vocab)..<((beamIndex + 1) * vocab)])
                 applyRepetitionPenalty(&scores, previousTokens: beam.tokens, penalty: options.repetitionPenalty)
                 applyTemperature(&scores, temperature: options.temperature)
                 applyTopK(&scores, k: options.topK, minTokensToKeep: 2)
@@ -780,6 +781,12 @@ final class IndexTTS2SemanticGPT {
     /// Reorders/duplicates the cache's batch rows so row `i` of the result
     /// continues `parents[i]`'s sequence — the beam-search shuffle.
     private func gatherCache(_ cache: GPTKVCache, parents: [Int]) -> GPTKVCache {
+        if let entry = cache.layers.compactMap({ $0 }).first,
+            entry.keys.dim(0) == parents.count,
+            parents.enumerated().allSatisfy({ $0.offset == $0.element })
+        {
+            return cache
+        }
         var result = cache
         let ids = MLXArray(parents.map(Int32.init))
         for layer in cache.layers.indices {
@@ -1114,34 +1121,26 @@ final class IndexTTS2SemanticGPT {
 
     private func linear(_ x: MLXArray, prefix: String, bias: Bool = true) -> MLXArray {
         let weight = weights["\(prefix).weight"]!.asType(x.dtype)
-        var y = matmul(x, weight.transposed(1, 0))
         if bias, let b = weights["\(prefix).bias"] {
-            y = y + b.asType(y.dtype)
+            return addMM(b.asType(x.dtype), x, weight.transposed(1, 0))
         }
-        return y
+        return matmul(x, weight.transposed(1, 0))
     }
 
     private func conv1DLinear(_ x: MLXArray, prefix: String) -> MLXArray {
         let weight = weights["\(prefix).weight"]!.asType(x.dtype)
-        var y = matmul(x, weight)
         if let b = weights["\(prefix).bias"] {
-            y = y + b.asType(y.dtype)
+            return addMM(b.asType(x.dtype), x, weight)
         }
-        return y
+        return matmul(x, weight)
     }
 
     private func layerNorm(_ x: MLXArray, prefix: String, eps: Float = 1e-5) -> MLXArray {
-        let mean = x.mean(axis: -1, keepDims: true)
-        let centered = x - mean
-        let variance = (centered * centered).mean(axis: -1, keepDims: true)
-        var y = centered / sqrt(variance + MLXArray(eps).asType(x.dtype))
-        if let weight = weights["\(prefix).weight"] {
-            y = y * weight.asType(y.dtype)
-        }
-        if let bias = weights["\(prefix).bias"] {
-            y = y + bias.asType(y.dtype)
-        }
-        return y
+        MLX.layerNorm(
+            x,
+            weight: weights["\(prefix).weight"]?.asType(x.dtype),
+            bias: weights["\(prefix).bias"]?.asType(x.dtype),
+            eps: eps)
     }
 
     private func embed(_ ids: [Int32], key: String) -> MLXArray {
