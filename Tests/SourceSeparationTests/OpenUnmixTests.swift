@@ -2,6 +2,8 @@ import XCTest
 @testable import SourceSeparation
 @testable import AudioCommon
 import MLX
+import MLXNN
+import MLXRandom
 import Foundation
 
 final class OpenUnmixConfigTests: XCTestCase {
@@ -83,6 +85,54 @@ final class LSTMCellTests: XCTestCase {
         XCTAssertEqual(newC.shape, [1, 4])
     }
 
+    /// Fused gate path must produce the same output as the un-fused path —
+    /// catches transpose / concat-axis / bias-add mistakes in
+    /// `prepareForInference()`.
+    func testLSTMCellFusedEqualsUnfused() {
+        let inputSize = 7
+        let hiddenSize = 5
+        let cell = LSTMCell(inputSize: inputSize, hiddenSize: hiddenSize)
+
+        // Random but reproducible weights so the test is stable.
+        MLXRandom.seed(0xC0DEFACE)
+        let gateSize = 4 * hiddenSize
+        let params = ModuleParameters.unflattened([
+            "weight_ih": MLXRandom.normal([gateSize, inputSize]),
+            "weight_hh": MLXRandom.normal([gateSize, hiddenSize]),
+            "bias_ih":   MLXRandom.normal([gateSize]),
+            "bias_hh":   MLXRandom.normal([gateSize]),
+        ])
+        cell.update(parameters: params)
+
+        let x = MLXRandom.normal([1, inputSize])
+        let h = MLXRandom.normal([1, hiddenSize])
+        let c = MLXRandom.normal([1, hiddenSize])
+        eval(x, h, c)
+
+        // Unfused output (default path until prepareForInference is called).
+        let (unfusedH, unfusedC) = cell.step(x, h: h, c: c)
+        eval(unfusedH, unfusedC)
+        let unfusedHArr = unfusedH.asArray(Float.self)
+        let unfusedCArr = unfusedC.asArray(Float.self)
+
+        // Fused output (same instance — prepareForInference flips the path).
+        cell.prepareForInference()
+        let (fusedH, fusedC) = cell.step(x, h: h, c: c)
+        eval(fusedH, fusedC)
+        let fusedHArr = fusedH.asArray(Float.self)
+        let fusedCArr = fusedC.asArray(Float.self)
+
+        XCTAssertEqual(unfusedHArr.count, fusedHArr.count)
+        for i in 0..<unfusedHArr.count {
+            XCTAssertEqual(unfusedHArr[i], fusedHArr[i], accuracy: 1e-5,
+                "h[\(i)] differs between fused and unfused paths")
+        }
+        for i in 0..<unfusedCArr.count {
+            XCTAssertEqual(unfusedCArr[i], fusedCArr[i], accuracy: 1e-5,
+                "c[\(i)] differs between fused and unfused paths")
+        }
+    }
+
     func testBiLSTMLayerOutputShape() {
         let layer = BiLSTMLayer(inputSize: 8, hiddenSize: 4)
         let x = MLXArray.ones([5, 8])  // [T=5, features=8]
@@ -101,6 +151,117 @@ final class LSTMCellTests: XCTestCase {
 }
 
 // MARK: - E2E Tests (require model download)
+
+final class STFTInverseMLXTests: XCTestCase {
+
+    /// MLX iSTFT must match the Swift/vDSP iSTFT within a loose tolerance
+    /// (FP reduction order differs across the overlap-add).
+    func testInverseMLXMatchesSwift() {
+        let stft = STFTProcessor(nFFT: 4096, nHop: 1024)
+        // 0.5s of mono audio at 44.1k → enough frames to exercise overlap-add.
+        let n = 22050
+        var rng = SystemRandomNumberGenerator()
+        var audio = [Float](repeating: 0, count: n)
+        for i in 0..<n {
+            audio[i] = Float.random(in: -1...1, using: &rng) * 0.5
+        }
+
+        // Forward STFT to get a realistic complex spectrum.
+        let (real, imag) = stft.forward(audio)
+        let T = real.count
+        let F = real[0].count
+
+        let swiftOut = stft.inverse(real: real, imag: imag, length: n)
+
+        // Build [T, F] MLXArrays from the same spectra.
+        var realFlat = [Float](repeating: 0, count: T * F)
+        var imagFlat = [Float](repeating: 0, count: T * F)
+        for t in 0..<T {
+            for f in 0..<F {
+                realFlat[t * F + f] = real[t][f]
+                imagFlat[t * F + f] = imag[t][f]
+            }
+        }
+        let realMLX = MLXArray(realFlat, [T, F])
+        let imagMLX = MLXArray(imagFlat, [T, F])
+
+        let mlxOut = stft.inverseMLX(real: realMLX, imag: imagMLX, length: n)
+        eval(mlxOut)
+        let mlxArr = mlxOut.asArray(Float.self)
+
+        XCTAssertEqual(swiftOut.count, mlxArr.count)
+        var maxDiff: Float = 0
+        for i in 0..<n {
+            let d = abs(swiftOut[i] - mlxArr[i])
+            if d > maxDiff { maxDiff = d }
+        }
+        // 1e-3 absolute — both paths are doing the same math but with
+        // different reduction order (vDSP per-frame vs MLX batched OLA).
+        XCTAssertLessThan(maxDiff, 1e-3,
+            "max abs diff between Swift and MLX iSTFT: \(maxDiff)")
+    }
+}
+
+final class WienerFilterMLXTests: XCTestCase {
+
+    /// MLX Wiener must match the Swift reference within FP-reordering noise on
+    /// random inputs. Tolerance is loose (1e-3 absolute) because reduction
+    /// order differs, but the algorithm produces the same stems.
+    func testMLXMatchesSwiftWiener() {
+        let nSources = 4
+        let T = 24      // 2 windows below windowLen
+        let F = 16
+        let windowLen = 10  // exercise the windowing branch
+
+        MLXRandom.seed(0xABCDEF)
+        var rng = SystemRandomNumberGenerator()
+
+        func random3(_ J: Int, _ T: Int, _ F: Int) -> [[[Float]]] {
+            (0..<J).map { _ in
+                (0..<T).map { _ in
+                    (0..<F).map { _ in Float.random(in: 0.01...1.0, using: &rng) }
+                }
+            }
+        }
+        func random2(_ T: Int, _ F: Int) -> [[Float]] {
+            (0..<T).map { _ in (0..<F).map { _ in Float.random(in: -1.0...1.0, using: &rng) } }
+        }
+
+        let tgtL = random3(nSources, T, F)
+        let tgtR = random3(nSources, T, F)
+        let mRL = random2(T, F), mIL = random2(T, F)
+        let mRR = random2(T, F), mIR = random2(T, F)
+
+        let swiftOut = WienerFilter.apply(
+            targetMagsL: tgtL, targetMagsR: tgtR,
+            mixRealL: mRL, mixImagL: mIL,
+            mixRealR: mRR, mixImagR: mIR,
+            iterations: 1, windowLen: windowLen)
+
+        let mlxOut = WienerFilterMLX.apply(
+            targetMagsL: tgtL, targetMagsR: tgtR,
+            mixRealL: mRL, mixImagL: mIL,
+            mixRealR: mRR, mixImagR: mIR,
+            iterations: 1, windowLen: windowLen)
+
+        XCTAssertEqual(swiftOut.count, mlxOut.count)
+        for j in 0..<nSources {
+            for (sw, mx) in [
+                (swiftOut[j].realL, mlxOut[j].realL),
+                (swiftOut[j].imagL, mlxOut[j].imagL),
+                (swiftOut[j].realR, mlxOut[j].realR),
+                (swiftOut[j].imagR, mlxOut[j].imagR),
+            ] {
+                for t in 0..<T {
+                    for f in 0..<F {
+                        XCTAssertEqual(sw[t][f], mx[t][f], accuracy: 1e-3,
+                            "source \(j) at (t=\(t), f=\(f)) differs")
+                    }
+                }
+            }
+        }
+    }
+}
 
 final class E2EOpenUnmixTests: XCTestCase {
 
@@ -159,6 +320,25 @@ final class E2EOpenUnmixTests: XCTestCase {
             XCTAssertEqual(stereoStem.count, 2, "\(target.rawValue) should be stereo")
             XCTAssertEqual(stereoStem[0].count, audio[0].count, "\(target.rawValue) length mismatch L")
             XCTAssertEqual(stereoStem[1].count, audio[1].count, "\(target.rawValue) length mismatch R")
+        }
+    }
+
+    func testSeparateResamplesNon44kInput() throws {
+        let s = try separator
+        // Feed 48 kHz audio. UMX runs at 44.1 kHz, so separate() must resample
+        // the mix to the model rate; stems come back at 44.1 kHz, not 48 kHz.
+        let audio48 = makeStereoTestSignal(seconds: 2.0, sampleRate: 48000)
+        let stems = s.separate(audio: audio48, sampleRate: 48000, wiener: false)
+        let expected = Int((Double(audio48[0].count) * 44100.0 / 48000.0).rounded())
+        XCTAssertEqual(stems.count, 4)
+        for target in SeparationTarget.allCases {
+            guard let stem = stems[target] else {
+                XCTFail("Missing stem: \(target.rawValue)")
+                continue
+            }
+            XCTAssertEqual(stem[0].count, expected,
+                "\(target.rawValue) should be at the 44.1 kHz model rate (got \(stem[0].count), expected \(expected))")
+            XCTAssertEqual(stem[1].count, expected)
         }
     }
 

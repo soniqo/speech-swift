@@ -98,6 +98,7 @@ final class DiagnosticsMonitor {
 
 struct DiagnosticsView: View {
     let monitor: DiagnosticsMonitor
+    var asrBackend: String = "—"
 
     var body: some View {
         VStack(spacing: 8) {
@@ -106,6 +107,7 @@ struct DiagnosticsView: View {
                 MetricLabel(title: "CPU", value: String(format: "%.0f%%", monitor.cpuUsage), color: cpuColor)
                 MetricLabel(title: "MEM", value: String(format: "%.0fMB", monitor.memoryMB), color: memColor)
                 MetricLabel(title: "VAD", value: String(format: "%.2f", monitor.vadLevel), color: vadColor)
+                MetricLabel(title: "ASR", value: asrBackend, color: asrColor)
             }
             .font(.caption2.monospaced())
 
@@ -127,6 +129,14 @@ struct DiagnosticsView: View {
     private var cpuColor: Color { monitor.cpuUsage > 150 ? .red : monitor.cpuUsage > 80 ? .orange : .blue }
     private var memColor: Color { monitor.memoryMB > 2000 ? .red : monitor.memoryMB > 1000 ? .orange : .purple }
     private var vadColor: Color { monitor.vadLevel > 0.1 ? .red : monitor.vadLevel > 0.03 ? .orange : .green }
+    private var asrColor: Color {
+        switch asrBackend {
+        case "ANE": return .green
+        case "GPU": return .blue
+        case "CPU": return .orange
+        default:    return .secondary
+        }
+    }
 }
 
 // MARK: - Helpers

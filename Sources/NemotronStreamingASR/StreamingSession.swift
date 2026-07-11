@@ -13,11 +13,14 @@ public class StreamingSession {
     private let vocabulary: NemotronVocabulary
     private let melPreprocessor: StreamingMelPreprocessor
     private let rnntDecoder: RNNTGreedyDecoder
+    private var wordBoostingState: WordBoostingState?
 
     private var cacheLastChannel: MLMultiArray
     private var cacheLastTime: MLMultiArray
     private var cacheLastChannelLen: MLMultiArray
     private var preCache: MLMultiArray
+    /// Nil for English-only bundles whose encoder has no `language_mask` input.
+    private let languageMask: MLMultiArray?
 
     private var h: MLMultiArray
     private var c: MLMultiArray
@@ -33,14 +36,18 @@ public class StreamingSession {
     private var allLogProbs: [Float] = []
     private var sampleBuffer: [Float] = []
     private var segmentIndex: Int = 0
+    internal private(set) var wordBoostingChangedDecisions: Int = 0
 
     init(
         config: NemotronStreamingConfig,
+        languageSlot: Int,
         encoder: MLModel,
         decoder: MLModel,
         joint: MLModel,
         vocabulary: NemotronVocabulary,
-        melPreprocessor: StreamingMelPreprocessor
+        melPreprocessor: StreamingMelPreprocessor,
+        wordBoosting: WordBoostingConfig?,
+        wordBoostingTokenizer: NemotronSentencePieceUnigramTokenizer?
     ) throws {
         self.config = config
         self.encoder = encoder
@@ -48,7 +55,18 @@ public class StreamingSession {
         self.joint = joint
         self.vocabulary = vocabulary
         self.melPreprocessor = melPreprocessor
-        self.rnntDecoder = RNNTGreedyDecoder(config: config, decoder: decoder, joint: joint)
+        let wordBoostingContext = WordBoostingContext(
+            config: wordBoosting,
+            vocabulary: vocabulary,
+            tokenizer: wordBoostingTokenizer
+        )
+        self.rnntDecoder = RNNTGreedyDecoder(
+            config: config,
+            decoder: decoder,
+            joint: joint,
+            wordBoosting: wordBoostingContext
+        )
+        self.wordBoostingState = wordBoostingContext?.initialState()
 
         let layers = config.encoderLayers
         let hidden = config.encoderHidden
@@ -56,10 +74,26 @@ public class StreamingSession {
         let convCache = config.convCacheSize
         let preCacheSize = config.streaming.preCacheSize
         let numMelBins = config.numMelBins
+        let numPrompts = config.numPrompts
 
         preCache = try MLMultiArray(
             shape: [1, numMelBins as NSNumber, preCacheSize as NSNumber], dataType: .float32)
         memset(preCache.dataPointer, 0, numMelBins * preCacheSize * MemoryLayout<Float>.stride)
+
+        // One-hot language mask, only allocated when the encoder accepts it.
+        // The English-only bundle's encoder takes no `language_mask` input;
+        // multilingual 3.5 takes a 128-slot one-hot.
+        if encoder.modelDescription.inputDescriptionsByName.keys.contains("language_mask") {
+            let mask = try MLMultiArray(
+                shape: [1, numPrompts as NSNumber], dataType: .float32)
+            memset(mask.dataPointer, 0, numPrompts * MemoryLayout<Float>.stride)
+            let clamped = max(0, min(numPrompts - 1, languageSlot))
+            let lmPtr = mask.dataPointer.assumingMemoryBound(to: Float.self)
+            lmPtr[clamped] = 1.0
+            languageMask = mask
+        } else {
+            languageMask = nil
+        }
 
         cacheLastChannel = try MLMultiArray(
             shape: [layers, 1, attCtx, hidden] as [NSNumber], dataType: .float32)
@@ -112,6 +146,21 @@ public class StreamingSession {
         let samplesPerChunk = config.streaming.melFrames * config.hopLength
         let shiftMelFrames = config.streaming.outputFrames * config.subsamplingFactor
         let shiftSamples = shiftMelFrames * config.hopLength
+        // For the multilingual config (chunkMs=320) shiftSamples ==
+        // samplesPerChunk — adjacent chunks do NOT overlap, and that IS
+        // correct for this checkpoint. The trained encoder takes exactly
+        // `chunk_size` mel frames per call; right-context is provided via
+        // the streaming caches (`cache_last_*`), not via future audio in
+        // the current call. The export script trimmed the right-context
+        // outputs at trace time (`keep_all_outputs=False`), so feeding
+        // overlapped audio here would re-process already-consumed frames
+        // and desync the RNN-T predictor's LSTM state.
+        //
+        // The chunker's correctness is regressed by
+        // `E2ENemotronHarshAudioTests.testStreamingMatchesBatchOnCleanLongUtterance`
+        // (expects ≥0.95 streaming-vs-batch recall on clean continuous
+        // speech). DO NOT introduce audio-overlap here — see
+        // Configuration.swift docstring on `rightContext`.
         var results: [NemotronStreamingASRModel.PartialTranscript] = []
 
         while sampleBuffer.count >= samplesPerChunk {
@@ -149,7 +198,8 @@ public class StreamingSession {
             text: text,
             isFinal: true,
             confidence: confidence,
-            segmentIndex: segmentIndex
+            segmentIndex: segmentIndex,
+            wordBoostingChangedDecisions: wordBoostingChangedDecisions
         )]
     }
 
@@ -168,14 +218,19 @@ public class StreamingSession {
             chunkMel = rawMel
         }
 
-        let encoderInput = try MLDictionaryFeatureProvider(dictionary: [
+        let audioLenArr = try makeInt32Array(value: Int32(expectedFrames))
+        var encoderFeatures: [String: MLFeatureValue] = [
             "audio_signal": MLFeatureValue(multiArray: chunkMel),
-            "audio_length": MLFeatureValue(multiArray: makeInt32Array(value: Int32(expectedFrames))),
+            "audio_length": MLFeatureValue(multiArray: audioLenArr),
             "pre_cache": MLFeatureValue(multiArray: preCache),
             "cache_last_channel": MLFeatureValue(multiArray: cacheLastChannel),
             "cache_last_time": MLFeatureValue(multiArray: cacheLastTime),
             "cache_last_channel_len": MLFeatureValue(multiArray: cacheLastChannelLen),
-        ])
+        ]
+        if let languageMask = languageMask {
+            encoderFeatures["language_mask"] = MLFeatureValue(multiArray: languageMask)
+        }
+        let encoderInput = try MLDictionaryFeatureProvider(dictionary: encoderFeatures)
         let encoderOutput = try encoder.prediction(from: encoderInput)
 
         let encoded = encoderOutput.featureValue(for: "encoded_output")!.multiArrayValue!
@@ -194,7 +249,6 @@ public class StreamingSession {
         let result = try rnntDecoder.decode(
             encoded: encoded,
             encodedLength: encodedLength,
-            frameOffset: 0,
             h: &h,
             c: &c,
             decoderOutput: &decoderOutput,
@@ -202,11 +256,13 @@ public class StreamingSession {
             jointProvider: jointProvider,
             tokenArray: tokenArray,
             encSlice: encSlice,
-            argmaxBuf: argmaxBuf
+            argmaxBuf: argmaxBuf,
+            wordBoostingState: &wordBoostingState
         )
 
         allTokens.append(contentsOf: result.tokens)
         allLogProbs.append(contentsOf: result.tokenLogProbs)
+        wordBoostingChangedDecisions += result.wordBoostingChangedDecisions
 
         let text = vocabulary.decode(allTokens)
         guard !text.isEmpty else { return nil }
@@ -223,7 +279,8 @@ public class StreamingSession {
             text: text,
             isFinal: false,
             confidence: confidence,
-            segmentIndex: segmentIndex
+            segmentIndex: segmentIndex,
+            wordBoostingChangedDecisions: wordBoostingChangedDecisions
         )
     }
 

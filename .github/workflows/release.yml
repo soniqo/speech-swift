@@ -11,7 +11,7 @@ jobs:
   build:
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: main
 
@@ -24,33 +24,60 @@ jobs:
       - name: Package
         run: |
           mkdir -p dist
+          # `speech`/`speech-server` are the canonical names; `audio`/`audio-server`
+          # are deprecated aliases produced by the same targets in Package.swift.
+          cp .build/release/speech .build/release/speech-server dist/
           cp .build/release/audio .build/release/audio-server dist/
           cp .build/release/mlx.metallib dist/
-          # KokoroTTS loads fr/pt/hi pronunciation dicts via Bundle.module,
-          # which hard-crashes if the resource bundle isn't beside the binary (#212).
-          cp -R .build/release/Qwen3Speech_KokoroTTS.bundle dist/
+          # Copy every SPM-generated resource bundle next to the binary.
+          # KokoroTTS needs its own bundle for fr/pt/hi pronunciation dicts (#212);
+          # MAGNeT/VoxCPM2/etc. need swift-transformers_Hub.bundle for tokenizer
+          # downloads, and MagpieTTS ships baked speaker tables in its own bundle.
+          # Globbing keeps future modules from silently shipping broken.
+          cp -R .build/release/*.bundle dist/
           cd dist
-          tar czf audio-macos-arm64.tar.gz audio audio-server mlx.metallib Qwen3Speech_KokoroTTS.bundle
+          tar czf speech-macos-arm64.tar.gz speech speech-server audio audio-server mlx.metallib *.bundle
 
       - name: Upload release asset
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/audio-macos-arm64.tar.gz
+          files: dist/speech-macos-arm64.tar.gz
 
-      - name: Update Homebrew formula
+      # Mint a short-lived installation token for soniqo/homebrew-tap via the
+      # `soniqo-release-bot` GitHub App. The token is auto-revoked when the job
+      # ends and is scoped to Contents: write on the tap only. App credentials
+      # live as repo secrets (RELEASE_BOT_APP_ID, RELEASE_BOT_PRIVATE_KEY).
+      - name: Mint Homebrew tap token
+        id: tap-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+          owner: soniqo
+          repositories: homebrew-tap
+
+      - name: Update Homebrew tap
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ steps.tap-token.outputs.token }}
         run: |
-          SHA=$(shasum -a 256 dist/audio-macos-arm64.tar.gz | awk '{print $1}')
+          SHA=$(shasum -a 256 dist/speech-macos-arm64.tar.gz | awk '{print $1}')
           TAG="${GITHUB_REF_NAME}"
-          URL="https://github.com/${{ github.repository }}/releases/download/${TAG}/audio-macos-arm64.tar.gz"
+          VERSION="${TAG#v}"
+          URL="https://github.com/${{ github.repository }}/releases/download/${TAG}/speech-macos-arm64.tar.gz"
 
-          git fetch origin main
-          git checkout main
+          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/soniqo/homebrew-tap.git" /tmp/homebrew-tap
+          cd /tmp/homebrew-tap
 
+          # All three sed rewrites must stay in sync — previously only `url`
+          # and `sha256` were rewritten while `version` drifted, producing
+          # tap formulas that downloaded the new tarball but reported the
+          # old version (see soniqo/speech-swift#298).
           sed -i '' "s|url \".*\"|url \"${URL}\"|" Formula/speech.rb
           sed -i '' "s|sha256 \".*\"|sha256 \"${SHA}\"|" Formula/speech.rb
+          sed -i '' "s|version \".*\"|version \"${VERSION}\"|" Formula/speech.rb
 
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "soniqo-release-bot[bot]"
+          git config user.email "soniqo-release-bot[bot]@users.noreply.github.com"
           git add Formula/speech.rb
-          git diff --cached --quiet || git commit -m "brew: update formula for ${TAG}"
+          git diff --cached --quiet || git commit -m "speech: update to ${TAG}"
           git push origin main

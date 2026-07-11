@@ -24,11 +24,22 @@ public class CoreMLASRModel {
     /// Load full CoreML ASR from HuggingFace.
     ///
     /// Downloads encoder and decoder models from `aufklarer/Qwen3-ASR-CoreML`.
+    ///
+    /// Compute units are split per-component because the encoder and decoder
+    /// have different optimal backends: the encoder defaults to `.all` (the
+    /// 30 s fixed-shape graph runs well on GPU on most Macs), while the
+    /// decoder defaults to `.cpuAndNeuralEngine` (the autoregressive
+    /// MLState path is ANE-friendly and ~7× faster there than GPU per the
+    /// rebuilt-encoder PR). A single `computeUnits` parameter that
+    /// propagated into both calls silently overrode the decoder's stated
+    /// `.cpuAndNeuralEngine` default with `.all`, costing real ANE
+    /// throughput on the full-pipeline path.
     public static func fromPretrained(
         encoderModelId: String = CoreMLASREncoder.defaultModelId,
         decoderModelId: String = CoreMLASREncoder.defaultModelId,
         tokenizerModelId: String = "aufklarer/Qwen3-ASR-0.6B-MLX-4bit",
-        computeUnits: MLComputeUnits = .all,
+        encoderComputeUnits: MLComputeUnits = CoreMLComputeUnitsResolver.resolved(default: .all),
+        decoderComputeUnits: MLComputeUnits = CoreMLComputeUnitsResolver.resolved(default: .cpuAndNeuralEngine),
         cacheDir: URL? = nil,
         offlineMode: Bool = false,
         progressHandler: ((Double, String) -> Void)? = nil
@@ -37,7 +48,7 @@ public class CoreMLASRModel {
         progressHandler?(0.0, "Loading CoreML encoder...")
         let enc = try await CoreMLASREncoder.fromPretrained(
             modelId: encoderModelId,
-            computeUnits: computeUnits,
+            computeUnits: encoderComputeUnits,
             cacheDir: cacheDir,
             offlineMode: offlineMode
         ) { p, msg in
@@ -48,7 +59,7 @@ public class CoreMLASRModel {
         progressHandler?(0.3, "Loading CoreML decoder...")
         let dec = try await CoreMLTextDecoder.fromPretrained(
             modelId: decoderModelId,
-            computeUnits: computeUnits,
+            computeUnits: decoderComputeUnits,
             cacheDir: cacheDir,
             offlineMode: offlineMode
         ) { p, msg in
@@ -93,14 +104,19 @@ public class CoreMLASRModel {
         language: String? = nil,
         maxTokens: Int = 448
     ) throws -> String {
-        // Extract mel features
+        let profile = ProcessInfo.processInfo.environment["COREML_ASR_PROFILE"] == "1"
+        let t0 = CFAbsoluteTimeGetCurrent()
+
         let melFeatures = featureExtractor.process(audio, sampleRate: sampleRate)
+        let t1 = CFAbsoluteTimeGetCurrent()
 
-        // Encode audio → embeddings [1, T/8, 1024]
-        let audioEmbeds = try encoder.encode(melFeatures)
-        let numAudioTokens = audioEmbeds.dim(1)
+        // The encoder pads mel to a fixed 30 s shape and reports the real
+        // (un-padded) audio-token count via ``output_length``. We feed only
+        // the first ``numAudioTokens`` of the padded embeddings to the
+        // decoder so trailing zero-derived tokens don't pollute attention.
+        let (audioEmbeds, numAudioTokens) = try encoder.encode(melFeatures)
+        let t2 = CFAbsoluteTimeGetCurrent()
 
-        // Reset decoder KV cache
         decoder.resetCache()
 
         let T = Qwen3ASRTokens.self
@@ -121,42 +137,86 @@ public class CoreMLASRModel {
         }
         suffixTokens.append(Int32(T.asrTextTokenId))
 
-        // ── Prefill: process all prefix tokens ──
+        // ── Prefill: process all prefix tokens (one batched call) ──
         var lastLogits: MLMultiArray?
-
-        for token in prefixTokens {
-            let embedding = try decoder.embed(tokenId: token)
-            lastLogits = try decoder.decoderStep(embedding: embedding)
-        }
+        lastLogits = try decoder.decoderPrefillTokens(prefixTokens)
+        let t3 = CFAbsoluteTimeGetCurrent()
 
         // ── Prefill: process audio embeddings ──
-        for i in 0..<numAudioTokens {
-            let audioEmbed = try decoder.audioEmbeddingToMultiArray(audioEmbeds, at: i)
-            lastLogits = try decoder.decoderStep(embedding: audioEmbed)
+        // Bulk-extract the MLX audio embeddings once (single Metal sync)
+        // then feed them to the decoder in batched chunks of
+        // ``prefillBatchSize`` tokens. The fixed-T CoreML decoder packs
+        // T tokens per ANE dispatch, so a 20 s / 250-token clip becomes
+        // ~2 calls instead of 250 (each ANE dispatch costs ~30 ms — the
+        // dispatch overhead dominated the per-step cost in profiling).
+        let _ = audioEmbeds.dim(2)  // sanity-check hidden dim
+        let audioEmbedsFlat: [Float] = audioEmbeds.asArray(Float.self)
+        let chunk = decoder.prefillBatchSize
+        var consumed = 0
+        while consumed < numAudioTokens {
+            let n = min(chunk, numAudioTokens - consumed)
+            lastLogits = try decoder.decoderPrefill(
+                flatEmbeddings: audioEmbedsFlat,
+                offset: consumed,
+                realCount: n,
+            )
+            consumed += n
         }
+        let t4 = CFAbsoluteTimeGetCurrent()
 
-        // ── Prefill: process suffix tokens ──
-        for token in suffixTokens {
-            let embedding = try decoder.embed(tokenId: token)
-            lastLogits = try decoder.decoderStep(embedding: embedding)
-        }
+        // ── Prefill: process suffix tokens (one batched call) ──
+        lastLogits = try decoder.decoderPrefillTokens(suffixTokens)
+        let t5 = CFAbsoluteTimeGetCurrent()
 
         // ── Autoregressive generation ──
         guard var logits = lastLogits else {
             return "[CoreML decoder: no output]"
         }
 
+        // Known WER issue with this path (multi-sentence utterances on
+        // LibriSpeech test-clean): the CoreML port emits ``<|im_end|>``
+        // after the first sentence-final period with a wide logit margin
+        // (~6+ nats over the runner-up). The MLX path at the same
+        // effective bit width keeps generating. We tried both a
+        // logit-margin guard and a force-first-EOS-suppression; neither
+        // helps — the model's runner-up at the truncation point is also
+        // wrong (e.g. " The" instead of " on"), so substituting it just
+        // trades deletions for substitutions. The root cause is upstream
+        // — encoder INT8 quantization / mel padding leakage into audio
+        // embeddings, or position drift in chunked prefill. Tracked as
+        // a separate fix that requires model re-export, not a sampler
+        // change. The ``argmax(skipping:)`` / ``logit(_:at:)`` helpers
+        // stay for that future work.
         var generatedTokens: [Int32] = []
         var nextToken = decoder.argmax(logits: logits)
+        // First-token EOS would mean the model thinks the audio yielded an
+        // empty transcript — never right on real speech. Cheap to guard.
+        if nextToken == imEndId {
+            nextToken = decoder.argmax(logits: logits, skipping: imEndId)
+        }
         generatedTokens.append(nextToken)
 
         for _ in 1..<maxTokens {
-            if nextToken == Int32(T.imEndTokenId) { break }
-
+            if nextToken == imEndId { break }
             let embedding = try decoder.embed(tokenId: nextToken)
             logits = try decoder.decoderStep(embedding: embedding)
             nextToken = decoder.argmax(logits: logits)
             generatedTokens.append(nextToken)
+        }
+        if profile {
+            let audioDuration = Double(audio.count) / Double(sampleRate)
+            print("[COREML-ASR-PROFILE] audio=\(audioDuration)s gen=\(generatedTokens.count)")
+        }
+        let t6 = CFAbsoluteTimeGetCurrent()
+
+        if profile {
+            let ms = { (a: CFAbsoluteTime, b: CFAbsoluteTime) in (b - a) * 1000 }
+            print(String(format: "[COREML-ASR-PROFILE] mel=%.0fms encoder=%.0fms prefix=%.0fms audio_prefill=%.0fms(%dtok→%.1fms/tok) suffix=%.0fms gen=%.0fms(%dtok→%.1fms/tok) total=%.0fms",
+                         ms(t0, t1), ms(t1, t2), ms(t2, t3),
+                         ms(t3, t4), numAudioTokens, ms(t3, t4) / Double(max(numAudioTokens, 1)),
+                         ms(t4, t5),
+                         ms(t5, t6), generatedTokens.count, ms(t5, t6) / Double(max(generatedTokens.count, 1)),
+                         ms(t0, t6)))
         }
 
         // Decode tokens
@@ -193,13 +253,15 @@ public class CoreMLASRModel {
         // 1. Extract mel features (pure CPU via Accelerate — no MLXArray)
         let melFeatures = featureExtractor.processRaw(audio, sampleRate: sampleRate)
 
-        // 2. Encode audio → MLMultiArray embeddings [1, T/8, 1024]
-        let audioEmbeds = try encoder.encode(
+        // 2. Encode audio → MLMultiArray embeddings + real (un-padded)
+        //    audio-token count from the encoder's ``output_length``.
+        let encoded = try encoder.encode(
             melData: melFeatures.data,
             melBins: melFeatures.melBins,
             timeFrames: melFeatures.timeFrames
         )
-        let numAudioTokens = audioEmbeds.shape[1].intValue
+        let audioEmbeds = encoded.embeddings
+        let numAudioTokens = encoded.outputLength
 
         // 3. Reset decoder KV cache
         decoder.resetCache()
@@ -243,18 +305,21 @@ public class CoreMLASRModel {
             lastLogits = try decoder.decoderStep(embedding: embedding)
         }
 
-        // 7. Autoregressive generation
+        // 7. Autoregressive generation (same EOS note as `transcribe()` —
+        // see that path for the background).
         guard var logits = lastLogits else {
             return "[CoreML decoder: no output]"
         }
 
         var generatedTokens: [Int32] = []
         var nextToken = decoder.argmax(logits: logits)
+        if nextToken == imEndId {
+            nextToken = decoder.argmax(logits: logits, skipping: imEndId)
+        }
         generatedTokens.append(nextToken)
 
         for _ in 1..<maxTokens {
-            if nextToken == Int32(T.imEndTokenId) { break }
-
+            if nextToken == imEndId { break }
             let embedding = try decoder.embed(tokenId: nextToken)
             logits = try decoder.decoderStep(embedding: embedding)
             nextToken = decoder.argmax(logits: logits)

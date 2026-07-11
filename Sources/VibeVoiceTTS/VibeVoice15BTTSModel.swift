@@ -16,6 +16,9 @@ import Tokenizers
 /// )
 /// ```
 public final class VibeVoice15BTTSModel {
+    /// Default HuggingFace model identifier — the 1.5B INT4 bundle.
+    public static let defaultModelId = "aufklarer/VibeVoice-1.5B-MLX-INT4"
+
     public struct Configuration: Sendable {
         public var modelId: String
         public var tokenizerModelId: String
@@ -103,6 +106,14 @@ public final class VibeVoice15BTTSModel {
         progressHandler?(0.95, "Loading tokenizer...")
         let tokenizer = try await AutoTokenizer.from(modelFolder: tokenizerCacheDir)
 
+        // Install the shapeless-compile wrapper around the autoregressive LM
+        // step. Cheap (registers the compile closure; first invocation traces
+        // and caches the graph). Without this, every cache length seen during
+        // generation triggers a fresh kernel compile — ~22 min on a cold M-series
+        // for the 1.5B INT4 path.
+        progressHandler?(0.98, "Setting up compiled step...")
+        model.languageModel.setupCompilation()
+
         progressHandler?(1.0, "Ready")
         return VibeVoice15BTTSModel(
             configuration: configuration,
@@ -189,9 +200,18 @@ public final class VibeVoice15BTTSModel {
         )
 
         // 6) Generation loop: LM token sampling + branched on <speech_diffusion> / <speech_end> / text.
+        //
+        // Per-token forwards go through `Qwen2Model.executeStep`, which is wrapped
+        // by `MLX.compile(shapeless: true)` after `setupCompilation()`. The cache
+        // is materialised once here as `[(K, V)]` tuples (extracted from the
+        // prefill state); each step then concats new K/V onto the running tensors.
+        // Shapeless compile means the same compiled graph services every cache
+        // length, eliminating the per-shape recompile that drives the cold-start
+        // cost on this 1.5B unified-LM path.
         let speechEnd = Int32(TokenConstants.speechEndId)
         let speechDiff = Int32(TokenConstants.speechDiffusionId)
-        let embedTokens = inference.model.languageModel.embedTokens
+        let lm = inference.model.languageModel
+        let embedTokens = lm.embedTokens
         let acousticCache = StreamingConvCache()
 
         var audioChunks: [MLXArray] = []
@@ -199,6 +219,25 @@ public final class VibeVoice15BTTSModel {
         var currentHidden = prefillHidden[0..., lastIdx...(lastIdx), 0...]
         let negLastIdx = negPrefillHidden.dim(1) - 1
         var negCurrentHidden = negPrefillHidden[0..., negLastIdx...(negLastIdx), 0...]
+
+        // Snapshot the prefilled K/V into compiled-step format. Both caches must
+        // already have data — prefill ran above with an explicit prompt.
+        guard
+            let posSnapshot0 = inference.lmCache.first?.snapshot(),
+            let negSnapshot0 = inference.negLmCache.first?.snapshot()
+        else {
+            return []
+        }
+        _ = posSnapshot0; _ = negSnapshot0  // type witness
+
+        var posCache: [(MLXArray, MLXArray)] = inference.lmCache.compactMap { $0.snapshot() }
+        var negCache: [(MLXArray, MLXArray)] = inference.negLmCache.compactMap { $0.snapshot() }
+        guard posCache.count == lm.config.hiddenLayers,
+              negCache.count == lm.config.hiddenLayers else {
+            return []
+        }
+        var posOffset = inference.lmCache[0].offset
+        var negOffset = inference.negLmCache[0].offset
 
         for _ in 0..<configuration.maxSpeechTokens {
             let logits = embedTokens.asLinear(currentHidden)  // [1, 1, vocab]
@@ -208,6 +247,7 @@ public final class VibeVoice15BTTSModel {
 
             if tokenId == speechEnd { break }
 
+            let stepEmbed: MLXArray
             if tokenId == speechDiff {
                 // Sample a new acoustic latent via diffusion conditioned on
                 // current hidden. Decode to audio. Feed connector back as the
@@ -225,25 +265,30 @@ public final class VibeVoice15BTTSModel {
 
                 // Feed acoustic_connector(latent) as next embed (no semantic
                 // during generation — only acoustic per reference).
-                let acEmbed = inference.model.acousticConnector(latent)
-                currentHidden = inference.model.languageModel.forwardWithEmbeddings(
-                    acEmbed, cache: inference.lmCache
-                )
-                negCurrentHidden = inference.model.languageModel.forwardWithEmbeddings(
-                    acEmbed, cache: inference.negLmCache
-                )
+                stepEmbed = inference.model.acousticConnector(latent)
             } else {
                 // Plain text token — embed + step.
                 let tokenArr = MLXArray([tokenId]).reshaped([1, 1])
-                currentHidden = inference.forwardWithAudio(
-                    inputIds: tokenArr, audioEmbeddings: nil, audioMask: nil,
-                    cache: &inference.lmCache
-                )
-                negCurrentHidden = inference.forwardWithAudio(
-                    inputIds: tokenArr, audioEmbeddings: nil, audioMask: nil,
-                    cache: &inference.negLmCache
-                )
+                stepEmbed = embedTokens(tokenArr)
             }
+
+            let (posHidden, posNew) = lm.executeStep(
+                embeddings: stepEmbed,
+                offset: MLXArray(Int32(posOffset)),
+                cache: posCache
+            )
+            posCache = posNew
+            posOffset += 1
+            currentHidden = posHidden
+
+            let (negHidden, negNew) = lm.executeStep(
+                embeddings: stepEmbed,
+                offset: MLXArray(Int32(negOffset)),
+                cache: negCache
+            )
+            negCache = negNew
+            negOffset += 1
+            negCurrentHidden = negHidden
         }
 
         if audioChunks.isEmpty { return [] }

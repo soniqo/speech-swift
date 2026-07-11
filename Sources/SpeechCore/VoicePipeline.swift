@@ -419,8 +419,11 @@ public final class VoicePipeline {
                 let bridge = Unmanaged<TTSBridge>.fromOpaque(ctx!).takeUnretainedValue()
                 bridge.cancelled = false
                 let textStr = String(cString: text!)
-                let langStr = language.map { String(cString: $0) } ?? ""
-                AudioLog.pipeline.info("TTS synthesize: text='\(textStr)', language='\(langStr)'")
+                let rawLang = language.map { String(cString: $0) } ?? ""
+                // STT may report a full language name ("english"/"russian") but TTS expects an ISO
+                // code; passing the raw name makes Supertonic throw `unsupportedLanguage` → silence.
+                let langStr = normalizeTTSLanguage(rawLang)
+                AudioLog.pipeline.info("TTS synthesize: text='\(textStr)', language='\(rawLang)'→'\(langStr)'")
 
                 // Single TTS call for the full text — consistent voice, no
                 // chunk boundary artifacts (with noChunking streaming config).
@@ -432,7 +435,7 @@ public final class VoicePipeline {
                         defer { group.leave() }
                         do {
                             let stream = bridge.model.generateStream(
-                                text: textStr, language: langStr.isEmpty ? nil : langStr)
+                                text: textStr, language: langStr)  // always a valid ISO code
                             var sentFinal = false
                             for try await chunk in stream {
                                 guard !bridge.cancelled else { break }
@@ -550,4 +553,26 @@ private func splitTTSSentences(_ text: String) -> [String] {
         sentences.append(text)
     }
     return sentences
+}
+
+/// Map a detected language to the ISO code TTS expects. STT can report a full English name
+/// ("english", "russian"); TTS tokenizers key on ISO codes ("en", "ru") and throw on anything
+/// else. Unknown/empty → "en" so the pipeline speaks rather than going silent. File-level so it's
+/// callable from the C-function-pointer TTS vtable (which can't capture `Self`).
+func normalizeTTSLanguage(_ s: String) -> String {
+    let l = s.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+    if l.isEmpty { return "en" }
+    let names: [String: String] = [
+        "english": "en", "korean": "ko", "japanese": "ja", "arabic": "ar",
+        "bulgarian": "bg", "czech": "cs", "danish": "da", "german": "de",
+        "greek": "el", "spanish": "es", "estonian": "et", "finnish": "fi",
+        "french": "fr", "hindi": "hi", "croatian": "hr", "hungarian": "hu",
+        "indonesian": "id", "italian": "it", "lithuanian": "lt", "latvian": "lv",
+        "dutch": "nl", "polish": "pl", "portuguese": "pt", "romanian": "ro",
+        "russian": "ru", "slovak": "sk", "slovenian": "sl", "swedish": "sv",
+        "turkish": "tr", "ukrainian": "uk", "vietnamese": "vi",
+    ]
+    if let iso = names[l] { return iso }
+    if l.count == 2 { return l }   // already an ISO code (e.g. config set "de")
+    return "en"                     // unknown → safe, always-supported default
 }

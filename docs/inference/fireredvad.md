@@ -14,10 +14,10 @@ Audio → Resample to 16kHz → Kaldi Fbank (80-dim) → CoreML (ANE) → Post-p
 
 ```bash
 # Basic usage
-.build/release/audio vad audio.wav --engine firered
+.build/release/speech vad audio.wav --engine firered
 
 # Custom threshold
-.build/release/audio vad audio.wav --engine firered --onset 0.5
+.build/release/speech vad audio.wav --engine firered --onset 0.5
 ```
 
 ## Swift API
@@ -87,8 +87,8 @@ Smoothing window has minimal effect (+/-0.3% F1). The threshold controls the FAR
 
 ```bash
 # Custom threshold and smoothing
-audio vad audio.wav --engine firered --threshold 0.5 --smooth-window 7
+speech vad audio.wav --engine firered --threshold 0.5 --smooth-window 7
 
 # Local model variant (e.g., Stream-VAD N2=0)
-audio vad audio.wav --engine firered -m /path/to/local/model
+speech vad audio.wav --engine firered -m /path/to/local/model
 ```

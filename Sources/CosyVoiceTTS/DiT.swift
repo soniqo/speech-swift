@@ -35,13 +35,13 @@ public class SinusoidalPositionEmbedding: Module {
 /// sinEmbed -> linear1 -> SiLU -> linear2
 public class TimestepEmbedding: Module {
     @ModuleInfo(key: "sin_embed") var sinEmbed: SinusoidalPositionEmbedding
-    @ModuleInfo var linear1: QuantizedLinear
-    @ModuleInfo var linear2: QuantizedLinear
+    @ModuleInfo var linear1: Linear
+    @ModuleInfo var linear2: Linear
 
-    public init(freqEmbedDim: Int, dim: Int, groupSize: Int = 64, bits: Int = 4) {
+    public init(freqEmbedDim: Int, dim: Int) {
         self._sinEmbed.wrappedValue = SinusoidalPositionEmbedding(dim: freqEmbedDim)
-        self._linear1.wrappedValue = QuantizedLinear(freqEmbedDim, dim, bias: true, groupSize: groupSize, bits: bits)
-        self._linear2.wrappedValue = QuantizedLinear(dim, dim, bias: true, groupSize: groupSize, bits: bits)
+        self._linear1.wrappedValue = Linear(freqEmbedDim, dim, bias: true)
+        self._linear2.wrappedValue = Linear(dim, dim, bias: true)
         super.init()
     }
 
@@ -64,11 +64,11 @@ public class TimestepEmbedding: Module {
 /// Uses non-affine LayerNorm (no learnable weight/bias) followed by
 /// conditioning-dependent scale and shift.
 public class AdaLayerNormZero: Module {
-    @ModuleInfo var linear: QuantizedLinear
+    @ModuleInfo var linear: Linear
     let norm: LayerNorm
 
-    public init(dim: Int, groupSize: Int = 64, bits: Int = 4) {
-        self._linear.wrappedValue = QuantizedLinear(dim, dim * 6, bias: true, groupSize: groupSize, bits: bits)
+    public init(dim: Int) {
+        self._linear.wrappedValue = Linear(dim, dim * 6, bias: true)
         self.norm = LayerNorm(dimensions: dim, eps: 1e-6, affine: false)
         super.init()
     }
@@ -101,11 +101,11 @@ public class AdaLayerNormZero: Module {
 
 /// Final adaptive layer norm with only 2 modulation params (scale + shift).
 public class AdaLayerNormZeroFinal: Module {
-    @ModuleInfo var linear: QuantizedLinear
+    @ModuleInfo var linear: Linear
     let norm: LayerNorm
 
-    public init(dim: Int, groupSize: Int = 64, bits: Int = 4) {
-        self._linear.wrappedValue = QuantizedLinear(dim, dim * 2, bias: true, groupSize: groupSize, bits: bits)
+    public init(dim: Int) {
+        self._linear.wrappedValue = Linear(dim, dim * 2, bias: true)
         self.norm = LayerNorm(dimensions: dim, eps: 1e-6, affine: false)
         super.init()
     }
@@ -132,21 +132,21 @@ public class DiTAttention: Module {
     let dimHead: Int
     let scale: Float
 
-    @ModuleInfo(key: "to_q") var toQ: QuantizedLinear
-    @ModuleInfo(key: "to_k") var toK: QuantizedLinear
-    @ModuleInfo(key: "to_v") var toV: QuantizedLinear
-    @ModuleInfo(key: "to_out") var toOut: QuantizedLinear
+    @ModuleInfo(key: "to_q") var toQ: Linear
+    @ModuleInfo(key: "to_k") var toK: Linear
+    @ModuleInfo(key: "to_v") var toV: Linear
+    @ModuleInfo(key: "to_out") var toOut: Linear
 
-    public init(dim: Int, heads: Int, dimHead: Int, groupSize: Int = 64, bits: Int = 4) {
+    public init(dim: Int, heads: Int, dimHead: Int) {
         self.heads = heads
         self.dimHead = dimHead
         self.scale = 1.0 / sqrt(Float(dimHead))
 
         let innerDim = heads * dimHead
-        self._toQ.wrappedValue = QuantizedLinear(dim, innerDim, bias: true, groupSize: groupSize, bits: bits)
-        self._toK.wrappedValue = QuantizedLinear(dim, innerDim, bias: true, groupSize: groupSize, bits: bits)
-        self._toV.wrappedValue = QuantizedLinear(dim, innerDim, bias: true, groupSize: groupSize, bits: bits)
-        self._toOut.wrappedValue = QuantizedLinear(innerDim, dim, bias: true, groupSize: groupSize, bits: bits)
+        self._toQ.wrappedValue = Linear(dim, innerDim, bias: true)
+        self._toK.wrappedValue = Linear(dim, innerDim, bias: true)
+        self._toV.wrappedValue = Linear(dim, innerDim, bias: true)
+        self._toOut.wrappedValue = Linear(innerDim, dim, bias: true)
 
         super.init()
     }
@@ -194,12 +194,12 @@ public class DiTAttention: Module {
 /// Feedforward network with GELU (tanh approximate) activation.
 /// linear1 -> GELU(tanh) -> linear2
 public class DiTFeedForward: Module {
-    @ModuleInfo var linear1: QuantizedLinear
-    @ModuleInfo var linear2: QuantizedLinear
+    @ModuleInfo var linear1: Linear
+    @ModuleInfo var linear2: Linear
 
-    public init(dim: Int, ffDim: Int, groupSize: Int = 64, bits: Int = 4) {
-        self._linear1.wrappedValue = QuantizedLinear(dim, ffDim, bias: true, groupSize: groupSize, bits: bits)
-        self._linear2.wrappedValue = QuantizedLinear(ffDim, dim, bias: true, groupSize: groupSize, bits: bits)
+    public init(dim: Int, ffDim: Int) {
+        self._linear1.wrappedValue = Linear(dim, ffDim, bias: true)
+        self._linear2.wrappedValue = Linear(ffDim, dim, bias: true)
         super.init()
     }
 
@@ -224,12 +224,12 @@ public class DiTBlock: Module {
     @ModuleInfo(key: "ff_norm") var ffNorm: LayerNorm
     @ModuleInfo var ff: DiTFeedForward
 
-    public init(dim: Int, heads: Int, dimHead: Int, ffMult: Int, groupSize: Int = 64, bits: Int = 4) {
-        self._attnNorm.wrappedValue = AdaLayerNormZero(dim: dim, groupSize: groupSize, bits: bits)
-        self._attn.wrappedValue = DiTAttention(dim: dim, heads: heads, dimHead: dimHead, groupSize: groupSize, bits: bits)
+    public init(dim: Int, heads: Int, dimHead: Int, ffMult: Int) {
+        self._attnNorm.wrappedValue = AdaLayerNormZero(dim: dim)
+        self._attn.wrappedValue = DiTAttention(dim: dim, heads: heads, dimHead: dimHead)
         // Non-affine LayerNorm for feedforward pre-norm (modulated externally)
         self._ffNorm.wrappedValue = LayerNorm(dimensions: dim, eps: 1e-6, affine: false)
-        self._ff.wrappedValue = DiTFeedForward(dim: dim, ffDim: dim * ffMult, groupSize: groupSize, bits: bits)
+        self._ff.wrappedValue = DiTFeedForward(dim: dim, ffDim: dim * ffMult)
         super.init()
     }
 
@@ -329,14 +329,14 @@ private func mish(_ x: MLXArray) -> MLXArray {
 /// speaker embedding) and projects to model dimension.
 public class InputEmbedding: Module {
     let spkDim: Int
-    @ModuleInfo var proj: QuantizedLinear
+    @ModuleInfo var proj: Linear
     @ModuleInfo(key: "conv_pos_embed") var convPosEmbed: ConvPositionEmbedding
 
-    public init(melDim: Int, muDim: Int, spkDim: Int, dim: Int, groupSize: Int = 64, bits: Int = 4) {
+    public init(melDim: Int, muDim: Int, spkDim: Int, dim: Int) {
         self.spkDim = spkDim
         // Input: concatenation of [x, cond, textEmbed, spks] = [melDim, melDim, muDim, spkDim]
         let inputDim = melDim + melDim + muDim + spkDim
-        self._proj.wrappedValue = QuantizedLinear(inputDim, dim, bias: true, groupSize: groupSize, bits: bits)
+        self._proj.wrappedValue = Linear(inputDim, dim, bias: true)
         self._convPosEmbed.wrappedValue = ConvPositionEmbedding(dim: dim)
         super.init()
     }
@@ -395,13 +395,11 @@ public class DiT: Module {
         self.config = config
 
         self._timeEmbed.wrappedValue = TimestepEmbedding(
-            freqEmbedDim: config.freqEmbedDim, dim: config.dim,
-            groupSize: config.groupSize, bits: config.bits)
+            freqEmbedDim: config.freqEmbedDim, dim: config.dim)
 
         self._inputEmbed.wrappedValue = InputEmbedding(
             melDim: config.melDim, muDim: config.muDim,
-            spkDim: config.spkDim, dim: config.dim,
-            groupSize: config.groupSize, bits: config.bits)
+            spkDim: config.spkDim, dim: config.dim)
 
         // RoPE: dimensions = dimHead (64), traditional=true (interleaved pairs matching
         // x_transformers' rotate_half + duplicated freqs), base=10000
@@ -411,12 +409,10 @@ public class DiT: Module {
         self._transformerBlocks.wrappedValue = (0 ..< config.depth).map { _ in
             DiTBlock(
                 dim: config.dim, heads: config.heads,
-                dimHead: config.dimHead, ffMult: config.ffMult,
-                groupSize: config.groupSize, bits: config.bits)
+                dimHead: config.dimHead, ffMult: config.ffMult)
         }
 
-        self._normOut.wrappedValue = AdaLayerNormZeroFinal(dim: config.dim,
-            groupSize: config.groupSize, bits: config.bits)
+        self._normOut.wrappedValue = AdaLayerNormZeroFinal(dim: config.dim)
         self._projOut.wrappedValue = Linear(config.dim, config.melDim, bias: true)
 
         super.init()

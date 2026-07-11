@@ -85,7 +85,7 @@ public final class FireRedVADModel {
         }
 
         let mlConfig = MLModelConfiguration()
-        mlConfig.computeUnits = .cpuAndNeuralEngine
+        mlConfig.computeUnits = CoreMLComputeUnitsResolver.resolved(default: .cpuAndNeuralEngine)
 
         let model = try MLModel(contentsOf: modelURL, configuration: mlConfig)
 
@@ -109,7 +109,7 @@ public final class FireRedVADModel {
         }
 
         let mlConfig = MLModelConfiguration()
-        mlConfig.computeUnits = .cpuAndNeuralEngine
+        mlConfig.computeUnits = CoreMLComputeUnitsResolver.resolved(default: .cpuAndNeuralEngine)
 
         let model = try MLModel(contentsOf: modelURL, configuration: mlConfig)
         return FireRedVADModel(coremlModel: model)

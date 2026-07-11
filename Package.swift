@@ -25,8 +25,40 @@ let package = Package(
             targets: ["CosyVoiceTTS"]
         ),
         .library(
+            name: "ChatterboxTTS",
+            targets: ["ChatterboxTTS"]
+        ),
+        .library(
+            name: "OmniVoiceTTS",
+            targets: ["OmniVoiceTTS"]
+        ),
+        .library(
+            name: "IndicMioTTS",
+            targets: ["IndicMioTTS"]
+        ),
+        .library(
+            name: "FishAudioTTS",
+            targets: ["FishAudioTTS"]
+        ),
+        .library(
+            name: "F5TTS",
+            targets: ["F5TTS"]
+        ),
+        .library(
+            name: "HiggsTTS",
+            targets: ["HiggsTTS"]
+        ),
+        .library(
+            name: "IndexTTS2TTS",
+            targets: ["IndexTTS2TTS"]
+        ),
+        .library(
             name: "PersonaPlex",
             targets: ["PersonaPlex"]
+        ),
+        .library(
+            name: "HibikiTranslate",
+            targets: ["HibikiTranslate"]
         ),
         .library(
             name: "SpeechVAD",
@@ -35,6 +67,10 @@ let package = Package(
         .library(
             name: "SpeechEnhancement",
             targets: ["SpeechEnhancement"]
+        ),
+        .library(
+            name: "SpeechRestoration",
+            targets: ["SpeechRestoration"]
         ),
         .library(
             name: "SourceSeparation",
@@ -53,8 +89,36 @@ let package = Package(
             targets: ["NemotronStreamingASR"]
         ),
         .library(
+            name: "WhisperASR",
+            targets: ["WhisperASR"]
+        ),
+        .library(
             name: "VibeVoiceTTS",
             targets: ["VibeVoiceTTS"]
+        ),
+        .library(
+            name: "VoxCPM2TTS",
+            targets: ["VoxCPM2TTS"]
+        ),
+        .library(
+            name: "MAGNeTMusicGen",
+            targets: ["MAGNeTMusicGen"]
+        ),
+        .library(
+            name: "StableAudio3MusicGen",
+            targets: ["StableAudio3MusicGen"]
+        ),
+        .library(
+            name: "FlashSR",
+            targets: ["FlashSR"]
+        ),
+        .library(
+            name: "MagpieTTS",
+            targets: ["MagpieTTS"]
+        ),
+        .library(
+            name: "MagpieTTSCoreML",
+            targets: ["MagpieTTSCoreML"]
         ),
         .library(
             name: "OmnilingualASR",
@@ -69,12 +133,20 @@ let package = Package(
             targets: ["KokoroTTS"]
         ),
         .library(
+            name: "SupertonicTTS",
+            targets: ["SupertonicTTS"]
+        ),
+        .library(
             name: "Qwen3TTSCoreML",
             targets: ["Qwen3TTSCoreML"]
         ),
         .library(
             name: "Qwen3Chat",
             targets: ["Qwen3Chat"]
+        ),
+        .library(
+            name: "FunctionGemma",
+            targets: ["FunctionGemma"]
         ),
         .library(
             name: "MADLADTranslation",
@@ -88,6 +160,19 @@ let package = Package(
             name: "SpeechWakeWord",
             targets: ["SpeechWakeWord"]
         ),
+        .library(
+            name: "Audio2Face3D",
+            targets: ["Audio2Face3D"]
+        ),
+        .executable(
+            name: "speech",
+            targets: ["AudioCLI"]
+        ),
+        .executable(
+            name: "speech-server",
+            targets: ["AudioServerCLI"]
+        ),
+        // Deprecated aliases — kept for one release cycle. Will be removed in a future version.
         .executable(
             name: "audio",
             targets: ["AudioCLI"]
@@ -95,14 +180,36 @@ let package = Package(
         .executable(
             name: "audio-server",
             targets: ["AudioServerCLI"]
+        ),
+        .executable(
+            name: "asr-bench",
+            targets: ["AsrBenchmark"]
+        ),
+        .executable(
+            name: "vad-bench",
+            targets: ["VadBenchmark"]
+        ),
+        .executable(
+            name: "diarization-bench",
+            targets: ["DiarizationBenchmark"]
         )
     ],
     dependencies: [
         .package(url: "https://github.com/ml-explore/mlx-swift", from: "0.30.0"),
+        // Generic LLM runtime (loads standard HF MLX models: Qwen3, Gemma, Llama, …) — backs the
+        // larger on-device chat model. The MLXLLM/MLXLMCommon libraries moved here from
+        // mlx-swift-examples. Pins mlx-swift .upToNextMinor(0.31.4), compatible with ours.
+        .package(url: "https://github.com/ml-explore/mlx-swift-lm", branch: "main"),
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.5.0"),
         .package(url: "https://github.com/huggingface/swift-transformers", from: "1.1.6"),
         .package(url: "https://github.com/hummingbird-project/hummingbird.git", "2.5.0"..<"2.17.0"),
-        .package(url: "https://github.com/hummingbird-project/hummingbird-websocket.git", from: "2.6.0")
+        .package(url: "https://github.com/hummingbird-project/hummingbird-websocket.git", "2.6.0"..<"2.7.0"),
+        // Pin swift-websocket to 1.5.x — 1.6.0 added `import NIOSSL` in WSCore/WebSocketHandler.swift
+        // without declaring swift-nio-ssl as a target dependency, so the module is unresolvable
+        // on a clean checkout. https://github.com/hummingbird-project/swift-websocket
+        .package(url: "https://github.com/hummingbird-project/swift-websocket.git", "1.5.0"..<"1.6.0"),
+        // WhisperKit (Argmax) — retained for benchmark comparison against the native WhisperASR runtime.
+        .package(url: "https://github.com/argmaxinc/WhisperKit", from: "1.0.0")
     ],
     targets: [
         .target(
@@ -118,6 +225,7 @@ let package = Package(
                 .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "MLXNN", package: "mlx-swift"),
                 .product(name: "MLXFast", package: "mlx-swift"),
+                .product(name: "MLXFFT", package: "mlx-swift"),
             ]
         ),
         .target(
@@ -158,10 +266,104 @@ let package = Package(
             ]
         ),
         .target(
+            name: "OmniVoiceTTS",
+            dependencies: [
+                "AudioCommon",
+                "MLXCommon",
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXNN", package: "mlx-swift"),
+                .product(name: "MLXFast", package: "mlx-swift"),
+                .product(name: "MLXFFT", package: "mlx-swift"),
+                .product(name: "Hub", package: "swift-transformers"),
+                .product(name: "Tokenizers", package: "swift-transformers")
+            ]
+        ),
+        .target(
+            name: "ChatterboxTTS",
+            dependencies: [
+                "AudioCommon",
+                "MLXCommon",
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXNN", package: "mlx-swift"),
+                .product(name: "MLXFast", package: "mlx-swift"),
+                .product(name: "Hub", package: "swift-transformers"),
+                .product(name: "Tokenizers", package: "swift-transformers")
+            ]
+        ),
+        .target(
+            name: "IndicMioTTS",
+            dependencies: [
+                "AudioCommon",
+                "MLXCommon",
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXNN", package: "mlx-swift"),
+                .product(name: "MLXFast", package: "mlx-swift"),
+                .product(name: "MLXFFT", package: "mlx-swift"),
+                .product(name: "Hub", package: "swift-transformers"),
+                .product(name: "Tokenizers", package: "swift-transformers")
+            ]
+        ),
+        .target(
+            name: "FishAudioTTS",
+            dependencies: [
+                "AudioCommon",
+                "MLXCommon",
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXNN", package: "mlx-swift"),
+                .product(name: "MLXFast", package: "mlx-swift"),
+                .product(name: "Hub", package: "swift-transformers"),
+                .product(name: "Tokenizers", package: "swift-transformers")
+            ]
+        ),
+        .target(
+            name: "F5TTS",
+            dependencies: [
+                "AudioCommon",
+                "MLXCommon",
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXNN", package: "mlx-swift"),
+                .product(name: "MLXFast", package: "mlx-swift"),
+                .product(name: "MLXFFT", package: "mlx-swift"),
+            ]
+        ),
+        .target(
+            name: "HiggsTTS",
+            dependencies: [
+                "AudioCommon",
+                "MLXCommon",
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXNN", package: "mlx-swift"),
+                .product(name: "MLXFast", package: "mlx-swift"),
+                .product(name: "Hub", package: "swift-transformers"),
+                .product(name: "Tokenizers", package: "swift-transformers"),
+            ]
+        ),
+        .target(
+            name: "IndexTTS2TTS",
+            dependencies: [
+                "AudioCommon",
+                "ChatterboxTTS",
+                "MLXCommon",
+                "SpeechRestoration",
+                .product(name: "MLX", package: "mlx-swift"),
+            ]
+        ),
+        .target(
             name: "PersonaPlex",
             dependencies: [
                 "AudioCommon",
                 "MLXCommon",
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXNN", package: "mlx-swift"),
+                .product(name: "MLXFast", package: "mlx-swift")
+            ]
+        ),
+        .target(
+            name: "HibikiTranslate",
+            dependencies: [
+                "AudioCommon",
+                "MLXCommon",
+                "PersonaPlex",
                 .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "MLXNN", package: "mlx-swift"),
                 .product(name: "MLXFast", package: "mlx-swift")
@@ -181,6 +383,12 @@ let package = Package(
             dependencies: [
                 "AudioCommon",
                 "MLXCommon",
+            ]
+        ),
+        .target(
+            name: "SpeechRestoration",
+            dependencies: [
+                "AudioCommon",
             ]
         ),
         .target(
@@ -224,6 +432,75 @@ let package = Package(
             ]
         ),
         .target(
+            name: "VoxCPM2TTS",
+            dependencies: [
+                "AudioCommon",
+                "MLXCommon",
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXNN", package: "mlx-swift"),
+                .product(name: "MLXFast", package: "mlx-swift"),
+                .product(name: "MLXRandom", package: "mlx-swift"),
+                .product(name: "Transformers", package: "swift-transformers")
+            ]
+        ),
+        .target(
+            name: "MAGNeTMusicGen",
+            dependencies: [
+                "AudioCommon",
+                "MLXCommon",
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXNN", package: "mlx-swift"),
+                .product(name: "MLXFast", package: "mlx-swift"),
+                .product(name: "MLXRandom", package: "mlx-swift"),
+                .product(name: "Transformers", package: "swift-transformers")
+            ]
+        ),
+        .target(
+            name: "StableAudio3MusicGen",
+            dependencies: [
+                "AudioCommon",
+                "MLXCommon",
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXNN", package: "mlx-swift"),
+                .product(name: "MLXFast", package: "mlx-swift"),
+                .product(name: "MLXRandom", package: "mlx-swift"),
+            ]
+        ),
+        .target(
+            name: "FlashSR",
+            dependencies: [
+                "AudioCommon",
+                "MLXCommon",
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXNN", package: "mlx-swift"),
+                .product(name: "MLXFast", package: "mlx-swift"),
+                .product(name: "MLXRandom", package: "mlx-swift"),
+            ]
+        ),
+        .target(
+            name: "MagpieTTS",
+            dependencies: [
+                "AudioCommon",
+                "MLXCommon",
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXNN", package: "mlx-swift"),
+                .product(name: "MLXFast", package: "mlx-swift"),
+                .product(name: "MLXRandom", package: "mlx-swift"),
+            ],
+            resources: [
+                .process("Resources"),
+            ]
+        ),
+        .target(
+            name: "MagpieTTSCoreML",
+            dependencies: [
+                "AudioCommon",
+                "MagpieTTS",
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXRandom", package: "mlx-swift"),
+            ]
+        ),
+        .target(
             name: "OmnilingualASR",
             dependencies: [
                 "AudioCommon",
@@ -235,8 +512,8 @@ let package = Package(
         ),
         .binaryTarget(
             name: "CSpeechCore",
-            url: "https://github.com/soniqo/speech-core/releases/download/v0.0.5/SpeechCore.xcframework.zip",
-            checksum: "ec87ae9191875390e19cd2aa74bfdbd8f314c4a0e83dfe012eed4d1ca30c4a5d"
+            url: "https://github.com/soniqo/speech-core/releases/download/v0.0.6/SpeechCore.xcframework.zip",
+            checksum: "aca6733cd04b873e1f7a428993e8d4f23ffceed42f7507cd1196c0b89d34f170"
         ),
         .target(
             name: "SpeechCore",
@@ -255,6 +532,12 @@ let package = Package(
             ]
         ),
         .target(
+            name: "SupertonicTTS",
+            dependencies: [
+                "AudioCommon",
+            ]
+        ),
+        .target(
             name: "Qwen3Chat",
             dependencies: [
                 "AudioCommon",
@@ -262,6 +545,14 @@ let package = Package(
                 .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "MLXNN", package: "mlx-swift"),
                 .product(name: "MLXFast", package: "mlx-swift"),
+            ]
+        ),
+        .target(
+            name: "FunctionGemma",
+            dependencies: [
+                "AudioCommon",
+                .product(name: "Hub", package: "swift-transformers"),
+                .product(name: "Tokenizers", package: "swift-transformers"),
             ]
         ),
         .target(
@@ -284,6 +575,19 @@ let package = Package(
             dependencies: ["AudioCommon"]
         ),
         .target(
+            name: "WhisperASR",
+            dependencies: [
+                "AudioCommon"
+            ]
+        ),
+        .target(
+            name: "Audio2Face3D",
+            dependencies: [
+                "AudioCommon",
+                .product(name: "MLX", package: "mlx-swift")
+            ]
+        ),
+        .target(
             name: "AudioCLILib",
             dependencies: [
                 "Qwen3ASR",
@@ -291,19 +595,34 @@ let package = Package(
                 "CosyVoiceTTS",
                 "Qwen3TTSCoreML",
                 "PersonaPlex",
+                "HibikiTranslate",
                 "SpeechVAD",
                 "SpeechEnhancement",
+                "SpeechRestoration",
                 "SourceSeparation",
                 "ParakeetASR",
                 "ParakeetStreamingASR",
                 "NemotronStreamingASR",
+                "WhisperASR",
                 "OmnilingualASR",
                 "KokoroTTS",
                 "VibeVoiceTTS",
+                "VoxCPM2TTS",
+                "F5TTS",
+                "HiggsTTS",
+                "IndexTTS2TTS",
+                "IndicMioTTS",
+                "MAGNeTMusicGen",
+                "StableAudio3MusicGen",
+                "FlashSR",
+                "MagpieTTS",
+                "MagpieTTSCoreML",
                 "MADLADTranslation",
                 "SpeechWakeWord",
+                "Audio2Face3D",
                 "AudioCommon",
                 .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXRandom", package: "mlx-swift"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser")
             ]
         ),
@@ -311,17 +630,76 @@ let package = Package(
             name: "AudioCLI",
             dependencies: ["AudioCLILib"]
         ),
+        .executableTarget(
+            name: "AsrBenchmark",
+            dependencies: [
+                "AudioCommon",
+                "Qwen3ASR",
+                "ParakeetASR",
+                "NemotronStreamingASR",
+                "OmnilingualASR",
+                "WhisperASR",
+                .product(name: "WhisperKit", package: "WhisperKit"),
+                .product(name: "ArgumentParser", package: "swift-argument-parser")
+            ]
+        ),
+        .target(
+            name: "BenchmarkSupport",
+            dependencies: [
+                "AudioCommon",
+                "SpeechVAD",
+            ]
+        ),
+        .executableTarget(
+            name: "VadBenchmark",
+            dependencies: [
+                "AudioCommon",
+                "SpeechVAD",
+                "BenchmarkSupport",
+                .product(name: "ArgumentParser", package: "swift-argument-parser")
+            ]
+        ),
+        .executableTarget(
+            name: "DiarizationBenchmark",
+            dependencies: [
+                "AudioCommon",
+                "SpeechVAD",
+                "BenchmarkSupport",
+                .product(name: "ArgumentParser", package: "swift-argument-parser")
+            ]
+        ),
         .target(
             name: "AudioServer",
             dependencies: [
                 "Qwen3ASR",
                 "Qwen3TTS",
+                "Qwen3TTSCoreML",
                 "CosyVoiceTTS",
+                "ParakeetASR",
+                "ParakeetStreamingASR",
+                "NemotronStreamingASR",
+                "OmnilingualASR",
+                "KokoroTTS",
+                "VoxCPM2TTS",
+                "IndicMioTTS",
+                "MagpieTTS",
+                "MagpieTTSCoreML",
+                "VibeVoiceTTS",
                 "PersonaPlex",
+                "HibikiTranslate",
                 "SpeechEnhancement",
+                "SpeechVAD",
+                "SourceSeparation",
+                "FlashSR",
+                "MAGNeTMusicGen",
+                "StableAudio3MusicGen",
                 "AudioCommon",
                 .product(name: "Hummingbird", package: "hummingbird"),
-                .product(name: "HummingbirdWebSocket", package: "hummingbird-websocket")
+                .product(name: "HummingbirdWebSocket", package: "hummingbird-websocket"),
+                // Pulled in via hummingbird-websocket but we keep the explicit
+                // pin (see top-level deps) so 1.6.0+ can't slip in; reference
+                // it here so SwiftPM doesn't warn that the pin is unused.
+                .product(name: "WSCore", package: "swift-websocket")
             ]
         ),
         .executableTarget(
@@ -333,13 +711,27 @@ let package = Package(
         ),
         .testTarget(
             name: "PersonaPlexTests",
-            dependencies: ["PersonaPlex", "AudioCommon", "Qwen3ASR"]
+            dependencies: ["PersonaPlex", "AudioCommon", "Qwen3ASR"],
+            resources: [
+                .copy("Resources/test_audio.wav")
+            ]
+        ),
+        .testTarget(
+            name: "HibikiTranslateTests",
+            dependencies: ["HibikiTranslate", "AudioCommon", "ParakeetASR", "Qwen3TTS", "MADLADTranslation"],
+            resources: [
+                .copy("Resources/fleurs_fr.wav"),
+                .copy("Resources/hibiki_official_es_5s.wav"),
+                .copy("Resources/fleurs_pt.wav"),
+                .copy("Resources/fleurs_de.wav"),
+            ]
         ),
         .testTarget(
             name: "Qwen3ASRTests",
             dependencies: ["Qwen3ASR", "SpeechVAD", "AudioCommon"],
             resources: [
-                .copy("Resources/test_audio.wav")
+                .copy("Resources/test_audio.wav"),
+                .copy("Resources/kokoro_continuous_stitched.wav"),
             ]
         ),
         .testTarget(
@@ -353,6 +745,60 @@ let package = Package(
         .testTarget(
             name: "CosyVoiceTTSTests",
             dependencies: ["CosyVoiceTTS", "AudioCommon"]
+        ),
+        .testTarget(
+            name: "OmniVoiceTTSTests",
+            dependencies: [
+                "OmniVoiceTTS", "AudioCommon", "MLXCommon",
+                .product(name: "MLX", package: "mlx-swift")
+            ]
+        ),
+        .testTarget(
+            name: "ChatterboxTTSTests",
+            dependencies: [
+                "ChatterboxTTS", "AudioCommon", "MLXCommon",
+                .product(name: "MLX", package: "mlx-swift")
+            ]
+        ),
+        .testTarget(
+            name: "IndicMioTTSTests",
+            dependencies: [
+                "IndicMioTTS", "AudioCommon", "MLXCommon", "Qwen3ASR",
+                .product(name: "MLX", package: "mlx-swift")
+            ]
+        ),
+        .testTarget(
+            name: "FishAudioTTSTests",
+            dependencies: [
+                "FishAudioTTS", "AudioCommon", "MLXCommon", "Qwen3ASR",
+                .product(name: "MLX", package: "mlx-swift")
+            ]
+        ),
+        .testTarget(
+            name: "F5TTSTests",
+            dependencies: [
+                "F5TTS", "AudioCommon", "MLXCommon", "Qwen3ASR",
+                .product(name: "MLX", package: "mlx-swift")
+            ],
+            resources: [
+                .copy("Resources/pinyin_fixtures.json"),
+                .copy("Resources/pinyin_lexicon_subset.tsv"),
+            ]
+        ),
+        .testTarget(
+            name: "HiggsTTSTests",
+            dependencies: [
+                "HiggsTTS", "AudioCommon", "Qwen3ASR",
+                .product(name: "MLX", package: "mlx-swift")
+            ]
+        ),
+        .testTarget(
+            name: "IndexTTS2TTSTests",
+            dependencies: [
+                "IndexTTS2TTS",
+                "AudioCommon",
+                "Qwen3ASR",
+            ]
         ),
         .testTarget(
             name: "SpeechVADTests",
@@ -381,7 +827,8 @@ let package = Package(
             name: "NemotronStreamingASRTests",
             dependencies: ["NemotronStreamingASR", "AudioCommon", "KokoroTTS"],
             resources: [
-                .copy("Resources/test_audio.wav")
+                .copy("Resources/test_audio.wav"),
+                .copy("Resources/english.json"),
             ]
         ),
         .testTarget(
@@ -410,11 +857,26 @@ let package = Package(
             ]
         ),
         .testTarget(
+            name: "SupertonicTTSTests",
+            dependencies: [
+                "SupertonicTTS",
+                "AudioCommon",
+                "Qwen3ASR",
+            ]
+        ),
+        .testTarget(
             name: "SpeechEnhancementTests",
             dependencies: [
                 "SpeechEnhancement",
                 "AudioCommon",
                 .product(name: "MLX", package: "mlx-swift"),
+            ]
+        ),
+        .testTarget(
+            name: "SpeechRestorationTests",
+            dependencies: [
+                "SpeechRestoration",
+                "AudioCommon",
             ]
         ),
         .testTarget(
@@ -432,12 +894,73 @@ let package = Package(
                 "NemotronStreamingASR",
                 "AudioCommon",
                 .product(name: "MLX", package: "mlx-swift"),
+            ],
+            resources: [
+                .copy("Resources/test_audio.wav")
             ]
+        ),
+        .testTarget(
+            name: "VoxCPM2TTSTests",
+            dependencies: [
+                "VoxCPM2TTS",
+                "AudioCommon",
+                .product(name: "MLX", package: "mlx-swift")
+            ]
+        ),
+        .testTarget(
+            name: "MAGNeTMusicGenTests",
+            dependencies: [
+                "MAGNeTMusicGen",
+                "AudioCommon",
+                .product(name: "MLX", package: "mlx-swift")
+            ]
+        ),
+        .testTarget(
+            name: "StableAudio3MusicGenTests",
+            dependencies: [
+                "StableAudio3MusicGen",
+                "AudioCommon",
+                .product(name: "MLX", package: "mlx-swift")
+            ]
+        ),
+        .testTarget(
+            name: "FlashSRTests",
+            dependencies: [
+                "FlashSR",
+                "AudioCommon",
+                .product(name: "MLX", package: "mlx-swift")
+            ]
+        ),
+        .testTarget(
+            name: "MagpieTTSTests",
+            dependencies: [
+                "MagpieTTS",
+                "Qwen3ASR",
+                "AudioCommon",
+                .product(name: "MLX", package: "mlx-swift")
+            ]
+        ),
+        .testTarget(
+            name: "MagpieTTSCoreMLTests",
+            dependencies: [
+                "MagpieTTSCoreML",
+                "MagpieTTS",
+                "Qwen3ASR",
+                "AudioCommon",
+            ],
+            resources: [.process("Resources")]
         ),
         .testTarget(
             name: "Qwen3ChatTests",
             dependencies: [
                 "Qwen3Chat",
+                "AudioCommon",
+            ]
+        ),
+        .testTarget(
+            name: "FunctionGemmaTests",
+            dependencies: [
+                "FunctionGemma",
                 "AudioCommon",
             ]
         ),
@@ -459,6 +982,9 @@ let package = Package(
             name: "AudioServerTests",
             dependencies: [
                 "AudioServer"
+            ],
+            resources: [
+                .copy("Resources/test_audio.wav")
             ]
         ),
         .testTarget(
@@ -494,6 +1020,13 @@ let package = Package(
                 .copy("Resources/kws_light_up.wav"),
                 .copy("Resources/kws_lovely_child.wav"),
                 .copy("Resources/ref_encoder_light_up.bin")
+            ]
+        ),
+        .testTarget(
+            name: "Audio2Face3DTests",
+            dependencies: [
+                "Audio2Face3D",
+                "AudioCommon"
             ]
         )
     ]

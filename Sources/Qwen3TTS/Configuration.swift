@@ -16,11 +16,14 @@ public enum TTSModelSize {
     }
 
     /// Detect quantization bits from a HuggingFace model ID.
-    /// Returns 4 by default if not specified.
+    /// Returns 4 by default if not specified; 0 means no quantization (bf16/fp32 path).
     public static func detectBits(from modelId: String) -> Int {
         let lower = modelId.lowercased()
         if lower.contains("8bit") || lower.contains("8-bit") {
             return 8
+        }
+        if lower.contains("bf16") || lower.contains("fp16") || lower.contains("fp32") {
+            return 0
         }
         return 4
     }
@@ -42,11 +45,13 @@ public struct TalkerConfig: Codable, Sendable {
     public var textHiddenSize: Int = 2048
     public var codecVocabSize: Int = 3072
     public var groupSize: Int = 64
-    public var bits: Int = 4
+    // int4 was decommissioned for TTS (too much quality loss); 8-bit is the floor
+    // for the 0.6B Base/CustomVoice models, bf16 for the 1.7B Base model.
+    public var bits: Int = 8
 
     public init() {}
 
-    /// 0.6B, 4-bit (default)
+    /// 0.6B, 8-bit (the smallest shipped 0.6B precision; no 0.6B bf16 bundle exists).
     public static var base06B: TalkerConfig { TalkerConfig() }
 
     /// 0.6B, 8-bit
@@ -56,8 +61,8 @@ public struct TalkerConfig: Codable, Sendable {
         return config
     }
 
-    /// 1.7B, 4-bit
-    public static var large4bit: TalkerConfig {
+    /// 1.7B base dims; precision set by the derived configs (bf16 floor).
+    public static var large: TalkerConfig {
         var config = TalkerConfig()
         config.hiddenSize = 2048
         config.numHeads = 16
@@ -65,16 +70,26 @@ public struct TalkerConfig: Codable, Sendable {
         config.headDim = 128
         config.intermediateSize = 6144
         config.textHiddenSize = 2048
-        config.bits = 4
+        config.bits = 0
         return config
     }
 
     /// 1.7B, 8-bit
     public static var large8bit: TalkerConfig {
-        var config = large4bit
+        var config = large
         config.bits = 8
         return config
     }
+
+    /// 0.6B, bf16 (no quantization).
+    public static var smallBf16: TalkerConfig {
+        var config = TalkerConfig()
+        config.bits = 0
+        return config
+    }
+
+    /// 1.7B, bf16 (no quantization) — the production floor.
+    public static var largeBf16: TalkerConfig { large }
 }
 
 // MARK: - Code Predictor Config
@@ -93,7 +108,8 @@ public struct CodePredictorConfig: Codable, Sendable {
     public var vocabSize: Int = 2048
     public var numCodeGroups: Int = 16
     public var groupSize: Int = 64
-    public var bits: Int = 4
+    // int4 decommissioned for TTS; 8-bit floor (0.6B), bf16 (1.7B).
+    public var bits: Int = 8
 
     /// Whether a projection from embeddingDim → hiddenSize is needed
     public var needsProjection: Bool { embeddingDim != hiddenSize }
@@ -107,20 +123,30 @@ public struct CodePredictorConfig: Codable, Sendable {
         return config
     }
 
-    /// 1.7B, 4-bit — embeddings are 2048-dim with projection to 1024
-    public static var large4bit: CodePredictorConfig {
+    /// 1.7B base dims (embeddings 2048-dim with projection to 1024); precision set by derived configs.
+    public static var large: CodePredictorConfig {
         var config = CodePredictorConfig()
         config.embeddingDim = 2048
-        config.bits = 4
+        config.bits = 0
         return config
     }
 
     /// 1.7B, 8-bit
     public static var large8bit: CodePredictorConfig {
-        var config = large4bit
+        var config = large
         config.bits = 8
         return config
     }
+
+    /// 0.6B, bf16 (no quantization).
+    public static var smallBf16: CodePredictorConfig {
+        var config = CodePredictorConfig()
+        config.bits = 0
+        return config
+    }
+
+    /// 1.7B, bf16 (no quantization) — the production floor.
+    public static var largeBf16: CodePredictorConfig { large }
 }
 
 // MARK: - Speech Tokenizer Decoder Config
@@ -161,7 +187,7 @@ public struct CodecTokens {
     public static let ttsBos: Int = 151672
     public static let ttsEos: Int = 151673
     public static let languageEnglish: Int = 2050
-    public static let languageGerman: Int = 2052
+    public static let languageGerman: Int = 2053
     public static let languageChinese: Int = 2055
     public static let languageJapanese: Int = 2058
     public static let languageSpanish: Int = 2054
@@ -247,11 +273,13 @@ public struct StreamingConfig: Sendable {
 
 /// Well-known TTS model variants
 public enum TTSModelVariant: String, CaseIterable, Sendable {
-    case base = "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-4bit"
-    case base8bit = "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-8bit"
-    case customVoice = "aufklarer/Qwen3-TTS-12Hz-0.6B-CustomVoice-MLX-4bit"
-    case base17B = "aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-4bit"
+    // int4 decommissioned for TTS. The 0.6B Base/CustomVoice models use 8-bit;
+    // the 1.7B production Base model is bf16.
+    case base = "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-8bit"
     case base17B8bit = "aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-8bit"
+    case base17Bbf16 = "aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-bf16"
+    case customVoice = "aufklarer/Qwen3-TTS-12Hz-0.6B-CustomVoice-MLX-8bit"
+    case customVoiceBf16 = "aufklarer/Qwen3-TTS-12Hz-0.6B-CustomVoice-MLX-bf16"
 }
 
 // MARK: - Combined TTS Config
@@ -275,17 +303,16 @@ public struct Qwen3TTSConfig: Codable, Sendable {
         Qwen3TTSConfig()
     }
 
-    /// Build config for a given model size and quantization.
+    /// Build config for a given model size and quantization. `bits == 0` selects bf16.
+    ///
+    /// int4 is no longer shipped for any TTS model. This still respects any `bits` —
+    /// the loader builds the config for whatever precision the model id reports — so a
+    /// 4-bit bundle (none ship today) would still load rather than being routed away.
     public static func config(for size: TTSModelSize, bits: Int) -> Qwen3TTSConfig {
-        switch (size, bits) {
-        case (.small, 8):
-            return Qwen3TTSConfig(talker: .small8bit, codePredictor: .small8bit)
-        case (.large, 8):
-            return Qwen3TTSConfig(talker: .large8bit, codePredictor: .large8bit)
-        case (.large, _):
-            return Qwen3TTSConfig(talker: .large4bit, codePredictor: .large4bit)
-        default:
-            return Qwen3TTSConfig()  // small 4-bit
-        }
+        var talker: TalkerConfig = (size == .large) ? .large : TalkerConfig()
+        var codePredictor: CodePredictorConfig = (size == .large) ? .large : CodePredictorConfig()
+        talker.bits = bits
+        codePredictor.bits = bits
+        return Qwen3TTSConfig(talker: talker, codePredictor: codePredictor)
     }
 }

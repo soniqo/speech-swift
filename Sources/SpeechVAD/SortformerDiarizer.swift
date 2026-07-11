@@ -6,8 +6,12 @@ import AudioCommon
 /// End-to-end neural speaker diarization using NVIDIA Sortformer (CoreML).
 ///
 /// Sortformer directly predicts per-frame speaker activity for up to 4 speakers
-/// without requiring separate embedding extraction or clustering. Runs on
-/// Neural Engine at ~120x real-time.
+/// without requiring separate embedding extraction or clustering. The default
+/// preset (`SortformerConfig.default`) runs on the Neural Engine at ~125–750×
+/// RTF on M-series silicon (warm, depending on input length) — single CoreML
+/// dispatch handles up to 30 s of audio per call. A small-chunk
+/// `.streaming` preset is available for future realtime / low-latency
+/// consumers but is significantly slower per-second-of-audio.
 ///
 /// ```swift
 /// let diarizer = try await SortformerDiarizer.fromPretrained()
@@ -30,28 +34,20 @@ public final class SortformerDiarizer {
 
     // MARK: - Streaming State
 
-    /// Speaker cache buffer, flat `[spkcacheLen * fcDModel]`
-    private var spkcache: [Float]
-    /// Number of valid frames in speaker cache
-    private var spkcacheLength: Int = 0
-    /// FIFO buffer, flat `[fifoLen * fcDModel]`
-    private var fifo: [Float]
-    /// Number of valid frames in FIFO
-    private var fifoLength: Int = 0
+    private var state: SortformerStreamingState
+    private let updater: SortformerStateUpdater
+
     init(model: SortformerCoreMLModel, config: SortformerConfig = .default) {
         self.model = model
         self.config = config
         self.melExtractor = SortformerMelExtractor(config: config)
-        self.spkcache = [Float](repeating: 0, count: config.spkcacheLen * config.fcDModel)
-        self.fifo = [Float](repeating: 0, count: config.fifoLen * config.fcDModel)
+        self.state = SortformerStreamingState(config: config)
+        self.updater = SortformerStateUpdater(config: config)
     }
 
     /// Reset streaming state between different audio files.
     public func resetState() {
-        spkcache = [Float](repeating: 0, count: config.spkcacheLen * config.fcDModel)
-        spkcacheLength = 0
-        fifo = [Float](repeating: 0, count: config.fifoLen * config.fcDModel)
-        fifoLength = 0
+        state.reset()
     }
 
     // MARK: - Loading
@@ -60,22 +56,34 @@ public final class SortformerDiarizer {
     ///
     /// - Parameters:
     ///   - modelId: HuggingFace model ID
+    ///   - cacheDir: optional override for the local cache directory
+    ///   - offlineMode: if true, only consult the local cache
+    ///   - config: chunk-shape preset (`.default`, `.balanced`, `.streaming`)
+    ///   - computeUnits: which CoreML backends to enable. Defaults to
+    ///     `.cpuAndNeuralEngine` (ANE-only, no GPU/MPSGraph validation).
+    ///     Set to `.cpuOnly` for instant first-load at the cost of ~10–50×
+    ///     RTF instead of ~125–750× (useful during onboarding / on
+    ///     simulator / on weak devices). `SPEECH_COREML_COMPUTE_UNITS` env
+    ///     var overrides this when set.
     ///   - progressHandler: callback for download progress
     /// - Returns: ready-to-use diarizer
     public static func fromPretrained(
         modelId: String = defaultModelId,
         cacheDir: URL? = nil,
         offlineMode: Bool = false,
+        config: SortformerConfig = .default,
+        computeUnits: MLComputeUnits = .cpuAndNeuralEngine,
         progressHandler: ((Double, String) -> Void)? = nil
     ) async throws -> SortformerDiarizer {
         progressHandler?(0.0, "Downloading Sortformer model...")
 
         let cacheDir = try cacheDir ?? HuggingFaceDownloader.getCacheDirectory(for: modelId)
 
+        let modelFileName = config.coreMLModelFileName
         try await HuggingFaceDownloader.downloadWeights(
             modelId: modelId,
             to: cacheDir,
-            additionalFiles: ["Sortformer.mlmodelc/**", "config.json"],
+            additionalFiles: ["\(modelFileName)/**", "config.json"],
             offlineMode: offlineMode,
             progressHandler: { progress in
                 progressHandler?(progress * 0.8, "Downloading Sortformer model...")
@@ -84,7 +92,7 @@ public final class SortformerDiarizer {
 
         progressHandler?(0.8, "Loading CoreML model...")
 
-        let modelURL = cacheDir.appendingPathComponent("Sortformer.mlmodelc", isDirectory: true)
+        let modelURL = cacheDir.appendingPathComponent(modelFileName, isDirectory: true)
         guard FileManager.default.fileExists(atPath: modelURL.path) else {
             throw AudioModelError.modelLoadFailed(
                 modelId: modelId,
@@ -92,7 +100,12 @@ public final class SortformerDiarizer {
         }
 
         let mlConfig = MLModelConfiguration()
-        mlConfig.computeUnits = .cpuAndNeuralEngine
+        // `.cpuAndNeuralEngine` skips the GPU/MPSGraph backend during model
+        // load validation — see #319 (M5 Max + macOS 26) and #328. The
+        // caller can override via the `computeUnits` parameter or by
+        // setting SPEECH_COREML_COMPUTE_UNITS in the environment.
+        mlConfig.computeUnits = CoreMLComputeUnitsResolver.resolved(default: computeUnits)
+        mlConfig.allowLowPrecisionAccumulationOnGPU = true
 
         let mlModel: MLModel
         do {
@@ -104,11 +117,50 @@ public final class SortformerDiarizer {
                 underlying: error)
         }
 
-        let config = SortformerConfig.default
         let coremlModel = SortformerCoreMLModel(model: mlModel, config: config)
 
         progressHandler?(1.0, "Ready")
         return SortformerDiarizer(model: coremlModel, config: config)
+    }
+
+    /// Prime the on-device CoreML cache without holding a diarizer instance.
+    ///
+    /// The first time a Sortformer `.mlmodelc` loads on a given device,
+    /// CoreML compiles its MIL into ANE bytecode via the BNNS compiler.
+    /// For `.default` (chunk_len=340) this can take minutes on cold cache;
+    /// subsequent loads pull from `~/Library/Caches/com.apple.modelcompiler/`
+    /// in seconds. Call this from a background task at app launch (or any
+    /// non-interactive moment) so the user pays the compile cost during
+    /// onboarding instead of on the first diarize call.
+    ///
+    /// The compiled artifact persists in the system cache after this
+    /// returns; the temporary `MLModel` instance is discarded.
+    ///
+    /// - Parameters:
+    ///   - modelId: HuggingFace model ID
+    ///   - cacheDir: optional override for the local cache directory
+    ///   - offlineMode: if true, only consult the local cache
+    ///   - config: chunk-shape preset to warm
+    ///   - computeUnits: backends to compile for (defaults to `.cpuAndNeuralEngine`)
+    ///   - progressHandler: callback for download + load progress
+    public static func preload(
+        modelId: String = defaultModelId,
+        cacheDir: URL? = nil,
+        offlineMode: Bool = false,
+        config: SortformerConfig = .default,
+        computeUnits: MLComputeUnits = .cpuAndNeuralEngine,
+        progressHandler: ((Double, String) -> Void)? = nil
+    ) async throws {
+        // Reuses fromPretrained so the load path is identical to what the
+        // app would later hit; the diarizer is allowed to deallocate as
+        // soon as this function returns — the BNNS compile cache survives.
+        _ = try await fromPretrained(
+            modelId: modelId,
+            cacheDir: cacheDir,
+            offlineMode: offlineMode,
+            config: config,
+            computeUnits: computeUnits,
+            progressHandler: progressHandler)
     }
 
     // MARK: - Diarization
@@ -168,19 +220,20 @@ public final class SortformerDiarizer {
 
         // Streaming chunking parameters (matching NeMo)
         let subFactor = self.config.subsamplingFactor
-        let chunkLen = Int(self.config.chunkLenSeconds)  // 6 encoder output frames
-        let leftCtx = Int(self.config.leftContextSeconds)  // 1
-        let rightCtx = Int(self.config.rightContextSeconds) // 7
-        let coreMelFrames = chunkLen * subFactor  // 48 mel frames per core chunk
-        let coreMLInputFrames = 112  // Fixed CoreML input size
+        let chunkLen = Int(self.config.chunkLenSeconds)
+        let leftCtx = Int(self.config.leftContextSeconds)
+        let rightCtx = Int(self.config.rightContextSeconds)
+        let coreMelFrames = chunkLen * subFactor
+        let coreMLInputFrames = self.config.coreMLInputFrames
         let nMels = self.config.nMels
         let numSpeakers = self.config.maxSpeakers
+        let dim = self.config.fcDModel
+        let spkcacheCapacity = self.config.spkcacheLen
+        let fifoCapacity = self.config.fifoLen
 
-        // Collect core predictions from each chunk
-        var allChunkProbs = [[Float]]()  // Each entry: [coreFrames * numSpeakers]
+        var allChunkProbs = [[Float]]()
         let emptyResult = DiarizationResult(segments: [], numSpeakers: 0, speakerEmbeddings: [])
 
-        // Calculate total chunks for progress reporting
         let totalChunks = max(1, (totalMelFrames + coreMelFrames - 1) / coreMelFrames)
         var chunkIndex = 0
 
@@ -203,47 +256,49 @@ public final class SortformerDiarizer {
             // Build padded mel chunk [coreMLInputFrames, nMels]
             var chunkMel = [Float](repeating: 0, count: coreMLInputFrames * nMels)
             let framesToCopy = min(actualLen, coreMLInputFrames)
-            for fi in 0..<framesToCopy {
-                let srcBase = (chunkStart + fi) * nMels
-                let dstBase = fi * nMels
-                for di in 0..<nMels {
-                    chunkMel[dstBase + di] = melSpec[srcBase + di]
+            if framesToCopy > 0 {
+                let elements = framesToCopy * nMels
+                let srcStart = chunkStart * nMels
+                chunkMel.withUnsafeMutableBufferPointer { dst in
+                    melSpec.withUnsafeBufferPointer { src in
+                        memcpy(dst.baseAddress!, src.baseAddress! + srcStart,
+                               elements * MemoryLayout<Float>.stride)
+                    }
                 }
             }
+
+            // The CoreML inputs require fixed shapes — pad the dynamic state
+            // arrays up to capacity for this call. The model fills the
+            // unused tail with zeros via its internal length inputs.
+            var paddedSpkcache = state.spkcache
+            paddedSpkcache.append(contentsOf:
+                [Float](repeating: 0,
+                        count: spkcacheCapacity * dim - paddedSpkcache.count))
+            var paddedFifo = state.fifo
+            paddedFifo.append(contentsOf:
+                [Float](repeating: 0,
+                        count: fifoCapacity * dim - paddedFifo.count))
 
             do {
                 let output = try model.predict(
                     chunk: chunkMel,
                     chunkLength: actualLen,
-                    spkcache: spkcache,
-                    spkcacheLength: spkcacheLength,
-                    fifo: fifo,
-                    fifoLength: fifoLength
+                    spkcache: paddedSpkcache,
+                    spkcacheLength: state.spkcacheLength,
+                    fifo: paddedFifo,
+                    fifoLength: state.fifoLength
                 )
 
-                // Extract core predictions (skip spkcache + fifo + left context,
-                // trim right context)
-                let validEmbs: Int = output.validEmbFrames
-                let lcFrames: Int = Int(Float(leftOffset) / Float(subFactor) + 0.5)
-                let rcFrames: Int = Int(ceil(Float(rightOffset) / Float(subFactor)))
-                let coreLen: Int = validEmbs - lcFrames - rcFrames
-                let corePredLen = coreLen > 0 ? coreLen : 0
+                let lcFrames = Int(Float(leftOffset) / Float(subFactor) + 0.5)
+                let rcFrames = Int(ceil(Float(rightOffset) / Float(subFactor)))
 
-                let predOffset = spkcacheLength + fifoLength + lcFrames
-                let totalPredFrames = output.predsFrames
-
-                var chunkProbs = [Float]()
-                for f in 0..<corePredLen {
-                    let predFrame = predOffset + f
-                    guard predFrame < totalPredFrames else { break }
-                    for s in 0..<numSpeakers {
-                        chunkProbs.append(output.pred(frame: predFrame, speaker: s))
-                    }
-                }
-                allChunkProbs.append(chunkProbs)
-
-                // Update streaming state (FIFO overflow → spkcache)
-                updateState(from: output)
+                let result = updater.update(
+                    state: &state,
+                    chunkEmbs: output.encoderEmbs,
+                    preds: output.speakerPreds,
+                    leftContext: lcFrames,
+                    rightContext: rcFrames)
+                allChunkProbs.append(result.confirmed)
             } catch {
                 print("Warning: Sortformer inference failed on chunk at mel frame \(sttFeat): \(error)")
             }
@@ -273,90 +328,6 @@ public final class SortformerDiarizer {
             numSpeakers: usedSpeakers.count,
             speakerEmbeddings: []  // End-to-end model, no separate embeddings
         )
-    }
-
-    // MARK: - State Management (NeMo FIFO→spkcache pattern)
-
-    /// Update spkcache and fifo buffers from encoder embeddings.
-    ///
-    /// Follows NeMo's streaming_update: new embeddings go into FIFO.
-    /// When FIFO overflows, oldest frames move to spkcache.
-    private func updateState(from output: SortformerOutput) {
-        let validFrames = output.validEmbFrames
-        guard validFrames > 0 else { return }
-        let dim = config.fcDModel
-        let fifoCapacity = config.fifoLen
-        let cacheCapacity = config.spkcacheLen
-
-        if fifoLength + validFrames <= fifoCapacity {
-            // FIFO has room — just append
-            for f in 0..<validFrames {
-                let srcBase = f * dim
-                let dstBase = (fifoLength + f) * dim
-                for d in 0..<dim {
-                    fifo[dstBase + d] = output.encoderEmbs[srcBase + d]
-                }
-            }
-            fifoLength += validFrames
-        } else {
-            // FIFO overflow: move oldest frames to spkcache
-            let overflow = fifoLength + validFrames - fifoCapacity
-
-            // Move overflow frames from front of FIFO to spkcache
-            if spkcacheLength + overflow <= cacheCapacity {
-                // Append to spkcache
-                for f in 0..<overflow {
-                    let srcBase = f * dim
-                    let dstBase = (spkcacheLength + f) * dim
-                    for d in 0..<dim {
-                        spkcache[dstBase + d] = fifo[srcBase + d]
-                    }
-                }
-                spkcacheLength += overflow
-            } else {
-                // Spkcache also overflows — shift left and append
-                let cacheOverflow = spkcacheLength + overflow - cacheCapacity
-                let keep = spkcacheLength - cacheOverflow
-                if keep > 0 {
-                    for f in 0..<keep {
-                        let srcBase = (f + cacheOverflow) * dim
-                        let dstBase = f * dim
-                        for d in 0..<dim {
-                            spkcache[dstBase + d] = spkcache[srcBase + d]
-                        }
-                    }
-                }
-                for f in 0..<overflow {
-                    let srcBase = f * dim
-                    let dstBase = (keep + f) * dim
-                    for d in 0..<dim {
-                        spkcache[dstBase + d] = fifo[srcBase + d]
-                    }
-                }
-                spkcacheLength = min(cacheCapacity, keep + overflow)
-            }
-
-            // Shift FIFO left by overflow, then append new frames
-            let remaining = fifoLength - overflow
-            if remaining > 0 {
-                for f in 0..<remaining {
-                    let srcBase = (f + overflow) * dim
-                    let dstBase = f * dim
-                    for d in 0..<dim {
-                        fifo[dstBase + d] = fifo[srcBase + d]
-                    }
-                }
-            }
-            fifoLength = remaining
-            for f in 0..<validFrames {
-                let srcBase = f * dim
-                let dstBase = (fifoLength + f) * dim
-                for d in 0..<dim {
-                    fifo[dstBase + d] = output.encoderEmbs[srcBase + d]
-                }
-            }
-            fifoLength += validFrames
-        }
     }
 
     // MARK: - Binarization

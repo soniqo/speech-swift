@@ -15,7 +15,7 @@ public struct CosyVoiceLLMConfig: Codable, Sendable {
     public var speechTokenSize: Int = 6561
     public var speechTokenExtra: Int = 200
     public var groupSize: Int = 64
-    public var bits: Int = 4
+    public var bits: Int = 8
 
     /// Total speech embedding/head size: speechTokenSize + speechTokenExtra
     public var totalSpeechVocabSize: Int { speechTokenSize + speechTokenExtra }
@@ -25,6 +25,17 @@ public struct CosyVoiceLLMConfig: Codable, Sendable {
     public var eosToken: Int { speechTokenSize + 1 }
     public var taskIdToken: Int { speechTokenSize + 2 }
     public var fillToken: Int { speechTokenSize + 3 }
+
+    /// Stop tokens recognised by the LLM during autoregressive generation.
+    /// Upstream's `Qwen2LM` (which `CosyVoice3LM` inherits) defines
+    ///   `stop_token_ids = [speech_token_size + i for i in range(3)]`
+    /// so EOS, "stop_1", and "fill" all break the generation loop. Our port
+    /// previously only broke on eosToken, forcing the LLM to keep generating
+    /// when it wanted to stop via either of the other two — observable as
+    /// per-segment repetitions in long-form synthesis.
+    public var stopTokens: [Int] {
+        [speechTokenSize, speechTokenSize + 1, speechTokenSize + 2]
+    }
 
     public init() {}
 }
@@ -43,7 +54,7 @@ public struct CosyVoiceDiTConfig: Codable, Sendable {
     public var staticChunkSize: Int = 50
     public var freqEmbedDim: Int = 256
     public var groupSize: Int = 64
-    public var bits: Int = 4
+    public var bits: Int = 8
 
     /// Feedforward network dimension: dim * ffMult
     public var ffDim: Int { dim * ffMult }

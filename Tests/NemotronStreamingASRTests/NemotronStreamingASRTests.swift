@@ -6,7 +6,7 @@ import CoreML
 
 final class NemotronStreamingConfigTests: XCTestCase {
 
-    func testDefaultConfigIsSensible() {
+    func testDefaultConfigIsMultilingual() {
         let config = NemotronStreamingConfig.default
         XCTAssertEqual(config.numMelBins, 128)
         XCTAssertEqual(config.sampleRate, 16000)
@@ -14,18 +14,20 @@ final class NemotronStreamingConfigTests: XCTestCase {
         XCTAssertEqual(config.encoderLayers, 24)
         XCTAssertEqual(config.decoderHidden, 640)
         XCTAssertEqual(config.decoderLayers, 2)
-        XCTAssertEqual(config.vocabSize, 1024)
-        XCTAssertEqual(config.blankTokenId, 1024)
+        XCTAssertEqual(config.vocabSize, 13087)
+        XCTAssertEqual(config.blankTokenId, 13087)
+        XCTAssertEqual(config.attentionContext, 56)
+        XCTAssertEqual(config.numPrompts, 128)
     }
 
-    func testStreamingDefaultsForChunk160ms() {
+    func testStreamingDefaultsForChunk320ms() {
         let s = NemotronStreamingConfig.default.streaming
-        XCTAssertEqual(s.chunkMs, 160)
-        XCTAssertEqual(s.chunkSize, 2)
-        XCTAssertEqual(s.rightContext, 1)
-        XCTAssertEqual(s.melFrames, 17)
-        XCTAssertEqual(s.preCacheSize, 16)
-        XCTAssertEqual(s.outputFrames, 2)
+        XCTAssertEqual(s.chunkMs, 320)
+        XCTAssertEqual(s.chunkSize, 4)
+        XCTAssertEqual(s.rightContext, 3)
+        XCTAssertEqual(s.melFrames, 32)
+        XCTAssertEqual(s.preCacheSize, 9)
+        XCTAssertEqual(s.outputFrames, 4)
     }
 
     func testConfigRoundtripsThroughJSON() throws {
@@ -34,7 +36,69 @@ final class NemotronStreamingConfigTests: XCTestCase {
         let decoded = try JSONDecoder().decode(NemotronStreamingConfig.self, from: encoded)
         XCTAssertEqual(decoded.encoderHidden, config.encoderHidden)
         XCTAssertEqual(decoded.decoderLayers, config.decoderLayers)
+        XCTAssertEqual(decoded.numPrompts, config.numPrompts)
         XCTAssertEqual(decoded.streaming.chunkMs, config.streaming.chunkMs)
+    }
+
+    /// English-only bundles ship a config.json without `numPrompts`;
+    /// the decoder should default to 128 and not crash.
+    func testConfigDecodesWithoutNumPrompts() throws {
+        let json = """
+        {
+          "numMelBins": 128, "sampleRate": 16000, "nFFT": 512, "hopLength": 160,
+          "winLength": 400, "preEmphasis": 0.97, "encoderHidden": 1024,
+          "encoderLayers": 24, "subsamplingFactor": 8, "attentionContext": 70,
+          "convCacheSize": 8, "decoderHidden": 640, "decoderLayers": 2,
+          "vocabSize": 1024, "blankTokenId": 1024,
+          "streaming": {
+            "chunkMs": 160, "chunkSize": 2, "rightContext": 1,
+            "melFrames": 17, "preCacheSize": 16, "outputFrames": 2
+          }
+        }
+        """.data(using: .utf8)!
+        let cfg = try JSONDecoder().decode(NemotronStreamingConfig.self, from: json)
+        XCTAssertEqual(cfg.numPrompts, 128)  // default fallback
+        XCTAssertEqual(cfg.vocabSize, 1024)
+    }
+}
+
+final class NemotronLanguagesTests: XCTestCase {
+
+    func testWrappedDictionaryParses() throws {
+        let json = """
+        {"promptDictionary": {"en-US": 0, "de-DE": 9, "auto": 101}}
+        """.data(using: .utf8)!
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("lang-\(UUID()).json")
+        try json.write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let langs = try NemotronLanguages.load(from: url)
+        XCTAssertEqual(langs.slot(for: "en-US"), 0)
+        XCTAssertEqual(langs.slot(for: "de-DE"), 9)
+        XCTAssertEqual(langs.slot(for: nil), 101)
+    }
+
+    func testFlatDictionaryParses() throws {
+        let json = """
+        {"en-US": 0, "ja-JP": 10, "auto": 101}
+        """.data(using: .utf8)!
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("lang-\(UUID()).json")
+        try json.write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let langs = try NemotronLanguages.load(from: url)
+        XCTAssertEqual(langs.slot(for: "ja-JP"), 10)
+    }
+
+    func testPrefixFallback() {
+        let langs = NemotronLanguages(promptDictionary: ["en": 0, "en-US": 0, "auto": 101])
+        XCTAssertEqual(langs.slot(for: "en-GB"), 0,
+            "Unknown subtag should fall back to base language slot")
+        XCTAssertEqual(langs.slot(for: "fr-FR"), 101,
+            "Completely unknown language should fall back to 'auto'")
+    }
+
+    func testUnderscoreNormalization() {
+        let langs = NemotronLanguages(promptDictionary: ["en-US": 0, "auto": 101])
+        XCTAssertEqual(langs.slot(for: "en_US"), 0)
     }
 }
 
@@ -69,9 +133,81 @@ final class NemotronVocabularyTests: XCTestCase {
         XCTAssertEqual(words[0].confidence, 0.9, accuracy: 1e-4)
         XCTAssertEqual(words[1].confidence, 0.8, accuracy: 1e-4)
     }
+
+    /// Unit-level reproducer for the reported `<en-US>` leak. The vocab file
+    /// of `aufklarer/Nemotron-3.5-ASR-Streaming-0.6B-CoreML-INT8` contains
+    /// `<en-US>`, `<en-GB>`, `<ar-AR>`, `<es-ES>`, etc. as ordinary BPE
+    /// pieces (~60 language tags). `decode()` currently has no special-token
+    /// filter (see `Vocabulary.swift:31-38` — the doc comment itself admits
+    /// "callers may strip <lang-tag> markers downstream"). When the RNN-T
+    /// joint's argmax lands on a language-ID slot — which it can on
+    /// overlapped / noisy / language-ambiguous audio — that literal
+    /// `<en-US>` flows into the user-facing String.
+    ///
+    /// This test asserts the absence behaviour the fix must deliver. It
+    /// reproduces the bug at the lowest possible level: a 2-token vocab, no
+    /// model, no audio. **This test is expected to fail until decode()
+    /// gains a skip-special-tokens path.**
+    func testDecodeFiltersLanguageTagTokens() {
+        let vocab = NemotronVocabulary(idToToken: [
+            0: "<en-US>",
+            1: "▁hello",
+            2: "▁world",
+            3: "<ar-AR>",
+        ])
+        let text = vocab.decode([0, 1, 2, 3])
+        XCTAssertFalse(text.contains("<en-US>"),
+            "decode() leaked <en-US> language-tag: \"\(text)\"")
+        XCTAssertFalse(text.contains("<ar-AR>"),
+            "decode() leaked <ar-AR> language-tag: \"\(text)\"")
+        let langTagRegex = try? NSRegularExpression(pattern: "<[a-zA-Z][a-zA-Z-]*>")
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        XCTAssertEqual(
+            langTagRegex?.numberOfMatches(in: text, range: range), 0,
+            "decode() must strip <lang-tag>-style special tokens — got: \"\(text)\""
+        )
+        // The non-special tokens still render through.
+        XCTAssertTrue(text.contains("hello"))
+        XCTAssertTrue(text.contains("world"))
+    }
 }
 
-// MARK: - E2E Tests (require model download + CoreML)
+// MARK: - E2E Tests (require local CoreML bundle or HF download)
+
+/// Path to a locally-converted CoreML bundle, settable via env var.
+/// Falls back to the canonical /tmp path used by the export pipeline.
+private func localBundlePath() -> URL? {
+    if let env = ProcessInfo.processInfo.environment["NEMOTRON_35_LOCAL_BUNDLE"], !env.isEmpty {
+        let url = URL(fileURLWithPath: env)
+        if FileManager.default.fileExists(atPath: url.path) { return url }
+    }
+    let fallback = URL(fileURLWithPath: "/tmp/Nemotron-3.5-CoreML-320ms")
+    if FileManager.default.fileExists(atPath: fallback.path) { return fallback }
+    return nil
+}
+
+/// Path to the English-only bundle (`aufklarer/Nemotron-Speech-Streaming-0.6B-CoreML-INT8`).
+/// English-only Nemotron Speech Streaming is its own model variant — smaller bundle,
+/// 160 ms chunks, attCtx=70, vocab=1024.
+/// First looks at the env override, then the HF cache.
+private func englishOnlyBundlePath() -> URL? {
+    if let env = ProcessInfo.processInfo.environment["NEMOTRON_EN_LOCAL_BUNDLE"], !env.isEmpty {
+        let url = URL(fileURLWithPath: env)
+        if FileManager.default.fileExists(atPath: url.path) { return url }
+    }
+    let home = FileManager.default.homeDirectoryForCurrentUser
+    let cache = home
+        .appendingPathComponent(".cache/huggingface/hub/models--aufklarer--Nemotron-Speech-Streaming-0.6B-CoreML-INT8/snapshots")
+    guard let contents = try? FileManager.default.contentsOfDirectory(at: cache, includingPropertiesForKeys: nil) else {
+        return nil
+    }
+    for entry in contents where entry.hasDirectoryPath {
+        if FileManager.default.fileExists(atPath: entry.appendingPathComponent("encoder.mlmodelc").path) {
+            return entry
+        }
+    }
+    return nil
+}
 
 final class E2ENemotronStreamingASRTests: XCTestCase {
 
@@ -87,7 +223,12 @@ final class E2ENemotronStreamingASRTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
         if Self._model == nil {
-            Self._model = try await NemotronStreamingASRModel.fromPretrained()
+            // Prefer local bundle (no download); fall back to HF.
+            if let local = localBundlePath() {
+                Self._model = try await NemotronStreamingASRModel.fromLocal(bundleDir: local)
+            } else {
+                Self._model = try await NemotronStreamingASRModel.fromPretrained()
+            }
         }
     }
 
@@ -97,41 +238,122 @@ final class E2ENemotronStreamingASRTests: XCTestCase {
         XCTAssertEqual(m.config.encoderHidden, 1024)
         XCTAssertEqual(m.config.encoderLayers, 24)
         XCTAssertEqual(m.config.decoderLayers, 2)
-        XCTAssertEqual(m.config.vocabSize, 1024)
+        XCTAssertEqual(m.config.vocabSize, 13087)
+        XCTAssertEqual(m.config.numPrompts, 128)
+        XCTAssertGreaterThanOrEqual(m.languages.count, 60,
+            "Multilingual bundle should expose 60+ language aliases")
+        XCTAssertNotNil(m.languages.promptDictionary["en-US"])
+        XCTAssertNotNil(m.languages.promptDictionary["ja-JP"])
     }
 
     func testWarmup() throws {
         try model.warmUp()
     }
 
-    func testBatchTranscription() throws {
+    func testBatchTranscriptionEnglish() throws {
         let m = try model
         let audioURL = Bundle.module.url(forResource: "test_audio", withExtension: "wav")!
         let audio = try AudioFileLoader.load(url: audioURL, targetSampleRate: 16000)
-        let text = try m.transcribeAudio(audio, sampleRate: 16000)
+        let text = try m.transcribeAudio(audio, sampleRate: 16000, language: "en-US")
         XCTAssertFalse(text.isEmpty, "Transcription should not be empty")
-        print("Batch result: \(text)")
+        print("Batch en-US: \(text)")
     }
 
-    func testStreamingTranscription() async throws {
+    func testBatchTranscriptionEnglishWithWordBoosting() throws {
+        let m = try model
+        let audioURL = Bundle.module.url(forResource: "test_audio", withExtension: "wav")!
+        let audio = try AudioFileLoader.load(url: audioURL, targetSampleRate: 16000)
+        let boosted = WordBoostingConfig(
+            phrases: ["replacement part", "shipped tomorrow"],
+            boost: 0.75
+        )
+
+        let text = try m.transcribeAudio(
+            audio,
+            sampleRate: 16000,
+            language: "en-US",
+            wordBoosting: boosted
+        )
+
+        XCTAssertFalse(text.isEmpty, "Boosted transcription should not be empty")
+        XCTAssertTrue(text.localizedCaseInsensitiveContains("replacement"))
+        XCTAssertTrue(text.localizedCaseInsensitiveContains("tomorrow"))
+        print("Batch en-US boosted: \(text)")
+    }
+
+    /// Regression canary for the boost path: when the decoder runs with
+    /// boosting configured, `wordBoostingChangedDecisions` on the streamed
+    /// partial transcripts must be > 0 — proving the trie was built, the
+    /// failure links resolved, and the per-step bonus actually got added
+    /// to at least one decision. If any of those silently no-op the
+    /// counter stays at zero.
+    ///
+    /// We deliberately do NOT assert the transcript text changes:
+    /// shallow-fusion boost correctly refuses to invent words when there
+    /// is no acoustic evidence, so a phonetically-unanchored OOV boost
+    /// does not flip the output (and rightly so). Counter > 0 is the
+    /// directly-observable evidence that the path engaged.
+    func testWordBoostingActuallyEngagesDecoder() async throws {
+        let m = try model
+
+        // Skip when the bundle lacks `tokenizer.model`. With greedy
+        // vocab fallback the phrase IDs diverge from the decoder's
+        // output IDs (the empirical 10/14 OOV divergence the PR
+        // documents), so the trie's edges don't match the model's
+        // output stream and the boost path never advances past root.
+        // That's exactly the scenario the PR fixes — but we cannot
+        // exercise the fix in a bundle that doesn't ship the file.
+        guard m.wordBoostingTokenizerStatus.mode == .sentencePieceModel else {
+            throw XCTSkip("tokenizer.model not in bundle — boost path requires the real SentencePiece tokenizer. Status=\(m.wordBoostingTokenizerStatus.mode)")
+        }
+
+        let audioURL = Bundle.module.url(forResource: "test_audio", withExtension: "wav")!
+        let audio = try AudioFileLoader.load(url: audioURL, targetSampleRate: 16000)
+
+        // Diagnostic-tier boost on phrases that are phonetically close
+        // to baseline content; the matcher should advance into them
+        // during decoding and flip at least one greedy decision.
+        let boosted = WordBoostingConfig(
+            phrases: ["replacement parts", "shipped tomorrows", "guaranteed"],
+            boost: 5.0
+        )
+        var totalChangedDecisions = 0
+        var lastText = ""
+        for await partial in m.transcribeStream(
+            audio: audio,
+            sampleRate: 16000,
+            language: "en-US",
+            wordBoosting: boosted
+        ) {
+            totalChangedDecisions = max(totalChangedDecisions, partial.wordBoostingChangedDecisions)
+            if partial.isFinal { lastText = partial.text }
+        }
+
+        XCTAssertFalse(lastText.isEmpty, "Boosted streaming transcription must produce text")
+        XCTAssertGreaterThan(totalChangedDecisions, 0,
+            "Configured boosting must change at least one decoder decision; counter=0 means the trie or decoder hook silently no-opped. Text=\(lastText.debugDescription)")
+        print("[boost-engaged] changedDecisions=\(totalChangedDecisions) text=\(lastText)")
+    }
+
+    func testStreamingTranscriptionEnglish() async throws {
         let m = try model
         let audioURL = Bundle.module.url(forResource: "test_audio", withExtension: "wav")!
         let audio = try AudioFileLoader.load(url: audioURL, targetSampleRate: 16000)
 
         var partials: [NemotronStreamingASRModel.PartialTranscript] = []
-        for await partial in m.transcribeStream(audio: audio, sampleRate: 16000) {
+        for await partial in m.transcribeStream(audio: audio, sampleRate: 16000, language: "en-US") {
             partials.append(partial)
         }
-        XCTAssertFalse(partials.isEmpty, "Should produce at least one partial")
+        XCTAssertFalse(partials.isEmpty)
         let last = partials.last!
-        XCTAssertTrue(last.isFinal, "Last partial should be final (from finalize())")
-        XCTAssertFalse(last.text.isEmpty, "Final text should not be empty")
-        print("Streamed final: \(last.text)")
+        XCTAssertTrue(last.isFinal)
+        XCTAssertFalse(last.text.isEmpty)
+        print("Streamed en-US final: \(last.text)")
     }
 
     func testStreamingSessionSilence() throws {
         let m = try model
-        let session = try m.createSession()
+        let session = try m.createSession(language: "en-US")
         let samplesPerChunk = m.config.streaming.chunkMs * m.config.sampleRate / 1000
         let silence = [Float](repeating: 0, count: samplesPerChunk)
         for _ in 0..<3 {
@@ -142,7 +364,14 @@ final class E2ENemotronStreamingASRTests: XCTestCase {
     }
 
     func testMemoryManagement() async throws {
-        let m = try await NemotronStreamingASRModel.fromPretrained()
+        // Resolve a model via the same path setUp uses, but reload fresh so
+        // we can exercise unload independently of the shared instance.
+        let m: NemotronStreamingASRModel
+        if let local = localBundlePath() {
+            m = try await NemotronStreamingASRModel.fromLocal(bundleDir: local)
+        } else {
+            m = try await NemotronStreamingASRModel.fromPretrained()
+        }
         XCTAssertTrue(m.isLoaded)
         XCTAssertGreaterThan(m.memoryFootprint, 0)
         m.unload()
@@ -150,34 +379,76 @@ final class E2ENemotronStreamingASRTests: XCTestCase {
         XCTAssertEqual(m.memoryFootprint, 0)
     }
 
-    /// Synthesize a known phrase with Kokoro and transcribe it through Nemotron.
-    /// Kokoro produces 24 kHz audio; Nemotron resamples internally to 16 kHz.
-    ///
-    /// `transcribeAudio` pads 0.5 s of leading + trailing silence so the
-    /// streaming encoder's initially-zero cache has a ramp into the real audio;
-    /// without it the first word or last word can be clipped on short clips
-    /// with sharp synthetic onsets/offsets. A light ghost word at the very
-    /// start is still possible (first-chunk attention with zero left context),
-    /// so the check is all-content-words-present, not full-string equality.
-    func testTTSRoundTrip() async throws {
+    /// English-only bundle (`aufklarer/Nemotron-Speech-Streaming-0.6B-CoreML-INT8`)
+    /// loads and transcribes through the same `NemotronStreamingASR` target,
+    /// using the same `transcribeAudio` API. The encoder doesn't accept
+    /// `language_mask`, so `StreamingSession` skips it (geometry differs from
+    /// multilingual: chunk=160 ms, attCtx=70, vocab=1024, no prompt kernel).
+    func testEnglishOnlyBundleTranscription() async throws {
+        guard let bundle = englishOnlyBundlePath() else {
+            throw XCTSkip("English-only bundle not in HF cache")
+        }
+        let m = try await NemotronStreamingASRModel.fromLocal(bundleDir: bundle)
+        XCTAssertTrue(m.isLoaded)
+        // English bundle has the older geometry.
+        XCTAssertEqual(m.config.vocabSize, 1024)
+        XCTAssertEqual(m.config.attentionContext, 70)
+        XCTAssertEqual(m.config.streaming.chunkMs, 160)
+        let audioURL = Bundle.module.url(forResource: "test_audio", withExtension: "wav")!
+        let audio = try AudioFileLoader.load(url: audioURL, targetSampleRate: 16000)
+        let text = try m.transcribeAudio(audio, sampleRate: 16000, language: "en-US")
+        XCTAssertFalse(text.isEmpty, "Transcription should not be empty")
+        print("English-only bundle: \(text)")
+    }
+
+    /// Round-trip: same Kokoro-synthesized phrase, transcribe with multiple
+    /// language prompt slots. en-US must recover all content words; other
+    /// slots should still produce non-empty output (language conditioning
+    /// shifts the BPE distribution but the encoder still hears speech).
+    func testMultilingualLanguageSwitching() async throws {
         let nemotron = try model
         let tts = try await KokoroTTSModel.fromPretrained()
 
         let phrase = "The quick brown fox jumps over the lazy dog"
         let audio24k = try tts.synthesize(text: phrase, voice: "af_heart")
-        let audioDuration = Float(audio24k.count) / 24000.0
-        XCTAssertGreaterThan(audio24k.count, 24000, "TTS should produce at least 1s of audio")
-        print("TTS audio: \(audio24k.count) samples (\(String(format: "%.2f", audioDuration))s)")
 
-        let transcript = try nemotron.transcribeAudio(audio24k, sampleRate: 24000)
-        print("Round-trip input:  \"\(phrase)\"")
-        print("Round-trip output: \"\(transcript)\"")
-
-        let normalized = transcript.lowercased()
+        let enText = try nemotron.transcribeAudio(audio24k, sampleRate: 24000, language: "en-US")
+        print("en-US: \"\(enText)\"")
         let expected = ["quick", "brown", "fox", "jumps", "over", "lazy", "dog"]
-        let matched = expected.filter { normalized.contains($0) }
+        let matched = expected.filter { enText.lowercased().contains($0) }
         XCTAssertEqual(matched.count, expected.count,
-            "Round-trip should recover every content word. " +
-            "Matched \(matched.count)/\(expected.count): \(matched). Transcript: \"\(transcript)\"")
+            "en-US prompt should recover every content word; got \(matched)/\(expected)")
+
+        // Same audio with a different language slot should still produce output
+        // (the encoder runs regardless of slot choice; we're verifying the slot
+        // wiring doesn't crash the pipeline for other languages).
+        for lang in ["de-DE", "fr-FR", "ja-JP"] {
+            let other = try nemotron.transcribeAudio(audio24k, sampleRate: 24000, language: lang)
+            print("\(lang): \"\(other)\"")
+            // Don't assert accuracy — wrong-language prompt usually still
+            // produces *some* transcription, just often nonsensical.
+        }
+    }
+
+    /// Round-trip with the English-only bundle: same Kokoro phrase + the same
+    /// Swift `transcribeAudio` API + the same content-word assertion as the
+    /// multilingual round-trip. Proves both bundles produce equivalent
+    /// end-to-end output through one Swift target.
+    func testEnglishOnlyBundleTTSRoundTrip() async throws {
+        guard let bundle = englishOnlyBundlePath() else {
+            throw XCTSkip("English-only bundle not in HF cache")
+        }
+        let nemotron = try await NemotronStreamingASRModel.fromLocal(bundleDir: bundle)
+        let tts = try await KokoroTTSModel.fromPretrained()
+
+        let phrase = "The quick brown fox jumps over the lazy dog"
+        let audio24k = try tts.synthesize(text: phrase, voice: "af_heart")
+
+        let text = try nemotron.transcribeAudio(audio24k, sampleRate: 24000, language: "en-US")
+        print("English-only round-trip: \"\(text)\"")
+        let expected = ["quick", "brown", "fox", "jumps", "over", "lazy", "dog"]
+        let matched = expected.filter { text.lowercased().contains($0) }
+        XCTAssertEqual(matched.count, expected.count,
+            "English-only bundle should recover every content word; got \(matched)/\(expected)")
     }
 }

@@ -4,13 +4,20 @@ import Foundation
 
 /// CoreML MultiCodeDecoder: autoregressive CB1-15 prediction.
 /// 5-layer transformer with 15 lm_heads, scatter-write KV cache.
+///
+/// Supports both stateful (MLState) and stateless (explicit KV cache I/O).
+/// Stateful drops per-call cache I/O (~327 KB × 2000 inner calls per 10 s clip).
 final class MultiCodeDecoderCoreML {
     private let model: MLModel
     private let maxSeqLen = 16
     private let totalKVDim = 5120  // 5 layers * 8 KV heads * 128 head_dim
     private let numGroups = 15
+    private let isStateful: Bool
 
-    init(model: MLModel) { self.model = model }
+    init(model: MLModel) {
+        self.model = model
+        self.isStateful = !model.modelDescription.stateDescriptionsByName.isEmpty
+    }
 
     /// Predict 15 residual codebook tokens autoregressively.
     /// - Parameters:
@@ -26,20 +33,28 @@ final class MultiCodeDecoderCoreML {
         temperature: Float = 0.9,
         topK: Int = 50
     ) throws -> [Int32] {
-        // Init KV cache
-        var keyCache = makeZeros(shape: [1, totalKVDim, 1, maxSeqLen])
-        var valueCache = makeZeros(shape: [1, totalKVDim, 1, maxSeqLen])
+        // Per-predict() state. Stateful path: MLState lives only inside this
+        // call so the KV cache resets cleanly across frames. Stateless path:
+        // keep the explicit cache buffers in locals and round-trip them.
+        let mlState: MLState? = isStateful ? model.makeState() : nil
+        var keyCache: MLMultiArray? = nil
+        var valueCache: MLMultiArray? = nil
+        if !isStateful {
+            keyCache = makeZeros(shape: [1, totalKVDim, 1, maxSeqLen])
+            valueCache = makeZeros(shape: [1, totalKVDim, 1, maxSeqLen])
+        }
 
         // Position 0: feed hidden_states from CodeDecoder
-        var (_, kc, vc) = try step(
+        var (_, kc0, vc0) = try step(
             embed: ensureNCHW(hiddenState, channels: 1024),
-            position: 0, keyCache: keyCache, valueCache: valueCache)
-        keyCache = kc; valueCache = vc
+            position: 0, keyCache: keyCache, valueCache: valueCache, state: mlState)
+        if !isStateful { keyCache = kc0; valueCache = vc0 }
 
         // Position 1: feed CodeEmbedder(CB0) → read lm_head[0] → CB1
         let cb0Embed = ensureNCHW(try codeEmbedder.embed(Int(cb0Token)), channels: 1024)
-        var (logits, kc2, vc2) = try step(embed: cb0Embed, position: 1, keyCache: keyCache, valueCache: valueCache)
-        keyCache = kc2; valueCache = vc2
+        var (logits, kc1, vc1) = try step(embed: cb0Embed, position: 1,
+                                          keyCache: keyCache, valueCache: valueCache, state: mlState)
+        if !isStateful { keyCache = kc1; valueCache = vc1 }
 
         // Sample CB1 from lm_head[0]
         let cb1Logits = extractGroupLogits(logits, group: 0)
@@ -52,8 +67,10 @@ final class MultiCodeDecoderCoreML {
                 try multiCodeEmbedder.embed(codebookIdx: cbStep - 1, tokenId: Int(prevToken)),
                 channels: 1024)
             let pos = cbStep + 1
-            (logits, kc, vc) = try step(embed: embed, position: pos, keyCache: keyCache, valueCache: valueCache)
-            keyCache = kc; valueCache = vc
+            let (lg, kc, vc) = try step(embed: embed, position: pos,
+                                        keyCache: keyCache, valueCache: valueCache, state: mlState)
+            logits = lg
+            if !isStateful { keyCache = kc; valueCache = vc }
 
             let groupLogits = extractGroupLogits(logits, group: cbStep)
             prevToken = TTSSampler.sample(logits: groupLogits, temperature: temperature, topK: topK)
@@ -65,7 +82,8 @@ final class MultiCodeDecoderCoreML {
 
     // MARK: - Helpers
 
-    private func step(embed: MLMultiArray, position: Int, keyCache: MLMultiArray, valueCache: MLMultiArray)
+    private func step(embed: MLMultiArray, position: Int,
+                      keyCache: MLMultiArray?, valueCache: MLMultiArray?, state: MLState?)
         throws -> (logits: MLMultiArray, keyCache: MLMultiArray, valueCache: MLMultiArray) {
         let cacheLen = try MLMultiArray(shape: [1], dataType: .int32)
         cacheLen.dataPointer.assumingMemoryBound(to: Int32.self)[0] = Int32(position)
@@ -78,21 +96,35 @@ final class MultiCodeDecoderCoreML {
         memset(updateMask.dataPointer, 0, maxSeqLen * 2)
         updateMask.dataPointer.assumingMemoryBound(to: Float16.self)[position] = Float16(1.0)
 
-        let inputs: [String: MLFeatureValue] = [
+        var inputs: [String: MLFeatureValue] = [
             "input_embeds": MLFeatureValue(multiArray: embed),
             "cache_length": MLFeatureValue(multiArray: cacheLen),
-            "key_cache": MLFeatureValue(multiArray: keyCache),
             "key_padding_mask": MLFeatureValue(multiArray: keyMask),
             "kv_cache_update_mask": MLFeatureValue(multiArray: updateMask),
-            "value_cache": MLFeatureValue(multiArray: valueCache),
         ]
+        // Stateless path adds explicit KV cache I/O; stateful path leaves it
+        // to MLState (runtime keeps the buffers between predictions).
+        if !isStateful, let kc = keyCache, let vc = valueCache {
+            inputs["key_cache"] = MLFeatureValue(multiArray: kc)
+            inputs["value_cache"] = MLFeatureValue(multiArray: vc)
+        }
 
-        let result = try model.prediction(from: try MLDictionaryFeatureProvider(dictionary: inputs))
-        return (
-            result.featureValue(for: "all_logits")!.multiArrayValue!,
-            result.featureValue(for: "new_key_cache")!.multiArrayValue!,
-            result.featureValue(for: "new_value_cache")!.multiArrayValue!
-        )
+        let provider = try MLDictionaryFeatureProvider(dictionary: inputs)
+        let result: MLFeatureProvider
+        if let mlState = state {
+            result = try model.prediction(from: provider, using: mlState)
+        } else {
+            result = try model.prediction(from: provider)
+        }
+
+        let logits = result.featureValue(for: "all_logits")!.multiArrayValue!
+        // Stateful models don't expose new_key_cache / new_value_cache — return
+        // the input caches as placeholders (callers ignore them on stateful).
+        let nkc = result.featureValue(for: "new_key_cache")?.multiArrayValue
+            ?? (keyCache ?? logits)
+        let nvc = result.featureValue(for: "new_value_cache")?.multiArrayValue
+            ?? (valueCache ?? logits)
+        return (logits, nkc, nvc)
     }
 
     /// Extract logits for a specific group from [1, 15, 2048] (stride-safe).

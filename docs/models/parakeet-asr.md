@@ -43,8 +43,33 @@ The model is split into 3 CoreML sub-models for optimal compute unit placement:
 | `decoder.mlmodelc` | CPU + Neural Engine | None | LSTM prediction network |
 | `joint.mlmodelc` | CPU + Neural Engine | None | Dual-head token + duration logits |
 
-Default quantization:
-- **INT8** (`aufklarer/Parakeet-TDT-v3-CoreML-INT8`) — ~50% size reduction, best quality/speed balance
+Default model (`aufklarer/Parakeet-TDT-v3-CoreML-INT8-30s`):
+- **INT8** palettized encoder — ~50% size reduction, best quality/speed balance
+- **Single fixed shape** (3000 mel frames = 30s), not EnumeratedShapes — so it loads on any CoreML compute unit (CPU-only, GPU, or Neural Engine) without the heavy multi-shape compile. Audio longer than 30s is window-chunked in `transcribeAudio`. The `aufklarer/Parakeet-TDT-v3-CoreML-INT8-iOS-5s` variant (fixed 500 frames = 5s) trades a smaller window for lower runtime memory on iOS.
+
+The `-30s` and `-iOS-5s` builds target iOS17 and ANE-compile cleanly on M5 — single-shape sidesteps the BNNS validator issue that hit the older EnumeratedShapes builds. New builds from this converter use `ct.target.iOS18`, since iOS18 is needed for the multi-encoder repo (below) to avoid the same validator path on EnumeratedShapes-style dynamic `tile` ops.
+
+The legacy multi-encoder repo `aufklarer/Parakeet-TDT-v3-CoreML-INT8` ships three single-shape encoders in one directory:
+
+| File | Shape | Use |
+|------|-------|-----|
+| `encoder.mlmodelc` | 3000 frames (30s) | default — same shape as `-30s` |
+| `encoder_5s.mlmodelc` | 500 frames (5s) | shortest window, smallest per-call cost |
+| `encoder_15s.mlmodelc` | 1500 frames (15s) | mid window for conversational chunks |
+
+Pick via `encoderVariant:` on `fromPretrained`:
+
+```swift
+// default encoder.mlmodelc (30s)
+let model = try await ParakeetASRModel.fromPretrained(modelId: "aufklarer/Parakeet-TDT-v3-CoreML-INT8")
+
+// shape-specific variant
+let m5 = try await ParakeetASRModel.fromPretrained(
+    modelId: "aufklarer/Parakeet-TDT-v3-CoreML-INT8",
+    encoderVariant: "5s")
+```
+
+EnumeratedShapes is no longer used: iOS18's MIL validator rejects the dynamic `tile` reps that the FastConformer pad-mask emits when the time dim is symbolic. Single-shape variants side-step that.
 
 Mel preprocessing (pre-emphasis, STFT, mel filterbank, normalization) is done in Swift using Accelerate/vDSP — no CoreML preprocessor model needed. Decoder and joint are small enough that quantization isn't necessary.
 
@@ -60,25 +85,37 @@ Mel preprocessing (pre-emphasis, STFT, mel filterbank, normalization) is done in
 
 ```bash
 # Transcribe with Parakeet (CoreML, fast on Neural Engine)
-audio transcribe --engine parakeet audio.wav
+speech transcribe --engine parakeet audio.wav
 
 # Transcribe with Qwen3 (MLX, default)
-audio transcribe audio.wav
-audio transcribe --engine qwen3 audio.wav
+speech transcribe audio.wav
+speech transcribe --engine qwen3 audio.wav
 ```
 
 ## Performance
 
-On Apple Silicon with Neural Engine (M2 Max, 20s audio):
-- Cold: RTF ~0.12 (first inference includes CoreML compilation)
-- Warm: RTF ~0.03 (subsequent inferences, ~32x real-time)
-- Mel preprocessing uses vectorized Accelerate/vDSP (pre-emphasis, normalization)
-- Decode loop uses memcpy, memset, and vDSP argmax to minimize scalar overhead
-- Encoder runs on Neural Engine for maximum throughput
+Encoder-only forward on M5 Pro / macOS 26.5 (warm best of 5, swift JIT process):
+
+| Shape | Compute | Warm | RTF | Peak RSS |
+|-------|---------|------|-----|----------|
+| 3000 (30s) | ANE | 74 ms | 0.0025 | 820 MB |
+| 3000 (30s) | GPU | 34 ms | 0.0011 | 1363 MB |
+| 1500 (15s) | ANE | 24 ms | 0.0016 | 784 MB |
+| 500  (5s)  | ANE |  8 ms | 0.0016 | 765 MB |
+| 500  (5s)  | GPU | 16 ms | 0.0031 | 1326 MB |
+
+Short clips (5s) favor ANE — 2× faster and ~560 MB less peak RSS than GPU. Long clips (30s) favor GPU on warm throughput. macOS now defaults to `.cpuAndNeuralEngine` with `.cpuAndGPU` fallback; pick the matching `encoderVariant:` for short voice-pipeline chunks.
+
+Implementation notes:
+- Mel preprocessing uses vectorized Accelerate/vDSP (pre-emphasis, normalization).
+- Decode loop uses memcpy, memset, and vDSP argmax to minimize scalar overhead.
+- ANE first inference includes BNNS graph compile (~5–11 s) which CoreML caches on disk under `com.apple.e5rt.e5bundlecache` for subsequent process launches.
 
 ## Model Weights
 
-- [aufklarer/Parakeet-TDT-v3-CoreML-INT8](https://huggingface.co/aufklarer/Parakeet-TDT-v3-CoreML-INT8)
+- [aufklarer/Parakeet-TDT-v3-CoreML-INT8-30s](https://huggingface.co/aufklarer/Parakeet-TDT-v3-CoreML-INT8-30s) — default (single fixed 30s shape)
+- [aufklarer/Parakeet-TDT-v3-CoreML-INT8-iOS-5s](https://huggingface.co/aufklarer/Parakeet-TDT-v3-CoreML-INT8-iOS-5s) — iOS (single fixed 5s shape, lower memory)
+- [aufklarer/Parakeet-TDT-v3-CoreML-INT8](https://huggingface.co/aufklarer/Parakeet-TDT-v3-CoreML-INT8) — multi-encoder repo (`encoder.mlmodelc` 30s, `encoder_5s.mlmodelc`, `encoder_15s.mlmodelc`)
 
 ## Thread Safety
 

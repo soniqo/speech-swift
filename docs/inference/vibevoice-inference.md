@@ -87,7 +87,7 @@ let url = try tts.encodeAndSaveVoice(
 Or via the CLI:
 
 ```bash
-audio vibevoice-encode-voice reference.wav "actual transcript" \
+speech vibevoice-encode-voice reference.wav "actual transcript" \
     --output voices/my-voice.safetensors
 ```
 
@@ -107,12 +107,12 @@ the internal chunk loop — PR welcome.
 
 ```bash
 # 0.5B Realtime (default) — voice-cache flow
-audio vibevoice "Hello world." \
+speech vibevoice "Hello world." \
   --voice-cache voice_cache/en-Mike_man.safetensors \
   --output hello.wav
 
 # 1.5B long-form — single-shot with reference audio + transcript
-audio vibevoice "Long paragraph ..." \
+speech vibevoice "Long paragraph ..." \
   --long-form \
   --reference-audio reference_speech.wav \
   --reference-transcript "exact transcript of the reference" \
@@ -120,7 +120,7 @@ audio vibevoice "Long paragraph ..." \
   --output episode.wav
 
 # Mint a 0.5B voice cache from a recording
-audio vibevoice-encode-voice reference.wav \
+speech vibevoice-encode-voice reference.wav \
   "exact transcript of the recording" \
   --output voices/my-voice.safetensors
 ```

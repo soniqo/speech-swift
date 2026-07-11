@@ -2,6 +2,24 @@ import Foundation
 import MLX
 import MLXNN
 
+/// Build a Linear layer that is quantized when bits > 0, plain when bits == 0.
+/// QuantizedLinear inherits from Linear, so the return type is always Linear and
+/// caller code can store it in a single `@ModuleInfo var x: Linear` field.
+public func makeMaybeQuantizedLinear(
+    _ inputDimensions: Int,
+    _ outputDimensions: Int,
+    bias: Bool,
+    groupSize: Int,
+    bits: Int
+) -> Linear {
+    if bits > 0 {
+        return QuantizedLinear(inputDimensions, outputDimensions, bias: bias,
+                               groupSize: groupSize, bits: bits)
+    } else {
+        return Linear(inputDimensions, outputDimensions, bias: bias)
+    }
+}
+
 /// Generic weight loading utilities shared between ASR and TTS
 public enum CommonWeightLoader {
 
@@ -67,8 +85,12 @@ public enum CommonWeightLoader {
         }
     }
 
+    /// Apply weights to a Linear (or QuantizedLinear, since the latter inherits from
+    /// the former). When the layer is a QuantizedLinear, `.scales`/`.biases` are wired
+    /// in addition to `.weight`. For plain Linear those keys are absent in the
+    /// safetensors (bf16/fp32 model) and only `.weight` (+ optional `.bias`) apply.
     public static func applyQuantizedLinearWeights(
-        to linear: QuantizedLinear,
+        to linear: Linear,
         prefix: String,
         from weights: [String: MLXArray]
     ) {
@@ -77,14 +99,15 @@ public enum CommonWeightLoader {
         if let weight = weights["\(prefix).weight"] {
             params["weight"] = .value(weight)
         }
-        if let scales = weights["\(prefix).scales"] {
-            params["scales"] = .value(scales)
-        }
-        if let biases = weights["\(prefix).biases"] {
-            params["biases"] = .value(biases)
+        if linear is QuantizedLinear {
+            if let scales = weights["\(prefix).scales"] {
+                params["scales"] = .value(scales)
+            }
+            if let biases = weights["\(prefix).biases"] {
+                params["biases"] = .value(biases)
+            }
         }
         // Regular linear bias (separate from quantization biases)
-        // Qwen2.5 attention q/k/v projections have regular biases
         if let bias = weights["\(prefix).bias"] {
             params["bias"] = .value(bias)
         }
@@ -217,6 +240,36 @@ public enum CommonWeightLoader {
         applyQuantizedLinearWeights(to: mlp.gateProj, prefix: "\(prefix).gate_proj", from: weights)
         applyQuantizedLinearWeights(to: mlp.upProj, prefix: "\(prefix).up_proj", from: weights)
         applyQuantizedLinearWeights(to: mlp.downProj, prefix: "\(prefix).down_proj", from: weights)
+    }
+
+    /// Apply MLP weights (SwiGLU) — dispatches to quantized or plain
+    /// projections per-leaf based on `.scales` presence. Use when the
+    /// surrounding module was declared with `Linear` and may have been
+    /// swapped to `QuantizedLinear` by `quantize(model:filter:)`.
+    public static func applyMLPWeights(
+        to mlp: MLP,
+        prefix: String,
+        from weights: [String: MLXArray]
+    ) {
+        applyMaybeQuantizedLinearWeights(to: mlp.gateProj, prefix: "\(prefix).gate_proj", from: weights)
+        applyMaybeQuantizedLinearWeights(to: mlp.upProj, prefix: "\(prefix).up_proj", from: weights)
+        applyMaybeQuantizedLinearWeights(to: mlp.downProj, prefix: "\(prefix).down_proj", from: weights)
+    }
+
+    /// Apply weights to a `Linear` that may have been swapped to
+    /// `QuantizedLinear`. Picks the right keys (`weight`, optional `bias`
+    /// for plain Linear; plus `scales`, `biases` when quantized) based on
+    /// what is present in the safetensors.
+    public static func applyMaybeQuantizedLinearWeights(
+        to linear: Linear,
+        prefix: String,
+        from weights: [String: MLXArray]
+    ) {
+        if weights["\(prefix).scales"] != nil, let q = linear as? QuantizedLinear {
+            applyQuantizedLinearWeights(to: q, prefix: prefix, from: weights)
+        } else {
+            applyLinearWeights(to: linear, prefix: prefix, from: weights)
+        }
     }
 }
 

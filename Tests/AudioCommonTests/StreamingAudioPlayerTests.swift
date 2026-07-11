@@ -70,7 +70,9 @@ final class StreamingAudioPlayerTests: XCTestCase {
         let expectation = XCTestExpectation(description: "done")
         player.onPlaybackFinished = { expectation.fulfill() }
         player.markGenerationComplete()
-        wait(for: [expectation], timeout: 3.0)
+        // 10s timeout: the no-progress watchdog needs 3 × 200 ms polls (600 ms)
+        // to fire when the render thread freezes mid-stream on virtualized CI.
+        wait(for: [expectation], timeout: 10.0)
         player.stop()
     }
 
@@ -81,6 +83,44 @@ final class StreamingAudioPlayerTests: XCTestCase {
         let silence = [Float](repeating: 0.001, count: 1000)
         player.scheduleChunk(silence)
         // Without engine, can't truly test — but should not crash
+    }
+
+    func testStartupDeclickDefaultDoesNotAddLatency() {
+        let input = [Float](repeating: 1, count: 100)
+        let output = StreamingAudioPlayer.startupDeclick(input, sampleRate: 1000)
+
+        XCTAssertEqual(output.count, input.count)
+        XCTAssertEqual(output.first ?? -1, 0, accuracy: 0.0001)
+        XCTAssertEqual(output[4], 1, accuracy: 0.0001)
+        XCTAssertEqual(output.last ?? 0, 1, accuracy: 0.0001)
+    }
+
+    func testStartupDeclickPrependsSilenceAndFadesFirstChunk() {
+        let input = [Float](repeating: 1, count: 100)
+        let output = StreamingAudioPlayer.startupDeclick(
+            input,
+            sampleRate: 1000,
+            prerollDuration: 0.010,
+            fadeInDuration: 0.020)
+
+        XCTAssertEqual(output.count, 110)
+        XCTAssertTrue(output.prefix(10).allSatisfy { $0 == 0 })
+        XCTAssertEqual(output[10], 0, accuracy: 0.0001)
+        XCTAssertGreaterThan(output[29], 0.99)
+        XCTAssertEqual(output.last ?? 0, 1, accuracy: 0.0001)
+    }
+
+    func testStartupDeclickCanDisablePreroll() {
+        let input = [Float](repeating: 1, count: 10)
+        let output = StreamingAudioPlayer.startupDeclick(
+            input,
+            sampleRate: 1000,
+            prerollDuration: 0,
+            fadeInDuration: 0.004)
+
+        XCTAssertEqual(output.count, input.count)
+        XCTAssertEqual(output.first ?? -1, 0, accuracy: 0.0001)
+        XCTAssertEqual(output.last ?? 0, 1, accuracy: 0.0001)
     }
 
     func testEmptyChunkIgnored() {

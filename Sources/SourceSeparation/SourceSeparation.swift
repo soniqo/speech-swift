@@ -31,34 +31,47 @@ public final class SourceSeparator {
     ///
     /// - Parameters:
     ///   - audio: Stereo audio as `[[Float]]` — `audio[0]` = left, `audio[1]` = right
-    ///   - sampleRate: Input sample rate (resampled to 44100 if different)
-    ///   - targets: Which stems to extract (default: all 4)
-    /// - Returns: Dictionary of target → stereo audio `[[Float]]`
-    /// Separate a stereo audio mix into stems.
-    ///
-    /// - Parameters:
-    ///   - audio: Stereo audio as `[[Float]]` — `audio[0]` = left, `audio[1]` = right
-    ///   - sampleRate: Input sample rate (resampled to 44100 if different)
+    ///   - sampleRate: Input sample rate. Resampled to the model rate
+    ///     (`config.sampleRate`, 44.1 kHz) at mastering quality if different.
     ///   - targets: Which stems to extract (default: all 4)
     ///   - wiener: Apply Wiener post-filtering (improves SDR ~0.5 dB, requires all 4 stems)
-    /// - Returns: Dictionary of target → stereo audio `[[Float]]`
+    /// - Returns: Dictionary of target → stereo audio `[[Float]]` at the model rate
     public func separate(
         audio: [[Float]],
         sampleRate: Int = 44100,
         targets: [SeparationTarget] = SeparationTarget.allCases,
-        wiener: Bool = true
+        wiener: Bool = true,
+        metricsHandler: ((SourceSeparationMetrics) -> Void)? = nil
     ) -> [SeparationTarget: [[Float]]] {
         guard audio.count == 2 else {
             // Mono → duplicate to stereo
             let mono = audio.first ?? []
-            return separate(audio: [mono, mono], sampleRate: sampleRate, targets: targets)
+            return separate(
+                audio: [mono, mono], sampleRate: sampleRate,
+                targets: targets, wiener: wiener, metricsHandler: metricsHandler)
         }
 
-        let left = audio[0]
-        let right = audio[1]
+        // UMX is trained at 44.1 kHz; feeding another rate would mis-map every
+        // STFT bin (wrong pitch/tempo). Bring the mix to the model rate first.
+        // Music → mastering quality for full-band fidelity.
+        let stereo: [[Float]]
+        if sampleRate != config.sampleRate {
+            stereo = AudioFileLoader.resampleStereo(
+                audio, from: sampleRate, to: config.sampleRate, quality: .mastering)
+        } else {
+            stereo = audio
+        }
+
+        let left = stereo[0]
+        let right = stereo[1]
         let length = left.count
 
+        var metrics = SourceSeparationMetrics()
+        metrics.audioSeconds = Double(length) / Double(config.sampleRate)
+        let totalStart = CFAbsoluteTimeGetCurrent()
+
         // STFT each channel
+        let stftStart = CFAbsoluteTimeGetCurrent()
         let (leftReal, leftImag) = stft.forward(left)
         let (rightReal, rightImag) = stft.forward(right)
 
@@ -74,53 +87,83 @@ public final class SourceSeparator {
                 inputMag[t][stft.nBins + f] = rightMag[t][f]
             }
         }
+        metrics.stftForwardSec = CFAbsoluteTimeGetCurrent() - stftStart
 
-        // Run all target models and collect magnitude estimates
+        // Build the MLX input once — identical across all stems. Avoids rebuilding
+        // a flat `[Float]` and a fresh MLXArray inside the per-stem loop.
+        let flatInput = inputMag.flatMap { $0 }
+        let mlxInput = MLXArray(flatInput, [T, 2, stft.nBins])
+
+        // Launch all target models lazily, then single batched eval. MLX is
+        // lazy by default, so deferring `eval()` until all forward graphs are
+        // built lets the scheduler interleave kernel dispatches across stems
+        // instead of fully serializing on each `eval()`.
+        let graphStart = CFAbsoluteTimeGetCurrent()
+        let pending: [(target: SeparationTarget, output: MLXArray)] = targets.compactMap { target in
+            guard let model = models[target] else { return nil }
+            return (target, model(mlxInput))
+        }
+        metrics.modelGraphBuildSec = CFAbsoluteTimeGetCurrent() - graphStart
+
+        let evalStart = CFAbsoluteTimeGetCurrent()
+        eval(pending.map(\.output))
+        metrics.modelEvalSec = CFAbsoluteTimeGetCurrent() - evalStart
+
+        // Unpack each stem's output to nested [[Float]] for the existing
+        // Wiener / iSTFT path. GPU work is already complete by this point.
         var targetMags: [(target: SeparationTarget, left: [[Float]], right: [[Float]])] = []
-
-        for target in targets {
-            guard let model = models[target] else { continue }
-
-            let flatInput = inputMag.flatMap { $0 }
-            let mlxInput = MLXArray(flatInput, [T, 2, stft.nBins])
-
-            let output = model(mlxInput)
-            eval(output)
-
-            let outputFlat = output.asArray(Float.self)
+        for entry in pending {
+            let unpackStart = CFAbsoluteTimeGetCurrent()
+            let outputFlat = entry.output.asArray(Float.self)
             var leftOutMag = [[Float]](repeating: [Float](repeating: 0, count: stft.nBins), count: T)
             var rightOutMag = [[Float]](repeating: [Float](repeating: 0, count: stft.nBins), count: T)
-
             for t in 0..<T {
                 for f in 0..<stft.nBins {
                     leftOutMag[t][f] = outputFlat[t * 2 * stft.nBins + f]
                     rightOutMag[t][f] = outputFlat[t * 2 * stft.nBins + stft.nBins + f]
                 }
             }
-
-            targetMags.append((target, leftOutMag, rightOutMag))
+            metrics.modelSecByTarget[entry.target] = CFAbsoluteTimeGetCurrent() - unpackStart
+            targetMags.append((entry.target, leftOutMag, rightOutMag))
         }
 
         var results: [SeparationTarget: [[Float]]] = [:]
 
         if wiener && targetMags.count > 1 {
-            // Multichannel Wiener EM: produces complex STFT directly
+            // Multichannel Wiener EM + inverse STFT, both on the GPU. Wiener
+            // returns MLXArrays of shape [J, T, F]; we stack L/R into a
+            // channel axis, run a single batched inverseMLX over [J, 2, T, F],
+            // and only convert to [[Float]] at the very end. This removes the
+            // per-(t, f) scalar-write loop that used to bridge the two stages.
+            let wienerStart = CFAbsoluteTimeGetCurrent()
             let allLeftMags = targetMags.map(\.left)
             let allRightMags = targetMags.map(\.right)
-            let refined = WienerFilter.apply(
+            let refined = WienerFilterMLX.applyMLX(
                 targetMagsL: allLeftMags,
                 targetMagsR: allRightMags,
                 mixRealL: leftReal, mixImagL: leftImag,
                 mixRealR: rightReal, mixImagR: rightImag,
                 iterations: 1)
+            metrics.wienerSec = CFAbsoluteTimeGetCurrent() - wienerStart
 
+            let istftStart = CFAbsoluteTimeGetCurrent()
+            // Stack [J, T, F] L and R along a new channel axis → [J, 2, T, F].
+            let realJC = stacked([refined.realL, refined.realR], axis: 1)
+            let imagJC = stacked([refined.imagL, refined.imagR], axis: 1)
+            let audioJC = stft.inverseMLX(real: realJC, imag: imagJC, length: length)
+            // Single sync + readback: [J, 2, length] → flat [J*2*length]
+            eval(audioJC)
+            let flat = audioJC.asArray(Float.self)
             for (i, entry) in targetMags.enumerated() {
-                let leftStem = stft.inverse(real: refined[i].realL, imag: refined[i].imagL, length: length)
-                let rightStem = stft.inverse(real: refined[i].realR, imag: refined[i].imagR, length: length)
+                let base = i * 2 * length
+                let leftStem = Array(flat[base ..< base + length])
+                let rightStem = Array(flat[base + length ..< base + 2 * length])
                 results[entry.target] = [leftStem, rightStem]
             }
+            metrics.inverseStftSec = CFAbsoluteTimeGetCurrent() - istftStart
         } else {
             // No Wiener — direct phase reconstruction
+            let istftStart = CFAbsoluteTimeGetCurrent()
             for entry in targetMags {
                 let leftStem = stft.applyMaskAndInvert(
                     maskedMag: entry.left, origReal: leftReal, origImag: leftImag, length: length)
@@ -128,8 +171,11 @@ public final class SourceSeparator {
                     maskedMag: entry.right, origReal: rightReal, origImag: rightImag, length: length)
                 results[entry.target] = [leftStem, rightStem]
             }
+            metrics.inverseStftSec = CFAbsoluteTimeGetCurrent() - istftStart
         }
 
+        metrics.totalSec = CFAbsoluteTimeGetCurrent() - totalStart
+        metricsHandler?(metrics)
         return results
     }
 
@@ -188,6 +234,9 @@ public final class SourceSeparator {
             let params = ModuleParameters.unflattened(weights)
             try model.update(parameters: params)
             model.train(false)  // Use pretrained running_mean/running_var in BatchNorm
+            // Concatenate LSTM input/hidden weight matrices so each timestep
+            // runs one matmul instead of two. Must happen after update().
+            model.prepareForInference()
             models[target] = model
         }
 

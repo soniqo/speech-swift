@@ -31,8 +31,22 @@ let pipeline = try await PyannoteDiarizationPipeline.fromPretrained(
     cacheBaseDir: appModels)
 // Segmentation → appModels/models/aufklarer/Pyannote-Segmentation-MLX/
 // Embedding    → appModels/models/aufklarer/WeSpeaker-ResNet34-LM-MLX/
-// VAD (opt.)   → appModels/models/aufklarer/Silero-VAD-v5-MLX/
+// VAD (opt.)   → appModels/models/aufklarer/Silero-VAD-v6.2.1-MLX/
 ```
+
+## HuggingFace Mirror (`HF_ENDPOINT`)
+
+Downloads default to `https://huggingface.co`. Users in regions where that host is slow or blocked — notably mainland China — can point the downloader at a mirror by setting the `HF_ENDPOINT` environment variable (the same name Python's `huggingface_hub` uses):
+
+```bash
+export HF_ENDPOINT=https://hf-mirror.com
+.build/release/speech transcribe recording.wav   # weights now fetch from hf-mirror.com
+```
+
+Notes:
+- The value must be a full `http(s)://host` URL. A blank or malformed value is ignored and the default endpoint is used.
+- The cache is keyed by repo id, not by host — switching `HF_ENDPOINT` reuses any weights already on disk and never forces a re-download. You can fetch from the mirror once and keep using the cache offline.
+- Applies to every model and CLI command, since all downloads share one downloader.
 
 ## Offline Mode
 

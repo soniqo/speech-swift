@@ -25,18 +25,27 @@ final class AppleTTSModel: NSObject, SpeechGenerationModel, AVSpeechSynthesizerD
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = AVSpeechSynthesisVoice(language: language ?? "en-US")
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate
-
         return try await withCheckedThrowingContinuation { cont in
             self.continuation = cont
             synthesizer.speak(utterance)
         }
     }
 
-    // AVSpeechSynthesizer plays audio directly — return empty samples
-    // since the pipeline doesn't need to play them via StreamingAudioPlayer
-    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+    private func finish() {
+        // AVSpeechSynthesizer plays audio directly — return empty samples
+        // since the pipeline doesn't need to play them via StreamingAudioPlayer.
         continuation?.resume(returning: [Float](repeating: 0, count: 2400))
         continuation = nil
+    }
+
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        finish()
+    }
+
+    /// Audio session interruption / explicit cancel — also resume so the
+    /// upstream pipeline doesn't stay in `isGenerating` forever.
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        finish()
     }
 }
 
@@ -68,6 +77,9 @@ final class CompanionChatViewModel {
     var loadProgress: Double = 0
     var loadingStatus = ""
     var errorMessage: String?
+    /// Which compute backend the loaded ASR encoder is using ("ANE", "GPU",
+    /// "CPU"). Updated when models load. Surfaced in the diagnostics view.
+    var asrBackend = "—"
 
     private var _modelsLoaded = false
     var modelsLoaded: Bool { _modelsLoaded }
@@ -80,18 +92,32 @@ final class CompanionChatViewModel {
     private var sttModel: ParakeetASRModel?
     private var ttsModel: (any SpeechGenerationModel)?
     private var pipeline: VoicePipeline?
-    private var pipelinePostPlaybackGuard: Double = 2.0
+    /// Brief post-playback gate to swallow any residual echo / decay in the
+    /// simulator's host-audio loop. With `isGenerating` already gating the
+    /// mic during TTS playback, only the speaker→mic decay tail needs covering.
+    private let pipelinePostPlaybackGuard: Double = 0.5
+    /// Force-cut threshold — slightly under `maxUtteranceDuration` so the
+    /// recovery cooldown kicks in when VAD reports a near-MAX utterance.
+    private let forceCutThreshold: Double = 4.5
     private var audioEngine: AVAudioEngine?
     private let player = StreamingAudioPlayer()
     private var isSpeaking = false
     private var speechStartTime: CFAbsoluteTime = 0
     private var wasForceCut = false
-    private var forceCutCooldownEnd: CFAbsoluteTime = 0
+    private var pipelineCooldownEnd: CFAbsoluteTime = 0
     private var lastResponseAudioDuration: Double = 0
     private var responseAudioStartTime: CFAbsoluteTime = 0
     private var micRecordBuffer: [Float] = []
     private var ttsRecordBuffer: [Float] = []
     private var debugLog: [String] = []
+    /// Decaying peak amplitude for the simple AGC applied before pushing
+    /// audio to the pipeline. The simulator's host-mic capture varies in
+    /// gain across a session — quiet trailing utterances dropped below
+    /// Silero VAD's onset threshold even at `vadOnset = 0.2`. AGC tracks
+    /// the loudest recent sample (with exponential decay) and scales each
+    /// buffer toward a target peak, capped at 10× to avoid amplifying
+    /// pure silence to noise.
+    private var agcRecentPeak: Float = 0
 
     private func dbg(_ msg: String) {
         let ts = String(format: "%.3f", CFAbsoluteTimeGetCurrent().truncatingRemainder(dividingBy: 1000))
@@ -132,6 +158,9 @@ final class CompanionChatViewModel {
                     }
                 }
             }.value
+            if let units = sttModel?.encoderComputeUnits {
+                asrBackend = Self.computeUnitsLabel(units)
+            }
 
             // Load TTS model
             loadingStatus = "Loading TTS..."
@@ -174,10 +203,31 @@ final class CompanionChatViewModel {
         config.minSilenceDuration = 0.6
         config.maxUtteranceDuration = 5.0   // Matches iOS Parakeet encoder (5s max, single fixed shape)
         config.maxResponseDuration = 5.0   // Cap TTS output to prevent repetition loops
-        config.eagerSTT = true  // Start transcribing during speech, don't wait for silence
+        // Disable eager STT — it transcribes mid-speech and discards the
+        // result if a new `speechStarted` fires before STT completes. On
+        // real iPhone audio (loud + Silero hysteresis), a 2-3 s utterance
+        // sometimes splits into 2.0 s + 0.7 s with the gap interpreted as
+        // a new turn, so the eager result for the first 2.0 s gets
+        // discarded and the second 0.7 s produces an empty transcription
+        // that strands the UI in "transcribing…". Latency cost is small
+        // for a voice echo demo.
+        config.eagerSTT = false
         config.warmupSTT = false
-        config.preSpeechBufferDuration = 2.0  // Capture beginning of sentences before VAD fires
+        // Short pre-roll — long pre-roll (2.0 s) of leading silence before
+        // brief utterances flips Parakeet TDT v3's auto language detection
+        // into Russian/etc. and produces phonetic transliteration. 0.3 s
+        // is enough to capture the consonant onset without dominating the
+        // mel input.
+        config.preSpeechBufferDuration = 0.3
         config.postPlaybackGuard = 2.0  // Suppress VAD for 2s after TTS to prevent echo feedback (no AEC yet)
+        // The simulator's host-mic capture can be quieter than a real
+        // device. Default Silero `vadOnset = 0.5` misses utterances around
+        // RMS 0.02, which surfaces as "occasional missed phrase" — the
+        // user has to repeat. Lower the onset threshold so VAD triggers
+        // on quieter speech; the isGenerating gate above already prevents
+        // false positives during TTS playback.
+        config.vadOnset = 0.2
+        config.vadOffset = 0.15
 
         pipeline = VoicePipeline(
             stt: stt,
@@ -188,7 +238,6 @@ final class CompanionChatViewModel {
                 DispatchQueue.main.async { self?.handleEvent(event) }
             }
         )
-
 
         pipelineLog.warning("[START] echo pipeline created")
 
@@ -271,16 +320,21 @@ final class CompanionChatViewModel {
             dbg("sessionCreated")
 
         case .speechStarted:
-            // After force-cut, ignore speech until TTS response finishes + postPlaybackGuard
-            if wasForceCut && CFAbsoluteTimeGetCurrent() < forceCutCooldownEnd {
-                dbg("speechStarted IGNORED (force-cut cooldown, \(String(format: "%.1f", forceCutCooldownEnd - CFAbsoluteTimeGetCurrent()))s remaining)")
-                speechStartTime = CFAbsoluteTimeGetCurrent()
+            // Cooldown applies to every response (force-cut or not) — gate
+            // the handler uniformly. The mic-tap silence-push usually
+            // prevents VAD from firing during cooldown, but if it slips
+            // through (e.g. the C++ pipeline detected onset before our
+            // cooldown engaged) we drop it here as a safety net.
+            let now = CFAbsoluteTimeGetCurrent()
+            if now < pipelineCooldownEnd {
+                dbg("speechStarted IGNORED (cooldown, \(String(format: "%.1f", pipelineCooldownEnd - now))s remaining)")
+                speechStartTime = now
                 return
             }
             wasForceCut = false
             dbg("speechStarted")
             isSpeechDetected = true
-            speechStartTime = CFAbsoluteTimeGetCurrent()
+            speechStartTime = now
             pipelineState = "listening..."
 
         case .speechEnded:
@@ -290,10 +344,10 @@ final class CompanionChatViewModel {
                 return
             }
             let elapsed = CFAbsoluteTimeGetCurrent() - speechStartTime
-            wasForceCut = elapsed >= 4.5  // ~maxUtteranceDuration (5s)
+            wasForceCut = elapsed >= forceCutThreshold
             if wasForceCut {
                 // Initial cooldown until responseDone extends it
-                forceCutCooldownEnd = .greatestFiniteMagnitude
+                pipelineCooldownEnd = .greatestFiniteMagnitude
                 dbg("speechEnded (MAX LENGTH after \(String(format: "%.1f", elapsed))s)")
                 pipelineState = "max length reached, transcribing..."
                 messages.append(ChatBubbleMessage(role: .system,
@@ -308,13 +362,16 @@ final class CompanionChatViewModel {
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             dbg("transcription: '\(trimmed)' lang=\(lang ?? "-") conf=\(String(format: "%.2f", conf))")
             guard !trimmed.isEmpty else {
-                // Empty transcription after force-cut → end cooldown so pipeline isn't stuck
+                // Any empty transcription strands the UI in "transcribing…"
+                // without a recovery path — reset state so the next
+                // utterance can come through. Force-cut additionally
+                // clears the cooldown lock that was set on speechEnded.
                 if wasForceCut {
                     wasForceCut = false
-                    forceCutCooldownEnd = 0
-                    pipelineState = "listening"
+                    pipelineCooldownEnd = 0
                     dbg("empty transcription after force-cut — cooldown cleared")
                 }
+                pipelineState = "listening"
                 return
             }
             messages.append(ChatBubbleMessage(role: .user, text: trimmed))
@@ -343,6 +400,10 @@ final class CompanionChatViewModel {
             lastResponseAudioDuration += Double(samples.count) / 24000.0
             pipelineState = "speaking..."
             dbg("audioDelta: \(samples.count) samples (\(String(format: "%.2f", Double(samples.count)/24000))s)")
+            // Capture for tts_debug.wav so we can inspect what's being
+            // sent to the speaker (helps diagnose audio artifacts like
+            // the end-of-synthesis click).
+            ttsRecordBuffer.append(contentsOf: samples)
             do { try player.play(samples: samples, sampleRate: 24000) }
             catch { dbg("playback error: \(error)") }
 
@@ -355,9 +416,12 @@ final class CompanionChatViewModel {
             isGenerating = false
             isSpeaking = false
             player.markGenerationComplete()
-            if wasForceCut {
-                forceCutCooldownEnd = CFAbsoluteTimeGetCurrent() + guard_
-            }
+            // Always apply the cooldown (not just on force-cut) so the mic
+            // gate in the audio tap covers post-TTS residual echo on the
+            // iOS Simulator. On a real device the cooldown is mostly
+            // redundant (low acoustic coupling between speaker and mic)
+            // but harmless.
+            pipelineCooldownEnd = CFAbsoluteTimeGetCurrent() + guard_
             lastResponseAudioDuration = 0
             resumeAfterResponse()
 
@@ -411,6 +475,11 @@ final class CompanionChatViewModel {
             try session.setCategory(.playAndRecord, mode: .default,
                                     options: [.defaultToSpeaker, .allowBluetoothHFP])
             try session.setActive(true)
+            // `.defaultToSpeaker` is honoured at category-set time but iOS
+            // can quietly route .playAndRecord audio to the earpiece at
+            // runtime (especially after the mic is hot). Force the route
+            // to the bottom speaker so TTS playback is audible.
+            try session.overrideOutputAudioPort(.speaker)
         } catch {
             errorMessage = "Mic access failed: \(error.localizedDescription)"
             return
@@ -475,11 +544,33 @@ final class CompanionChatViewModel {
                 self.micRecordBuffer.removeFirst(self.micRecordBuffer.count - maxMicSamples)
             }
 
-            // Don't feed audio during force-cut cooldown — prevents echo/recurring
-            if self.wasForceCut && CFAbsoluteTimeGetCurrent() < self.forceCutCooldownEnd {
+            // While a response is being generated/played, or during the
+            // post-playback cooldown, replace the live mic samples with
+            // silence before pushing to the pipeline. We can't simply
+            // `return` because the C++ VAD relies on a continuous audio
+            // stream — dropping a chunk creates a time discontinuity that
+            // appears to leave VAD in a state where the next real speech
+            // burst doesn't fire `speechStarted` until after a long delay.
+            // Pushing zeros keeps the buffer aligned in real time and
+            // lets VAD transition cleanly from silence to speech.
+            //
+            // We use `isGenerating` (set on transcriptionCompleted,
+            // cleared on responseDone) rather than `isSpeaking` because
+            // AVSpeechSynthesizer starts emitting audio immediately on
+            // `speak()`, before the pipeline emits `responseAudioDelta` —
+            // `isSpeaking` only flips true *after* didFinish, by which
+            // time the relevant playback has already happened. The
+            // cooldown also covers force-cut recovery (its original use).
+            let now = CFAbsoluteTimeGetCurrent()
+            if self.isGenerating || now < self.pipelineCooldownEnd {
+                // Reset AGC tracker so the first post-cooldown buffer
+                // doesn't inherit a stale peak from before TTS.
+                self.agcRecentPeak = 0
+                let silence = [Float](repeating: 0, count: samples.count)
+                self.pipeline?.pushAudio(silence)
                 return
             }
-            self.pipeline?.pushAudio(samples)
+            self.pipeline?.pushAudio(self.applyAGC(to: samples))
         }
 
         guard let playerFormat = AVAudioFormat(
@@ -495,6 +586,42 @@ final class CompanionChatViewModel {
         } catch {
             errorMessage = "Mic error: \(error.localizedDescription)"
         }
+    }
+
+    /// Friendly label for an `MLComputeUnits` value, used to display the
+    /// ASR backend in the diagnostics view.
+    private static func computeUnitsLabel(_ u: MLComputeUnits) -> String {
+        switch u {
+        case .cpuOnly:               return "CPU"
+        case .cpuAndGPU:             return "GPU"
+        case .all:                   return "ANE"
+        case .cpuAndNeuralEngine:    return "ANE"
+        @unknown default:            return "?"
+        }
+    }
+
+    /// Per-buffer automatic gain control. Tracks a decaying peak of the
+    /// loudest recent sample and scales the buffer so that peak hits a
+    /// target level (~0.5). Caps at 10× to avoid amplifying silence /
+    /// background noise to speech-trigger levels. The pipeline's silence
+    /// gate ensures this only runs on real mic input (not TTS bleed).
+    private func applyAGC(to samples: [Float]) -> [Float] {
+        let targetPeak: Float = 0.5
+        let decay: Float = 0.95   // peak persists ~ -0.4 dB / buffer
+        let maxGain: Float = 10
+        let minPeakForGain: Float = 0.005   // below this is silence — no gain
+
+        var bufferPeak: Float = 0
+        for s in samples {
+            let abs = s < 0 ? -s : s
+            if abs > bufferPeak { bufferPeak = abs }
+        }
+        agcRecentPeak = max(bufferPeak, agcRecentPeak * decay)
+
+        guard agcRecentPeak > minPeakForGain else { return samples }
+        let gain = min(targetPeak / agcRecentPeak, maxGain)
+        if gain <= 1.05 { return samples }   // already loud enough
+        return samples.map { $0 * gain }
     }
 
     private func stopMicrophone() {

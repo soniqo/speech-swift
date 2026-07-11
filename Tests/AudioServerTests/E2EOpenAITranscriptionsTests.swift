@@ -1,0 +1,222 @@
+import XCTest
+@testable import AudioServer
+
+/// End-to-end tests for POST /v1/audio/transcriptions.
+///
+/// Requires Qwen3-ASR weights to be downloadable from HuggingFace. Skipped in
+/// CI via the `--skip E2E` test filter; runs locally as part of `make test`.
+final class E2EOpenAITranscriptionsTests: XCTestCase {
+    static var serverTask: Task<Void, Error>?
+    static let port = 19385
+
+    override class func setUp() {
+        super.setUp()
+        serverTask = Task {
+            let server = AudioServer(host: "127.0.0.1", port: port)
+            try await server.run()
+        }
+        Thread.sleep(forTimeInterval: 1.5)
+    }
+
+    override class func tearDown() {
+        serverTask?.cancel()
+        Thread.sleep(forTimeInterval: 0.5)
+        super.tearDown()
+    }
+
+    // MARK: - Helpers
+
+    private func testAudioData() throws -> Data {
+        guard let url = Bundle.module.url(forResource: "test_audio", withExtension: "wav") else {
+            throw XCTSkip("test_audio.wav resource missing from AudioServerTests bundle")
+        }
+        return try Data(contentsOf: url)
+    }
+
+    private func multipartBody(
+        boundary: String,
+        file: Data,
+        filename: String = "audio.wav",
+        fields: [String: String]
+    ) -> Data {
+        var body = Data()
+        body.append(Data("--\(boundary)\r\n".utf8))
+        body.append(Data(
+            "Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n".utf8))
+        body.append(Data("Content-Type: audio/wav\r\n\r\n".utf8))
+        body.append(file)
+        body.append(Data("\r\n".utf8))
+        for (key, value) in fields {
+            body.append(Data("--\(boundary)\r\n".utf8))
+            body.append(Data("Content-Disposition: form-data; name=\"\(key)\"\r\n\r\n".utf8))
+            body.append(Data(value.utf8))
+            body.append(Data("\r\n".utf8))
+        }
+        body.append(Data("--\(boundary)--\r\n".utf8))
+        return body
+    }
+
+    private func post(
+        path: String,
+        body: Data,
+        contentType: String
+    ) async throws -> (Int, Data, [String: String]) {
+        let url = URL(string: "http://127.0.0.1:\(Self.port)\(path)")!
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue(contentType, forHTTPHeaderField: "Content-Type")
+        req.httpBody = body
+        req.timeoutInterval = 120
+        let (data, response) = try await URLSession.shared.data(for: req)
+        let http = response as! HTTPURLResponse
+        var headers: [String: String] = [:]
+        for (k, v) in http.allHeaderFields {
+            if let key = k as? String, let value = v as? String {
+                headers[key.lowercased()] = value
+            }
+        }
+        return (http.statusCode, data, headers)
+    }
+
+    // MARK: - Tests
+
+    func testMultipartJSON() async throws {
+        let audio = try testAudioData()
+        let boundary = "----TestBoundary\(UUID().uuidString)"
+        let body = multipartBody(
+            boundary: boundary,
+            file: audio,
+            fields: ["model": "whisper-1"])
+        let (status, data, _) = try await post(
+            path: "/v1/audio/transcriptions",
+            body: body,
+            contentType: "multipart/form-data; boundary=\(boundary)")
+        XCTAssertEqual(status, 200, "Body: \(String(data: data, encoding: .utf8) ?? "<binary>")")
+
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        XCTAssertNotNil(json?["text"] as? String)
+        XCTAssertFalse((json?["text"] as? String ?? "").isEmpty,
+            "Transcription text should not be empty")
+        // OpenAI's default `json` response returns only {"text": "..."}.
+        // Rich metadata belongs in verbose_json — assert we don't leak extras
+        // that strict client deserializers would reject.
+        XCTAssertNil(json?["duration"], "default json must not include duration")
+        XCTAssertNil(json?["language"], "default json must not include language")
+        XCTAssertNil(json?["segments"], "default json must not include segments")
+    }
+
+    func testMultipartVerboseJSON() async throws {
+        let audio = try testAudioData()
+        let boundary = "----TestBoundary\(UUID().uuidString)"
+        let body = multipartBody(
+            boundary: boundary,
+            file: audio,
+            fields: ["model": "whisper-1", "response_format": "verbose_json"])
+        let (status, data, _) = try await post(
+            path: "/v1/audio/transcriptions",
+            body: body,
+            contentType: "multipart/form-data; boundary=\(boundary)")
+        XCTAssertEqual(status, 200, "Body: \(String(data: data, encoding: .utf8) ?? "<binary>")")
+
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        XCTAssertEqual(json?["task"] as? String, "transcribe")
+        XCTAssertNotNil(json?["text"] as? String)
+        XCTAssertNotNil(json?["duration"] as? Double)
+        XCTAssertNotNil(json?["language"] as? String)
+        let segments = json?["segments"] as? [[String: Any]]
+        XCTAssertNotNil(segments)
+        XCTAssertGreaterThanOrEqual(segments?.count ?? 0, 1)
+    }
+
+    func testMultipartTextResponse() async throws {
+        let audio = try testAudioData()
+        let boundary = "----TestBoundary\(UUID().uuidString)"
+        let body = multipartBody(
+            boundary: boundary,
+            file: audio,
+            fields: ["model": "whisper-1", "response_format": "text"])
+        let (status, data, headers) = try await post(
+            path: "/v1/audio/transcriptions",
+            body: body,
+            contentType: "multipart/form-data; boundary=\(boundary)")
+        XCTAssertEqual(status, 200)
+        XCTAssertTrue((headers["content-type"] ?? "").contains("text/plain"))
+        let text = String(data: data, encoding: .utf8) ?? ""
+        XCTAssertFalse(text.isEmpty, "Plain-text response should contain transcription")
+    }
+
+    func testMultipartSRTResponse() async throws {
+        let audio = try testAudioData()
+        let boundary = "----TestBoundary\(UUID().uuidString)"
+        let body = multipartBody(
+            boundary: boundary,
+            file: audio,
+            fields: ["model": "whisper-1", "response_format": "srt"])
+        let (status, data, headers) = try await post(
+            path: "/v1/audio/transcriptions",
+            body: body,
+            contentType: "multipart/form-data; boundary=\(boundary)")
+        XCTAssertEqual(status, 200)
+        XCTAssertTrue((headers["content-type"] ?? "").contains("application/x-subrip"))
+        let text = String(data: data, encoding: .utf8) ?? ""
+        XCTAssertFalse(text.isEmpty, "SRT response should contain transcription")
+        // SRT cue format: "1\n00:00:00,000 --> HH:MM:SS,mmm\n<text>\n"
+        XCTAssertTrue(text.hasPrefix("1\n"), "SRT should start with cue index")
+        XCTAssertTrue(text.contains("-->"), "SRT should contain timestamp arrow")
+        XCTAssertTrue(text.contains(","), "SRT timestamps use comma as ms separator")
+    }
+
+    func testMultipartVTTResponse() async throws {
+        let audio = try testAudioData()
+        let boundary = "----TestBoundary\(UUID().uuidString)"
+        let body = multipartBody(
+            boundary: boundary,
+            file: audio,
+            fields: ["model": "whisper-1", "response_format": "vtt"])
+        let (status, data, headers) = try await post(
+            path: "/v1/audio/transcriptions",
+            body: body,
+            contentType: "multipart/form-data; boundary=\(boundary)")
+        XCTAssertEqual(status, 200)
+        XCTAssertTrue((headers["content-type"] ?? "").contains("text/vtt"))
+        let text = String(data: data, encoding: .utf8) ?? ""
+        XCTAssertFalse(text.isEmpty, "VTT response should contain transcription")
+        // WEBVTT header + cue: "WEBVTT\n\nHH:MM:SS.mmm --> HH:MM:SS.mmm\n<text>\n"
+        XCTAssertTrue(text.hasPrefix("WEBVTT"), "VTT must start with WEBVTT magic")
+        XCTAssertTrue(text.contains("-->"), "VTT should contain timestamp arrow")
+        XCTAssertTrue(text.contains("."), "VTT timestamps use dot as ms separator")
+    }
+
+    func testMissingFileReturnsBadRequest() async throws {
+        let boundary = "----TestBoundary\(UUID().uuidString)"
+        // Send a multipart body that has only a `model` field, no `file`.
+        var body = Data()
+        body.append(Data("--\(boundary)\r\n".utf8))
+        body.append(Data("Content-Disposition: form-data; name=\"model\"\r\n\r\n".utf8))
+        body.append(Data("whisper-1".utf8))
+        body.append(Data("\r\n--\(boundary)--\r\n".utf8))
+
+        let (status, data, headers) = try await post(
+            path: "/v1/audio/transcriptions",
+            body: body,
+            contentType: "multipart/form-data; boundary=\(boundary)")
+        XCTAssertEqual(status, 400)
+        XCTAssertTrue((headers["content-type"] ?? "").contains("application/json"))
+
+        // OpenAI error envelope shape:
+        //   {"error": {"message": "...", "type": "invalid_request_error",
+        //              "code": null, "param": null}}
+        // The official openai-python / openai-node SDKs parse `error.message`
+        // as a nested object — a bare {"error": "..."} crashes their handlers.
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        let error = json?["error"] as? [String: Any]
+        XCTAssertNotNil(error, "error must be a nested object, not a bare string")
+        XCTAssertEqual(error?["type"] as? String, "invalid_request_error")
+        XCTAssertNotNil(error?["message"] as? String)
+        XCTAssertFalse((error?["message"] as? String ?? "").isEmpty)
+        // `code` and `param` must exist as keys (even if null) so SDKs that
+        // unconditionally read them don't trip on missing-key errors.
+        XCTAssertTrue(error?.keys.contains("code") ?? false)
+        XCTAssertTrue(error?.keys.contains("param") ?? false)
+    }
+}

@@ -242,7 +242,7 @@ model.warmUp()  // compile + warmup pass
 // Subsequent respond() / respondStream() calls use compiled path
 ```
 
-CLI: `audio respond --input audio.wav --compile --output response.wav`
+CLI: `speech respond --input audio.wav --compile --output response.wav`
 
 ## References
 

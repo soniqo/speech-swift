@@ -55,16 +55,16 @@ let detections = try detector.detect(audio: samples, sampleRate: 16000)
 
 ```bash
 # Bare phrase (uses tuned defaults):
-audio wake recording.wav --keywords "hey soniqo"
+speech wake recording.wav --keywords "hey soniqo"
 
 # Per-phrase tuning (phrase[:ac_threshold[:boost]]):
-audio wake recording.wav --keywords "hey soniqo:0.1:0.5" "cancel:0.2"
+speech wake recording.wav --keywords "hey soniqo:0.1:0.5" "cancel:0.2"
 
 # JSON output:
-audio wake recording.wav --keywords "hey soniqo" --json
+speech wake recording.wav --keywords "hey soniqo" --json
 
 # Keyword file (one entry per line, `#` for comments):
-audio wake recording.wav --keywords-file keywords.txt
+speech wake recording.wav --keywords-file keywords.txt
 ```
 
 ## Streaming pipeline
@@ -107,7 +107,7 @@ let adapter = try WakeWordStreamingAdapter(detector: detector)
 The tuned defaults (0.15 / 0.5 / 1) are a good starting point on read speech.
 For noisy conditions or far-field mics, raise `acThreshold` toward 0.2–0.3 to
 cut false positives, or increase `boost` to 1.0–2.0 for better recall on
-short phrases. Use `audio wake --json` to dump matched spans + timestamps
+short phrases. Use `speech wake --json` to dump matched spans + timestamps
 and iterate.
 
 ## Known limitations
