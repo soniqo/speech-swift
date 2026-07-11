@@ -35,6 +35,11 @@ Three-stage pipeline: LLM → DiT Flow Matching → HiFi-GAN Vocoder → 24kHz a
 - Affine projection (192 → 80) conditions DiT flow model on target voice
 - Model: `aufklarer/CamPlusPlus-Speaker-CoreML` (~14 MB, FP16)
 - CLI: `--voice-sample reference.wav`
+- Long-form cloning splits text into sentence segments, seeds MLX before each
+  segment when `seed:` is passed (`--seed` on the CLI) so repeated runs are
+  reproducible, and stitches with edge fades so no output path ends on an
+  audible click. The prompt region is sliced off in the mel domain before
+  vocoding (upstream parity), so no audio-domain prompt trim is applied
 
 ## Multi-Speaker Dialogue
 - `DialogueParser` parses `[S1] text [S2] text` speaker tags into `DialogueSegment` structs
@@ -48,6 +53,11 @@ Three-stage pipeline: LLM → DiT Flow Matching → HiFi-GAN Vocoder → 24kHz a
 - Unknown tags pass through as freeform instructions: `(Speak like a pirate)`
 - `--cosy-instruct` sets the global default instruction (replaces "You are a helpful assistant.")
 - Text format: `{instruction}<|endofprompt|>(token 151646){text_to_synthesize}`
+- For zero-shot cloning, a non-default instruction uses CosyVoice's `instruct2`
+  layout: the LLM receives the framed instruction and target text, while the
+  reference audio remains attached to the Flow model as the voice anchor. The
+  unstyled path continues to use the reference transcript plus speech-token
+  context for maximum speaker fidelity.
 
 ## Streaming
 - Chunk-aware causal masking in DiT
@@ -56,11 +66,32 @@ Three-stage pipeline: LLM → DiT Flow Matching → HiFi-GAN Vocoder → 24kHz a
 
 ## Weight Conversion
 - Source: FunAudioLLM/Fun-CosyVoice3-0.5B-2512 (PyTorch .pt)
-- LLM: 4-bit quantized (group_size=64)
-- DiT Flow: bfloat16
-- HiFi-GAN: float32
+- HiFi-GAN: float32 (weight-norm folded)
 - Conv1d weights transposed: PyTorch [out,in,k] → MLX [out,k,in]
-- Total: ~1.9 GB (quantized)
+
+### Available bundles
+
+| Variant | LLM | DiT | speech_tokenizer | Total | HF repo |
+|---|---|---|---|---:|---|
+| **bf16 / 16-bit** (default) | bf16 | bf16 | bf16 | ~2.1 GB | [aufklarer/CosyVoice3-0.5B-MLX-bf16](https://huggingface.co/aufklarer/CosyVoice3-0.5B-MLX-bf16) |
+| **8-bit** | int8, group=64 | bf16 | bf16 | ~1.4 GB | [aufklarer/CosyVoice3-0.5B-MLX-8bit](https://huggingface.co/aufklarer/CosyVoice3-0.5B-MLX-8bit) |
+| **8-bit-full** | int8, group=64 | int8, group=64 | bf16 | ~1.6 GB | [aufklarer/CosyVoice3-0.5B-MLX-8bit-full](https://huggingface.co/aufklarer/CosyVoice3-0.5B-MLX-8bit-full) |
+
+The runtime declares every weight-bearing matmul in the LLM and the DiT
+as `Linear`. Bundles that ship `.scales` for a given projection get a
+per-path `Linear → QuantizedLinear` swap at load time; bundles that omit
+the `quantization` block, or declare `bits: 16`, stay in plain `Linear`
+form. This lets a single runtime serve all production variants from the same
+module hierarchy.
+
+Pick via the CLI:
+
+```bash
+speech speak "Hello, world" --engine cosyvoice --cosyvoice-variant bf16 -o hi.wav
+speech speak "Hello, world" --engine cosyvoice --cosyvoice-variant 16bit -o hi.wav
+```
+
+`--model-id` still wins if you point it at a custom HF repo.
 
 ## Configuration
 Key parameters from cosyvoice3.yaml:

@@ -8,8 +8,6 @@ Synthesize text → transcribe audio back (Qwen3-ASR 0.6B) → compute WER vs or
 
 | TTS Engine | Model | Params | Size | WER% | RTF | Cold Start | TTFT |
 |------------|-------|--------|------|------|-----|------------|------|
-| CosyVoice3 | 0.5B 4-bit | 500M | ~1.9 GB | 3.25 | 0.59 | 0.9s | — |
-| Qwen3-TTS | 1.7B 4-bit | 1.7B | ~2.3 GB | 3.47 | 0.79 | 1.1s | 1ms |
 | Qwen3-TTS | 1.7B 8-bit | 1.7B | ~3.5 GB | 3.66 | 0.85 | 1.1s | 1ms |
 | Kokoro-82M | 82M CoreML | 82M | ~170 MB | 3.90 | 0.17 | 20.5s | ~450ms |
 | Qwen3-TTS | 0.6B 8-bit | 600M | ~960 MB | 9.74 | 0.76 | 1.1s | 2ms |
@@ -17,17 +15,18 @@ Synthesize text → transcribe audio back (Qwen3-ASR 0.6B) → compute WER vs or
 
 **Machine**: Apple M2 Max, 64 GB, macOS 14, release build.
 
+> The 1.7B **4-bit** variant was dropped — it degraded badly (near-silent/garbled output on some inputs). The 1.7B now ships **8-bit** and **bf16** (the full-precision default, ~3.7 GB, ≈8-bit intelligibility); see the [bf16 model card](https://huggingface.co/aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-bf16) for measured RTF/memory.
+
 On harder literary text (111 LibriSpeech sentences), Qwen3-TTS 0.6B 4-bit scores 19.15% WER — higher due to archaic vocabulary and long sentences.
 
 ## Key observations
 
-- **CosyVoice3** achieves best intelligibility (3.25% WER) and fastest RTF (0.59)
-- **Qwen3-TTS 1.7B** matches CosyVoice quality (3.47%) but is slower (RTF 0.79)
-- **0.6B → 1.7B** dramatically improves quality (15.58% → 3.47% for 4-bit, 4.5x fewer errors)
-- **4-bit → 8-bit** makes little difference for 1.7B (3.47% → 3.66%) but hurts 0.6B (15.58% → 9.74%)
+- **Qwen3-TTS 1.7B** is the strongest Qwen3-TTS result in this table (3.66% at 8-bit, RTF 0.85)
+- **0.6B → 1.7B** dramatically improves quality (9.74% → 3.66% at 8-bit, ~2.7x fewer errors)
+- **Quantization** hurts the small model (0.6B: 15.58% 4-bit → 9.74% 8-bit); the 1.7B's 4-bit was dropped for quality and now ships 8-bit + bf16
 - All engines are faster than real-time (RTF < 1.0)
 - **Kokoro** has fastest RTF (0.17) but slowest cold start (20.5s CoreML compilation, cached after first use)
-- **MLX models** (Qwen3, CosyVoice) load in ~1s — no cold start penalty
+- **MLX Qwen3-TTS models** load in ~1s — no CoreML compilation cold start
 - **TTFT** (time to first token): Qwen3-TTS embed is 1-3ms, Kokoro ~450ms (CoreML prediction overhead)
 - Generation dominates Qwen3-TTS latency at ~92% of total time (52-58ms/step)
 

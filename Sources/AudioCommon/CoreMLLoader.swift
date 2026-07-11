@@ -67,6 +67,10 @@ public enum CoreMLLoader {
         configuration: MLModelConfiguration,
         name: String? = nil
     ) throws -> MLModel {
+        // Honor the SPEECH_COREML_COMPUTE_UNITS override (CI forces cpuOnly to
+        // skip the runner's hanging ANE/GPU first-load compile). No-op on device.
+        configuration.computeUnits = CoreMLComputeUnitsResolver.resolved(
+            default: configuration.computeUnits)
         let label = name ?? url.deletingPathExtension().lastPathComponent
         let unitsLabel = describe(units: configuration.computeUnits)
         let start = Date()

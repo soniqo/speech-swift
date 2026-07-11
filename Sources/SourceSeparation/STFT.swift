@@ -1,5 +1,6 @@
 import Accelerate
 import Foundation
+import MLX
 
 /// STFT processor for stereo 44.1kHz audio (Open-Unmix configuration).
 ///
@@ -166,6 +167,67 @@ struct STFTProcessor {
 
         // Remove center padding
         return Array(output[padLen..<(padLen + length)])
+    }
+
+    /// Vectorised inverse STFT on the GPU. Inputs are complex spectra as two
+    /// real `MLXArray`s of shape `[..., T, nBins]`; the batch dims (e.g.
+    /// `[channels, T, nBins]`) pass through. Output is `[..., length]`.
+    ///
+    /// Algorithm:
+    ///   1. Combine real+imag into one complex tensor, run `irfft` along the
+    ///      bin axis → time-domain frames of shape `[..., T, nFFT]`.
+    ///   2. Window the frames.
+    ///   3. Overlap-add via reshape + pad-and-sum, valid when `nFFT % nHop == 0`
+    ///      (here 4096 / 1024 = 4 sub-windows per frame).
+    ///   4. Normalise by the per-sample window² sum and trim centre padding.
+    func inverseMLX(real: MLXArray, imag: MLXArray, length: Int) -> MLXArray {
+        precondition(nFFT % nHop == 0,
+            "MLX iSTFT overlap-add requires nFFT % nHop == 0 (got \(nFFT) / \(nHop))")
+        let k = nFFT / nHop
+
+        // [..., T, nBins] complex → time-domain frames [..., T, nFFT]
+        let complex = real + imag.asImaginary()
+        var frames = irfft(complex, n: nFFT, axis: -1)
+
+        // Apply the analysis window across the last axis.
+        let winMLX = MLXArray(window, [nFFT])
+        frames = frames * winMLX
+
+        // Overlap-add via reshape + pad-and-sum.
+        let shape = frames.shape
+        let T = shape[shape.count - 2]
+        let batchShape = Array(shape.dropLast(2))
+        let subFrames = frames.reshaped(batchShape + [T, k, nHop])
+
+        var accum: MLXArray? = nil
+        for j in 0..<k {
+            let slice = subFrames[.ellipsis, 0..., j, 0...]   // [..., T, hop]
+            var widths = Array(repeating: IntOrPair((0, 0)), count: batchShape.count)
+            widths.append(IntOrPair((j, (k - 1) - j)))         // along T
+            widths.append(IntOrPair((0, 0)))                   // along hop
+            let padded = MLX.padded(slice, widths: widths)
+            accum = accum.map { $0 + padded } ?? padded
+        }
+        let combined = accum!.reshaped(batchShape + [(T + k - 1) * nHop])
+
+        // Window² sum across the overlap-add output (depends only on T).
+        let w2 = (winMLX * winMLX).reshaped([k, nHop])
+        var w2Accum: MLXArray? = nil
+        for j in 0..<k {
+            let row = w2[j, 0...]                              // [hop]
+            let expanded = MLX.broadcast(row.reshaped([1, nHop]), to: [T, nHop])
+            let pad = MLX.padded(
+                expanded,
+                widths: [IntOrPair((j, (k - 1) - j)), IntOrPair((0, 0))])
+            w2Accum = w2Accum.map { $0 + pad } ?? pad
+        }
+        let winSum = w2Accum!.reshaped([(T + k - 1) * nHop])
+
+        let normalised = combined / MLX.maximum(winSum, MLXArray(Float(1e-8)))
+
+        // Trim the symmetric centre-pad.
+        let padLen = nFFT / 2
+        return normalised[.ellipsis, padLen ..< (padLen + length)]
     }
 
     /// Apply magnitude mask with original phase, then iSTFT.

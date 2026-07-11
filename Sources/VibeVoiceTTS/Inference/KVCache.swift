@@ -88,6 +88,17 @@ public class KVCacheSimple: KVCache {
     public var sequenceLength: Int {
         keys?.dim(2) ?? 0
     }
+
+    /// Extract the valid `[B, H, offset, D]` slice of cached K/V as a fresh
+    /// tuple — the format consumed by the shapeless compiled autoregressive
+    /// step. Returns nil before the first `update(...)`.
+    public func snapshot() -> (MLXArray, MLXArray)? {
+        guard let k = keys, let v = values, offset > 0 else { return nil }
+        return (
+            k[.ellipsis, ..<offset, 0...],
+            v[.ellipsis, ..<offset, 0...]
+        )
+    }
 }
 
 public func createCausalMask(n: Int, offset: Int) -> MLXArray {

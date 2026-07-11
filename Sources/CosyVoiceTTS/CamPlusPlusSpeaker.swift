@@ -59,7 +59,7 @@ public final class CamPlusPlusSpeaker {
         }
 
         let mlConfig = MLModelConfiguration()
-        mlConfig.computeUnits = .cpuAndNeuralEngine
+        mlConfig.computeUnits = CoreMLComputeUnitsResolver.resolved(default: .cpuAndNeuralEngine)
 
         let mlModel: MLModel
         do {

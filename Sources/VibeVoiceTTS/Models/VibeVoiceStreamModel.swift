@@ -117,6 +117,13 @@ public class VibeVoiceStreamModel: Module {
     /// Set to true after weight load if the bundle contains eos_classifier weights.
     public var hasEosClassifier: Bool = false
 
+    /// Set to true after weight load if the bundle contains
+    /// `acoustic_tokenizer.encoder.*` weights. Realtime-0.5B is distributed
+    /// inference-only (decoder + LM + connector); its encoder weights are
+    /// absent and our nn module would otherwise sit at random init, producing
+    /// silent garbage if `encodeVoice` is called against it.
+    public var hasAcousticEncoder: Bool = false
+
     public var speechScalingFactor: MLXArray = MLXArray(1.0)
     public var speechBiasFactor: MLXArray = MLXArray(0.0)
 

@@ -43,10 +43,20 @@ public class ConditionalFlowMatching: Module {
 
     @ModuleInfo var decoder: DiT
 
-    /// Compiled DiT forward pass for kernel fusion. Uses shapeless=false since
-    /// all shapes are constant across the 10 ODE steps within a generation.
-    /// Hardcodes nil spks/cond path (the common case for CosyVoice3 0.5B).
+    /// Compiled DiT forward passes for kernel fusion. Uses shapeless=false
+    /// since all shapes are constant across the 10 ODE steps within a
+    /// generation. Two variants: nil spks/cond (plain TTS) and full
+    /// conditioning (zero-shot cloning: spks + cond present).
     private var compiledDiTForward: (([MLXArray]) -> [MLXArray])?
+    private var compiledDiTForwardFull: (([MLXArray]) -> [MLXArray])?
+
+    /// Fixed initial ODE noise `[1, 80, N]`. Upstream CausalConditionalCFM
+    /// never samples fresh noise — it slices a fixed torch-seed-0 buffer
+    /// (`rand_noise = randn([1, 80, 50 * 300])`), an implicitly validated
+    /// draw for the 10-step Euler solver. Set from a bundle-provided buffer
+    /// (see `loadFixedNoise`); when nil, a keyed draw provides the same
+    /// fixed-noise property without depending on the global RNG.
+    public var fixedNoise: MLXArray?
 
     public init(config: CosyVoiceFlowConfig) {
         self.config = config
@@ -54,7 +64,19 @@ public class ConditionalFlowMatching: Module {
         super.init()
     }
 
-    /// Set up compiled DiT forward pass for Metal kernel fusion.
+    /// Load a raw little-endian float32 noise buffer and reshape to
+    /// `[1, 80, N]` (the upstream `rand_noise` layout).
+    public static func loadFixedNoise(path: String) -> MLXArray? {
+        guard let data = FileManager.default.contents(atPath: path) else { return nil }
+        let count = data.count / MemoryLayout<Float>.size
+        guard count >= 80, count % 80 == 0 else { return nil }
+        let floats = data.withUnsafeBytes { raw in
+            Array(raw.bindMemory(to: Float.self).prefix(count))
+        }
+        return MLXArray(floats, [1, 80, count / 80])
+    }
+
+    /// Set up compiled DiT forward passes for Metal kernel fusion.
     ///
     /// With shapeless=false, the compiled graph is traced once per input shape
     /// and reused across all 10 ODE steps (shapes are identical each step).
@@ -65,17 +87,24 @@ public class ConditionalFlowMatching: Module {
         compiledDiTForward = compile(
             inputs: [decoderRef], outputs: [decoderRef], shapeless: false
         ) { inputs in
-            let x = inputs[0]
-            let mask = inputs[1]
-            let mu = inputs[2]
-            let t = inputs[3]
-            let velocity = decoderRef(x, mask: mask, mu: mu, t: t, spks: nil, cond: nil)
+            let velocity = decoderRef(
+                inputs[0], mask: inputs[1], mu: inputs[2], t: inputs[3],
+                spks: nil, cond: nil)
+            return [velocity]
+        }
+
+        compiledDiTForwardFull = compile(
+            inputs: [decoderRef], outputs: [decoderRef], shapeless: false
+        ) { inputs in
+            let velocity = decoderRef(
+                inputs[0], mask: inputs[1], mu: inputs[2], t: inputs[3],
+                spks: inputs[4], cond: inputs[5])
             return [velocity]
         }
     }
 
-    /// Execute DiT forward pass (compiled when available, falls back to uncompiled).
-    /// Uses compiled path only when spks and cond are nil.
+    /// Execute DiT forward pass (compiled when available, falls back to
+    /// uncompiled for the mixed spks-without-cond case).
     private func executeDiTForward(
         x: MLXArray, mask: MLXArray, mu: MLXArray, t: MLXArray,
         spks: MLXArray?, cond: MLXArray?
@@ -83,25 +112,54 @@ public class ConditionalFlowMatching: Module {
         if let compiled = compiledDiTForward, spks == nil, cond == nil {
             return compiled([x, mask, mu, t])[0]
         }
+        if let compiled = compiledDiTForwardFull, let spks, let cond {
+            return compiled([x, mask, mu, t, spks, cond])[0]
+        }
         return decoder(x, mask: mask, mu: mu, t: t, spks: spks, cond: cond)
     }
 
-    /// Warm up the compiled DiT with a small dummy forward pass.
-    /// Traces the compiled graph and pre-compiles Metal shaders so the first
-    /// real generation pays zero compilation cost.
+    /// Warm up the compiled DiT with small dummy forward passes.
+    /// Traces both compiled graphs and pre-compiles Metal shaders so the
+    /// first real generation pays zero compilation cost. Dummies use the
+    /// loaded weight dtype so the traces match runtime call signatures.
     public func warmUp() {
         guard compiledDiTForward != nil else { return }
 
-        // Small dummy inputs: [2, 80, 4] (batch=2 for CFG doubling, T=4 minimal)
-        let dummyX = MLXArray.zeros([2, 80, 4])
-        let dummyMask = MLXArray.ones([2, 1, 4])
-        let dummyMu = MLXArray.zeros([2, 80, 4])
-        let dummyT = MLXArray.zeros([2])
+        let dtype = decoder.projOut.weight.dtype
+        let melDim = config.dit.melDim
+        let dummyX = MLXArray.zeros([2, melDim, 4]).asType(dtype)
+        let dummyMask = MLXArray.ones([2, 1, 4]).asType(dtype)
+        let dummyMu = MLXArray.zeros([2, melDim, 4]).asType(dtype)
+        let dummyT = MLXArray.zeros([2]).asType(dtype)
 
-        let result = executeDiTForward(
+        let plain = executeDiTForward(
             x: dummyX, mask: dummyMask, mu: dummyMu, t: dummyT,
             spks: nil, cond: nil)
-        eval(result)
+        eval(plain)
+
+        let dummySpks = MLXArray.zeros([2, config.dit.spkDim]).asType(dtype)
+        let dummyCond = MLXArray.zeros([2, melDim, 4]).asType(dtype)
+        let full = executeDiTForward(
+            x: dummyX, mask: dummyMask, mu: dummyMu, t: dummyT,
+            spks: dummySpks, cond: dummyCond)
+        eval(full)
+    }
+
+    /// Initial noise for the ODE solver, always float32.
+    /// Slices the fixed buffer when present (batch 1 and long enough),
+    /// otherwise draws with a fixed key so repeated calls are identical.
+    func initialNoise(batch: Int, timeSteps: Int, temperature: Float) -> MLXArray {
+        var z: MLXArray
+        if let buf = fixedNoise, batch == 1, buf.dim(2) >= timeSteps {
+            z = buf[0..., 0..., 0 ..< timeSteps].asType(.float32)
+        } else {
+            z = MLXRandom.normal(
+                [batch, config.outputSize, timeSteps], key: MLXRandom.key(0))
+        }
+        if temperature != 1.0 {
+            z = z * temperature
+        }
+        return z
     }
 
     /// Solve the flow matching ODE to generate a mel spectrogram.
@@ -127,8 +185,12 @@ public class ConditionalFlowMatching: Module {
         spks: MLXArray? = nil,
         cond: MLXArray? = nil
     ) -> MLXArray {
-        // 1. Sample initial noise: z ~ N(0, temperature^2 * I)
-        let z = MLXRandom.normal(mu.shape).asType(mu.dtype) * MLXArray(temperature)
+        // 1. Initial noise, float32. The solver state stays float32 for the
+        //    whole integration — upstream solves in float32 and returns
+        //    `.float()`; accumulating in the half-precision weight dtype
+        //    adds an audible spectral noise floor over the 10 Euler steps.
+        var x = initialNoise(
+            batch: mu.dim(0), timeSteps: mu.dim(2), temperature: temperature)
 
         // 2. Create time schedule with cosine mapping
         // Python: t_span = torch.linspace(0, 1, n_timesteps + 1)
@@ -138,50 +200,46 @@ public class ConditionalFlowMatching: Module {
             return 1.0 - cos(t * 0.5 * .pi)
         }
 
-        // 3. Euler solver with classifier-free guidance
-        var x = z
-
-        let cfgRate = MLXArray(config.cfgRate).asType(mu.dtype)
+        // 3. Euler solver with classifier-free guidance. The DiT runs in the
+        //    loaded weight dtype; the CFG combine and Euler update run fp32.
+        let ditDtype = mu.dtype
+        let cfgRate = config.cfgRate
 
         // Pre-build unconditioned inputs (zeros) for CFG — reused across all ODE steps
         let muZeros = MLXArray.zeros(mu.shape, dtype: mu.dtype)
-        let spksZeros: MLXArray? = spks.map { MLXArray.zeros($0.shape, dtype: $0.dtype) }
-        let condZeros: MLXArray? = cond.map { MLXArray.zeros($0.shape, dtype: $0.dtype) }
+        let spksZeros: MLXArray? = spks.map { MLXArray.zeros($0.shape, dtype: ditDtype) }
+        let condZeros: MLXArray? = cond.map { MLXArray.zeros($0.shape, dtype: ditDtype) }
 
         for i in 0 ..< nTimesteps {
             let t = tSchedule[i]
             let dt = tSchedule[i + 1] - tSchedule[i]
 
-            let dtScalar = MLXArray(dt).asType(mu.dtype)
-
             // Batch doubling for CFG: run conditioned + unconditioned in one forward pass
             let batchSize = x.dim(0)
-            let xIn = concatenated([x, x], axis: 0)                      // [2B, 80, T]
+            let xIn = concatenated([x, x], axis: 0).asType(ditDtype)      // [2B, 80, T]
             let maskIn = concatenated([mask, mask], axis: 0)              // [2B, 1, T]
             let muIn = concatenated([mu, muZeros], axis: 0)               // [2B, 80, T]
-            let tArr = MLXArray([Float](repeating: t, count: batchSize * 2)).asType(mu.dtype)
+            let tArr = MLXArray([Float](repeating: t, count: batchSize * 2)).asType(ditDtype)
 
             let spksIn: MLXArray? = spks.flatMap { s in
-                spksZeros.map { z in concatenated([s, z], axis: 0) }
+                spksZeros.map { z in concatenated([s.asType(ditDtype), z], axis: 0) }
             }
             let condIn: MLXArray? = cond.flatMap { c in
-                condZeros.map { z in concatenated([c, z], axis: 0) }
+                condZeros.map { z in concatenated([c.asType(ditDtype), z], axis: 0) }
             }
 
             // Single forward pass through DiT with doubled batch
             let velocity = executeDiTForward(
                 x: xIn, mask: maskIn, mu: muIn, t: tArr, spks: spksIn, cond: condIn)
 
-            // Split conditioned and unconditioned predictions
-            let vCond = velocity[0 ..< batchSize]
-            let vUncond = velocity[batchSize...]
-
-            // Apply classifier-free guidance:
+            // Split conditioned and unconditioned predictions, combine in fp32:
             //   v = (1 + cfg_rate) * v_cond - cfg_rate * v_uncond
+            let vCond = velocity[0 ..< batchSize].asType(.float32)
+            let vUncond = velocity[batchSize...].asType(.float32)
             let v = (1.0 + cfgRate) * vCond - cfgRate * vUncond
 
             // Euler step: x_{t+dt} = x_t + dt * v
-            x = x + dtScalar * v
+            x = x + dt * v
 
             // Evaluate to avoid building too large a computation graph
             eval(x)
@@ -194,8 +252,11 @@ public class ConditionalFlowMatching: Module {
 // MARK: - PreLookaheadLayer
 
 /// Causal convolution encoder before DiT.
-/// Two Conv1d layers: conv1(80→1024, k=4) → ReLU → conv2(1024→80, k=3).
-/// Adds local context to token embeddings before flow matching.
+/// conv1(80→1024, k=4, look-ahead) → leaky_relu(0.01) → conv2(1024→80, k=3,
+/// causal) → residual add with the input. The residual and the leaky slope
+/// match upstream `upsample_encoder.PreLookaheadLayer` — the DiT was trained
+/// with `mu = f(tokens) + tokens`, so dropping either shifts the content
+/// conditioning off-distribution on every frame.
 public class PreLookaheadLayer: Module {
     @ModuleInfo var conv1: CausalDilatedConv1d
     @ModuleInfo var conv2: CausalDilatedConv1d
@@ -215,9 +276,9 @@ public class PreLookaheadLayer: Module {
     /// Input: [B, C, T] (NCL) → Output: [B, C, T] (NCL)
     public func callAsFunction(_ x: MLXArray) -> MLXArray {
         var h = conv1(x)
-        h = relu(h)
+        h = leakyRelu(h, negativeSlope: 0.01)
         h = conv2(h)
-        return h
+        return h + x
     }
 }
 
@@ -262,58 +323,111 @@ public class CosyVoiceFlowModel: Module {
         super.init()
     }
 
-    /// Generate a mel spectrogram from speech tokens.
+    /// Generate a mel spectrogram from speech tokens, optionally conditioned on a
+    /// reference clip via prepended prompt tokens + frame-aligned prompt mel.
+    ///
+    /// When `promptToken` and `promptFeat` are supplied (the upstream zero-shot
+    /// cloning path), they're concatenated to `tokens` / written into the DiT's
+    /// `cond` slot so the flow has a per-frame anchor of the reference voice. The
+    /// returned mel still spans the **full** sequence (prompt + generated); the
+    /// caller is responsible for slicing off the first `promptFeat.dim(2)`
+    /// frames before passing to HiFi-GAN.
     ///
     /// - Parameters:
-    ///   - tokens: `[B, T]` speech token IDs (FSQ codes 0-6560)
-    ///   - spkEmbedding: `[B, 192]` raw speaker embedding, or nil for single-speaker
-    ///   - nTimesteps: ODE solver steps (default from config, typically 10)
-    ///   - temperature: noise temperature for sampling (default 1.0)
-    /// - Returns: `[B, 80, T_mel]` mel spectrogram where `T_mel = T * tokenMelRatio`
+    ///   - tokens: `[B, T]` speech token IDs (FSQ codes 0-6560) for the *new*
+    ///     content to synthesize.
+    ///   - spkEmbedding: `[B, 192]` raw CAM++ speaker embedding, or nil.
+    ///   - promptToken: `[B, T_prompt]` FSQ codes of the reference audio (from
+    ///     `SpeechTokenizerModel.encode`), or nil for the non-cloning path.
+    ///   - promptFeat: `[B, 80, T_prompt_mel]` Matcha-style log-mel of the
+    ///     reference (from `FlowMelExtractor.extract`), or nil. **Must** satisfy
+    ///     `T_prompt_mel == T_prompt * tokenMelRatio` so the cond region aligns
+    ///     with the upsampled mu region — the caller's only invariant.
+    ///   - nTimesteps: ODE solver steps (default from config, typically 10).
+    ///   - temperature: noise temperature for sampling.
+    /// - Returns: `[B, 80, T_mel]` mel spectrogram, T_mel = (T + T_prompt) * 2.
     public func callAsFunction(
         tokens: MLXArray,
         spkEmbedding: MLXArray? = nil,
+        promptToken: MLXArray? = nil,
+        promptFeat: MLXArray? = nil,
         nTimesteps: Int? = nil,
         temperature: Float = 1.0
     ) -> MLXArray {
         let steps = nTimesteps ?? config.nTimesteps
 
-        // 1. Embed tokens: [B, T] → [B, T, 80]
-        var mu = inputEmbedding(tokens)
+        // 1. Prepend prompt_token to the generated tokens (upstream:
+        //    `text = torch.concat([prompt_text, text], dim=1)` in CausalMaskedDiffWithDiT).
+        let combinedTokens: MLXArray
+        if let pt = promptToken {
+            precondition(pt.dim(0) == tokens.dim(0),
+                         "promptToken batch must match tokens batch")
+            combinedTokens = concatenated([pt, tokens], axis: 1)
+        } else {
+            combinedTokens = tokens
+        }
 
-        // 2. Pre-lookahead conv encoder: [B, T, 80] → NCL → [B, 80, T] → NLC → [B, T, 80]
+        // 2. Embed combined tokens: [B, T_total] → [B, T_total, 80]
+        var mu = inputEmbedding(combinedTokens)
+
+        // 3. Pre-lookahead conv encoder: [B, T, 80] → NCL → [B, 80, T] → NLC → [B, T, 80]
         mu = preLookaheadLayer(mu.transposed(0, 2, 1)).transposed(0, 2, 1)
 
-        // 3. Upsample from token rate (25 Hz) to mel rate (50 Hz)
-        //    [B, T, 80] → [B, T*2, 80]  (repeat_interleave, each frame duplicated)
+        // 4. Upsample 25 Hz → 50 Hz (repeat-interleave by tokenMelRatio).
         let muUpsampled = RepeatInterleaveUpsampler.upsample(mu, ratio: config.tokenMelRatio)
         let melLen = muUpsampled.dim(1)
 
-        // 4. Transpose to [B, 80, T_mel] for DiT (expects channel-first)
+        // 5. NLC → NCL for the DiT.
         let muTransposed = muUpsampled.transposed(0, 2, 1)
 
-        // 5. Create mask [B, 1, T_mel] (all ones — no padding)
-        let batchSize = tokens.dim(0)
+        // 6. Validity mask (no padding inside generation — all ones).
+        let batchSize = combinedTokens.dim(0)
         let mask = MLXArray.ones([batchSize, 1, melLen]).asType(muTransposed.dtype)
 
-        // 6. Project speaker embedding if provided
-        //    L2-normalize first, then affine projection: [B, 192] → [B, 80]
+        // 7. Speaker conditioning (L2-norm then affine 192 → 80).
         let spks: MLXArray? = spkEmbedding.map { emb in
             let norm = sqrt(sum(emb * emb, axis: -1, keepDims: true)) + 1e-8
             let normalized = emb / norm
             return spkEmbedAffineLayer(normalized)
         }
 
-        // 7. Run flow matching ODE solver
+        // 8. Build the DiT cond signal. Upstream layout:
+        //      conds[:, :, :prompt_mel_len] = prompt_feat
+        //      conds[:, :, prompt_mel_len:] = 0
+        //    This is what gives the flow a per-frame timbre anchor — without it
+        //    the LLM's emotion-loaded tokens dominate via the spks path alone.
+        let cond: MLXArray?
+        if let pf = promptFeat {
+            precondition(pf.dim(0) == batchSize,
+                         "promptFeat batch must match tokens batch")
+            precondition(pf.dim(1) == config.outputSize,
+                         "promptFeat mel dim must be \(config.outputSize), got \(pf.dim(1))")
+            let promptMelLen = pf.dim(2)
+            precondition(promptMelLen <= melLen,
+                         "promptFeat (\(promptMelLen) frames) longer than total mel (\(melLen))")
+            let genMelLen = melLen - promptMelLen
+            if genMelLen > 0 {
+                let zerosAfter = MLXArray.zeros(
+                    [batchSize, config.outputSize, genMelLen]
+                ).asType(pf.dtype)
+                cond = concatenated([pf, zerosAfter], axis: 2)
+            } else {
+                cond = pf
+            }
+        } else {
+            cond = nil
+        }
+
+        // 9. Run the flow matching ODE solver.
         let mel = decoder.forward(
             mu: muTransposed,
             mask: mask,
             nTimesteps: steps,
             temperature: temperature,
             spks: spks,
-            cond: nil
+            cond: cond
         )
 
-        return mel  // [B, 80, T_mel]
+        return mel  // [B, 80, T_mel] — caller slices off [:, :, :promptMelLen]
     }
 }

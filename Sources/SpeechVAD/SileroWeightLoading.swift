@@ -4,7 +4,7 @@ import MLX
 import MLXNN
 import AudioCommon
 
-/// Weight loading for the Silero VAD v5 model.
+/// Weight loading for MLX Silero VAD weights.
 ///
 /// Loads from safetensors files produced by `scripts/convert_silero_vad.py`.
 /// The conversion script transposes Conv1d weights and sums LSTM biases,

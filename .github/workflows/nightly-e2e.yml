@@ -1,0 +1,271 @@
+name: Nightly E2E
+
+# Runs the full E2E test suite with real model downloads from HuggingFace.
+# PR/push CI (`tests.yml`) deliberately skips these because each shard
+# downloads multi-GB models and runs real MLX/CoreML inference.
+#
+# Rollout: starts with light shards (~1-3 GB models each). Heavy shards
+# (Qwen3-TTS, PersonaPlex, VibeVoice, VoxCPM2 bf16, Omnilingual 7B, etc.)
+# will be added once we've seen the workflow + Discord notify pass green.
+
+on:
+  schedule:
+    # 20:00 UTC = 21:00 CET (22:00 CEST during summer time).
+    # GitHub cron uses UTC and does not observe DST — adjust if you
+    # want the wall-clock time pinned to summer instead of winter.
+    - cron: '0 20 * * *'
+  workflow_dispatch:
+    inputs:
+      shard:
+        description: 'Run a single shard (regex matching matrix shard name); leave blank for all'
+        required: false
+        default: ''
+
+concurrency:
+  group: nightly-e2e
+  cancel-in-progress: false
+
+jobs:
+  e2e:
+    runs-on: macos-15
+    # Per-shard cap. Healthy shards finish in <15 min on cpuOnly; 30 min
+    # bounds any stuck shard so it fails fast (with logs) instead of holding
+    # the run to the old 90 min ceiling.
+    timeout-minutes: 30
+    # macos-15 runners are virtualized: no usable Neural Engine, and the
+    # paravirtual GPU can't JIT CoreML's first-load Metal program for stateful
+    # graphs. Both ANE and cpuAndGPU loads silently stall (a 17-27 min hang
+    # loading the Qwen3-ASR T=128 stateful decoder, observed on both). cpuOnly
+    # does no ANE/GPU codegen — pure CPU MIL execution — so it loads instantly
+    # and gives identical text for our roundtrip assertions. On-device keeps
+    # the ANE (env unset -> each loader's normal default).
+    env:
+      SPEECH_COREML_COMPUTE_UNITS: cpuOnly
+      # The library default stall timeout is end-user tuned (300 s — see
+      # HuggingFaceDownloader.downloadStallTimeoutSeconds). CI wants to fail
+      # fast on a wedged HF download instead of eating the shard timeout.
+      HF_DOWNLOAD_STALL_TIMEOUT: "90"
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          # `filter` and `skip` are swift-test regexes matched against
+          # target/class/method names. Targets like `Qwen3ASRTests` pull in
+          # the entire module's tests (E2E + unit). Use `skip` to peel heavy
+          # methods off into their own shard.
+          # CoreML model families, one shard each so a slow/failing model is
+          # isolated and each xctest process loads a bounded weight set. All
+          # run cpuOnly in CI via SPEECH_COREML_COMPUTE_UNITS (set above).
+          - name: kokoro-coreml
+            filter: 'KokoroTTSTests'
+            skip: ''
+          - name: parakeet-coreml
+            # The default Parakeet-TDT model is now a single fixed-shape export
+            # (30s, no EnumeratedShapes), so it loads cleanly on the cpuOnly
+            # virtualized runner. transcribeAudio window-chunks audio >30s.
+            filter: 'ParakeetASRTests|ParakeetStreamingASRTests'
+            modelId: ''
+            skip: ''
+          - name: magpie-coreml
+            # Minimal roundtrip only (testLoadAndSynthesizeEnglish). Skip the
+            # ASR cross-check — it loads the full Qwen3-ASR CoreML decoder and
+            # transcribes on cpuOnly (~13 min), which is what stalled the shard.
+            filter: 'MagpieTTSCoreMLTests'
+            skip: 'testAsrTranscribeCapturedMagpieAudio'
+          - name: speech-enhance-coreml
+            filter: 'SpeechEnhancementTests'
+            skip: ''
+          - name: wakeword-coreml
+            # The KWS streaming-Zipformer encoder's cpuOnly CoreML compile hangs
+            # on the virtualized macos-15 runner (>28 min -> 30-min cap). Root
+            # cause is the streaming 36-cache graph topology, NOT quantization: a
+            # --no-quantize fp16 re-export hangs identically (A/B confirmed on the
+            # runner). The VM has no usable Neural Engine and GPU is reserved for
+            # MLX, so no allowed compute unit loads it there — same class as the
+            # qwen3-asr CoreML decoder. Skip the E2E class on CI; it passes
+            # on-device (10/10, validated locally). Unit tests still run.
+            filter: 'SpeechWakeWordTests'
+            skip: 'E2ESpeechWakeWordTests'
+          - name: vad-diar-mlx-coreml
+            filter: 'SpeechVADTests'
+            skip: ''
+          - name: audio-infra
+            filter: 'AudioCommonTests|AudioServerTests|SpeechUITests'
+            # The S2S E2E tests load PersonaPlex 7B / Hibiki Zero-3B and run a
+            # full inference roundtrip over a websocket. On the virtualized
+            # macos-15 runner with cpuOnly compute, the cold-cache model load
+            # plus per-frame inference doesn't fit in the 30-min shard budget —
+            # the xctest process sits in `swift test --skip-build` with no
+            # logged progress for the full timeout. Locally on M-series with
+            # ANE/GPU these tests run in 25 s / 50 s respectively, so the
+            # tests themselves are correct; the runner is the constraint.
+            # Skip them in Nightly until we either move S2S E2E off cpuOnly or
+            # speed up the cold-cache load.
+            skip: 'testS2SHibikiTranslatesAudio|testS2SPersonaPlexProducesAudio'
+          - name: qwen3-chat-coreml
+            filter: 'Qwen3ChatTests'
+            skip: ''
+          # qwen3-asr was a single shard in the first nightly and OOM-killed
+          # the runner (~8 GB unique-weight footprint vs ~7 GB usable RAM on
+          # macos-15). Split into 4 sub-shards so each xctest process loads
+          # a bounded set of model variants.
+          - name: qwen3-asr-06b-mlx-coreml
+            filter: 'Qwen3ASRTests'
+            # Peel off 1.7B, 8-bit, aligner, streaming. Also skip the CoreML
+            # ASR decoder E2E: it's MLState-stateful, so ANE/GPU hang and
+            # cpuOnly crashes the loader — no compute unit runs it on the
+            # virtualized runner (validated on-device). Leaves the MLX
+            # 0.6B-4bit roundtrip + decoding tests.
+            skip: 'testLargeModel|testSmall8bit|ForcedAlignerTests|StreamingASRTests|E2ECoreMLASRTests'
+          - name: qwen3-asr-17b-mlx
+            # Matches both `testLargeModel*` (1.7B-MLX-8bit) and
+            # `testSmall8bit*` (0.6B-MLX-8bit) methods inside
+            # E2EQwen3ASRIntegrationTests.
+            filter: 'testLargeModel|testSmall8bit'
+            skip: ''
+          - name: qwen3-asr-aligner-mlx
+            # Minimal-quant policy: run only the 4-bit roundtrip + the unit
+            # tests. Skip the bf16 variant (~2.3 GB working set — too heavy for
+            # the runner, the source of the ~18 min stall) and the latency
+            # benchmark (runs align 4x; a perf probe, not a correctness test).
+            filter: 'ForcedAlignerTests'
+            # Also skip the CoreML aligner E2E on the virtualized macos-15
+            # runner: with SPEECH_COREML_COMPUTE_UNITS=cpuOnly, the encoder
+            # output is healthy but the text decoder returns an all-zero logits
+            # buffer. Recompiling the source mlpackage on the runner produced
+            # the same 0.0s span, while the bundle passes on real Apple Silicon.
+            skip: 'testForcedAlignerE2EBf16Variant|testForcedAlignerLatency|E2ECoreMLForcedAlignerTests'
+          - name: qwen3-asr-streaming-mlx-coreml
+            # StreamingASR loads ASR-0.6B-4bit + SileroVAD per test method;
+            # 3 methods × fresh load = enough memory churn to deserve isolation.
+            filter: 'StreamingASRTests'
+            skip: ''
+          - name: cosyvoice-mlx-coreml
+            # Keep the full CosyVoice pipeline E2E, but skip the redundant
+            # LLM-only micro-test on hosted macos-15: after the full pipeline
+            # has already exercised `llm.generate`, this method can trip the
+            # virtualized runner's MLX/Metal command-buffer watchdog.
+            filter: 'CosyVoiceTTSTests'
+            skip: 'testLLMGenerate5Tokens'
+
+    name: ${{ matrix.shard.name }}
+    steps:
+      - name: Select shard (workflow_dispatch filter)
+        id: shard-filter
+        env:
+          REQUESTED_SHARD: ${{ github.event.inputs.shard }}
+          SHARD_NAME: ${{ matrix.shard.name }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] \
+            && [ -n "$REQUESTED_SHARD" ] \
+            && [[ "$SHARD_NAME" != *"$REQUESTED_SHARD"* ]]; then
+            echo "Skipping $SHARD_NAME - manual run filtered to '$REQUESTED_SHARD'"
+            echo "selected=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "selected=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v5
+        if: steps.shard-filter.outputs.selected == 'true'
+
+      - name: Cache SwiftPM build
+        if: steps.shard-filter.outputs.selected == 'true'
+        uses: actions/cache@v5
+        with:
+          path: .build
+          key: spm-nightly-${{ runner.os }}-${{ hashFiles('Package.swift', 'Package.resolved') }}
+          restore-keys: |
+            spm-nightly-${{ runner.os }}-
+            spm-${{ runner.os }}-
+
+      - name: Build debug + tests
+        if: steps.shard-filter.outputs.selected == 'true'
+        run: swift build --build-tests --disable-sandbox
+
+      - name: Build MLX metallib
+        if: steps.shard-filter.outputs.selected == 'true'
+        run: ./scripts/build_mlx_metallib.sh debug
+
+      - name: Copy metallib into test bundles
+        if: steps.shard-filter.outputs.selected == 'true'
+        run: |
+          ARCH="$(uname -m)-apple-macosx"
+          for BUNDLE in .build/"$ARCH"/debug/*.xctest/Contents/MacOS; do
+            [ -d "$BUNDLE" ] && cp .build/debug/mlx.metallib "$BUNDLE/" 2>/dev/null || true
+          done
+
+      - name: Disk space before tests
+        if: steps.shard-filter.outputs.selected == 'true'
+        run: df -h /
+
+      - name: Relax audio-infra HuggingFace stall timeout
+        if: steps.shard-filter.outputs.selected == 'true' && matrix.shard.name == 'audio-infra'
+        run: |
+          echo "HF_DOWNLOAD_STALL_TIMEOUT=180" >> "$GITHUB_ENV"
+          echo "audio-infra downloads get 180s of no-progress patience"
+
+      - name: Run E2E tests
+        if: steps.shard-filter.outputs.selected == 'true'
+        env:
+          # Per-shard model override (parakeet -> fixed-shape iOS-5s); empty for
+          # shards that don't set matrix.shard.modelId.
+          PARAKEET_TEST_MODEL_ID: ${{ matrix.shard.modelId }}
+        run: |
+          if [ -n "${{ matrix.shard.skip }}" ]; then
+            swift test --skip-build --filter "${{ matrix.shard.filter }}" --skip "${{ matrix.shard.skip }}"
+          else
+            swift test --skip-build --filter "${{ matrix.shard.filter }}"
+          fi
+
+      - name: Dump crash reports
+        if: always() && steps.shard-filter.outputs.selected == 'true'
+        run: |
+          shopt -s nullglob
+          found=0
+          for f in ~/Library/Logs/DiagnosticReports/*.ips ~/Library/Logs/DiagnosticReports/*.crash; do
+            found=1
+            echo "===================== $f ====================="
+            cat "$f"
+          done
+          [ "$found" = 0 ] && echo "(no crash reports — process exited cleanly or was killed by timeout)"
+
+      - name: Disk space after tests
+        if: always() && steps.shard-filter.outputs.selected == 'true'
+        run: df -h /
+
+      - name: Show model cache footprint
+        if: always() && steps.shard-filter.outputs.selected == 'true'
+        run: |
+          du -sh ~/Library/Caches/qwen3-speech 2>/dev/null || echo "(no cache)"
+
+  notify:
+    name: Discord notify (on failure)
+    needs: e2e
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post failure to Discord
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SHA: ${{ github.sha }}
+          REF: ${{ github.ref_name }}
+        run: |
+          PAYLOAD=$(jq -n \
+            --arg url "$RUN_URL" \
+            --arg sha "${SHA:0:7}" \
+            --arg ref "$REF" \
+            '{
+              username: "Nightly E2E",
+              embeds: [{
+                title: "Nightly E2E failed",
+                url: $url,
+                color: 15158332,
+                fields: [
+                  {name: "Branch", value: $ref, inline: true},
+                  {name: "Commit", value: $sha, inline: true}
+                ],
+                footer: {text: "One or more shards failed — click title for details"}
+              }]
+            }')
+          curl -fsS -H "Content-Type: application/json" -d "$PAYLOAD" "$WEBHOOK"

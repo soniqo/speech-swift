@@ -30,4 +30,21 @@ public class Qwen2TransformerBlock: Module {
         let mlpOut = mlp(postAttentionLayerNorm(h))
         return h + mlpOut
     }
+
+    /// Pure-functional companion to `callAsFunction` for shapeless compile.
+    /// See `Qwen2Attention.forwardStep` for the contract.
+    public func forwardStep(
+        _ x: MLXArray,
+        offset: MLXArray,
+        attentionMask: MLXArray? = nil,
+        cache: (MLXArray, MLXArray)? = nil
+    ) -> (MLXArray, (MLXArray, MLXArray)) {
+        let normedInput = inputLayerNorm(x)
+        let (attnOut, newCache) = attention.forwardStep(
+            normedInput, offset: offset, attentionMask: attentionMask, cache: cache
+        )
+        let h = x + attnOut
+        let mlpOut = mlp(postAttentionLayerNorm(h))
+        return (h + mlpOut, newCache)
+    }
 }

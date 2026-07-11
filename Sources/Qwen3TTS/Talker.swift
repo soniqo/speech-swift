@@ -17,10 +17,10 @@ public class TalkerAttention: Module {
     let headDim: Int
     let scale: Float
 
-    @ModuleInfo var qProj: QuantizedLinear
-    @ModuleInfo var kProj: QuantizedLinear
-    @ModuleInfo var vProj: QuantizedLinear
-    @ModuleInfo var oProj: QuantizedLinear
+    @ModuleInfo var qProj: Linear
+    @ModuleInfo var kProj: Linear
+    @ModuleInfo var vProj: Linear
+    @ModuleInfo var oProj: Linear
     @ModuleInfo var qNorm: RMSNorm
     @ModuleInfo var kNorm: RMSNorm
 
@@ -34,16 +34,16 @@ public class TalkerAttention: Module {
 
         let hiddenSize = config.hiddenSize
 
-        self._qProj.wrappedValue = QuantizedLinear(
+        self._qProj.wrappedValue = makeMaybeQuantizedLinear(
             hiddenSize, numHeads * headDim, bias: false,
             groupSize: config.groupSize, bits: config.bits)
-        self._kProj.wrappedValue = QuantizedLinear(
+        self._kProj.wrappedValue = makeMaybeQuantizedLinear(
             hiddenSize, numKVHeads * headDim, bias: false,
             groupSize: config.groupSize, bits: config.bits)
-        self._vProj.wrappedValue = QuantizedLinear(
+        self._vProj.wrappedValue = makeMaybeQuantizedLinear(
             hiddenSize, numKVHeads * headDim, bias: false,
             groupSize: config.groupSize, bits: config.bits)
-        self._oProj.wrappedValue = QuantizedLinear(
+        self._oProj.wrappedValue = makeMaybeQuantizedLinear(
             numHeads * headDim, hiddenSize, bias: false,
             groupSize: config.groupSize, bits: config.bits)
 
@@ -147,14 +147,14 @@ public class TalkerDecoderLayer: Module {
 
 /// Text projection MLP: Linear(textHidden, textHidden) -> SiLU -> Linear(textHidden, hidden)
 public class TextProjectionMLP: Module {
-    @ModuleInfo var fc1: QuantizedLinear
-    @ModuleInfo var fc2: QuantizedLinear
+    @ModuleInfo var fc1: Linear
+    @ModuleInfo var fc2: Linear
 
     public init(textHiddenSize: Int, hiddenSize: Int, groupSize: Int = 64, bits: Int = 4) {
-        self._fc1.wrappedValue = QuantizedLinear(
+        self._fc1.wrappedValue = makeMaybeQuantizedLinear(
             textHiddenSize, textHiddenSize, bias: true,
             groupSize: groupSize, bits: bits)
-        self._fc2.wrappedValue = QuantizedLinear(
+        self._fc2.wrappedValue = makeMaybeQuantizedLinear(
             textHiddenSize, hiddenSize, bias: true,
             groupSize: groupSize, bits: bits)
 
@@ -178,7 +178,7 @@ public class TalkerModel: Module {
     @ModuleInfo var textProjection: TextProjectionMLP
     @ModuleInfo var layers: [TalkerDecoderLayer]
     @ModuleInfo var norm: RMSNorm
-    @ModuleInfo var codecHead: QuantizedLinear
+    @ModuleInfo var codecHead: Linear
 
     public init(config: TalkerConfig) {
         self.config = config
@@ -208,7 +208,7 @@ public class TalkerModel: Module {
         self._norm.wrappedValue = RMSNorm(dimensions: config.hiddenSize, eps: config.rmsNormEps)
 
         // Codec head (logits over codec vocabulary)
-        self._codecHead.wrappedValue = QuantizedLinear(
+        self._codecHead.wrappedValue = makeMaybeQuantizedLinear(
             config.hiddenSize, config.codecVocabSize, bias: false,
             groupSize: config.groupSize, bits: config.bits)
 

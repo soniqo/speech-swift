@@ -158,6 +158,34 @@ final class TranscribeCommandTests: XCTestCase {
         }())
     }
 
+    // MARK: --engine whisper
+
+    func testParsesWhisperEngine() throws {
+        let cmd = try AudioCLI.parseAsRoot(["transcribe", "audio.wav", "--engine", "whisper"])
+        let transcribe = try XCTUnwrap(cmd as? TranscribeCommand)
+        XCTAssertEqual(transcribe.engine, "whisper")
+        XCTAssertNoThrow(try transcribe.validate())
+    }
+
+    func testWhisperModelAliasesResolveDefaultCoreMLRepo() throws {
+        for alias in ["default", "turbo", "whisper", "large-v3-turbo"] {
+            XCTAssertEqual(
+                try resolveWhisperModelId(alias),
+                "aufklarer/Whisper-Large-v3-Turbo-CoreML",
+                "\(alias) should resolve to the default Whisper CoreML repo")
+        }
+    }
+
+    func testWhisperAcceptsFullModelId() throws {
+        XCTAssertEqual(
+            try resolveWhisperModelId("org/custom-whisper-coreml"),
+            "org/custom-whisper-coreml")
+    }
+
+    func testWhisperRejectsUnknownShortModelName() {
+        XCTAssertThrowsError(try resolveWhisperModelId("medium"))
+    }
+
     // MARK: --engine omnilingual --backend mlx
 
     func testOmnilingualDefaultBackendIsCoreML() throws {
@@ -284,7 +312,22 @@ final class AlignCommandTests: XCTestCase {
     func testDefaultAlignerModel() throws {
         let cmd = try AudioCLI.parseAsRoot(["align", "audio.wav"])
         let align = try XCTUnwrap(cmd as? AlignCommand)
-        XCTAssertEqual(align.alignerModel, "aufklarer/Qwen3-ForcedAligner-0.6B-4bit")
+        // The default is engine-dependent (mlx → 4-bit MLX, coreml → CoreML
+        // FP16) and resolved inside `run()`, so the parsed value is nil.
+        XCTAssertNil(align.alignerModel)
+    }
+
+    func testDefaultEngineIsMLX() throws {
+        let cmd = try AudioCLI.parseAsRoot(["align", "audio.wav"])
+        let align = try XCTUnwrap(cmd as? AlignCommand)
+        XCTAssertEqual(align.engine, "mlx")
+    }
+
+    func testEngineCoremlParses() throws {
+        let cmd = try AudioCLI.parseAsRoot(["align", "audio.wav", "--engine", "coreml"])
+        let align = try XCTUnwrap(cmd as? AlignCommand)
+        XCTAssertEqual(align.engine, "coreml")
+        XCTAssertNil(align.alignerModel)
     }
 
     func testParsesTextOption() throws {
@@ -389,7 +432,33 @@ final class SpeakCommandTests: XCTestCase {
     func testDefaultCosyVoiceModelId() throws {
         let cmd = try AudioCLI.parseAsRoot(["speak", "Hello"])
         let speak = try XCTUnwrap(cmd as? SpeakCommand)
-        XCTAssertEqual(speak.modelId, "aufklarer/CosyVoice3-0.5B-MLX-4bit")
+        // --model-id is now opt-in; the runtime resolves the default through
+        // --cosyvoice-variant (bf16 by default → aufklarer/CosyVoice3-0.5B-MLX-bf16).
+        XCTAssertNil(speak.modelId)
+        XCTAssertEqual(speak.cosyvoiceVariant, "bf16")
+    }
+
+    func testCosyVoiceVariantBf16() throws {
+        let cmd = try AudioCLI.parseAsRoot(
+            ["speak", "--engine", "cosyvoice", "--cosyvoice-variant", "bf16", "Hello"])
+        let speak = try XCTUnwrap(cmd as? SpeakCommand)
+        XCTAssertEqual(speak.cosyvoiceVariant, "bf16")
+        XCTAssertNil(speak.modelId)
+    }
+
+    func testCosyVoiceVariant16BitAlias() throws {
+        let cmd = try AudioCLI.parseAsRoot(
+            ["speak", "--engine", "cosyvoice", "--cosyvoice-variant", "16bit", "Hello"])
+        let speak = try XCTUnwrap(cmd as? SpeakCommand)
+        XCTAssertEqual(speak.cosyvoiceVariant, "16bit")
+        XCTAssertNil(speak.modelId)
+    }
+
+    func testCosyVoiceModelIdOverridesVariant() throws {
+        let cmd = try AudioCLI.parseAsRoot(
+            ["speak", "--engine", "cosyvoice", "--model-id", "custom/Model", "Hello"])
+        let speak = try XCTUnwrap(cmd as? SpeakCommand)
+        XCTAssertEqual(speak.modelId, "custom/Model")
     }
 
     // MARK: Engine selection
@@ -398,6 +467,26 @@ final class SpeakCommandTests: XCTestCase {
         let cmd = try AudioCLI.parseAsRoot(["speak", "--engine", "cosyvoice", "Hello"])
         let speak = try XCTUnwrap(cmd as? SpeakCommand)
         XCTAssertEqual(speak.engine, "cosyvoice")
+    }
+
+    func testIndicMioEngine() throws {
+        let cmd = try AudioCLI.parseAsRoot(["speak", "--engine", "indic-mio", "नमस्ते <happy>"])
+        let speak = try XCTUnwrap(cmd as? SpeakCommand)
+        XCTAssertEqual(speak.engine, "indic-mio")
+        XCTAssertEqual(speak.indicMioModelId, "aufklarer/Indic-Mio-MLX-fp16")
+        XCTAssertEqual(speak.indicMioTopP, 0.9, accuracy: 0.001)
+        XCTAssertEqual(speak.indicMioRepetitionPenalty, 1.0, accuracy: 0.001)
+    }
+
+    func testIndexTTS2Engine() throws {
+        let cmd = try AudioCLI.parseAsRoot([
+            "speak", "--engine", "indextts2", "Hello",
+            "--voice-sample", "ref.wav",
+        ])
+        let speak = try XCTUnwrap(cmd as? SpeakCommand)
+        XCTAssertEqual(speak.engine, "indextts2")
+        XCTAssertEqual(speak.voiceSample, "ref.wav")
+        XCTAssertEqual(speak.indextts2ModelId, "aufklarer/IndexTTS2-MLX-fp16")
     }
 
     func testInvalidEngineFails() {
@@ -517,6 +606,75 @@ final class SpeakCommandTests: XCTestCase {
         XCTAssertEqual(speak.modelId, "org/my-cosyvoice")
     }
 
+    func testIndicMioOptions() throws {
+        let embedding = Array(repeating: "0", count: 128).joined(separator: ",")
+        let cmd = try AudioCLI.parseAsRoot([
+            "speak", "नमस्ते <happy>",
+            "--engine", "indic-mio",
+            "--indic-mio-model-id", "org/indic-mio",
+            "--indic-mio-top-p", "0.8",
+            "--indic-mio-repetition-penalty", "1.1",
+            "--indic-mio-global-embedding", embedding,
+        ])
+        let speak = try XCTUnwrap(cmd as? SpeakCommand)
+        XCTAssertEqual(speak.indicMioModelId, "org/indic-mio")
+        XCTAssertEqual(speak.indicMioTopP, 0.8, accuracy: 0.001)
+        XCTAssertEqual(speak.indicMioRepetitionPenalty, 1.1, accuracy: 0.001)
+        XCTAssertNotNil(speak.indicMioGlobalEmbedding)
+    }
+
+    func testIndexTTS2Options() throws {
+        let cmd = try AudioCLI.parseAsRoot([
+            "speak", "Hello",
+            "--engine", "indextts2",
+            "--voice-sample", "ref.wav",
+            "--indextts2-model-id", "org/IndexTTS2-MLX-fp16",
+            "--indextts2-bundle-dir", "/tmp/IndexTTS2-MLX-fp16",
+            "--indextts2-emotion", "eager",
+            "--indextts2-emotion-weight", "0.75",
+            "--indextts2-speaking-rate", "1.15",
+            "--indextts2-max-pause", "0.18",
+        ])
+        let speak = try XCTUnwrap(cmd as? SpeakCommand)
+        XCTAssertEqual(speak.indextts2ModelId, "org/IndexTTS2-MLX-fp16")
+        XCTAssertEqual(speak.indextts2BundleDir, "/tmp/IndexTTS2-MLX-fp16")
+        XCTAssertEqual(speak.indextts2Emotion, "eager")
+        XCTAssertEqual(speak.indextts2EmotionWeight, 0.75, accuracy: 0.001)
+        XCTAssertEqual(speak.indextts2SpeakingRate, 1.15, accuracy: 0.001)
+        XCTAssertEqual(try XCTUnwrap(speak.indextts2MaxPause), 0.18, accuracy: 0.001)
+    }
+
+    func testIndexTTS2EmotionVectorOption() throws {
+        let cmd = try AudioCLI.parseAsRoot([
+            "speak", "Hello",
+            "--engine", "indextts2",
+            "--voice-sample", "ref.wav",
+            "--indextts2-emotion", "0.65,0,0,0,0,0,0.15,0",
+        ])
+        let speak = try XCTUnwrap(cmd as? SpeakCommand)
+        XCTAssertEqual(speak.indextts2Emotion, "0.65,0,0,0,0,0,0.15,0")
+    }
+
+    func testIndexTTS2EmotionAudioOption() throws {
+        let cmd = try AudioCLI.parseAsRoot([
+            "speak", "Hello",
+            "--engine", "indextts2",
+            "--voice-sample", "ref.wav",
+            "--indextts2-emotion-audio", "style.wav",
+        ])
+        let speak = try XCTUnwrap(cmd as? SpeakCommand)
+        XCTAssertEqual(speak.indextts2EmotionAudio, "style.wav")
+    }
+
+    func testIndicMioAcceptsInlineJSONEmbedding() throws {
+        let embedding = "[\(Array(repeating: "0", count: 128).joined(separator: ","))]"
+        XCTAssertNoThrow(try AudioCLI.parseAsRoot([
+            "speak", "नमस्ते <happy>",
+            "--engine", "indic-mio",
+            "--indic-mio-global-embedding", embedding,
+        ]))
+    }
+
     func testVerboseFlag() throws {
         let cmd = try AudioCLI.parseAsRoot(["speak", "hi", "--verbose"])
         let speak = try XCTUnwrap(cmd as? SpeakCommand)
@@ -533,6 +691,383 @@ final class SpeakCommandTests: XCTestCase {
         let cmd = try AudioCLI.parseAsRoot(["speak", "--batch-file", "f.txt", "--batch-size", "8"])
         let speak = try XCTUnwrap(cmd as? SpeakCommand)
         XCTAssertEqual(speak.batchSize, 8)
+    }
+
+    // MARK: Magpie engine — validate that voice-cloning / qwen3-specific
+    // flags are rejected with a helpful error instead of silently ignored.
+    // Magpie has 5 baked speakers and no zero-shot conditioning in the
+    // model, so passing `--voice-sample` / `--speaker` / `--instruct`
+    // would otherwise let the user think cloning had worked.
+
+    // `parseAsRoot` runs `validate()` during parsing, so the error
+    // surfaces from the parse call rather than from a separate validate().
+    private func expectSpeakReject(_ args: [String], contains needle: String,
+                                   file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertThrowsError(try AudioCLI.parseAsRoot(args), file: file, line: line) { err in
+            XCTAssertTrue("\(err)".contains(needle),
+                          "expected error containing '\(needle)', got: \(err)",
+                          file: file, line: line)
+        }
+    }
+
+    private func expectMagpieReject(_ args: [String], contains needle: String,
+                                      file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertThrowsError(try AudioCLI.parseAsRoot(args), file: file, line: line) { err in
+            XCTAssertTrue("\(err)".contains(needle),
+                          "expected error containing '\(needle)', got: \(err)",
+                          file: file, line: line)
+        }
+    }
+
+    // MARK: - Indic-Mio engine
+
+    func testIndexTTS2RejectsMissingVoiceSample() {
+        expectSpeakReject(
+            ["speak", "Hello", "--engine", "indextts2"],
+            contains: "--voice-sample")
+    }
+
+    func testIndexTTS2RejectsUnsupportedControls() {
+        expectSpeakReject(
+            ["speak", "Hello", "--engine", "indextts2", "--voice-sample", "ref.wav", "--stream"],
+            contains: "--stream")
+        expectSpeakReject(
+            ["speak", "Hello", "--engine", "indextts2", "--voice-sample", "ref.wav", "--speaker", "someone"],
+            contains: "--speaker")
+        expectSpeakReject(
+            ["speak", "Hello", "--engine", "indextts2", "--voice-sample", "ref.wav", "--instruct", "friendly"],
+            contains: "--instruct")
+        expectSpeakReject(
+            [
+                "speak", "Hello",
+                "--engine", "indextts2",
+                "--voice-sample", "ref.wav",
+                "--indextts2-emotion", "eager",
+                "--indextts2-emotion-audio", "style.wav",
+            ],
+            contains: "mutually exclusive")
+        expectSpeakReject(
+            [
+                "speak", "Hello",
+                "--engine", "indextts2",
+                "--voice-sample", "ref.wav",
+                "--indextts2-speaking-rate", "2.0",
+            ],
+            contains: "speakingRate")
+        expectSpeakReject(
+            [
+                "speak", "Hello",
+                "--engine", "indextts2",
+                "--voice-sample", "ref.wav",
+                "--indextts2-max-pause", "0.01",
+            ],
+            contains: "maxInternalPauseDuration")
+    }
+
+    // MARK: - F5-TTS engine
+
+    func testF5Engine() throws {
+        let cmd = try AudioCLI.parseAsRoot([
+            "speak", "--engine", "f5", "Hello",
+            "--voice-sample", "ref.wav",
+            "--f5-reference-text", "Reference transcript.",
+        ])
+        let speak = try XCTUnwrap(cmd as? SpeakCommand)
+        XCTAssertEqual(speak.engine, "f5")
+        XCTAssertEqual(speak.voiceSample, "ref.wav")
+        XCTAssertEqual(speak.f5ReferenceText, "Reference transcript.")
+        XCTAssertEqual(speak.f5ModelId, "aufklarer/F5TTS-v1-Base-MLX-fp16")
+        XCTAssertNil(speak.f5BundleDir)
+        XCTAssertEqual(speak.f5Steps, 16)
+        XCTAssertEqual(speak.f5CfgStrength, 2.0, accuracy: 0.001)
+        XCTAssertEqual(speak.f5Sway, -1.0, accuracy: 0.001)
+        XCTAssertEqual(speak.f5Speed, 1.0, accuracy: 0.001)
+        XCTAssertEqual(speak.f5Seed, 0)
+        XCTAssertEqual(speak.f5TargetRMS, 0.1, accuracy: 0.001)
+    }
+
+    func testF5Options() throws {
+        let cmd = try AudioCLI.parseAsRoot([
+            "speak", "Hello",
+            "--engine", "f5",
+            "--voice-sample", "ref.wav",
+            "--f5-reference-text", "Reference transcript.",
+            "--f5-model-id", "org/F5TTS-v1-Base-MLX-fp16",
+            "--f5-bundle-dir", "/tmp/F5TTS-v1-Base-MLX-fp16",
+            "--f5-steps", "16",
+            "--f5-cfg-strength", "1.5",
+            "--f5-sway=-0.8",
+            "--f5-speed", "1.25",
+            "--f5-seed", "42",
+            "--f5-target-rms", "0.12",
+        ])
+        let speak = try XCTUnwrap(cmd as? SpeakCommand)
+        XCTAssertEqual(speak.f5ModelId, "org/F5TTS-v1-Base-MLX-fp16")
+        XCTAssertEqual(speak.f5BundleDir, "/tmp/F5TTS-v1-Base-MLX-fp16")
+        XCTAssertEqual(speak.f5Steps, 16)
+        XCTAssertEqual(speak.f5CfgStrength, 1.5, accuracy: 0.001)
+        XCTAssertEqual(speak.f5Sway, -0.8, accuracy: 0.001)
+        XCTAssertEqual(speak.f5Speed, 1.25, accuracy: 0.001)
+        XCTAssertEqual(speak.f5Seed, 42)
+        XCTAssertEqual(speak.f5TargetRMS, 0.12, accuracy: 0.001)
+    }
+
+    func testF5RejectsMissingVoiceSample() {
+        expectSpeakReject(
+            ["speak", "Hello", "--engine", "f5", "--f5-reference-text", "hi"],
+            contains: "--voice-sample")
+    }
+
+    func testF5RejectsMissingOrBlankReferenceText() {
+        expectSpeakReject(
+            ["speak", "Hello", "--engine", "f5", "--voice-sample", "ref.wav"],
+            contains: "--f5-reference-text")
+        expectSpeakReject(
+            [
+                "speak", "Hello", "--engine", "f5", "--voice-sample", "ref.wav",
+                "--f5-reference-text", "   ",
+            ],
+            contains: "--f5-reference-text")
+    }
+
+    func testF5RejectsUnsupportedControls() {
+        expectSpeakReject(
+            [
+                "speak", "Hello", "--engine", "f5", "--voice-sample", "ref.wav",
+                "--f5-reference-text", "hi", "--stream",
+            ],
+            contains: "--stream")
+        expectSpeakReject(
+            [
+                "speak", "Hello", "--engine", "f5", "--voice-sample", "ref.wav",
+                "--f5-reference-text", "hi", "--speaker", "someone",
+            ],
+            contains: "--speaker")
+        expectSpeakReject(
+            [
+                "speak", "Hello", "--engine", "f5", "--voice-sample", "ref.wav",
+                "--f5-reference-text", "hi", "--instruct", "friendly",
+            ],
+            contains: "--instruct")
+        expectSpeakReject(
+            [
+                "speak", "--engine", "f5", "--batch-file", "texts.txt",
+                "--voice-sample", "ref.wav", "--f5-reference-text", "hi",
+            ],
+            contains: "single text")
+    }
+
+    func testF5RejectsInvalidSamplingValues() {
+        expectSpeakReject(
+            [
+                "speak", "Hello", "--engine", "f5", "--voice-sample", "ref.wav",
+                "--f5-reference-text", "hi", "--f5-steps", "0",
+            ],
+            contains: "steps")
+        expectSpeakReject(
+            [
+                "speak", "Hello", "--engine", "f5", "--voice-sample", "ref.wav",
+                "--f5-reference-text", "hi", "--f5-speed", "0",
+            ],
+            contains: "speed")
+        expectSpeakReject(
+            [
+                "speak", "Hello", "--engine", "f5", "--voice-sample", "ref.wav",
+                "--f5-reference-text", "hi", "--f5-cfg-strength=-1",
+            ],
+            contains: "cfgStrength")
+    }
+
+    // MARK: - Higgs engine
+
+    func testHiggsEngine() throws {
+        let cmd = try AudioCLI.parseAsRoot(["speak", "--engine", "higgs", "Hello"])
+        let speak = try XCTUnwrap(cmd as? SpeakCommand)
+        XCTAssertEqual(speak.engine, "higgs")
+        XCTAssertEqual(speak.higgsModelId, "aufklarer/Higgs-TTS-3-4B-MLX-bf16")
+        XCTAssertNil(speak.higgsBundleDir)
+        XCTAssertNil(speak.higgsRefText)
+        XCTAssertEqual(speak.higgsTemperature, 0.8, accuracy: 0.001)
+        XCTAssertNil(speak.higgsTopP)
+        XCTAssertNil(speak.higgsTopK)
+        XCTAssertEqual(speak.higgsMaxNewTokens, 2048)
+        XCTAssertEqual(speak.higgsSeed, 0)
+    }
+
+    func testHiggsOptions() throws {
+        let cmd = try AudioCLI.parseAsRoot([
+            "speak", "<|emotion:elation|>Hello!",
+            "--engine", "higgs",
+            "--voice-sample", "ref.wav",
+            "--higgs-ref-text", "Reference transcript.",
+            "--higgs-model-id", "org/Higgs-TTS-3-4B-MLX-bf16",
+            "--higgs-bundle-dir", "/tmp/Higgs-TTS-3-4B-MLX-bf16",
+            "--higgs-temperature", "1.0",
+            "--higgs-top-p", "0.95",
+            "--higgs-top-k", "50",
+            "--higgs-max-new-tokens", "512",
+            "--higgs-seed", "42",
+        ])
+        let speak = try XCTUnwrap(cmd as? SpeakCommand)
+        XCTAssertEqual(speak.voiceSample, "ref.wav")
+        XCTAssertEqual(speak.higgsRefText, "Reference transcript.")
+        XCTAssertEqual(speak.higgsModelId, "org/Higgs-TTS-3-4B-MLX-bf16")
+        XCTAssertEqual(speak.higgsBundleDir, "/tmp/Higgs-TTS-3-4B-MLX-bf16")
+        XCTAssertEqual(speak.higgsTemperature, 1.0, accuracy: 0.001)
+        XCTAssertEqual(try XCTUnwrap(speak.higgsTopP), 0.95, accuracy: 0.001)
+        XCTAssertEqual(speak.higgsTopK, 50)
+        XCTAssertEqual(speak.higgsMaxNewTokens, 512)
+        XCTAssertEqual(speak.higgsSeed, 42)
+    }
+
+    func testHiggsAllowsPlainTTSWithoutReference() throws {
+        XCTAssertNoThrow(try AudioCLI.parseAsRoot(["speak", "Hello", "--engine", "higgs"]))
+    }
+
+    func testHiggsRejectsRefTextWithoutVoiceSample() {
+        expectSpeakReject(
+            ["speak", "Hello", "--engine", "higgs", "--higgs-ref-text", "hi"],
+            contains: "--voice-sample")
+    }
+
+    func testHiggsRejectsUnsupportedControls() {
+        expectSpeakReject(
+            ["speak", "Hello", "--engine", "higgs", "--stream"],
+            contains: "--stream")
+        expectSpeakReject(
+            ["speak", "Hello", "--engine", "higgs", "--speaker", "someone"],
+            contains: "--speaker")
+        expectSpeakReject(
+            ["speak", "Hello", "--engine", "higgs", "--instruct", "friendly"],
+            contains: "--instruct")
+        expectSpeakReject(
+            ["speak", "--engine", "higgs", "--batch-file", "texts.txt"],
+            contains: "single text")
+    }
+
+    func testHiggsRejectsInvalidSamplingValues() {
+        expectSpeakReject(
+            ["speak", "Hello", "--engine", "higgs", "--higgs-temperature=-1"],
+            contains: "temperature")
+        expectSpeakReject(
+            ["speak", "Hello", "--engine", "higgs", "--higgs-top-p", "1.5"],
+            contains: "topP")
+        expectSpeakReject(
+            ["speak", "Hello", "--engine", "higgs", "--higgs-top-k", "0"],
+            contains: "topK")
+        expectSpeakReject(
+            ["speak", "Hello", "--engine", "higgs", "--higgs-max-new-tokens", "0"],
+            contains: "maxNewTokens")
+    }
+
+    func testIndicMioAcceptsVoiceSampleReference() throws {
+        let cmd = try AudioCLI.parseAsRoot([
+            "speak", "नमस्ते <happy>",
+            "--engine", "indic-mio",
+            "--voice-sample", "ref.wav",
+        ])
+        let speak = try XCTUnwrap(cmd as? SpeakCommand)
+        XCTAssertEqual(speak.voiceSample, "ref.wav")
+    }
+
+    func testIndicMioRejectsVoiceSampleWithExplicitEmbedding() {
+        let embedding = Array(repeating: "0", count: 128).joined(separator: ",")
+        expectSpeakReject(
+            [
+                "speak", "नमस्ते <happy>",
+                "--engine", "indic-mio",
+                "--voice-sample", "ref.wav",
+                "--indic-mio-global-embedding", embedding,
+            ],
+            contains: "either --voice-sample or --indic-mio-global-embedding")
+    }
+
+    func testIndicMioRejectsQwen3StyleControls() {
+        expectSpeakReject(
+            ["speak", "नमस्ते <happy>", "--engine", "indic-mio", "--speaker", "someone"],
+            contains: "--speaker")
+        expectSpeakReject(
+            ["speak", "नमस्ते <happy>", "--engine", "indic-mio", "--instruct", "be sad"],
+            contains: "--instruct")
+    }
+
+    func testIndicMioRejectsStreamingAndBatch() {
+        expectSpeakReject(
+            ["speak", "नमस्ते <happy>", "--engine", "indic-mio", "--stream"],
+            contains: "--stream")
+        expectSpeakReject(
+            ["speak", "--engine", "indic-mio", "--batch-file", "texts.txt"],
+            contains: "single text")
+    }
+
+    func testMagpieRejectsVoiceSample() {
+        expectMagpieReject(
+            ["speak", "hi", "--engine", "magpie", "--voice-sample", "ref.wav"],
+            contains: "--voice-sample")
+    }
+
+    func testMagpieRejectsQwen3SpeakerFlag() {
+        expectMagpieReject(
+            ["speak", "hi", "--engine", "magpie", "--speaker", "someone"],
+            contains: "--speaker")
+    }
+
+    func testMagpieRejectsInstruct() {
+        expectMagpieReject(
+            ["speak", "hi", "--engine", "magpie", "--instruct", "be friendly"],
+            contains: "--instruct")
+    }
+
+    func testMagpieAcceptsBakedSpeakers() throws {
+        for spk in ["sofia", "aria", "jason", "leo", "john"] {
+            XCTAssertNoThrow(try AudioCLI.parseAsRoot(
+                ["speak", "hi", "--engine", "magpie", "--magpie-speaker", spk]),
+                             "speaker \(spk) should validate")
+        }
+    }
+
+    func testMagpieRejectsUnknownSpeaker() {
+        expectMagpieReject(
+            ["speak", "hi", "--engine", "magpie", "--magpie-speaker", "elvis"],
+            contains: "--magpie-speaker")
+    }
+
+    // MARK: - Magpie CoreML engine
+
+    func testMagpieCoreMLAccepts() throws {
+        XCTAssertNoThrow(try AudioCLI.parseAsRoot(
+            ["speak", "hi", "--engine", "magpie-coreml", "--magpie-speaker", "aria"]))
+    }
+
+    func testMagpieCoreMLAcceptsStream() throws {
+        // Streaming is supported via the dedicated 8-frame nanocodec
+        // model. Validation must accept --stream now (used to be
+        // rejected when only the 64-frame batch codec shipped).
+        XCTAssertNoThrow(try AudioCLI.parseAsRoot(
+            ["speak", "hi", "--engine", "magpie-coreml", "--stream"]))
+    }
+
+    func testMagpieCoreMLRejectsVoiceCloningFlags() {
+        // Same five baked speakers as the MLX engine; reject the same set
+        // of cross-engine flags with the same actionable error.
+        for (flag, value) in [("--voice-sample", "ref.wav"),
+                              ("--speaker",      "someone"),
+                              ("--instruct",     "be friendly")] {
+            expectMagpieReject(
+                ["speak", "hi", "--engine", "magpie-coreml", flag, value],
+                contains: flag)
+        }
+    }
+
+    func testMagpieCoreMLAllSpeakers() throws {
+        // The CoreML bundle uses a different speaker index ordering than the
+        // MLX bundle (John=0 vs Sofia=0); the CLI name → enum lookup must
+        // work for all five identities.
+        for spk in ["sofia", "aria", "jason", "leo", "john"] {
+            XCTAssertNoThrow(try AudioCLI.parseAsRoot(
+                ["speak", "hi", "--engine", "magpie-coreml", "--magpie-speaker", spk]),
+                             "coreml speaker \(spk) should validate")
+        }
     }
 }
 

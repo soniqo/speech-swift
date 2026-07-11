@@ -75,14 +75,21 @@ final class PersonaPlexViewModel {
 
     func loadModel() async {
         isLoading = true
-        loadingStatus = "Downloading PersonaPlex (~5.5 GB)..."
+        let personaPlexOffline = PersonaPlexDemoCachePolicy.personaPlexOfflineModeAvailable()
+        let asrOffline = PersonaPlexDemoCachePolicy.asrOfflineModeAvailable()
+        let vadOffline = PersonaPlexDemoCachePolicy.vadOfflineModeAvailable()
+
+        loadingStatus = personaPlexOffline
+            ? "Loading PersonaPlex from local cache..."
+            : "Downloading PersonaPlex (~5.5 GB)..."
         errorMessage = nil
 
         do {
             let loadStart = CFAbsoluteTimeGetCurrent()
 
             let m = try await PersonaPlexModel.fromPretrained(
-                modelId: PersonaPlexModel.modelId8bit
+                modelId: PersonaPlexModel.modelId8bit,
+                offlineMode: personaPlexOffline
             ) { [weak self] progress, status in
                 DispatchQueue.main.async {
                     self?.loadingStatus = "\(status) (\(Int(progress * 100))%)"
@@ -103,16 +110,22 @@ final class PersonaPlexViewModel {
 
             model = m
 
-            loadingStatus = "Loading ASR model (~400 MB)..."
-            let asr = try await Qwen3ASRModel.fromPretrained { [weak self] progress, status in
+            loadingStatus = asrOffline
+                ? "Loading ASR from local cache..."
+                : "Loading ASR model (~400 MB)..."
+            let asr = try await Qwen3ASRModel.fromPretrained(
+                offlineMode: asrOffline
+            ) { [weak self] progress, status in
                 DispatchQueue.main.async {
                     self?.loadingStatus = "ASR: \(status) (\(Int(progress * 100))%)"
                 }
             }
             asrModel = asr
 
-            loadingStatus = "Loading VAD model..."
-            let vad = try await SileroVADModel.fromPretrained()
+            loadingStatus = vadOffline
+                ? "Loading VAD from local cache..."
+                : "Loading VAD model..."
+            let vad = try await SileroVADModel.fromPretrained(offlineMode: vadOffline)
             vadModel = vad
             let vadConfig = VADConfig(
                 onset: 0.5, offset: 0.35,

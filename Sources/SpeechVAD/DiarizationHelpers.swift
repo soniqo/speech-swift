@@ -100,6 +100,21 @@ enum DiarizationHelpers {
         var clusterWindows = items.map { Set([$0.windowIndex]) }
         var active = Set(0..<n)
 
+        // Memoized pairwise distances (flat n*n, symmetric). Constrained pairs
+        // are stored as +inf. A pair's distance (and its constraint state) only
+        // changes when one side merges, and the merged cluster's row/column is
+        // recomputed below — so the cache is always exact and the merge order
+        // is identical to the original recompute-every-iteration loop, at
+        // O(n^2) total distance work instead of O(n^3).
+        var dist = [Float](repeating: .infinity, count: n * n)
+        for i in 0..<n {
+            for j in (i + 1)..<n where items[i].windowIndex != items[j].windowIndex {
+                let d = cosineDistance(centroids[i], centroids[j])
+                dist[i * n + j] = d
+                dist[j * n + i] = d
+            }
+        }
+
         while active.count > 1 {
             // Find closest unconstrained pair
             var bestDist: Float = Float.greatestFiniteMagnitude
@@ -109,15 +124,9 @@ enum DiarizationHelpers {
             for ai in 0..<activeList.count {
                 for aj in (ai + 1)..<activeList.count {
                     let ci = activeList[ai], cj = activeList[aj]
-
-                    // Same-window constraint: if clusters share any window, skip
-                    if !clusterWindows[ci].isDisjoint(with: clusterWindows[cj]) {
-                        continue
-                    }
-
-                    let dist = cosineDistance(centroids[ci], centroids[cj])
-                    if dist < bestDist {
-                        bestDist = dist
+                    let d = dist[ci * n + cj]
+                    if d < bestDist {
+                        bestDist = d
                         bestI = ci
                         bestJ = cj
                     }
@@ -148,6 +157,16 @@ enum DiarizationHelpers {
             clusterWindows[bestI].formUnion(clusterWindows[bestJ])
 
             active.remove(bestJ)
+
+            // Refresh the merged cluster's cached distances (its centroid and
+            // window set both changed); everything else is untouched.
+            for other in active where other != bestI {
+                let d: Float = clusterWindows[bestI].isDisjoint(with: clusterWindows[other])
+                    ? cosineDistance(centroids[bestI], centroids[other])
+                    : .infinity
+                dist[bestI * n + other] = d
+                dist[other * n + bestI] = d
+            }
         }
 
         // Build final compact assignment

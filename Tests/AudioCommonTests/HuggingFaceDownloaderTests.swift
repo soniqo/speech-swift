@@ -57,12 +57,15 @@ final class HuggingFaceDownloaderTests: XCTestCase {
         let fakeWeights = tmpDir.appendingPathComponent("model.safetensors")
         try? Data([0x00]).write(to: fakeWeights)
 
-        // offlineMode=false should attempt network (and fail for fake model)
+        // offlineMode=false should attempt network (and fail for fake model).
+        // No retry delays: a 404 is a 404 — the test only cares that the
+        // network path was attempted, not the production backoff ladder.
         do {
             try await HuggingFaceDownloader.downloadWeights(
                 modelId: "nonexistent/model-that-does-not-exist",
                 to: tmpDir,
-                offlineMode: false
+                offlineMode: false,
+                retryDelaysSeconds: []
             )
             XCTFail("Should have thrown for nonexistent model with offlineMode=false")
         } catch {
@@ -101,6 +104,133 @@ final class HuggingFaceDownloaderTests: XCTestCase {
         XCTAssertFalse(HuggingFaceDownloader.weightsExist(in: tmpDir))
     }
 
+    // MARK: - weightsExist — Apple CoreML bundle layouts
+
+    /// CoreML-only repositories (e.g. `aufklarer/WeSpeaker-ResNet34-LM-CoreML`)
+    /// ship a `.mlmodelc/` directory and no `.safetensors` files. The
+    /// pre-fix `weightsExist` returned false for this layout, causing
+    /// every `offlineMode: true` load to fall through to `hub.snapshot()`
+    /// — which in turn issued an HTTP HEAD to huggingface.co even when
+    /// every byte of the model was on disk.
+    func testWeightsExistReturnsTrueForMlmodelcDirectory() throws {
+        let tmpDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("weights_mlmodelc_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+
+        XCTAssertFalse(HuggingFaceDownloader.weightsExist(in: tmpDir))
+
+        let mlmodelc = tmpDir.appendingPathComponent("wespeaker.mlmodelc", isDirectory: true)
+        try FileManager.default.createDirectory(at: mlmodelc, withIntermediateDirectories: true)
+
+        XCTAssertTrue(HuggingFaceDownloader.weightsExist(in: tmpDir),
+            "Directories ending in .mlmodelc must satisfy weightsExist — that's the cached-CoreML layout HF ships")
+    }
+
+    /// Multi-component CoreML models (e.g. Parakeet's encoder + decoder + joint)
+    /// ship multiple `.mlmodelc/` directories under the same repo. The
+    /// existence check fires on any one of them.
+    func testWeightsExistReturnsTrueForMultipleMlmodelcDirs() throws {
+        let tmpDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("weights_multi_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+
+        for name in ["encoder.mlmodelc", "decoder.mlmodelc", "joint.mlmodelc"] {
+            try FileManager.default.createDirectory(
+                at: tmpDir.appendingPathComponent(name, isDirectory: true),
+                withIntermediateDirectories: true
+            )
+        }
+
+        XCTAssertTrue(HuggingFaceDownloader.weightsExist(in: tmpDir))
+    }
+
+    /// `.mlpackage/` is the uncompiled CoreML container. Less common
+    /// in HF caches but recognised for symmetry.
+    func testWeightsExistReturnsTrueForMlpackageDirectory() throws {
+        let tmpDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("weights_mlpackage_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+
+        let mlpackage = tmpDir.appendingPathComponent("model.mlpackage", isDirectory: true)
+        try FileManager.default.createDirectory(at: mlpackage, withIntermediateDirectories: true)
+
+        XCTAssertTrue(HuggingFaceDownloader.weightsExist(in: tmpDir))
+    }
+
+    /// Mixed-layout repos that ship both `.safetensors` and `.mlmodelc/`
+    /// (rare but possible) must continue to satisfy `weightsExist`.
+    /// Pins that the broadened recogniser doesn't accidentally introduce
+    /// a regression on the canonical safetensors path.
+    func testWeightsExistReturnsTrueForMixedSafetensorsAndMlmodelc() throws {
+        let tmpDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("weights_mixed_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+
+        try Data([0x00]).write(to: tmpDir.appendingPathComponent("model.safetensors"))
+        try FileManager.default.createDirectory(
+            at: tmpDir.appendingPathComponent("encoder.mlmodelc", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+
+        XCTAssertTrue(HuggingFaceDownloader.weightsExist(in: tmpDir))
+    }
+
+    /// A directory containing only unrelated files (`config.json`,
+    /// `.cache/`, `tokenizer.json`) must NOT satisfy `weightsExist`.
+    /// Preserves the "incomplete cache → fall through to download"
+    /// semantics that downstream consumers rely on.
+    func testWeightsExistReturnsFalseForDirectoryWithoutWeightFiles() throws {
+        let tmpDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("weights_unrelated_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+
+        try Data("{}".utf8).write(to: tmpDir.appendingPathComponent("config.json"))
+        try Data("{}".utf8).write(to: tmpDir.appendingPathComponent("tokenizer.json"))
+        try FileManager.default.createDirectory(
+            at: tmpDir.appendingPathComponent(".cache", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+
+        XCTAssertFalse(HuggingFaceDownloader.weightsExist(in: tmpDir),
+            "Unrelated files (config, tokenizer, .cache) must NOT satisfy weightsExist — preserves 'incomplete cache → download' semantics")
+    }
+
+    // MARK: - offlineMode integration with CoreML caches
+
+    /// The behavioural counterpart to `testOfflineModeSkipsDownloadWhenWeightsExist`
+    /// — verifies that `downloadWeights(offlineMode: true)` short-circuits
+    /// (no network) when ONLY `.mlmodelc/` directories are present, without
+    /// any `.safetensors` files. This is the field-reported scenario that
+    /// motivated the patch.
+    func testOfflineModeSkipsDownloadWhenMlmodelcExists() async throws {
+        let tmpDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("offline_mlmodelc_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+
+        // Populate cache with the WeSpeaker-style single-mlmodelc layout
+        // (no safetensors). Pre-fix, this would NOT short-circuit.
+        let mlmodelc = tmpDir.appendingPathComponent("wespeaker.mlmodelc", isDirectory: true)
+        try FileManager.default.createDirectory(at: mlmodelc, withIntermediateDirectories: true)
+
+        var progressReported = false
+        try await HuggingFaceDownloader.downloadWeights(
+            modelId: "fake/coreml-only-model",
+            to: tmpDir,
+            offlineMode: true,
+            progressHandler: { progress in
+                if progress >= 1.0 { progressReported = true }
+            }
+        )
+        XCTAssertTrue(progressReported,
+            "offlineMode: true must short-circuit (no network) when only .mlmodelc/ caches are present — same contract as for .safetensors")
+    }
+
     // MARK: - cacheDir (custom cache directory)
 
     func testCustomCacheDirSkipsDefaultResolution() async throws {
@@ -125,5 +255,180 @@ final class HuggingFaceDownloaderTests: XCTestCase {
         )
         XCTAssertTrue(progressReported)
         XCTAssertTrue(HuggingFaceDownloader.weightsExist(in: tmpDir))
+    }
+
+    // MARK: - Download stall guard
+
+    /// A stalled operation (reports progress once, then sleeps forever)
+    /// must be aborted by the guard rather than hanging. Uses a 1 s
+    /// stall window so the test is fast.
+    func testStallGuardAbortsWedgedDownload() async throws {
+        let start = Date()
+        do {
+            try await HuggingFaceDownloader.withDownloadStallGuard(
+                modelId: "fake/wedged", stallTimeoutSeconds: 1
+            ) { reportProgress in
+                reportProgress(0.1)  // one tick, then never again
+                try await Task.sleep(for: .seconds(60))  // simulate a wedged transfer
+            }
+            XCTFail("expected stall guard to throw")
+        } catch let error as DownloadError {
+            guard case .stalled(let modelId, let seconds) = error else {
+                return XCTFail("expected .stalled, got \(error)")
+            }
+            XCTAssertEqual(modelId, "fake/wedged")
+            XCTAssertEqual(seconds, 1)
+        }
+        // Must abort within a few seconds, not wait out the 60 s sleep.
+        XCTAssertLessThan(Date().timeIntervalSince(start), 10,
+                          "stall guard should abort promptly after the window")
+    }
+
+    /// An operation that keeps reporting progress must NOT be tripped by
+    /// the guard even when it runs longer than the stall window.
+    func testStallGuardAllowsProgressingDownload() async throws {
+        try await HuggingFaceDownloader.withDownloadStallGuard(
+            modelId: "fake/healthy", stallTimeoutSeconds: 1
+        ) { reportProgress in
+            // Tick every 200 ms for ~1.6 s (> the 1 s stall window) so the
+            // clock keeps resetting; should complete without stalling.
+            for i in 1...8 {
+                try await Task.sleep(for: .milliseconds(200))
+                reportProgress(Double(i) / 8.0)
+            }
+        }
+    }
+
+    /// The shipped stall default is end-user tuned: aborted attempts restart
+    /// files from byte 0, so the guard must out-wait flaky-network recovery
+    /// (AP roams, hotspot sleep), not fail fast like CI. Locks the default
+    /// so a refactor doesn't silently regress it to a CI-tuned value.
+    /// Skipped when HF_DOWNLOAD_STALL_TIMEOUT is set (the override IS the
+    /// behavior under test elsewhere; here we want the bare default).
+    func testStallTimeoutDefaultIsEndUserTuned() throws {
+        try XCTSkipIf(
+            ProcessInfo.processInfo.environment["HF_DOWNLOAD_STALL_TIMEOUT"] != nil,
+            "HF_DOWNLOAD_STALL_TIMEOUT override active; default not observable")
+        XCTAssertEqual(HuggingFaceDownloader.downloadStallTimeoutSeconds, 300)
+    }
+
+    // MARK: - HF_ENDPOINT (China mirror support)
+
+    /// Saves, mutates, and restores `HF_ENDPOINT` around a body so the
+    /// process-global env var doesn't leak between tests.
+    private func withHFEndpoint(_ value: String?, _ body: () -> Void) {
+        let previous = ProcessInfo.processInfo.environment["HF_ENDPOINT"]
+        if let value {
+            setenv("HF_ENDPOINT", value, 1)
+        } else {
+            unsetenv("HF_ENDPOINT")
+        }
+        defer {
+            if let previous { setenv("HF_ENDPOINT", previous, 1) }
+            else { unsetenv("HF_ENDPOINT") }
+        }
+        body()
+    }
+
+    /// A valid `https://` mirror (the documented hf-mirror.com case) is
+    /// passed through verbatim so `HubApi` routes downloads to it.
+    func testResolvedEndpointHonorsValidMirror() {
+        withHFEndpoint("https://hf-mirror.com") {
+            XCTAssertEqual(HuggingFaceDownloader.resolvedEndpoint(), "https://hf-mirror.com")
+        }
+    }
+
+    /// A plain `http://` host (e.g. a self-hosted internal mirror) is also
+    /// accepted — the guard only rejects non-http(s) and hostless URLs.
+    func testResolvedEndpointHonorsHttpMirror() {
+        withHFEndpoint("http://hf.internal.example") {
+            XCTAssertEqual(HuggingFaceDownloader.resolvedEndpoint(), "http://hf.internal.example")
+        }
+    }
+
+    /// Surrounding whitespace (a stray newline from `export`) is trimmed.
+    func testResolvedEndpointTrimsWhitespace() {
+        withHFEndpoint("  https://hf-mirror.com\n") {
+            XCTAssertEqual(HuggingFaceDownloader.resolvedEndpoint(), "https://hf-mirror.com")
+        }
+    }
+
+    /// Unset → nil, so `HubApi` keeps its built-in huggingface.co default.
+    func testResolvedEndpointNilWhenUnset() {
+        withHFEndpoint(nil) {
+            XCTAssertNil(HuggingFaceDownloader.resolvedEndpoint())
+        }
+    }
+
+    /// Blank → nil (treated as unset rather than an empty host).
+    func testResolvedEndpointNilWhenBlank() {
+        withHFEndpoint("   ") {
+            XCTAssertNil(HuggingFaceDownloader.resolvedEndpoint())
+        }
+    }
+
+    /// Malformed values (no scheme, wrong scheme, or no host) fall back to
+    /// the default instead of breaking downloads — mirrors HubApi's guard.
+    func testResolvedEndpointNilWhenMalformed() {
+        for bad in ["hf-mirror.com", "ftp://hf-mirror.com", "https://", "not a url"] {
+            withHFEndpoint(bad) {
+                XCTAssertNil(HuggingFaceDownloader.resolvedEndpoint(),
+                             "expected nil for malformed HF_ENDPOINT=\(bad)")
+            }
+        }
+    }
+
+    /// Retry ladder sanity: attempts = delays + 1, delays strictly grow,
+    /// and total backoff stays bounded (≲2 min) so a hard failure still
+    /// terminates in reasonable time.
+    func testRetryLadderShape() {
+        let delays = HuggingFaceDownloader.downloadRetryDelaysSeconds
+        XCTAssertEqual(HuggingFaceDownloader.downloadMaxAttempts, delays.count + 1)
+        XCTAssertTrue(zip(delays, delays.dropFirst()).allSatisfy { $0 < $1 },
+                      "backoff should strictly grow")
+        XCTAssertLessThanOrEqual(delays.reduce(0, +), 120,
+                                 "total backoff should stay bounded")
+    }
+
+    // MARK: - Range download concurrency
+
+    private func withEnv(_ key: String, _ value: String?, _ body: () -> Void) {
+        let previous = ProcessInfo.processInfo.environment[key]
+        if let value {
+            setenv(key, value, 1)
+        } else {
+            unsetenv(key)
+        }
+        defer {
+            if let previous { setenv(key, previous, 1) }
+            else { unsetenv(key) }
+        }
+        body()
+    }
+
+    func testRangeDownloadConcurrencyDefaultIsFast() {
+        withEnv("HF_DOWNLOAD_RANGE_CONCURRENCY", nil) {
+            XCTAssertEqual(HuggingFaceDownloader.downloadRangeConcurrency, 16)
+        }
+    }
+
+    func testRangeDownloadConcurrencyHonorsOverride() {
+        withEnv("HF_DOWNLOAD_RANGE_CONCURRENCY", "12") {
+            XCTAssertEqual(HuggingFaceDownloader.downloadRangeConcurrency, 12)
+        }
+    }
+
+    func testRangeDownloadConcurrencyRejectsInvalidOverride() {
+        for raw in ["", "0", "-1", "not-a-number"] {
+            withEnv("HF_DOWNLOAD_RANGE_CONCURRENCY", raw) {
+                XCTAssertEqual(HuggingFaceDownloader.downloadRangeConcurrency, 16)
+            }
+        }
+    }
+
+    func testRangeDownloadConcurrencyCapsOverride() {
+        withEnv("HF_DOWNLOAD_RANGE_CONCURRENCY", "64") {
+            XCTAssertEqual(HuggingFaceDownloader.downloadRangeConcurrency, 16)
+        }
     }
 }

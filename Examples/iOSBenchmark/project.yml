@@ -1,0 +1,40 @@
+name: iOSBenchmark
+options:
+  bundleIdPrefix: audio.soniqo
+  deploymentTarget:
+    iOS: "18.0"
+
+packages:
+  Qwen3Speech:
+    path: ../..
+
+targets:
+  iOSBenchmark:
+    type: application
+    platform: iOS
+    sources:
+      - iOSBenchmark
+    info:
+      path: iOSBenchmark/Info.plist
+      properties:
+        UILaunchScreen: {}
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: audio.soniqo.iOSBenchmark
+      CODE_SIGN_STYLE: Automatic
+      DEVELOPMENT_TEAM: HNTDGD2AB7
+      OTHER_LDFLAGS: ["-Wl,-undefined,dynamic_lookup"]
+    dependencies:
+      - package: Qwen3Speech
+        product: ParakeetStreamingASR
+      - package: Qwen3Speech
+        product: OmnilingualASR
+      - package: Qwen3Speech
+        product: SupertonicTTS
+      - package: Qwen3Speech
+        product: KokoroTTS
+      - package: Qwen3Speech
+        product: FunctionGemma
+      - package: Qwen3Speech
+        product: SpeechCore
+      - package: Qwen3Speech
+        product: AudioCommon

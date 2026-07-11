@@ -298,6 +298,29 @@ final class DiarizationHelpersTests: XCTestCase {
         XCTAssertEqual(centroids.count, 2)
     }
 
+    func testClusteringUsesUpdatedCentroidDistances() {
+        // Unit vectors at 0°, 20°, 50°. d(A,B)=0.060 merges first; the merged
+        // centroid points at 10°, so d({A,B},C)=1-cos40°≈0.234 exceeds the
+        // 0.2 threshold and C must stay out — even though d(B,C)=1-cos30°≈0.134
+        // was below it. Centroid linkage requires the post-merge distance;
+        // reusing B's pre-merge distance would degrade to single linkage.
+        let items = [
+            DiarizationHelpers.ClusterItem(windowIndex: 0, localSpeakerId: 0,
+                                           embedding: [1, 0]),                  // A: 0°
+            DiarizationHelpers.ClusterItem(windowIndex: 1, localSpeakerId: 0,
+                                           embedding: [0.9397, 0.3420]),        // B: 20°
+            DiarizationHelpers.ClusterItem(windowIndex: 2, localSpeakerId: 0,
+                                           embedding: [0.6428, 0.7660]),        // C: 50°
+        ]
+        let (assignment, centroids) = DiarizationHelpers.constrainedAgglomerativeClustering(
+            items: items, threshold: 0.2)
+
+        XCTAssertEqual(assignment[0], assignment[1], "A and B should merge")
+        XCTAssertNotEqual(assignment[2], assignment[0],
+                          "C must be measured against the merged centroid, not its nearest member")
+        XCTAssertEqual(centroids.count, 2)
+    }
+
     func testClusteringMultipleSpeakers() {
         // 2 speakers across 3 windows — speaker embeddings are clearly separated
         let spk0: [Float] = [1, 0, 0, 0]

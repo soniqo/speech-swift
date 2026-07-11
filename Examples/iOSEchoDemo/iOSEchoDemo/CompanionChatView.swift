@@ -15,7 +15,7 @@ struct CompanionChatView: View {
                     statusBar
 
                     if vm.isListening {
-                        DiagnosticsView(monitor: vm.diagnostics)
+                        DiagnosticsView(monitor: vm.diagnostics, asrBackend: vm.asrBackend)
 
                         VoiceLevelBar(level: vm.audioLevel)
                             .frame(height: 4)

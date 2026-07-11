@@ -35,23 +35,25 @@ final class ICLVoiceCloningTests: XCTestCase {
         XCTAssertEqual(reEncoded[0, 2].item(Int32.self), 100)
     }
 
-    // MARK: - SpeechTokenizerEncoder construction
+    // MARK: - SpeechTokenizerEncoder construction (Mimi)
 
     func testEncoderConstruction() {
         let config = SpeechTokenizerDecoderConfig()
         let encoder = SpeechTokenizerEncoder(config: config)
-        // Verify expected structure
-        XCTAssertEqual(encoder.encoderBlocks.count, 4, "Should have 4 downsample blocks")
-        XCTAssertEqual(encoder.config.numQuantizers, 16, "Should have 16 codebooks")
+        // Mimi SEANet: 4 downsample stages (ratios 8/6/5/4) + transformer + split RVQ.
+        XCTAssertEqual(encoder.seanet.layers.count, 4, "SEANet should have 4 downsample stages")
+        XCTAssertEqual(encoder.transformer.layers.count, 8, "Encoder transformer should have 8 layers")
+        // Split RVQ: 1 semantic + 15 acoustic = 16 valid quantizers.
+        XCTAssertEqual(encoder.quantizer.semanticRVQ.codebooks.count, 1)
+        XCTAssertEqual(encoder.quantizer.acousticRVQ.codebooks.count, 15)
     }
 
     func testEncoderBlockDimensions() {
         let config = SpeechTokenizerDecoderConfig()
         let encoder = SpeechTokenizerEncoder(config: config)
-        // Input conv: 1 → 96 channels
-        XCTAssertNotNil(encoder.inputConv)
-        // Post conv: latentDim → hiddenSize
-        XCTAssertNotNil(encoder.postConv)
+        // Each SEANet stage has a single residual block (nResidualLayers = 1).
+        XCTAssertEqual(encoder.seanet.layers[0].residuals.count, 1)
+        XCTAssertEqual(encoder.cfg.validNumQuantizers, 16)
     }
 
     // MARK: - ResidualVectorQuantizer encode
@@ -83,6 +85,7 @@ final class ICLVoiceCloningTests: XCTestCase {
         let method = Qwen3TTSModel.fromPretrainedWithEncoder
         XCTAssertNotNil(method)
     }
+
 }
 
 // MARK: - E2E Tests
@@ -94,16 +97,25 @@ final class E2EICLVoiceCloningTests: XCTestCase {
         let (tts, encoder) = try await Qwen3TTSModel.fromPretrainedWithEncoder()
 
         // Verify encoder loaded
-        XCTAssertEqual(encoder.encoderBlocks.count, 4)
+        XCTAssertEqual(encoder.seanet.layers.count, 4)
 
-        // Quick forward pass with silence
-        let silence = [Float](repeating: 0, count: 24000)  // 1s at 24kHz
-        let codes = encoder.encode(samples: silence)
+        // Encode real speech: a correctly-loaded Mimi encoder must produce codec
+        // that VARIES frame-to-frame. The previous (wrong-architecture, unloaded)
+        // encoder emitted the same index on every frame — the bug that made ICL
+        // re-speak the reference. Guard against its return.
+        let refAudio = try AudioFileLoader.load(
+            url: URL(fileURLWithPath: "Tests/Qwen3ASRTests/Resources/test_audio.wav"),
+            targetSampleRate: 24000)
+        let speech = Array(refAudio[Int(5.17 * 24000)..<min(Int(8.37 * 24000), refAudio.count)])
+        let codes = encoder.encode(samples: speech)
         eval(codes)
         XCTAssertEqual(codes.dim(0), 1, "Batch size should be 1")
         XCTAssertEqual(codes.dim(1), 16, "Should have 16 codebooks")
         XCTAssertGreaterThan(codes.dim(2), 0, "Should produce at least 1 frame")
-        print("Encoder: 1s silence → \(codes.dim(2)) codec frames")
+        let cb0 = codes[0, 0, 0...].asArray(Int32.self)
+        XCTAssertGreaterThan(Set(cb0).count, 1,
+            "Codebook 0 must vary across frames — constant codes indicate an unloaded/wrong encoder")
+        print("Encoder: \(speech.count) samples → \(codes.dim(2)) frames, codebook0 distinct=\(Set(cb0).count)")
     }
 
     func testE2EICLRoundTrip() async throws {

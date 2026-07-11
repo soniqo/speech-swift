@@ -166,7 +166,6 @@ For short utterances that don't fill the pre-buffer, `markGenerationComplete()` 
 |------------|-----|-----------|----------------|----------------------:|
 | Qwen3-TTS 0.6B (4-bit) | 0.53 | 2.0s | ~1.07s | 2.0s |
 | Qwen3-TTS 1.7B (8-bit) | 0.79 | 2.0s | ~1.58s | 3.0s |
-| CosyVoice3 (4-bit) | 0.59 | ~150ms | ~100ms | 1.0s |
 | Kokoro-82M (CoreML) | N/A | all at once | ~45ms | 0s |
 
 RTF = Real-Time Factor (time to generate / audio duration). RTF < 1.0 means generation is faster than playback.
@@ -247,7 +246,7 @@ PlayerNode is gap-prone for streaming TTS because each buffer must be scheduled 
 
 ### Resampling
 
-TTS models generate audio at 24kHz (Qwen3-TTS, CosyVoice, Kokoro). The audio engine typically runs at 48kHz (macOS default hardware sample rate). An `AVAudioConverter` handles on-the-fly upsampling from 24kHz to 48kHz when writing into the ring buffer:
+Most TTS models generate audio at 24kHz (Qwen3-TTS, CosyVoice, Kokoro). VoxCPM2 generates audio at 48kHz directly. The audio engine typically runs at 48kHz (macOS default hardware sample rate). An `AVAudioConverter` handles on-the-fly upsampling from 24kHz to 48kHz when writing into the ring buffer:
 
 ```swift
 let converter = AVAudioConverter(from: ttsFormat, to: engineFormat)  // 24kHz → 48kHz

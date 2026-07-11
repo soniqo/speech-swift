@@ -148,7 +148,7 @@ public class OmnilingualASRModel {
         let configuration = MLModelConfiguration()
         // Match ParakeetASR default — ANE compilation is unreliable on some
         // devices, so target CPU+GPU for portability.
-        configuration.computeUnits = .cpuAndGPU
+        configuration.computeUnits = CoreMLComputeUnitsResolver.resolved(default: .cpuAndGPU)
 
         do {
             return try MLModel(contentsOf: compiledURL, configuration: configuration)

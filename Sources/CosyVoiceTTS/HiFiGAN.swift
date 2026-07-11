@@ -223,11 +223,30 @@ public class ResBlock: Module {
 
 // MARK: - Sine Generator
 
-/// Generates harmonic sine waves from F0 for the neural source filter.
-/// Produces sine_amp * sin(2*pi * cumsum(f0 * [1..numHarmonics+1] / sampleRate))
-/// with voiced/unvoiced masking.
+/// Harmonic source generator matching upstream `SineGen2` in causal
+/// inference mode — the variant CosyVoice3 (24 kHz) actually runs.
+///
+/// Upstream semantics (generator.py `SineGen2._f02sine`, causal=True):
+///   1. `rad = (f0 · h / sr) % 1` per harmonic, at sample rate.
+///   2. rad is linearly downsampled by 1/upsample_scale back to FRAME rate,
+///      cumsum'd there (phase magnitudes stay small), scaled by 2π and by
+///      upsample_scale, then upsampled with NEAREST — a per-frame staircase.
+///      The vocoder was trained on this staircase source; a smooth
+///      per-sample sine is off-distribution.
+///   3. Voiced: `sine_amp · sin(phase)` + noise_std·noise. Unvoiced:
+///      `(sine_amp / 3) · noise` — uniform [0, 1) at inference (upstream
+///      draws fixed buffers once at init; we use a fixed key instead).
+///
+/// Upstream's `rand_ini` initial-phase offset is applied to the first
+/// SAMPLE before the downsample; align_corners=False sampling never reads
+/// that sample back, so it is a no-op in causal inference and is omitted.
+///
+/// Takes FRAME-rate F0 (`[B, T]`) — the caller's F0 is nearest-upsampled
+/// and frame-constant upstream, so downsampling it back recovers the frame
+/// values exactly; the up/down round trip is skipped.
 public class SineGenerator {
     let sampleRate: Int
+    let upsampleScale: Int    // prod(upsample_rates) * istft_hop = 480
     let harmonicNum: Int      // Number of additional harmonics (total = harmonicNum + 1)
     let sineAmp: Float
     let noiseStd: Float
@@ -235,72 +254,82 @@ public class SineGenerator {
 
     public init(
         sampleRate: Int = 24000,
+        upsampleScale: Int = 480,
         harmonicNum: Int = 8,
         sineAmp: Float = 0.1,
         noiseStd: Float = 0.003,
         voicedThreshold: Float = 10.0
     ) {
         self.sampleRate = sampleRate
+        self.upsampleScale = upsampleScale
         self.harmonicNum = harmonicNum
         self.sineAmp = sineAmp
         self.noiseStd = noiseStd
         self.voicedThreshold = voicedThreshold
     }
 
-    /// Generate sine waves and voiced/unvoiced mask from F0.
-    /// - Parameter f0: [B, T, 1] fundamental frequency in Hz
-    /// - Returns: (sineWaves: [B, T, numHarmonics+1], uvMask: [B, T, 1])
-    public func callAsFunction(_ f0: MLXArray) -> (MLXArray, MLXArray) {
-        let totalHarmonics = harmonicNum + 1  // fundamental + overtones
+    /// Generate the harmonic source from frame-rate F0.
+    /// - Parameter f0Frame: `[B, T]` fundamental frequency in Hz at frame rate
+    /// - Returns: (sineWaves: `[B, T*upsampleScale, H]`, uvMask: `[B, T*upsampleScale, 1]`)
+    public func callAsFunction(_ f0Frame: MLXArray) -> (MLXArray, MLXArray) {
+        let batch = f0Frame.dim(0)
+        let frames = f0Frame.dim(1)
+        let totalHarmonics = harmonicNum + 1
 
-        // Create harmonic multipliers: [1, 2, 3, ..., totalHarmonics]
+        // Harmonic multipliers [1, 2, ..., H]: [1, 1, H]
         let harmonics = MLXArray(Array(1...totalHarmonics).map { Float($0) })
-            .reshaped([1, 1, totalHarmonics])  // [1, 1, H]
+            .reshaped([1, 1, totalHarmonics])
 
-        // f0: [B, T, 1] -> frequencies: [B, T, H]
-        let frequencies = (f0 * harmonics) / Float(sampleRate)
+        // Per-frame rad values with the % 1 wrap (integer cycles carry no
+        // phase; wrapping keeps the cumsum magnitudes small).
+        let f0 = f0Frame.asType(.float32).expandedDimensions(axis: 2)   // [B, T, 1]
+        let radFrame = ((f0 * harmonics) / Float(sampleRate)) % 1.0     // [B, T, H]
 
-        // Voiced mask: f0 > threshold -> 1.0, else 0.0
-        let uvMask = MLX.where(
+        // Frame-rate phase, scaled by 2π·upsample_scale, each frame's value
+        // held for upsample_scale samples (nearest upsample).
+        let phaseFrame = cumsum(radFrame, axis: 1)
+            * MLXArray(Float(2.0 * Float.pi) * Float(upsampleScale))     // [B, T, H]
+        let phaseUp = repeated(
+            phaseFrame.expandedDimensions(axis: 2), count: upsampleScale, axis: 2
+        ).reshaped([batch, frames * upsampleScale, totalHarmonics])      // [B, T*S, H]
+
+        let sines = sin(phaseUp)
+
+        // Voiced mask at sample rate (frame-constant F0 → repeat).
+        let uvFrame = MLX.where(
             f0 .> MLXArray(voicedThreshold),
             MLXArray(Float(1.0)),
-            MLXArray(Float(0.0)))
+            MLXArray(Float(0.0)))                                        // [B, T, 1]
+        let uvMask = repeated(
+            uvFrame.expandedDimensions(axis: 2), count: upsampleScale, axis: 2
+        ).reshaped([batch, frames * upsampleScale, 1])                   // [B, T*S, 1]
 
-        // Zero out unvoiced regions before cumsum to prevent phase drift
-        let maskedFreqs = frequencies * uvMask  // [B, T, H]
+        // Noise: voiced regions get noise_std, unvoiced get sine_amp/3 —
+        // uniform [0, 1) with a fixed key (upstream uses fixed buffers at eval).
+        let noiseAmp = uvMask * noiseStd + (1.0 - uvMask) * (sineAmp / 3.0)
+        let noise = noiseAmp * MLXRandom.uniform(
+            low: Float(0), high: Float(1),
+            [batch, frames * upsampleScale, totalHarmonics],
+            key: MLXRandom.key(0))
 
-        // Phase: 2*pi * cumsum(freq) along time axis
-        let phase = cumsum(maskedFreqs, axis: 1) * MLXArray(Float(2.0 * Float.pi))
-
-        // Add random initial phase offset to avoid artifacts at boundaries
-        let initPhase = MLXRandom.uniform(
-            low: 0,
-            high: Float(2.0 * Float.pi),
-            [f0.dim(0), 1, totalHarmonics])
-        let fullPhase = phase + initPhase
-
-        // Generate sine waves
-        var sineWaves = MLXArray(sineAmp) * sin(fullPhase)  // [B, T, H]
-
-        // Apply voiced mask: voiced -> sine, unvoiced -> noise
-        let noise = MLXRandom.normal(sineWaves.shape) * MLXArray(noiseStd)
-        sineWaves = sineWaves * uvMask + noise * (1.0 - uvMask)
-
+        let sineWaves = sines * sineAmp * uvMask + noise
         return (sineWaves, uvMask)
     }
 }
 
 // MARK: - Source Module (NSF)
 
-/// Neural Source Filter: generates excitation signal by merging harmonic sines.
-/// sine_generator -> linear_merge -> tanh -> add noise
+/// Neural Source Filter: merges harmonic sines into a single excitation.
+/// sine_generator -> linear_merge -> tanh. No noise is added to the merged
+/// source — upstream returns its noise branch separately and the HiFT
+/// decoder never consumes it.
 public class SourceModuleHnNSF: Module {
     let sineGen: SineGenerator
     @ModuleInfo var linearMerge: Linear
-    let noiseStd: Float
 
     public init(
         sampleRate: Int = 24000,
+        upsampleScale: Int = 480,
         harmonicNum: Int = 8,
         sineAmp: Float = 0.1,
         noiseStd: Float = 0.003,
@@ -308,23 +337,21 @@ public class SourceModuleHnNSF: Module {
     ) {
         self.sineGen = SineGenerator(
             sampleRate: sampleRate,
+            upsampleScale: upsampleScale,
             harmonicNum: harmonicNum,
             sineAmp: sineAmp,
             noiseStd: noiseStd,
             voicedThreshold: voicedThreshold)
-        self.noiseStd = noiseStd
         // Merge all harmonics (fundamental + overtones) into 1 channel
         self._linearMerge.wrappedValue = Linear(harmonicNum + 1, 1)
         super.init()
     }
 
-    /// - Parameter f0: [B, T, 1] fundamental frequency in Hz
-    /// - Returns: excitation signal [B, T, 1]
-    public func callAsFunction(_ f0: MLXArray) -> MLXArray {
-        let (sineWaves, _) = sineGen(f0)  // [B, T, H]
-        let merged = tanh(linearMerge(sineWaves))  // [B, T, 1]
-        let noise = MLXRandom.normal(merged.shape) * MLXArray(noiseStd)
-        return merged + noise
+    /// - Parameter f0Frame: `[B, T]` fundamental frequency in Hz at frame rate
+    /// - Returns: excitation signal `[B, T*upsampleScale, 1]`
+    public func callAsFunction(_ f0Frame: MLXArray) -> MLXArray {
+        let (sineWaves, _) = sineGen(f0Frame)          // [B, T*S, H]
+        return tanh(linearMerge(sineWaves))            // [B, T*S, 1]
     }
 }
 
@@ -371,27 +398,6 @@ public class F0Predictor: Module {
         h = h.squeezed(axis: 2)    // [B, T]
         return abs(h)
     }
-}
-
-// MARK: - F0 Interpolation
-
-/// Upsample F0 by a given factor using nearest-neighbor (repeat) interpolation.
-/// - Parameters:
-///   - f0: [B, T] F0 values
-///   - factor: integer upsample factor
-/// - Returns: [B, T * factor] upsampled F0
-private func interpolateF0(_ f0: MLXArray, factor: Int) -> MLXArray {
-    let batch = f0.dim(0)
-    let timeSteps = f0.dim(1)
-    let outLen = timeSteps * factor
-
-    if factor == 1 { return f0 }
-
-    // Nearest-neighbor upsampling: repeat each sample `factor` times
-    // f0: [B, T] -> [B, T, 1] -> repeat -> [B, T, factor] -> reshape [B, T*factor]
-    let expanded = f0.expandedDimensions(axis: 2)  // [B, T, 1]
-    let rep = repeated(expanded, count: factor, axis: 2)  // [B, T, factor]
-    return rep.reshaped([batch, outLen])
 }
 
 // MARK: - STFT
@@ -615,8 +621,15 @@ private func istft(
         }
     }
     let windowNorm = MLXArray(windowSumData).reshaped([1, outLen])
+    let normalized = accumulated / windowNorm
 
-    return accumulated / windowNorm
+    // torch.istft (center=True) trims n_fft/2 partial-window samples from
+    // both ends; keeping them leaves a nonzero first sample — a step
+    // discontinuity that reads as a click at the start of every render.
+    // After the trim the output is exactly hop·(nFrames−1) samples, matching
+    // torch, i.e. 480 samples per mel frame end to end.
+    let edge = nFFT / 2
+    return normalized[0..., edge ..< (outLen - edge)]
 }
 
 // MARK: - HiFi-GAN Generator
@@ -661,6 +674,7 @@ public class HiFiGANGenerator: Module {
         // Source module
         self._source.wrappedValue = SourceModuleHnNSF(
             sampleRate: config.sampleRate,
+            upsampleScale: config.totalUpsampleFactor * config.istftHopLen,
             harmonicNum: config.nbHarmonics,
             sineAmp: config.nsfAlpha,
             noiseStd: config.nsfSigma,
@@ -765,14 +779,10 @@ public class HiFiGANGenerator: Module {
         // 1. Predict F0 from mel: [B, 80, T] -> [B, T]
         let f0 = f0Predictor(melNCL)
 
-        // 2. Upsample F0 to waveform sample rate
-        //    Total upsample: prod(upsampleRates) * istftHopLen = 120 * 4 = 480
-        let totalUpsample = config.totalUpsampleFactor * config.istftHopLen
-        let f0Up = interpolateF0(f0, factor: totalUpsample)  // [B, T*480]
-
-        // 3. Generate source excitation signal
-        let f0UpExpanded = f0Up.expandedDimensions(axis: 2)  // [B, T*480, 1]
-        let sourceSignal = source(f0UpExpanded)  // [B, T*480, 1]
+        // 2-3. Generate source excitation from frame-rate F0. The source
+        //    module upsamples internally (×480 = prod(upsampleRates) ·
+        //    istftHopLen) with SineGen2's frame-staircase phase scheme.
+        let sourceSignal = source(f0)  // [B, T*480, 1]
 
         // 4. STFT of source -> real and imaginary parts in NCL format
         let sourceFlat = sourceSignal.squeezed(axis: 2)  // [B, T*480]
@@ -845,7 +855,9 @@ public class HiFiGANGenerator: Module {
         let magPart = x[0..., 0..<nBins, 0...]             // [B, 9, T_final]
         let phasePart = x[0..., nBins..<(nBins * 2), 0...]  // [B, 9, T_final]
 
-        let outputMag = exp(magPart)
+        // Upstream `_istft` clips magnitude at 1e2 — without it a single
+        // hot logit becomes a full-scale click after exp().
+        let outputMag = minimum(exp(magPart), MLXArray(Float(1e2)))
         let outputPhase = sin(phasePart)
 
         // 9. ISTFT to reconstruct audio

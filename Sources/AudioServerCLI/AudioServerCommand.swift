@@ -5,7 +5,7 @@ import AudioServer
 @main
 struct AudioServerCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "audio-server",
+        commandName: "speech-server",
         abstract: "HTTP API server for speech models on Apple Silicon"
     )
 
@@ -19,6 +19,13 @@ struct AudioServerCommand: AsyncParsableCommand {
     var preload: Bool = false
 
     func run() async throws {
+        if let argv0 = CommandLine.arguments.first,
+           (argv0 as NSString).lastPathComponent == "audio-server" {
+            FileHandle.standardError.write(Data(
+                "warning: `audio-server` is a deprecated alias and will be removed in a future release — use `speech-server` instead.\n".utf8
+            ))
+        }
+
         let server = AudioServer(host: host, port: port)
 
         if preload {
@@ -30,6 +37,7 @@ struct AudioServerCommand: AsyncParsableCommand {
         print("Starting server on http://\(host):\(port)")
         print("Endpoints:")
         print("  POST /transcribe     - Speech-to-text (WAV body or JSON with audio_base64)")
+        print("  POST /v1/audio/transcriptions - OpenAI-compatible STT (multipart/form-data)")
         print("  POST /speak          - Text-to-speech (JSON: {text, engine?, language?})")
         print("  POST /respond        - Speech-to-speech (WAV body, voice/max_steps via query)")
         print("  POST /enhance        - Speech enhancement (WAV body)")

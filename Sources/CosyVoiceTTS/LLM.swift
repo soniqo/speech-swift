@@ -59,7 +59,7 @@ func sampleToken(
     topP: Float,
     generatedTokens: [Int32] = [],
     suppressRange: (Int, Int)? = nil,
-    eosTokenId: Int? = nil,
+    stopTokens: [Int] = [],
     ignoreEos: Bool = false,
     rasWinSize: Int = 10,
     rasTauR: Float = 0.1
@@ -67,26 +67,33 @@ func sampleToken(
     var logits = logits.squeezed().asType(.float32)
     let vocabSize = logits.dim(0)
 
-    // 1. Token suppression: set special token range to -inf (except EOS)
+    // 1. Token suppression: forbid the "post-stop" range (fill tokens, padding,
+    //    etc.) from ever being sampled. Stop tokens themselves stay live — the
+    //    model needs them to signal end-of-utterance. Upstream's sampling_ids
+    //    doesn't suppress anything outside the eos token; we additionally
+    //    silence the speech-vocab tail to match how our converted decoder
+    //    behaves with the speechTokenExtra padding rows.
     if let (start, end) = suppressRange, start < end, start >= 0, end <= vocabSize {
         let indices = MLXArray(0..<Int32(vocabSize))
         let geStart = indices .>= MLXArray(Int32(start))
         let ltEnd = indices .< MLXArray(Int32(end))
         var suppressMask = logicalAnd(geStart, ltEnd)
-
-        if let eos = eosTokenId, eos >= start, eos < end {
-            let notEos = indices .!= MLXArray(Int32(eos))
-            suppressMask = logicalAnd(suppressMask, notEos)
+        for st in stopTokens where st >= start && st < end {
+            let notStop = indices .!= MLXArray(Int32(st))
+            suppressMask = logicalAnd(suppressMask, notStop)
         }
-
         logits = MLX.where(suppressMask, MLXArray(Float(-1e9)), logits)
     }
 
-    // 2. Mask EOS when below minimum length (matching Python's ignore_eos)
-    if ignoreEos, let eos = eosTokenId, eos >= 0, eos < vocabSize {
+    // 2. Mask ALL stop tokens when below minimum length (matching upstream's
+    //    ignore_eos behaviour generalised to the multi-stop-token vocabulary).
+    if ignoreEos {
         let indices = MLXArray(0..<Int32(vocabSize))
-        let eosMask = indices .== MLXArray(Int32(eos))
-        logits = MLX.where(eosMask, MLXArray(Float(-1e9)), logits)
+        var stopMask = MLXArray.zeros([vocabSize], dtype: .bool)
+        for st in stopTokens where st >= 0 && st < vocabSize {
+            stopMask = logicalOr(stopMask, indices .== MLXArray(Int32(st)))
+        }
+        logits = MLX.where(stopMask, MLXArray(Float(-1e9)), logits)
     }
 
     // 3. Nucleus sample
@@ -127,10 +134,10 @@ public class CosyVoiceAttention: Module {
     let headDim: Int
     let scale: Float
 
-    @ModuleInfo var qProj: QuantizedLinear
-    @ModuleInfo var kProj: QuantizedLinear
-    @ModuleInfo var vProj: QuantizedLinear
-    @ModuleInfo var oProj: QuantizedLinear
+    @ModuleInfo var qProj: Linear
+    @ModuleInfo var kProj: Linear
+    @ModuleInfo var vProj: Linear
+    @ModuleInfo var oProj: Linear
 
     let rope: MLXNN.RoPE
 
@@ -142,18 +149,10 @@ public class CosyVoiceAttention: Module {
 
         let hiddenSize = config.hiddenSize
 
-        self._qProj.wrappedValue = QuantizedLinear(
-            hiddenSize, numHeads * headDim, bias: true,
-            groupSize: config.groupSize, bits: config.bits)
-        self._kProj.wrappedValue = QuantizedLinear(
-            hiddenSize, numKVHeads * headDim, bias: true,
-            groupSize: config.groupSize, bits: config.bits)
-        self._vProj.wrappedValue = QuantizedLinear(
-            hiddenSize, numKVHeads * headDim, bias: true,
-            groupSize: config.groupSize, bits: config.bits)
-        self._oProj.wrappedValue = QuantizedLinear(
-            numHeads * headDim, hiddenSize, bias: false,
-            groupSize: config.groupSize, bits: config.bits)
+        self._qProj.wrappedValue = Linear(hiddenSize, numHeads * headDim, bias: true)
+        self._kProj.wrappedValue = Linear(hiddenSize, numKVHeads * headDim, bias: true)
+        self._vProj.wrappedValue = Linear(hiddenSize, numKVHeads * headDim, bias: true)
+        self._oProj.wrappedValue = Linear(numHeads * headDim, hiddenSize, bias: false)
 
         self.rope = MLXNN.RoPE(dimensions: headDim, traditional: false, base: config.ropeTheta)
 
@@ -208,20 +207,20 @@ public class CosyVoiceAttention: Module {
 // MARK: - CosyVoiceBlock
 
 /// Pre-norm transformer block for CosyVoice LLM.
-/// Uses SwiGLU MLP via QuantizedMLP from AudioCommon.
+/// Uses the Linear-based `MLP` so the bundle's quantization decides
+/// whether the gate/up/down projections stay bf16 or get swapped to
+/// `QuantizedLinear` at load time.
 public class CosyVoiceBlock: Module {
     @ModuleInfo var selfAttn: CosyVoiceAttention
-    @ModuleInfo var mlp: QuantizedMLP
+    @ModuleInfo var mlp: MLP
     @ModuleInfo var inputLayerNorm: RMSNorm
     @ModuleInfo var postAttentionLayerNorm: RMSNorm
 
     public init(config: CosyVoiceLLMConfig) {
         self._selfAttn.wrappedValue = CosyVoiceAttention(config: config)
-        self._mlp.wrappedValue = QuantizedMLP(
+        self._mlp.wrappedValue = MLP(
             hiddenSize: config.hiddenSize,
-            intermediateSize: config.intermediateSize,
-            groupSize: config.groupSize,
-            bits: config.bits)
+            intermediateSize: config.intermediateSize)
         self._inputLayerNorm.wrappedValue = RMSNorm(dimensions: config.hiddenSize, eps: config.rmsNormEps)
         self._postAttentionLayerNorm.wrappedValue = RMSNorm(dimensions: config.hiddenSize, eps: config.rmsNormEps)
 
@@ -268,7 +267,7 @@ public class CosyVoiceLLM: Module {
     @ModuleInfo var speechEmbedding: Embedding
     @ModuleInfo var layers: [CosyVoiceBlock]
     @ModuleInfo var norm: RMSNorm
-    @ModuleInfo var speechHead: QuantizedLinear
+    @ModuleInfo var speechHead: Linear
 
     /// Compiled generation step (24-layer transformer + speech head) for kernel fusion.
     /// Uses shapeless=true to handle growing KV cache without recompilation.
@@ -296,10 +295,11 @@ public class CosyVoiceLLM: Module {
         // Final layer norm
         self._norm.wrappedValue = RMSNorm(dimensions: config.hiddenSize, eps: config.rmsNormEps)
 
-        // Speech token head: project hidden states to speech vocabulary logits
-        self._speechHead.wrappedValue = QuantizedLinear(
-            config.hiddenSize, config.totalSpeechVocabSize, bias: false,
-            groupSize: config.groupSize, bits: config.bits)
+        // Speech token head: project hidden states to speech vocabulary logits.
+        // Declared as Linear; swapped to QuantizedLinear at load time when the
+        // bundle ships scales/biases for `speech_head`.
+        self._speechHead.wrappedValue = Linear(
+            config.hiddenSize, config.totalSpeechVocabSize, bias: false)
 
         super.init()
     }
@@ -360,12 +360,27 @@ public class CosyVoiceLLM: Module {
 
     /// Build the input embedding sequence for generation.
     ///
-    /// Format: [sos_embed, text_embeds..., task_id_embed]
-    /// - SOS and task_id come from the speech embedding table (special token indices)
-    /// - Text tokens come from the text embedding table
+    /// Base format: `[sos_embed, text_embeds..., task_id_embed]`.
+    /// When zero-shot voice cloning is active and `promptSpeechTokens` is set,
+    /// the reference's FSQ codes are embedded via the speech-token table and
+    /// appended after `task_id`, matching upstream's CosyVoice3LM:
     ///
-    /// Returns: [1, prefix_len, hidden_size]
-    public func buildInputSequence(textTokens: [Int32]) -> MLXArray {
+    ///   lm_input = concat([sos, text, task_id, prompt_speech_token_emb])
+    ///
+    /// The LLM then autoregresses *from the end of this prefix*, so the
+    /// generated tokens naturally continue the reference's acoustic state.
+    ///
+    /// - Parameters:
+    ///   - textTokens: text token IDs (Qwen2 vocab)
+    ///   - promptSpeechTokens: optional FSQ codes of the reference clip
+    ///     (output of `SpeechTokenizerModel.encode`), prepended into the
+    ///     speech-token autoregressive stream so generation begins from the
+    ///     reference's acoustic state.
+    /// - Returns: `[1, prefix_len, hidden_size]`
+    public func buildInputSequence(
+        textTokens: [Int32],
+        promptSpeechTokens: [Int32]? = nil
+    ) -> MLXArray {
         // Embed SOS token from speech embedding
         let sosEmbed = speechEmbedding(MLXArray([Int32(config.sosToken)]))  // [1, hidden]
 
@@ -376,11 +391,21 @@ public class CosyVoiceLLM: Module {
         // Embed task_id token from speech embedding
         let taskIdEmbed = speechEmbedding(MLXArray([Int32(config.taskIdToken)]))  // [1, hidden]
 
-        // Concatenate: [sos, text..., task_id] along sequence dimension
         let sosExpanded = sosEmbed.expandedDimensions(axis: 0)      // [1, 1, hidden]
         let taskIdExpanded = taskIdEmbed.expandedDimensions(axis: 0) // [1, 1, hidden]
 
-        return concatenated([sosExpanded, textEmbeds, taskIdExpanded], axis: 1)  // [1, prefix_len, hidden]
+        var pieces: [MLXArray] = [sosExpanded, textEmbeds, taskIdExpanded]
+
+        // Optional speech-prompt prefix: embed the reference FSQ codes via the
+        // same speech-token embedding the autoregressive generation uses, then
+        // append so the LLM's generation continues from the reference's state.
+        if let promptCodes = promptSpeechTokens, !promptCodes.isEmpty {
+            let codes = MLXArray(promptCodes).expandedDimensions(axis: 0)   // [1, T_prompt]
+            let promptEmbeds = speechEmbedding(codes)                        // [1, T_prompt, hidden]
+            pieces.append(promptEmbeds)
+        }
+
+        return concatenated(pieces, axis: 1)  // [1, prefix_len, hidden]
     }
 
     /// Single forward step through the transformer.
@@ -446,13 +471,17 @@ public class CosyVoiceLLM: Module {
     /// - Returns: Array of generated speech token IDs (FSQ codes, 0-6560)
     public func generate(
         textTokens: [Int32],
+        promptSpeechTokens: [Int32]? = nil,
+        contentTextLength: Int? = nil,
         sampling: CosyVoiceSamplingConfig = CosyVoiceSamplingConfig(),
         maxTokens: Int = 4096
     ) -> [Int32] {
-        let eosToken = config.eosToken
+        let stopTokens = config.stopTokens
+        let stopTokenSet = Set(stopTokens.map { Int32($0) })
 
         // Build prefix embeddings: [1, prefix_len, hidden]
-        let prefixEmbeds = buildInputSequence(textTokens: textTokens)
+        let prefixEmbeds = buildInputSequence(
+            textTokens: textTokens, promptSpeechTokens: promptSpeechTokens)
         let prefixLen = prefixEmbeds.dim(1)
 
         // Prefill: forward entire prefix through transformer
@@ -460,13 +489,14 @@ public class CosyVoiceLLM: Module {
         let (prefillLogits, cache) = forwardStep(prefixEmbeds, offset: offset, cache: nil)
         eval(prefillLogits, cache)
 
-        // Sample first speech token from last position of prefill output
-        // Suppress tokens above speechTokenSize (6561+) except EOS (6562)
+        // Suppress the trailing speech-vocab range (post-stop padding rows).
+        // The three stop tokens themselves stay live so the LLM can signal end.
         let suppressStart = config.speechTokenSize  // 6561
         let suppressEnd = config.totalSpeechVocabSize  // 6761
 
-        // Min length: at least minTokenTextRatio * text_len tokens before EOS
-        let textLen = textTokens.count
+        // Min length: scale to content text length, not the full
+        // instruction+content prefix. Upstream: min_len = content_len * ratio.
+        let textLen = contentTextLength ?? textTokens.count
         let minLen = Int(Float(textLen) * sampling.minTokenTextRatio)
 
         var currentToken = sampleToken(
@@ -474,12 +504,12 @@ public class CosyVoiceLLM: Module {
             topK: sampling.topK,
             topP: sampling.topP,
             suppressRange: (suppressStart, suppressEnd),
-            eosTokenId: eosToken,
-            ignoreEos: true,  // always ignore EOS for first token
+            stopTokens: stopTokens,
+            ignoreEos: true,  // always ignore stop tokens for first token
             rasWinSize: sampling.winSize,
             rasTauR: sampling.tauR)
 
-        if currentToken == Int32(eosToken) {
+        if stopTokenSet.contains(currentToken) {
             return []
         }
 
@@ -497,7 +527,7 @@ public class CosyVoiceLLM: Module {
                 embeds: tokenEmbed, offset: prefixLen + step, cache: currentCache)
             currentCache = newCache
 
-            // Sample next token (ignore EOS until min_len reached)
+            // Sample next token (mask all stop tokens until min_len reached)
             let belowMinLen = generatedTokens.count < minLen
             currentToken = sampleToken(
                 logits: stepLogits,
@@ -505,12 +535,12 @@ public class CosyVoiceLLM: Module {
                 topP: sampling.topP,
                 generatedTokens: generatedTokens,
                 suppressRange: (suppressStart, suppressEnd),
-                eosTokenId: eosToken,
+                stopTokens: stopTokens,
                 ignoreEos: belowMinLen,
                 rasWinSize: sampling.winSize,
                 rasTauR: sampling.tauR)
 
-            if currentToken == Int32(eosToken) {
+            if stopTokenSet.contains(currentToken) {
                 break
             }
 

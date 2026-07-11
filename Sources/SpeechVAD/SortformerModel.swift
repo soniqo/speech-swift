@@ -13,9 +13,10 @@ final class SortformerCoreMLModel {
     private let model: MLModel
     let config: SortformerConfig
 
-    /// Input shape constants derived from the CoreML model.
-    /// chunk: [1, 112, 128], spkcache: [1, 188, 512], fifo: [1, 40, 512]
-    private let chunkFrames: Int = 112
+    /// Input shape constants derived from the CoreML model. `chunkFrames` is
+    /// the model's fixed mel-frame input dimension — varies by variant.
+    /// chunk: `[1, chunkFrames, 128]`, spkcache: `[1, 188, 512]`, fifo: `[1, fifoLen, 512]`.
+    private let chunkFrames: Int
     private let spkcacheFrames: Int
     private let fifoFrames: Int
     private let featureDim: Int
@@ -23,6 +24,7 @@ final class SortformerCoreMLModel {
     init(model: MLModel, config: SortformerConfig = .default) {
         self.model = model
         self.config = config
+        self.chunkFrames = config.coreMLInputFrames
         self.spkcacheFrames = config.spkcacheLen
         self.fifoFrames = config.fifoLen
         self.featureDim = config.fcDModel

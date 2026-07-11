@@ -15,6 +15,9 @@ import Tokenizers
 /// let pcm = try await tts.generate(text: "Hello world.", language: nil)
 /// ```
 public final class VibeVoiceTTSModel {
+    /// Default HuggingFace model identifier — the 0.5B INT4 Realtime bundle.
+    public static let defaultModelId = "aufklarer/VibeVoice-Realtime-0.5B-MLX-INT4"
+
 
     public struct Configuration: Sendable {
         /// HuggingFace model id for the VibeVoice weights (MLX-compatible).
@@ -29,7 +32,7 @@ public final class VibeVoiceTTSModel {
         public var maxSpeechTokens: Int
 
         public init(
-            modelId: String = "microsoft/VibeVoice-Realtime-0.5B",
+            modelId: String = "aufklarer/VibeVoice-Realtime-0.5B-MLX-INT4",
             tokenizerModelId: String = "Qwen/Qwen2.5-0.5B",
             numInferenceSteps: Int = 20,
             cfgScale: Float = 1.3,
@@ -191,6 +194,23 @@ public final class VibeVoiceTTSModel {
         sampleRate: Int = 24000,
         transcript: String
     ) throws -> [String: MLXArray] {
+        // Realtime-0.5B doesn't ship the acoustic encoder — its checkpoint is
+        // inference-only. Without real encoder weights our acoustic_tokenizer.encode
+        // call returns random-init noise, producing a voice cache that the EOS
+        // classifier reads as an arbitrary speaker and the model babbles for
+        // hundreds of tokens before settling. Bail with a useful message so
+        // callers don't ship an unintelligible cache.
+        guard inference.model.hasAcousticEncoder else {
+            throw VibeVoiceError.modelNotInitialized(component:
+                "acoustic encoder not present in this checkpoint — Microsoft's "
+                + "VibeVoice-Realtime-0.5B is distributed inference-only and does "
+                + "not include encoder weights. To clone an arbitrary speaker from "
+                + "raw audio, use VibeVoice-1.5B end-to-end via `speech vibevoice ... "
+                + "--long-form --reference-audio <wav> --reference-transcript \"...\"` "
+                + "— the 1.5B path ships the encoder and inlines the encoding on each "
+                + "synthesis call, so no precomputed voice cache is needed."
+            )
+        }
         let audio: [Float]
         if sampleRate != AudioConstants.sampleRate {
             audio = AudioFileLoader.resample(

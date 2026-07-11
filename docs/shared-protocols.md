@@ -24,7 +24,11 @@ The `AudioCommon` module defines shared protocols that provide model-agnostic in
    ┌────┴────┐        ┌─────┴─────┐       ┌─────┴─────┐       ┌─────┴─────┐
    │Qwen3TTS │        │  Qwen3ASR │       │PersonaPlex │       │ SpeechVAD │
    │CosyVoice│        │ParakeetASR│       └───────────┘       └───────────┘
-   │Kokoro   │        │ForcedAlign│
+   │VoxCPM2  │        │ForcedAlign│
+   │Kokoro   │
+   │IndexTTS2│
+   │F5TTS    │
+   │HiggsTTS │
    └─────────┘        └───────────┘
 ```
 
@@ -42,7 +46,13 @@ public protocol SpeechGenerationModel: AnyObject {
 }
 ```
 
-**Conforming types:** `Qwen3TTSModel`, `CosyVoiceTTSModel`, `KokoroTTSModel`
+**Conforming types:** `Qwen3TTSModel`, `CosyVoiceTTSModel`, `VoxCPM2TTSModel`, `KokoroTTSModel`, `IndexTTS2TTSModel`, `F5TTSModel`, `HiggsTTSModel`
+
+`IndexTTS2TTSModel` implements bundle loading, manifest validation, metadata access, and `ModelMemoryManageable`. It exposes a reference-audio `generate` overload for the expanded IndexTTS2 bundle and runs native reference conditioning, optional `IndexTTS2EmotionControl` preset/vector blending, `IndexTTS2SynthesisOptions` speaking-rate and internal-pause controls, semantic GPT beam sampling, S2Mel decoding, and BigVGAN vocoding. The protocol-only `generate(text:language:)` entry point throws a reference-required error because IndexTTS2 is a zero-shot voice-cloning model.
+
+`F5TTSModel` implements local bundle loading, config validation, `ModelMemoryManageable`, and a reference-audio `generate` overload for the exported F5-TTS bundle. The runtime prepares Vocos-style reference mels, samples target mels with the native DiT flow model, and decodes 24 kHz waveform audio with Vocos. The protocol-only `generate(text:language:)` entry point throws a reference-required error because F5-TTS requires reference audio plus a reference transcript.
+
+`HiggsTTSModel` implements bundle loading, `ModelMemoryManageable`, native reference encoding (`encodeReference`), and reference-audio `generate` overloads for the Higgs TTS 3 bundle. The runtime builds a `<|tts|>`-protocol prompt, samples delay-patterned 8-codebook frames with a Qwen3 backbone and fused codebook head, and decodes 24 kHz audio with the embedded Higgs codec. The protocol-only `generate(text:language:)` performs reference-free synthesis in a model-chosen voice; inline control tags ride inside the text.
 
 ### SpeechRecognitionModel (STT)
 
@@ -324,9 +334,11 @@ func synthesizeAny(
 // Works with any TTS model:
 let qwen = try await Qwen3TTSModel.fromPretrained()
 let cosy = try await CosyVoiceTTSModel.fromPretrained()
+let vox = try await VoxCPM2TTSModel.fromPretrained()
 
 let audio1 = try await synthesizeAny(qwen, text: "Hello")
 let audio2 = try await synthesizeAny(cosy, text: "Hello")
+let audio3 = try await synthesizeAny(vox, text: "Hello")
 ```
 
 ### Generic Streaming
@@ -343,7 +355,7 @@ func streamAny(
 ### Existential Collections
 
 ```swift
-let ttsModels: [any SpeechGenerationModel] = [qwen, cosy]
+let ttsModels: [any SpeechGenerationModel] = [qwen, cosy, vox]
 
 for model in ttsModels {
     let audio = try await model.generate(text: "Hello", language: "english")
@@ -378,6 +390,11 @@ Sources/
 │   ├── Qwen3ASR+Protocols.swift
 │   └── ForcedAligner+Protocols.swift
 │
+├── WhisperASR/                Speech-to-text (Whisper Large-v3 Turbo CoreML)
+│   ├── WhisperASR.swift       WhisperASRModel: SpeechRecognitionModel
+│   ├── WhisperCoreMLRuntime.swift  Native CoreML mel/encoder/decoder runtime
+│   └── WhisperByteLevelTokenizer.swift  Whisper byte-level BPE decoder
+│
 ├── OmnilingualASR/            Speech-to-text (Meta wav2vec2 + CTC, 1,672 languages)
 │   ├── OmnilingualASR.swift   OmnilingualASRModel: SpeechRecognitionModel (CoreML backend, 300M)
 │   ├── Configuration.swift    Decodes published `config.json` (5 s / 10 s window variants)
@@ -399,6 +416,16 @@ Sources/
 │   ├── CosyVoiceTTS.swift     CosyVoiceTTSModel: SpeechGenerationModel
 │   └── CosyVoiceTTS+Protocols.swift
 │
+├── VoxCPM2TTS/                Text-to-speech (MiniCPM-4 + LocEnc + LocDiT + AudioVAE V2)
+│   ├── VoxCPM2TTS.swift       VoxCPM2TTSModel: SpeechGenerationModel
+│   ├── MiniCPM4.swift         MiniCPM-4 backbone, LocEnc, LocDiT, UnifiedCFM
+│   ├── AudioVAE.swift         AudioVAE V2 encode/decode
+│   └── Configuration.swift    ModelArgs / config decoding for VoxCPM2 snapshots
+│
+├── IndexTTS2TTS/              IndexTTS2 voice cloning (reference conditioning + synthesis)
+├── F5TTS/                     F5-TTS voice cloning (DiT flow + Vocos)
+├── HiggsTTS/                  Higgs TTS 3 conversational TTS + cloning (Qwen3 + fused codebooks + codec)
+│
 ├── PersonaPlex/               Speech-to-speech (Temporal + Depformer + Mimi)
 │   ├── PersonaPlex.swift      PersonaPlexModel: SpeechToSpeechModel
 │   └── PersonaPlex+Protocols.swift
@@ -407,7 +434,7 @@ Sources/
 │   ├── SpeechVAD.swift        PyannoteVADModel: VoiceActivityDetectionModel
 │   ├── SpeechVAD+Protocols.swift  Protocol conformances
 │   ├── SileroVAD.swift        SileroVADModel: VoiceActivityDetectionModel, StreamingVADProvider
-│   ├── SileroModel.swift      Silero VAD v5 network (STFT + encoder + LSTM)
+│   ├── SileroModel.swift      Silero VAD streaming network (STFT + encoder + LSTM)
 │   ├── StreamingVADProcessor.swift  Event-driven streaming wrapper
 │   ├── DiarizationPipeline.swift  PyannoteDiarizationPipeline: SpeakerDiarizationModel, SpeakerExtractionCapable
 │   ├── DiarizationHelpers.swift   Shared helpers (merge, compact IDs, resample)
@@ -426,8 +453,11 @@ Sources/
 
 ```
 AudioCommon  ← Qwen3ASR         ─┐
+             ← WhisperASR       │
              ← Qwen3TTS         │
              ← CosyVoiceTTS     │
+             ← VoxCPM2TTS       │
+             ← IndexTTS2TTS     │
              ← KokoroTTS        ├── AudioCLILib ── AudioCLI (executable)
              ← ParakeetASR      │
              ← ParakeetStreamingASR │
@@ -436,8 +466,8 @@ AudioCommon  ← Qwen3ASR         ─┐
              ← SpeechVAD       ─┘
              ← SpeechCore (CSpeechCore xcframework + AudioCommon)
 
-MLXCommon  ← Qwen3ASR, Qwen3TTS, Qwen3Chat, CosyVoiceTTS, PersonaPlex,
-              SpeechVAD, OmnilingualASR (MLX backend)
+MLXCommon  ← Qwen3ASR, Qwen3TTS, Qwen3Chat, CosyVoiceTTS, VoxCPM2TTS,
+              PersonaPlex, SpeechVAD, OmnilingualASR (MLX backend)
 ```
 
 Each model target depends only on `AudioCommon` and MLX. No cross-dependencies between model targets. `SpeechCore` depends on `AudioCommon` for protocols and the `CSpeechCore` binary target for the C++ pipeline engine.
@@ -450,6 +480,8 @@ All model classes are **not thread-safe** by design. ML inference is inherently 
 - `Qwen3ASRModel`, `StreamingASR`
 - `Qwen3TTSModel`
 - `CosyVoiceTTSModel`
+- `VoxCPM2TTSModel`
+- `IndexTTS2TTSModel`
 - `PersonaPlexModel`
 - `OmnilingualASRModel` (CoreML), `OmnilingualASRMLXModel` (MLX)
 - `ParakeetASRModel`, `ParakeetStreamingASRModel`, `NemotronStreamingASRModel`
@@ -463,6 +495,31 @@ All model classes are **not thread-safe** by design. ML inference is inherently 
 `SegmentationConfig`, `VADConfig`, `DiarizationConfig`, `VADPipeline`, `Qwen3AudioEncoderConfig`, `Qwen3ASRTokens`, `SlottedText`, `TextChunker`
 
 ## Error Handling
+
+### Realtime WebSocket errors
+
+The `/v1/realtime` websocket returns OpenAI-style error events instead of
+closing the connection for recoverable request or model-processing failures:
+
+```json
+{
+  "type": "error",
+  "error": {
+    "type": "server_error",
+    "message": "Realtime event 'response.create' failed: ...",
+    "event_type": "response.create"
+  }
+}
+```
+
+Client request errors use `invalid_request_error`. Failures thrown while
+processing a valid realtime event use `server_error` and include `event_type`
+so clients can associate the error with the message that failed.
+
+Long-running realtime model loads and generations emit lightweight
+`realtime.keepalive` events and websocket pong control frames periodically
+while no model output is ready. Clients can ignore these events or treat them
+as cold-start activity indicators.
 
 ### AudioModelError
 

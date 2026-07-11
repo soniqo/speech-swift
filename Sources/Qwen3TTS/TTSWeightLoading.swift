@@ -4,6 +4,13 @@ import MLX
 import MLXNN
 import AudioCommon
 
+/// Weight-loading progress logs go to stderr so they don't corrupt a stdout-based
+/// IPC channel (e.g. the speech-studio sidecar's NDJSON protocol).
+@inline(__always)
+internal func logLoad(_ message: String) {
+    FileHandle.standardError.write(Data((message + "\n").utf8))
+}
+
 /// Weight loading for TTS components
 public enum TTSWeightLoader {
 
@@ -15,7 +22,7 @@ public enum TTSWeightLoader {
         from directory: URL
     ) throws {
         let allWeights = try CommonWeightLoader.loadAllSafetensors(from: directory)
-        print("Loaded \(allWeights.count) weights from safetensors")
+        logLoad("Loaded \(allWeights.count) weights from safetensors")
 
         // Split into talker and code predictor weights
         var talkerWeights: [String: MLXArray] = [:]
@@ -40,7 +47,7 @@ public enum TTSWeightLoader {
         to talker: TalkerModel,
         from talkerWeights: [String: MLXArray]
     ) {
-        print("Found \(talkerWeights.count) talker weights")
+        logLoad("Found \(talkerWeights.count) talker weights")
 
         // Codec embedding (float, not quantized)
         CommonWeightLoader.applyEmbeddingWeights(
@@ -76,7 +83,7 @@ public enum TTSWeightLoader {
             applyTalkerLayerWeights(to: layer, prefix: prefix, from: talkerWeights)
         }
 
-        print("Applied weights to Talker (\(talker.layers.count) layers)")
+        logLoad("Applied weights to Talker (\(talker.layers.count) layers)")
     }
 
     private static func applyTalkerLayerWeights(
@@ -117,7 +124,7 @@ public enum TTSWeightLoader {
         to codePredictor: CodePredictorModel,
         from cpWeights: [String: MLXArray]
     ) {
-        print("Found \(cpWeights.count) code predictor weights")
+        logLoad("Found \(cpWeights.count) code predictor weights")
 
         // Codec embeddings (15 tables — safetensors uses singular "codec_embedding")
         for i in 0..<codePredictor.codecEmbeddings.count {
@@ -154,7 +161,7 @@ public enum TTSWeightLoader {
             }
         }
 
-        print("Applied weights to Code Predictor (\(codePredictor.layers.count) layers)")
+        logLoad("Applied weights to Code Predictor (\(codePredictor.layers.count) layers)")
     }
 
     private static func applyCodePredictorLayerWeights(
@@ -193,7 +200,7 @@ public enum TTSWeightLoader {
     ) throws {
         let allWeights = try CommonWeightLoader.loadAllSafetensors(from: directory)
 
-        print("Found \(allWeights.count) speech tokenizer weights total")
+        logLoad("Found \(allWeights.count) speech tokenizer weights total")
 
         // Load RVQ codebook weights (decoder-side quantizer)
         loadRVQWeights(into: decoder.splitRVQ, from: allWeights)
@@ -243,7 +250,7 @@ public enum TTSWeightLoader {
         CommonWeightLoader.applyConv1dWeights(
             to: decoder.finalConv.conv, prefix: "decoder.decoder.6.conv", from: allWeights, transpose: true)
 
-        print("Applied weights to Speech Tokenizer Decoder")
+        logLoad("Applied weights to Speech Tokenizer Decoder")
     }
 
     // MARK: - RVQ Weight Loading
@@ -395,7 +402,7 @@ public enum TTSWeightLoader {
                 seWeights[String(key.dropFirst("speaker_encoder.".count))] = value
             }
         }
-        print("Found \(seWeights.count) speaker encoder weights")
+        logLoad("Found \(seWeights.count) speaker encoder weights")
 
         // Initial conv (blocks.0 = TimeDelayNetBlock wrapping Conv1d)
         // Weight key: blocks.0.conv.weight/bias → our initialConv (Conv1d)
@@ -430,11 +437,17 @@ public enum TTSWeightLoader {
         // FC (direct Conv1d)
         applySpeakerConv1dWeights(to: encoder.fc, prefix: "fc", from: seWeights)
 
-        print("Applied weights to Speaker Encoder")
+        logLoad("Applied weights to Speaker Encoder")
     }
 
-    /// Apply Conv1d weights from safetensors. Speaker encoder weights are already in
-    /// MLX format [out_channels, kernel_size, in_channels] — no transpose needed.
+    /// Apply Conv1d weights from safetensors. Speaker-encoder exports are NOT
+    /// consistent: some store the convs in MLX layout [out, kernel, in] (e.g. the
+    /// 0.6B-4bit model) and some in PyTorch layout [out, in, kernel] (e.g. the
+    /// 1.7B-bf16 model). An unconditional transpose breaks the former; loading
+    /// verbatim breaks the latter (the first TDNN conv sees a [512,128,5] weight
+    /// against a [B,T,128] input → MLX channel mismatch in==5 vs 128, SIGTRAP).
+    /// So detect the layout by comparing the loaded weight against the conv's
+    /// allocated MLX weight shape and transpose only the PyTorch-layout case.
     private static func applySpeakerConv1dWeights(
         to conv: Conv1d,
         prefix: String,
@@ -442,7 +455,13 @@ public enum TTSWeightLoader {
     ) {
         var params: [String: NestedItem<String, MLXArray>] = [:]
         if let w = weights["\(prefix).weight"] {
-            params["weight"] = .value(w)
+            let mlx = conv.weight.shape  // MLX Conv1d weight is [out, kernel, in]
+            let isPyTorchLayout = w.ndim == 3 && mlx.count == 3
+                && w.shape[0] == mlx[0]
+                && w.shape[1] == mlx[2]   // loaded in-channels  == expected in
+                && w.shape[2] == mlx[1]   // loaded kernel-size  == expected kernel
+                && mlx[1] != mlx[2]       // unambiguous only when kernel != in
+            params["weight"] = .value(isPyTorchLayout ? w.transposed(0, 2, 1) : w)
         }
         if let b = weights["\(prefix).bias"] {
             params["bias"] = .value(b)

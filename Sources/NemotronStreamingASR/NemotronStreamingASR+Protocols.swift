@@ -15,7 +15,16 @@ extension NemotronStreamingASRModel: SpeechRecognitionModel {
 
     public func transcribeWithLanguage(audio: [Float], sampleRate: Int, language: String?) -> TranscriptionResult {
         let text = transcribe(audio: audio, sampleRate: sampleRate, language: language)
-        // Nemotron is English-only.
-        return TranscriptionResult(text: text, language: text.isEmpty ? nil : "english", confidence: 0)
+        // Multilingual: report the requested language verbatim if recognized,
+        // otherwise nil. The model itself does not emit a confidence score.
+        let reportedLang: String?
+        if text.isEmpty {
+            reportedLang = nil
+        } else if let lang = language, languages.promptDictionary[lang] != nil {
+            reportedLang = lang
+        } else {
+            reportedLang = nil
+        }
+        return TranscriptionResult(text: text, language: reportedLang, confidence: 0)
     }
 }

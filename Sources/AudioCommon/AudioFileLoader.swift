@@ -1,10 +1,29 @@
 import Foundation
 import AVFoundation
 
+/// Sample-rate-conversion quality. Both options fully drain the converter and
+/// produce exact-length output; they differ only in the SRC filter.
+public enum ResampleQuality {
+    /// Framework-default band-limited SRC (`Normal` algorithm). Anti-aliases
+    /// steep downsamples and retains high frequencies well below Nyquist;
+    /// rolls off slightly more near Nyquist than `.mastering`. The right
+    /// default for speech/voice, which is band-limited and usually
+    /// downsampled (e.g. 44.1k→16k for ASR), where mastering-grade filtering
+    /// is wasted cost.
+    case standard
+    /// Mastering algorithm at maximum quality — fullest high-frequency
+    /// retention right up to Nyquist, at higher cost. Use for music (source
+    /// separation) and upsampling/super-resolution, where full-band fidelity
+    /// matters.
+    case mastering
+}
+
 /// Loads audio files and converts to float samples
 public enum AudioFileLoader {
-    /// Load audio file and return samples at target sample rate
-    public static func load(url: URL, targetSampleRate: Int = 24000) throws -> [Float] {
+    /// Load audio file and return samples at target sample rate.
+    /// `quality` selects the SRC filter when resampling (default `.standard`;
+    /// pass `.mastering` for music/upsampling).
+    public static func load(url: URL, targetSampleRate: Int = 24000, quality: ResampleQuality = .standard) throws -> [Float] {
         let audioFile = try AVAudioFile(forReading: url)
         let format = audioFile.processingFormat
         let frameCount = AVAudioFrameCount(audioFile.length)
@@ -25,7 +44,7 @@ public enum AudioFileLoader {
         // Resample if needed
         let inputSampleRate = Int(format.sampleRate)
         if inputSampleRate != targetSampleRate {
-            return resample(samples, from: inputSampleRate, to: targetSampleRate)
+            return resample(samples, from: inputSampleRate, to: targetSampleRate, quality: quality)
         }
 
         return samples
@@ -33,7 +52,9 @@ public enum AudioFileLoader {
 
     /// Load audio file and return stereo channels at target sample rate.
     /// Returns `[left, right]` — mono files are duplicated to stereo.
-    public static func loadStereo(url: URL, targetSampleRate: Int = 44100) throws -> [[Float]] {
+    /// `quality` selects the SRC filter when resampling (default `.standard`;
+    /// pass `.mastering` for music).
+    public static func loadStereo(url: URL, targetSampleRate: Int = 44100, quality: ResampleQuality = .standard) throws -> [[Float]] {
         let audioFile = try AVAudioFile(forReading: url)
         let format = audioFile.processingFormat
         let frameCount = AVAudioFrameCount(audioFile.length)
@@ -59,8 +80,9 @@ public enum AudioFileLoader {
 
         let inputSampleRate = Int(format.sampleRate)
         if inputSampleRate != targetSampleRate {
-            return [resample(left, from: inputSampleRate, to: targetSampleRate),
-                    resample(right, from: inputSampleRate, to: targetSampleRate)]
+            // Resample both channels in one converter pass so L/R stay
+            // phase-aligned (two independent converters can drift).
+            return resampleStereo([left, right], from: inputSampleRate, to: targetSampleRate, quality: quality)
         }
 
         return [left, right]
@@ -156,60 +178,186 @@ public enum AudioFileLoader {
         return (samples, Int(sampleRate))
     }
 
-    /// Resample audio using AVAudioConverter (high-quality sinc interpolation).
+    /// Resample mono audio using `AVAudioConverter`.
+    ///
+    /// Fully drains the converter via `.endOfStream` so the filter tail isn't
+    /// truncated, and normalizes the result to the exact expected frame count.
+    /// `quality` selects the SRC filter: `.standard` (default) for speech,
+    /// `.mastering` for music/upsampling — see ``ResampleQuality``.
     ///
     /// - Parameters:
     ///   - samples: mono PCM Float32 audio
     ///   - inputRate: source sample rate in Hz
     ///   - outputRate: target sample rate in Hz
-    /// - Returns: resampled audio at `outputRate`
-    public static func resample(_ samples: [Float], from inputRate: Int, to outputRate: Int) -> [Float] {
+    ///   - quality: SRC filter quality (default `.standard`)
+    /// - Returns: resampled audio at `outputRate`. On converter-setup or
+    ///   conversion failure, returns the original `samples` unchanged (callers
+    ///   never receive partial/truncated output).
+    public static func resample(_ samples: [Float], from inputRate: Int, to outputRate: Int, quality: ResampleQuality = .standard) -> [Float] {
         guard inputRate != outputRate, !samples.isEmpty else { return samples }
 
-        let sourceFormat = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: Double(inputRate),
-            channels: 1,
-            interleaved: false)!
-        let targetFormat = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: Double(outputRate),
-            channels: 1,
-            interleaved: false)!
-
-        guard let converter = AVAudioConverter(from: sourceFormat, to: targetFormat) else {
+        guard let sourceFormat = AVAudioFormat(
+                commonFormat: .pcmFormatFloat32, sampleRate: Double(inputRate),
+                channels: 1, interleaved: false),
+              let targetFormat = AVAudioFormat(
+                commonFormat: .pcmFormatFloat32, sampleRate: Double(outputRate),
+                channels: 1, interleaved: false),
+              let converter = AVAudioConverter(from: sourceFormat, to: targetFormat),
+              let sourceBuffer = AVAudioPCMBuffer(
+                pcmFormat: sourceFormat, frameCapacity: AVAudioFrameCount(samples.count))
+        else {
             return samples
         }
 
-        let sourceBuffer = AVAudioPCMBuffer(pcmFormat: sourceFormat, frameCapacity: AVAudioFrameCount(samples.count))!
+        configureSRC(converter, quality: quality)
         sourceBuffer.frameLength = AVAudioFrameCount(samples.count)
         samples.withUnsafeBufferPointer { src in
             sourceBuffer.floatChannelData![0].update(from: src.baseAddress!, count: samples.count)
         }
 
         let ratio = Double(outputRate) / Double(inputRate)
-        let outputFrameCount = AVAudioFrameCount(Double(samples.count) * ratio)
-        let targetBuffer = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: outputFrameCount)!
-
-        var error: NSError?
-        var inputConsumed = false
-        converter.convert(to: targetBuffer, error: &error) { _, outStatus in
-            if inputConsumed {
-                outStatus.pointee = .noDataNow
-                return nil
-            }
-            inputConsumed = true
-            outStatus.pointee = .haveData
-            return sourceBuffer
-        }
-
-        guard error == nil, targetBuffer.frameLength > 0 else {
+        guard let out = convertDrained(
+            converter: converter, source: sourceBuffer, targetFormat: targetFormat,
+            inputFrames: samples.count, ratio: ratio, channels: 1)
+        else {
             return samples
         }
+        return out[0]
+    }
 
-        return Array(UnsafeBufferPointer(
-            start: targetBuffer.floatChannelData![0],
-            count: Int(targetBuffer.frameLength)))
+    /// Resample a stereo signal in a single converter pass so the two channels
+    /// stay phase-aligned. `channels[0]` = left, `channels[1]` = right; both
+    /// must have equal length. `quality` selects the SRC filter (default
+    /// `.standard`; pass `.mastering` for music). Falls back to per-channel
+    /// mono resampling for non-stereo input or on converter-setup failure.
+    public static func resampleStereo(_ channels: [[Float]], from inputRate: Int, to outputRate: Int, quality: ResampleQuality = .standard) -> [[Float]] {
+        guard channels.count == 2 else {
+            return channels.map { resample($0, from: inputRate, to: outputRate, quality: quality) }
+        }
+        let n = channels[0].count
+        guard inputRate != outputRate, n > 0, channels[1].count == n else {
+            return channels
+        }
+
+        guard let sourceFormat = AVAudioFormat(
+                commonFormat: .pcmFormatFloat32, sampleRate: Double(inputRate),
+                channels: 2, interleaved: false),
+              let targetFormat = AVAudioFormat(
+                commonFormat: .pcmFormatFloat32, sampleRate: Double(outputRate),
+                channels: 2, interleaved: false),
+              let converter = AVAudioConverter(from: sourceFormat, to: targetFormat),
+              let sourceBuffer = AVAudioPCMBuffer(
+                pcmFormat: sourceFormat, frameCapacity: AVAudioFrameCount(n))
+        else {
+            return channels.map { resample($0, from: inputRate, to: outputRate, quality: quality) }
+        }
+
+        configureSRC(converter, quality: quality)
+        sourceBuffer.frameLength = AVAudioFrameCount(n)
+        channels[0].withUnsafeBufferPointer {
+            sourceBuffer.floatChannelData![0].update(from: $0.baseAddress!, count: n)
+        }
+        channels[1].withUnsafeBufferPointer {
+            sourceBuffer.floatChannelData![1].update(from: $0.baseAddress!, count: n)
+        }
+
+        let ratio = Double(outputRate) / Double(inputRate)
+        guard let out = convertDrained(
+            converter: converter, source: sourceBuffer, targetFormat: targetFormat,
+            inputFrames: n, ratio: ratio, channels: 2)
+        else {
+            return channels.map { resample($0, from: inputRate, to: outputRate, quality: quality) }
+        }
+        return out
+    }
+
+    /// Configure the converter's SRC filter. Must be set before the first
+    /// `convert`. `.standard` leaves the framework default (`Normal`); only
+    /// `.mastering` opts into the slower, full-band Mastering algorithm.
+    private static func configureSRC(_ converter: AVAudioConverter, quality: ResampleQuality) {
+        switch quality {
+        case .standard:
+            break  // framework default Normal SRC — already drains + exact length
+        case .mastering:
+            converter.sampleRateConverterAlgorithm = AVSampleRateConverterAlgorithm_Mastering
+            converter.sampleRateConverterQuality = .max
+        }
+    }
+
+    /// Run the converter to completion, draining its internal tail via
+    /// `.endOfStream`, and return one Float array per channel normalized to the
+    /// exact expected frame count.
+    ///
+    /// Returns `nil` unless the converter reaches `.endOfStream` cleanly. Only
+    /// `.endOfStream` is success: `.error` (or a thrown `NSError`) is a hard
+    /// failure, and a no-progress step that isn't end-of-stream means the
+    /// converter is stuck. In every non-success case the partial output is
+    /// discarded rather than returned, so callers can fall back instead of
+    /// silently propagating a truncated buffer (which would desync downstream
+    /// audio/video).
+    private static func convertDrained(
+        converter: AVAudioConverter,
+        source: AVAudioPCMBuffer,
+        targetFormat: AVAudioFormat,
+        inputFrames: Int,
+        ratio: Double,
+        channels: Int
+    ) -> [[Float]]? {
+        // ceil + headroom for the sinc filter's priming/tail latency.
+        let capacity = AVAudioFrameCount(ceil(Double(inputFrames) * ratio)) + 4096
+        guard let target = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: capacity) else {
+            return nil
+        }
+
+        var out = [[Float]](repeating: [], count: channels)
+        for c in 0..<channels { out[c].reserveCapacity(Int(capacity)) }
+
+        var fed = false
+        while true {
+            target.frameLength = 0
+            var error: NSError?
+            let status = converter.convert(to: target, error: &error) { _, outStatus in
+                if fed {
+                    // Signal end-of-stream so the converter flushes its sinc
+                    // tail instead of stopping short.
+                    outStatus.pointee = .endOfStream
+                    return nil
+                }
+                fed = true
+                outStatus.pointee = .haveData
+                return source
+            }
+
+            let produced = Int(target.frameLength)
+            if produced > 0, let chans = target.floatChannelData {
+                for c in 0..<channels {
+                    out[c].append(contentsOf: UnsafeBufferPointer(start: chans[c], count: produced))
+                }
+            }
+
+            // Order matters: a clean `.endOfStream` (success) usually arrives on
+            // a call that produces 0 frames, so check it before the no-progress
+            // guard. `.inputRanDry` is not terminal — keep pulling until the
+            // input block signals `.endOfStream`.
+            if status == .error || error != nil { return nil }
+            if status == .endOfStream { break }
+            if produced == 0 { return nil }
+        }
+
+        // Normalize to the exact expected length so output is a strict function
+        // of input length and ratio (downstream stereo alignment and A/V sync
+        // rely on this). Mastering SRC compensates filter latency, so this is a
+        // 0–1 sample trim/pad in practice.
+        let expected = Int((Double(inputFrames) * ratio).rounded())
+        guard expected > 0, !out[0].isEmpty else { return nil }
+        for c in 0..<channels {
+            if out[c].count > expected {
+                out[c].removeLast(out[c].count - expected)
+            } else if out[c].count < expected {
+                out[c].append(contentsOf: repeatElement(0, count: expected - out[c].count))
+            }
+        }
+        return out
     }
 }
 

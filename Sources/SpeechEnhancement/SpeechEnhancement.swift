@@ -67,10 +67,16 @@ public final class SpeechEnhancer {
         self.synthesisMem = [Float](repeating: 0, count: config.fftSize - config.hopSize)
     }
 
-    /// Enhance audio by removing noise (batch mode).
+    /// Enhance audio by removing noise (single-shot batch mode).
     ///
     /// Processes the entire audio at once. Signal processing runs on CPU (vDSP),
     /// neural network inference runs via Core ML.
+    ///
+    /// **Length limit**: the CoreML model is exported with a `RangeDim(1, 6000)`
+    /// on the time axis (~60 s at 48 kHz / 10 ms hop). Inputs exceeding this
+    /// throw a CoreML prediction error. For longer audio use `enhanceChunked`,
+    /// which slices into windows that fit the cap and stitches with a
+    /// crossfade.
     ///
     /// - Parameters:
     ///   - audio: Input audio samples (mono, Float32)
@@ -81,9 +87,16 @@ public final class SpeechEnhancer {
         if sampleRate != Self.sampleRate {
             samples = AudioFileLoader.resample(audio, from: sampleRate, to: Self.sampleRate)
         }
-
         resetState()
+        return try enhanceCore(audio48k: samples)
+    }
 
+    /// Run the enhance pipeline on already-48-kHz audio WITHOUT resetting
+    /// streaming state. Used internally by `enhance(...)` (after one fresh
+    /// `resetState()`) and by `enhanceChunked(...)` (which resets once at the
+    /// start and carries STFT + normalization state across all chunks, so
+    /// only the GRU state inside CoreML re-zeros at each boundary).
+    private func enhanceCore(audio48k samples: [Float]) throws -> [Float] {
         let hop = config.hopSize
         let freqBins = config.freqBins  // 481 (960/2 + 1)
 
@@ -206,6 +219,133 @@ public final class SpeechEnhancer {
         let trimEnd = min(trimStart + samples.count, rawOutput.count)
         guard trimEnd > trimStart else { return [] }
         return Array(rawOutput[trimStart..<trimEnd])
+    }
+
+    /// Enhance long-form audio that exceeds the single-shot 60 s cap by
+    /// splitting into overlapping windows, running `enhance` on each, and
+    /// stitching with an equal-power (sin/cos) crossfade.
+    ///
+    /// Inputs at or under `chunkSeconds` go through the existing single-shot
+    /// path — `enhance(audio:sampleRate:)` — and are bit-identical to today.
+    ///
+    /// **State continuity**: between chunks the function preserves the STFT
+    /// analysis/synthesis overlap buffers AND the EMA normalization state.
+    /// Those are *exact* across the seam (no glitch). The only state that
+    /// can't be carried is the GRU hidden state inside the CoreML graph —
+    /// it re-initializes per `predict()` call. The first ~100–200 ms of each
+    /// non-leading chunk are therefore mildly degraded while the GRUs
+    /// re-converge; the crossfade region is sized to mask this for
+    /// speech-dominated content. Stationary low-SNR noise may exhibit a
+    /// brief noise-floor flicker at boundaries.
+    ///
+    /// - Parameters:
+    ///   - audio: Input audio samples (mono, Float32) at any sample rate
+    ///   - sampleRate: Sample rate of input audio (resampled to 48kHz if needed)
+    ///   - chunkSeconds: Target window size in seconds. Default 45 s leaves
+    ///     15 s of headroom under the model's 60 s cap. Must be > 1 s.
+    ///   - overlapMs: Crossfade overlap between adjacent chunks in
+    ///     milliseconds. Default 500 ms gives the GRU plenty of warm-up time
+    ///     inside the fade region. Must be < chunkSeconds × 1000 / 2.
+    /// - Returns: Enhanced audio at 48 kHz, same length as the resampled
+    ///   input (±1 sample for rounding).
+    public func enhanceChunked(
+        audio: [Float],
+        sampleRate: Int,
+        chunkSeconds: Double = 45.0,
+        overlapMs: Int = 500
+    ) throws -> [Float] {
+        precondition(chunkSeconds > 1.0, "chunkSeconds must be > 1 s")
+        precondition(Double(overlapMs) < chunkSeconds * 1000 / 2,
+                     "overlapMs must be < chunkSeconds*1000/2")
+
+        var samples = audio
+        if sampleRate != Self.sampleRate {
+            samples = AudioFileLoader.resample(audio, from: sampleRate, to: Self.sampleRate)
+        }
+        if samples.isEmpty { return [] }
+
+        let rate = Self.sampleRate
+        let chunkSamples = Int(chunkSeconds * Double(rate))
+
+        // Short input → single shot through the established path. Bit-identical
+        // to enhance(...) on this same input.
+        if samples.count <= chunkSamples {
+            resetState()
+            return try enhanceCore(audio48k: samples)
+        }
+
+        let overlapSamples = max(1, overlapMs * rate / 1000)
+        let hop = chunkSamples - overlapSamples
+
+        // Equal-division so the tail isn't a tiny fragment (mirrors the
+        // OmnilingualMLXModel chunker fix — small tails have unreliable
+        // per-window stats and produce worse seams).
+        let numChunks = max(2, Int(ceil(Double(samples.count - overlapSamples) / Double(hop))))
+        let evenChunkSamples = max(
+            overlapSamples + 1,
+            (samples.count + overlapSamples * (numChunks - 1) + numChunks - 1) / numChunks
+        )
+        let evenHop = evenChunkSamples - overlapSamples
+
+        // Reset once; the loop below preserves STFT + norm state across chunks.
+        resetState()
+
+        var output = [Float]()
+        output.reserveCapacity(samples.count)
+        var prevTail: [Float] = []
+
+        var offset = 0
+        while offset < samples.count {
+            let end = min(offset + evenChunkSamples, samples.count)
+            let chunk = Array(samples[offset..<end])
+            let enhanced = try enhanceCore(audio48k: chunk)
+            // The enhance path returns ≈ chunk.count samples (length preserved).
+            // Tail < overlapSamples can happen on the last chunk if rounding
+            // shaved it; clamp to keep the math safe.
+            let effectiveOverlap = min(overlapSamples, enhanced.count, prevTail.count)
+
+            if prevTail.isEmpty {
+                // First chunk — keep everything except the trailing overlap,
+                // stash that overlap as the tail to crossfade against next.
+                let keepEnd = max(0, enhanced.count - overlapSamples)
+                output.append(contentsOf: enhanced[0..<keepEnd])
+                prevTail = Array(enhanced[keepEnd..<enhanced.count])
+            } else {
+                // Equal-power crossfade over `effectiveOverlap` samples.
+                // t in [0,1]; fadeOut = cos(t*π/2), fadeIn = sin(t*π/2);
+                // |fadeOut|² + |fadeIn|² = 1 so the energy of stationary
+                // content stays flat across the seam.
+                for i in 0..<effectiveOverlap {
+                    let t = Float(i) / Float(max(effectiveOverlap - 1, 1))
+                    let fadeOut = cos(t * .pi / 2)
+                    let fadeIn = sin(t * .pi / 2)
+                    output.append(prevTail[i] * fadeOut + enhanced[i] * fadeIn)
+                }
+                // Any prevTail past the effectiveOverlap is older content
+                // that this chunk doesn't cover — append it raw to avoid
+                // dropping samples.
+                if prevTail.count > effectiveOverlap {
+                    output.append(contentsOf: prevTail[effectiveOverlap..<prevTail.count])
+                }
+                // Keep the middle of this chunk, stash its trailing overlap.
+                let midStart = effectiveOverlap
+                let midEnd = max(midStart, enhanced.count - overlapSamples)
+                output.append(contentsOf: enhanced[midStart..<midEnd])
+                prevTail = Array(enhanced[midEnd..<enhanced.count])
+            }
+
+            offset += evenHop
+            // If the remaining input is too small for a usable chunk, stop —
+            // the unbroken tail of `prevTail` covers the gap.
+            if samples.count - offset < overlapSamples * 2 { break }
+        }
+        // Flush the final tail.
+        output.append(contentsOf: prevTail)
+        // Length should match samples.count ±1. Clamp if slightly over.
+        if output.count > samples.count {
+            output.removeLast(output.count - samples.count)
+        }
+        return output
     }
 
     /// Reset all streaming state (STFT buffers, normalization).
