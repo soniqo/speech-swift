@@ -322,13 +322,24 @@ final class IndexTTS2BigVGAN: Module {
             widths: [.init((0, 0)), .init((kernel - 1, kernel - 1)), .init((0, 0))],
             value: MLXArray(Float(0)))
 
-        let fullTime = convolutionInput.dim(1) - kernel + 1
-        let kernelRange = MLXArray(0..<Int32(kernel)).expandedDimensions(axis: 0)
-        let timeRange = MLXArray(0..<Int32(fullTime)).expandedDimensions(axis: 1)
-        let windows = convolutionInput[0..., kernelRange + timeRange, 0...]
-        let filter = (filt.asType(convolutionInput.dtype) * Float(factor)).reshaped([1, 1, kernel, 1])
-        let out = (windows * filter).sum(axis: 2)
+        let out = firFilter(convolutionInput, filter: filt * Float(factor))
         return out[0..., padLeft..<(out.dim(1) - padRight), 0...]
+    }
+
+    /// Applies one FIR filter identically to every channel as a dense
+    /// `conv1d` with channels folded into the batch dimension. Equivalent to
+    /// materializing sliding windows and reducing, without the `[B, T, K, C]`
+    /// intermediate that dominated vocoder time.
+    private static func firFilter(_ x: MLXArray, filter: MLXArray, stride: Int = 1) -> MLXArray {
+        let batch = x.dim(0)
+        let time = x.dim(1)
+        let channels = x.dim(2)
+        let flat = x.transposed(0, 2, 1).reshaped([batch * channels, time, 1])
+        let weight = filter.asType(x.dtype).reshaped([1, filter.size, 1])
+        let filtered = conv1d(flat, weight, stride: stride)
+        return filtered
+            .reshaped([batch, channels, filtered.dim(1)])
+            .transposed(0, 2, 1)
     }
 
     static func firDownsample(_ x: MLXArray, filt: MLXArray, factor: Int) -> MLXArray {
@@ -337,13 +348,7 @@ final class IndexTTS2BigVGAN: Module {
         let padLeft = kernel / 2 - (even ? 1 : 0)
         let padRight = kernel / 2
         let paddedInput = replicatePad1D(x, left: padLeft, right: padRight)
-        let outTime = paddedInput.dim(1) - kernel + 1
-        let kernelRange = MLXArray(0..<Int32(kernel)).expandedDimensions(axis: 0)
-        let timeRange = MLXArray(0..<Int32(outTime)).expandedDimensions(axis: 1)
-        let windows = paddedInput[0..., kernelRange + timeRange, 0...]
-        let filter = filt.asType(paddedInput.dtype).reshaped([1, 1, kernel, 1])
-        let out = (windows * filter).sum(axis: 2)
-        return out[0..., .stride(by: factor), 0...]
+        return firFilter(paddedInput, filter: filt, stride: factor)
     }
 
     private static func replicatePad1D(_ x: MLXArray, left: Int, right: Int) -> MLXArray {

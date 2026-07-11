@@ -17,14 +17,14 @@ afternoon sun."
 | F5-TTS (clone, 16 steps, default) | 336M fp16 | 0.8 GB | 5.09 s | 2.91 s | **0.57** | 1-word sub |
 | F5-TTS (clone, 32 steps) | 336M fp16 | 0.8 GB | 5.09 s | 5.75 s | 1.13 | 1-word sub |
 | F5-TTS (clone, 12 steps) | 336M fp16 | 0.8 GB | 5.09 s | 2.19 s | 0.43 | 1-word sub |
-| IndexTTS2 (clone) | 1.5B-class fp16 | 2.8 GB | 5.39 s | 19.6 s | 3.6 | exact |
+| IndexTTS2 (clone) | 1.5B-class fp16 | 2.8 GB | 5.39 s | 16.0 s | 3.0 | exact |
 
 **Machine**: Apple M5 Pro, 48 GB, release build with compiled metallib.
 Synth time excludes model load (Higgs/F5 report it directly); RSS from
 `/usr/bin/time -l`, includes weights.
 
 IndexTTS2 stage timing (via `INDEXTTS2_TIMING=1`): reference conditioning
-0.6 s, semantic GPT 13.3 s, S2Mel flow 1.8 s, BigVGAN 3.9 s.
+0.6 s, semantic GPT 12.9 s, S2Mel flow 1.8 s, BigVGAN 0.7 s.
 
 ## Notes
 
@@ -41,12 +41,16 @@ IndexTTS2 stage timing (via `INDEXTTS2_TIMING=1`): reference conditioning
   found them indistinguishable, so the default moved from 32 to **16**
   (`--f5-steps 32` remains for maximum fidelity). Steps run over the full
   reference+target sequence, so RTF also improves on longer utterances.
-- **IndexTTS2 dropped from ~9 to 3.6 RTF** by giving the semantic GPT a KV
-  cache (decode was quadratic — every token re-ran the full sequence) and
-  batching the three sampling beams into one forward per step with
-  gather-based beam reordering. Remaining cost: GPT kernel-launch overhead
-  (~46 ms/step), BigVGAN (fp32 by design — Snake activations are
-  fp16-fragile), and S2Mel's 25 upstream-default flow steps. Still the
+- **IndexTTS2 dropped from ~9 to 3.0 RTF** in two passes: the semantic GPT
+  gained a KV cache (decode was quadratic — every token re-ran the full
+  sequence) with the three sampling beams batched into one forward per step,
+  and BigVGAN's anti-aliased FIR resamplers were rewritten from materialized
+  sliding windows (a `[B, T, K, C]` gather around every Snake activation) to
+  dense channels-as-batch `conv1d` — bit-equivalent output (diff 0.03% of
+  signal RMS), 3.9 s → 0.7 s. Remaining cost is GPT kernel-launch overhead
+  (~45 ms/step on ~7 ms of bandwidth): going further needs an mlx-lm-style
+  preallocated-KV + compiled-step rearchitecture, since MLX shapeless
+  compilation rejects the slice/split ops in the step graph. Still the
   heavyweight path; prefer it for its emotion-control surface.
 - Cloned-voice quality gates for Higgs and F5 (ASR roundtrips en/zh, plus
   es/de/ja for the Python reference) live in the E2E suites; see
