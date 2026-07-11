@@ -18,10 +18,12 @@ enum IndexTTS2StageTimer {
 public struct IndexTTS2SynthesisOptions: Equatable, Sendable {
     public var speakingRate: Float
     public var maxInternalPauseDuration: Float?
+    public var s2MelSteps: Int
 
     public init(
         speakingRate: Float = 1.0,
-        maxInternalPauseDuration: Float? = nil
+        maxInternalPauseDuration: Float? = nil,
+        s2MelSteps: Int = 25
     ) throws {
         guard speakingRate.isFinite, speakingRate >= 0.5, speakingRate <= 1.5 else {
             throw AudioModelError.invalidConfiguration(
@@ -37,8 +39,14 @@ public struct IndexTTS2SynthesisOptions: Equatable, Sendable {
                     reason: "maxInternalPauseDuration must be finite and in [0.05, 2.0].")
             }
         }
+        guard s2MelSteps >= 4, s2MelSteps <= 100 else {
+            throw AudioModelError.invalidConfiguration(
+                model: "IndexTTS2",
+                reason: "s2MelSteps must be in [4, 100].")
+        }
         self.speakingRate = speakingRate
         self.maxInternalPauseDuration = maxInternalPauseDuration
+        self.s2MelSteps = s2MelSteps
     }
 
     public static let `default` = try! IndexTTS2SynthesisOptions()
@@ -201,7 +209,8 @@ extension IndexTTS2NativeRuntime {
         let mel = s2MelFlow.inference(
             condition: condition,
             promptMel: conditioning.promptMel,
-            style: conditioning.styleEmbedding)
+            style: conditioning.styleEmbedding,
+            steps: synthesisOptions.s2MelSteps)
         eval(mel)
         IndexTTS2StageTimer.report("s2mel-flow", since: &stageStart)
         let promptFrames = conditioning.promptMel.dim(2)

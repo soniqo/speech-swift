@@ -634,6 +634,7 @@ final class SpeakCommandTests: XCTestCase {
             "--indextts2-emotion-weight", "0.75",
             "--indextts2-speaking-rate", "1.15",
             "--indextts2-max-pause", "0.18",
+            "--indextts2-s2mel-steps", "15",
         ])
         let speak = try XCTUnwrap(cmd as? SpeakCommand)
         XCTAssertEqual(speak.indextts2ModelId, "org/IndexTTS2-MLX-fp16")
@@ -642,6 +643,7 @@ final class SpeakCommandTests: XCTestCase {
         XCTAssertEqual(speak.indextts2EmotionWeight, 0.75, accuracy: 0.001)
         XCTAssertEqual(speak.indextts2SpeakingRate, 1.15, accuracy: 0.001)
         XCTAssertEqual(try XCTUnwrap(speak.indextts2MaxPause), 0.18, accuracy: 0.001)
+        XCTAssertEqual(speak.indextts2S2MelSteps, 15)
     }
 
     func testIndexTTS2EmotionVectorOption() throws {

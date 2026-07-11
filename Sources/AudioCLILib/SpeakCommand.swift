@@ -172,6 +172,9 @@ public struct SpeakCommand: ParsableCommand {
     @Option(name: .long, help: "[indextts2] Optional cap for long internal pauses, in seconds, from 0.05 to 2.0. Omit to keep raw model timing.")
     public var indextts2MaxPause: Float?
 
+    @Option(name: .customLong("indextts2-s2mel-steps"), help: "[indextts2] S2Mel flow steps (default 25; lower is faster)")
+    public var indextts2S2MelSteps: Int = 25
+
     // MARK: - F5-TTS-specific options
 
     @Option(name: .long, help: "[f5] HuggingFace model ID for the exported MLX bundle")
@@ -1093,7 +1096,8 @@ public struct SpeakCommand: ParsableCommand {
         do {
             return try IndexTTS2SynthesisOptions(
                 speakingRate: indextts2SpeakingRate,
-                maxInternalPauseDuration: indextts2MaxPause)
+                maxInternalPauseDuration: indextts2MaxPause,
+                s2MelSteps: indextts2S2MelSteps)
         } catch let error as AudioModelError {
             throw ValidationError(error.localizedDescription)
         }
