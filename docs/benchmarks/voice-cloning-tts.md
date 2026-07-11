@@ -25,6 +25,8 @@ Synth time excludes model load (Higgs/F5 report it directly); RSS from
 
 IndexTTS2 stage timing (via `INDEXTTS2_TIMING=1`): reference conditioning
 0.6 s, semantic GPT 12.9 s, S2Mel flow 1.8 s, BigVGAN 0.7 s.
+S2Mel step sweep (`--indextts2-s2mel-steps`, word-identical roundtrips):
+25 steps 1.95 s, 15 steps 1.14 s, 10 steps 0.73 s.
 
 ## Notes
 
