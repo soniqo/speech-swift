@@ -212,25 +212,31 @@ public final class MagpieTokenizer {
         }
     }
 
-    /// Lookup grouped phonemes: tokens within a group are concatenated
-    /// adjacent (no inter-token space); groups are separated by a single
-    /// space token. This matches NeMo `ChinesePhonemesTokenizer.encode`
-    /// behaviour where a phonemized syllable's pieces ride together and a
-    /// space marks the next syllable.
+    /// Lookup grouped phonemes as one flat adjacent stream — NeMo's
+    /// `ChinesePhonemesTokenizer.encode_from_g2p` emits the G2P output
+    /// verbatim with **no separator between syllables or words** (Chinese
+    /// text has none); only literal whitespace in the input becomes a space
+    /// token, deduplicated, and trailing spaces are dropped (the outer
+    /// `pad_with_space` re-wraps). Unknown tokens are skipped, mirroring
+    /// NeMo's warn-and-skip.
+    ///
+    /// Regression note: inserting a space token between every syllable
+    /// group here put ~half the sequence out of distribution and made the
+    /// model ignore the text conditioning entirely (free-running babble).
     private func lookupGroups(_ groups: [[String]]) -> [Int] {
         var ids: [Int] = []
         let space = tokenToId[" "]
-        var first = true
         for group in groups {
-            if !first, let sp = space { ids.append(sp) }
-            first = false
             for token in group {
-                if let id = tokenToId[token] {
+                if token == " " {
+                    if let sp = space, ids.last != sp { ids.append(sp) }
+                } else if let id = tokenToId[token] {
                     ids.append(id)
-                } else if let oov = oovId {
-                    ids.append(oov)
                 }
             }
+        }
+        if let sp = space {
+            while ids.last == sp { ids.removeLast() }
         }
         return ids
     }

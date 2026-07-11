@@ -182,13 +182,17 @@ final class E2EMagpieSynthesisTests: XCTestCase {
                  prompt: "Bonjour le monde, depuis le système de synthèse vocale.",
                  mustContain: ["bonjour", "le", "monde", "depuis",
                                "système", "synthèse", "vocale"]),
+            // Italian: greedy decoding stalls after the first word (the
+            // same pathology the Japanese case documents below), so use the
+            // library's stochastic defaults with a fixed seed.
             Case(lang: .italian,    asrLang: "italian",
                  speaker: .aria,
                  prompt: "Ciao mondo dal sistema di sintesi vocale.",
                  // "dal" → "del" is a common ASR / TTS rounding for the
                  // short function word; we accept either.
                  mustContain: ["ciao", "mondo", "sistema",
-                               "sintesi", "vocale"]),
+                               "sintesi", "vocale"],
+                 temperature: 0.6, topK: 80, maxSteps: 300, seed: 42),
             Case(lang: .vietnamese, asrLang: "vietnamese",
                  speaker: .aria,
                  prompt: "Xin chào thế giới từ hệ thống chuyển văn bản thành giọng nói.",

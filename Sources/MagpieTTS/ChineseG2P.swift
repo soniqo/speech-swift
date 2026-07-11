@@ -76,16 +76,21 @@ public final class MagpieChineseG2P {
             // word and this one as their own single-token groups so the
             // model sees commas / periods / spaces at the right positions.
             if cursor < range.lowerBound {
-                for scalar in text[cursor..<range.lowerBound].unicodeScalars {
-                    if !CharacterSet.whitespaces.contains(scalar) {
-                        groups.append([String(scalar)])
-                    }
-                }
+                Self.appendNonHan(text[cursor..<range.lowerBound], to: &groups)
             }
             cursor = range.upperBound
 
             let word = String(text[range])
-            if let pinyin = word.applyingTransform(.mandarinToLatin, reverse: false) {
+            // Route only Han words through the pinyin transform —
+            // `.mandarinToLatin` happily passes Latin text through, which
+            // would send e.g. "Ab" down the syllable-lookup path instead of
+            // NeMo's per-letter `ascii_letter_dict` treatment.
+            let containsHan = word.unicodeScalars.contains {
+                (0x4E00...0x9FFF).contains($0.value)      // CJK Unified
+                    || (0x3400...0x4DBF).contains($0.value)  // Extension A
+                    || (0xF900...0xFAFF).contains($0.value)  // Compat ideographs
+            }
+            if containsHan, let pinyin = word.applyingTransform(.mandarinToLatin, reverse: false) {
                 // A single word may emit multiple pinyin syllables separated
                 // by spaces, e.g. "世界" → "shì jiè" (two syllables).
                 for syllable in pinyin.split(separator: " ", omittingEmptySubsequences: true) {
@@ -95,21 +100,32 @@ public final class MagpieChineseG2P {
                 }
             } else {
                 // Non-Han content — punctuation, Latin runs, digits.
-                for scalar in word.unicodeScalars where !CharacterSet.whitespaces.contains(scalar) {
-                    groups.append([String(scalar)])
-                }
+                Self.appendNonHan(Substring(word), to: &groups)
             }
             return true
         }
         // Trailing punctuation after the last word.
         if cursor < text.endIndex {
-            for scalar in text[cursor..<text.endIndex].unicodeScalars {
-                if !CharacterSet.whitespaces.contains(scalar) {
-                    groups.append([String(scalar)])
-                }
-            }
+            Self.appendNonHan(text[cursor..<text.endIndex], to: &groups)
         }
         return groups
+    }
+
+    /// Non-Han segment → one group per scalar, matching NeMo's `ChineseG2p`
+    /// passthrough: ASCII letters are uppercased (`ascii_letter_dict` — the
+    /// zh sub-vocab carries A–Z only), whitespace runs collapse to a single
+    /// literal " " group (NeMo keeps text whitespace and dedupes adjacent
+    /// spaces at encode), everything else passes through unchanged.
+    private static func appendNonHan(_ segment: Substring, to groups: inout [[String]]) {
+        for scalar in segment.unicodeScalars {
+            if CharacterSet.whitespaces.contains(scalar) {
+                if groups.last != [" "] { groups.append([" "]) }
+            } else if scalar.isASCII, (65...90).contains(scalar.value) || (97...122).contains(scalar.value) {
+                groups.append([String(scalar).uppercased()])
+            } else {
+                groups.append([String(scalar)])
+            }
+        }
     }
 
     /// Convert one accented-vowel pinyin syllable to the `[ipa_phoneme...,
@@ -123,7 +139,9 @@ public final class MagpieChineseG2P {
             return [stripped.lowercased()]
         }
         var phonemes = ipa.split(separator: " ").map(String.init)
-        if tone > 0 { phonemes.append("#\(tone)") }
+        // Apple's transform leaves neutral-tone syllables unmarked; NeMo's
+        // pypinyin path runs `neutral_tone_with_five`, so neutral = "#5".
+        phonemes.append(tone > 0 ? "#\(tone)" : "#5")
         return phonemes
     }
 

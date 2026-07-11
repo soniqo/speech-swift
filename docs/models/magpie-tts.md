@@ -111,8 +111,15 @@ into NaturalLanguage). For each word `applyingTransform(.mandarinToLatin)`
 emits tone-marked pinyin (CLDR table picks the *contextual* reading, e.g.
 `世界` → `shì jiè` as a unit instead of char-by-char). Each pinyin
 syllable is then split into its IPA components via the bundled
-`Resources/cmudict_pinyin_zh.txt`, with `#1`–`#5` tone markers extracted
-from the combining diacritic.
+`Resources/cmudict_pinyin_zh.txt`, with `#1`–`#4` tone markers extracted
+from the combining diacritic and unmarked syllables emitting `#5`
+(NeMo's `neutral_tone_with_five`). The phoneme stream is **flat**: no
+separator between syllables or words — NeMo's `ChinesePhonemesTokenizer`
+emits the G2P output verbatim, and inserting spaces between syllables
+puts the sequence out of distribution (the model ignores the text and
+babbles). Literal whitespace collapses to a single space token, ASCII
+letters map per-letter to the uppercase-only zh sub-vocab, and unknown
+tokens are skipped.
 
 ### Japanese — `CFStringTokenizer` + heiban pitch
 
