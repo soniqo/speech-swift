@@ -11,16 +11,19 @@ allowed-tools: Bash
 Run unit and/or E2E tests.
 
 - `unit` (default): Quick tests, no model downloads. CI-safe.
-- `e2e`: Full pipeline tests with real models. Requires metallib + cached weights.
-- `all`: Both unit and E2E.
+- `e2e`: Full pipeline tests with real models, via `scripts/test_e2e_isolated.sh`
+  — one process per E2E suite. Never use plain `swift test` for the full E2E
+  suite: models accumulate in a single xctest process and can exhaust system
+  memory (observed: machine reboot).
+- `all`: Both unit and E2E (unit phase once, then isolated E2E suites).
 - Any other argument: passed as `--filter` to swift test.
 
 ```bash
 arg="${ARGUMENTS:-unit}"
 case "$arg" in
   unit) swift test --skip E2E 2>&1 | tail -20 ;;
-  e2e)  swift test 2>&1 | tail -30 ;;
-  all)  swift test 2>&1 | tail -30 ;;
+  e2e)  swift build --build-tests --disable-sandbox && ./scripts/build_mlx_metallib.sh debug && E2E_SKIP_UNIT=1 scripts/test_e2e_isolated.sh 2>&1 | tail -40 ;;
+  all)  swift build --build-tests --disable-sandbox && ./scripts/build_mlx_metallib.sh debug && scripts/test_e2e_isolated.sh 2>&1 | tail -40 ;;
   *)    swift test --filter "$arg" 2>&1 | tail -20 ;;
 esac
 ```

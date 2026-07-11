@@ -165,12 +165,23 @@ Run a single test:
 swift test --filter TestClassName/testMethodName --disable-sandbox
 ```
 
-Full local suite including E2E. Build the debug metallib first; tests may
-download models and require Apple Silicon GPU/ANE support:
+Full local suite including E2E — **never run it as a single `swift test`
+invocation**. All suites share one xctest process, each E2E suite loads
+multi-GB model weights, and nothing is released between suites, so a
+single-process run accumulates every model in RSS and can exhaust system
+memory (observed: hard machine reboot mid-suite). Use the isolated runner,
+which runs the unit phase once (CI semantics) and then each E2E class in
+its own process, bounding peak memory to the largest single suite:
 ```bash
-make debug
-swift test --disable-sandbox
+swift build --build-tests --disable-sandbox
+./scripts/build_mlx_metallib.sh debug
+scripts/test_e2e_isolated.sh
 ```
+Per-suite logs and a pass/fail summary land in `.e2e-logs/`. Knobs:
+`E2E_ONLY_FILTER=<substring>` runs matching E2E classes only,
+`E2E_SKIP_FILE=<file of Module.Class lines>` resumes an interrupted run,
+`E2E_SKIP_UNIT=1` skips the unit phase. Tests may download models and
+require Apple Silicon GPU/ANE support.
 
 ### Testing requirements for new code
 
