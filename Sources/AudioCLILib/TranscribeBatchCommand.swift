@@ -135,10 +135,17 @@ public struct TranscribeBatchCommand: ParsableCommand {
                 totalAudio += groupAudioDuration
                 let groupRTF = elapsed / max(groupAudioDuration, 0.001)
 
+                // Per-row `time` is the group elapsed split evenly across
+                // rows, not a real per-row measurement. The default
+                // `transcribeBatch` path runs decoder forwards serially so
+                // each row contributes ≈ equally per decode step; an even
+                // split is more honest than prorating by audio duration,
+                // which would over-credit longer chunks. Use `batch_time`
+                // when you need a true wall-clock measure.
+                let allocatedPerRow = elapsed / Double(loaded.count)
                 for (item, result) in zip(loaded, results) {
                     let pct = Double(item.globalIndex + 1) / Double(files.count) * 100
-                    let allocatedElapsed = elapsed * (item.duration / max(groupAudioDuration, 0.001))
-                    let itemRTF = allocatedElapsed / max(item.duration, 0.001)
+                    let itemRTF = allocatedPerRow / max(item.duration, 0.001)
 
                     if jsonl {
                         let escaped = result
@@ -146,11 +153,11 @@ public struct TranscribeBatchCommand: ParsableCommand {
                             .replacingOccurrences(of: "\"", with: "\\\"")
                         print("{\"file\":\"\(item.name)\",\"text\":\"\(escaped)\","
                             + String(format: "\"time\":%.3f,\"rtf\":%.4f,\"duration\":%.2f,\"batch_time\":%.3f,\"batch_rtf\":%.4f,\"batch_size\":%d}",
-                                     allocatedElapsed, itemRTF, item.duration, elapsed, groupRTF, loaded.count))
+                                     allocatedPerRow, itemRTF, item.duration, elapsed, groupRTF, loaded.count))
                     } else {
                         print(String(format: "  [%d/%d] (%.0f%%) %@: %@  (%.2fs allocated, batch %.2fs, RTF=%.3f)",
                                      item.globalIndex + 1, files.count, pct, item.name, result,
-                                     allocatedElapsed, elapsed, itemRTF))
+                                     allocatedPerRow, elapsed, itemRTF))
                     }
 
                     if let outDir = outDir {

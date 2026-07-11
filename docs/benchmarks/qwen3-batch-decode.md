@@ -141,6 +141,12 @@ batch size 2 on repeated test chunks, where row 0 completes the sentence and
 row 1 truncates after "Can you guarantee". It remains behind
 `QWEN3_ASR_EXPERIMENTAL_BATCH_DECODE=1`.
 
+`Tests/Qwen3ASRTests/E2EQwen3ASRExperimentalBatchedDecodeTests.swift` locks
+this in: it skips when the env var is unset and asserts the truncation diff
+inside `XCTExpectFailure` when set. Once the path is fixed, the expected
+failure goes unsatisfied and the test flips red — that's the signal to drop
+the env-var gate and (likely) the experimental code.
+
 The next instrumentation step is to add an internal Qwen3-ASR metrics path
 that returns:
 

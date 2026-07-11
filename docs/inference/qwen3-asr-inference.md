@@ -86,12 +86,28 @@ let texts = model.transcribeBatch(
 
 By default this API preserves the same per-chunk greedy semantics as
 `transcribe(audio:)`, while sharing one CPU token synchronization across the
-batch at each decode step. The experimental MLX decoder batch can be enabled
-with `QWEN3_ASR_EXPERIMENTAL_BATCH_DECODE=1` while developing the true
-batched-GEMM scheduler, but it must be benchmarked against repeated identical
-chunks before being treated as production-safe. Non-greedy decoding options
-always fall back to the existing per-chunk path because they pull logits to CPU
-for sampling/repetition logic.
+batch at each decode step.
+
+Non-greedy decoding options always fall back to serial per-chunk
+`transcribe(audio:)` calls because repetition penalty, n-gram masking, and
+temperature sampling each need CPU-side logits at every decode step that the
+batched path doesn't surface. "Non-greedy" means any of:
+
+- `repetitionPenalty != 1.0`
+- `noRepeatNgramSize > 0`
+- `temperature > 0.0`
+
+The gate is `Qwen3ASRModel.isGreedyFastPath`, locked in by unit tests in
+`Tests/Qwen3ASRTests/Qwen3ASRBatchedDecodeTests.swift` (one per non-greedy
+flag) and an E2E `testBatchFallsBackToSerialForNonGreedyOptions` that asserts
+batched output equals per-chunk serial output when non-greedy options are set.
+
+The experimental MLX decoder batch can be enabled with
+`QWEN3_ASR_EXPERIMENTAL_BATCH_DECODE=1` while developing the true
+batched-GEMM scheduler. It currently truncates row 1 at batch size 2 on
+repeated identical chunks; that bug is locked in by
+`E2EQwen3ASRExperimentalBatchedDecodeTests` so the gate is a hard constraint,
+not a soft warning.
 
 The current experimental true-batch path batches only equal-length encoder
 outputs. Mixed-duration inputs are grouped by encoder sequence length, decoded
@@ -104,6 +120,15 @@ CLI usage:
 ```bash
 audio transcribe-batch ./chunks --engine qwen3 --model 1.7B-8bit --batch-size 4
 ```
+
+The JSONL output exposes both per-row and per-batch timings:
+
+- `time` / `rtf` — per-row inference time and RTF. The default path runs
+  decoder forwards serially per row, so this is the group elapsed split
+  evenly across rows in the batch. It is an attribution, not a measured
+  per-row wall-clock.
+- `batch_time` / `batch_rtf` — true wall-clock for the whole group; use
+  these when computing aggregate throughput.
 
 Experimental batched decoder run:
 

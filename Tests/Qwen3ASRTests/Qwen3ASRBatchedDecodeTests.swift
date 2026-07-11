@@ -81,18 +81,36 @@ final class Qwen3ASRBatchedDecodeTests: XCTestCase {
         ])
     }
 
-    func testBatchCausalMaskShapeAndValues() {
-        let mask = Qwen3ASRModel.buildBatchedCausalMask(seqLen: 3, dtype: .float32)
+    // The greedy fast path is the only path that can run the batched decoder.
+    // Anything that needs CPU-side logits (repetition penalty, n-gram mask,
+    // temperature sampling) must drop back to serial per-chunk transcribe so
+    // those checks stay correct. These assertions lock in the exact gate so
+    // a future refactor cannot silently let non-greedy options reach the
+    // batched path.
 
-        XCTAssertEqual(mask.shape, [1, 1, 3, 3])
-        XCTAssertEqual(mask[0, 0, 0, 0].item(Float.self), 0)
-        XCTAssertLessThan(mask[0, 0, 0, 1].item(Float.self), -1e8)
-        XCTAssertLessThan(mask[0, 0, 0, 2].item(Float.self), -1e8)
-        XCTAssertEqual(mask[0, 0, 1, 0].item(Float.self), 0)
-        XCTAssertEqual(mask[0, 0, 1, 1].item(Float.self), 0)
-        XCTAssertLessThan(mask[0, 0, 1, 2].item(Float.self), -1e8)
-        XCTAssertEqual(mask[0, 0, 2, 0].item(Float.self), 0)
-        XCTAssertEqual(mask[0, 0, 2, 1].item(Float.self), 0)
-        XCTAssertEqual(mask[0, 0, 2, 2].item(Float.self), 0)
+    func testIsGreedyFastPathTrueForDefaultOptions() {
+        XCTAssertTrue(Qwen3ASRModel.isGreedyFastPath(Qwen3DecodingOptions()))
     }
+
+    func testIsGreedyFastPathFalseForRepetitionPenalty() {
+        XCTAssertFalse(Qwen3ASRModel.isGreedyFastPath(Qwen3DecodingOptions(repetitionPenalty: 1.1)))
+    }
+
+    func testIsGreedyFastPathFalseForNoRepeatNgram() {
+        XCTAssertFalse(Qwen3ASRModel.isGreedyFastPath(Qwen3DecodingOptions(noRepeatNgramSize: 3)))
+    }
+
+    func testIsGreedyFastPathFalseForTemperature() {
+        XCTAssertFalse(Qwen3ASRModel.isGreedyFastPath(Qwen3DecodingOptions(temperature: 0.5)))
+    }
+
+    func testIsGreedyFastPathFalseForCombinedNonGreedyOptions() {
+        let opts = Qwen3DecodingOptions(
+            repetitionPenalty: 1.15,
+            noRepeatNgramSize: 3,
+            temperature: 0.2
+        )
+        XCTAssertFalse(Qwen3ASRModel.isGreedyFastPath(opts))
+    }
+
 }
