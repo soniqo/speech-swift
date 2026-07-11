@@ -188,6 +188,7 @@ public class CoreMLASRModel {
         // change. The ``argmax(skipping:)`` / ``logit(_:at:)`` helpers
         // stay for that future work.
         var generatedTokens: [Int32] = []
+        let imEndId: Int32 = 151645
         var nextToken = decoder.argmax(logits: logits)
         // First-token EOS would mean the model thinks the audio yielded an
         // empty transcript — never right on real speech. Cheap to guard.
@@ -312,6 +313,7 @@ public class CoreMLASRModel {
         }
 
         var generatedTokens: [Int32] = []
+        let imEndId: Int32 = 151645
         var nextToken = decoder.argmax(logits: logits)
         if nextToken == imEndId {
             nextToken = decoder.argmax(logits: logits, skipping: imEndId)
