@@ -1,0 +1,22 @@
+warning: 'speech-swift-magpie-fix': dependency 'mlx-swift-lm' is not used by any target
+[0/3] Write swift-version--58304C5D6DBC2206.txt
+[0/1] Planning build
+[1/1] Compiling plugin GenerateManual
+[2/2] Compiling plugin GenerateDoccReference
+[3/3] Compiling plugin CudaBuild
+Building for debugging...
+[3/20] Write sources
+[4/20] Write swift-version--58304C5D6DBC2206.txt
+[6/16] Emitting module MagpieTTS
+[7/16] Compiling MagpieTTS ChineseG2P.swift
+[7/21] Write Objects.LinkFileList
+[12/21] Linking audio
+[13/21] Applying audio
+[14/21] Linking speech
+[15/21] Applying speech
+[16/21] Linking audio-server
+[17/21] Linking speech-server
+[18/21] Applying audio-server
+[19/21] Applying speech-server
+[20/21] Linking Qwen3SpeechPackageTests
+Build complete! (8.03s)
