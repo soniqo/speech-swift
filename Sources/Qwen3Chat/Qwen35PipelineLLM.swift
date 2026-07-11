@@ -62,11 +62,14 @@ public final class Qwen35PipelineLLM: PipelineLLM {
                     self.onToken?(chunk)
                     onToken(chunk, false)
                 }
-            } catch { }
-
-            if !fullResponse.isEmpty {
-                onToken("", true)
+            } catch {
+                FileHandle.standardError.write(Data("Qwen35PipelineLLM: generation failed: \(error)\n".utf8))
             }
+
+            // ALWAYS send the final marker — even for an empty or failed generation. Consumers
+            // (voice pipelines) block their turn on it; skipping it on empty output left them
+            // waiting forever ("stuck thinking") with the error swallowed.
+            onToken("", true)
             semaphore.signal()
         }
 
