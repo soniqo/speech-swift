@@ -35,6 +35,16 @@ struct TDTGreedyDecoder {
     let config: ParakeetConfig
     let decoder: MLModel
     let joint: MLModel
+    /// Language-tag token IDs to suppress during argmax, so the decoder can only emit an allowed
+    /// language and the transcription follows it. Empty = no steering (native auto-detect).
+    let maskedTokenIds: Set<Int>
+
+    init(config: ParakeetConfig, decoder: MLModel, joint: MLModel, maskedTokenIds: Set<Int> = []) {
+        self.config = config
+        self.decoder = decoder
+        self.joint = joint
+        self.maskedTokenIds = maskedTokenIds
+    }
 
     /// Decode encoded audio representations into token IDs with per-token log-probabilities.
     ///
@@ -97,7 +107,7 @@ struct TDTGreedyDecoder {
             let tokenLogits = jointOut.featureValue(for: "token_logits")!.multiArrayValue!
             let durationLogits = jointOut.featureValue(for: "duration_logits")!.multiArrayValue!
 
-            let tokenId = argmax(tokenLogits, count: config.vocabSize + 1, floatBuf: argmaxBuf)
+            let tokenId = argmax(tokenLogits, count: config.vocabSize + 1, floatBuf: argmaxBuf, masked: maskedTokenIds)
 
             if tokenId == config.blankTokenId {
                 t += 1
@@ -177,10 +187,10 @@ struct TDTGreedyDecoder {
 
     /// Find the index of the maximum value in the first `count` elements.
     /// Uses vDSP for large arrays (token logits); scalar for small arrays (duration logits).
-    private func argmax(_ array: MLMultiArray, count: Int, floatBuf: UnsafeMutablePointer<Float>?) -> Int {
+    private func argmax(_ array: MLMultiArray, count: Int, floatBuf: UnsafeMutablePointer<Float>?, masked: Set<Int> = []) -> Int {
         let ptr = array.dataPointer.assumingMemoryBound(to: Float16.self)
 
-        // Small arrays or no buffer: scalar path
+        // Small arrays or no buffer: scalar path (duration logits; never masked)
         if count <= 16 || floatBuf == nil {
             var maxIdx = 0
             var maxVal = ptr[0]
@@ -195,6 +205,10 @@ struct TDTGreedyDecoder {
 
         // Large arrays: convert Float16→Float, then vDSP_maxvi
         for i in 0..<count { floatBuf![i] = Float(ptr[i]) }
+        // Suppress disallowed tags so only requested language tags can condition the decode.
+        for id in masked where id >= 0 && id < count {
+            floatBuf![id] = -Float.greatestFiniteMagnitude
+        }
         var maxVal: Float = 0
         var maxIdx: vDSP_Length = 0
         vDSP_maxvi(floatBuf!, 1, &maxVal, &maxIdx, vDSP_Length(count))

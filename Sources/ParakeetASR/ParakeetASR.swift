@@ -85,7 +85,9 @@ public class ParakeetASRModel {
     /// - Parameters:
     ///   - audio: PCM Float32 audio samples
     ///   - sampleRate: Sample rate of the input audio in Hz
-    ///   - language: Language hint (unused, Parakeet auto-detects from 25 European languages)
+    ///   - language: Language steering — a comma-separated shortlist of ISO codes ("en", or
+    ///     "en,ru" for bilingual). The decoder is masked so it can only emit these languages'
+    ///     tags. Empty/nil (default) lets the model auto-detect natively.
     /// - Returns: Transcribed text
     /// - Throws: `AudioModelError` on CoreML inference failure
     public func transcribeAudio(_ audio: [Float], sampleRate: Int, language: String? = nil) throws -> String {
@@ -110,12 +112,18 @@ public class ParakeetASRModel {
         // has no EnumeratedShapes) transcribe arbitrarily long audio instead
         // of truncating to the tail.
         let maxWindow = supportedMelLengths.last ?? melLength
+        // Language steering: a per-call language wins; otherwise fall back to the persistent
+        // override. Empty/nil both mean auto-detect.
+        let effectiveLanguage = Self.effectiveLanguageHint(
+            perCall: language,
+            override: languageOverride)
+        let masked = vocabulary.maskedLanguageTokenIds(allowing: effectiveLanguage)
         let tInfer0 = CFAbsoluteTimeGetCurrent()
         var tokenIds: [Int] = []
         var tokenLogProbs: [Float] = []
 
         if melLength <= maxWindow {
-            let r = try encodeAndDecodeWindow(mel: mel, actualLength: melLength)
+            let r = try encodeAndDecodeWindow(mel: mel, actualLength: melLength, maskedTokenIds: masked)
             tokenIds = r.tokens; tokenLogProbs = r.tokenLogProbs
         } else {
             // The mel buffer is [1, 128, bufferFrames] where bufferFrames
@@ -128,7 +136,7 @@ public class ParakeetASRModel {
             while start < melLength {
                 let win = min(maxWindow, melLength - start)
                 let windowMel = try sliceMel(mel: mel, start: start, length: win, totalFrames: bufferFrames)
-                let r = try encodeAndDecodeWindow(mel: windowMel, actualLength: win)
+                let r = try encodeAndDecodeWindow(mel: windowMel, actualLength: win, maskedTokenIds: masked)
                 tokenIds += r.tokens; tokenLogProbs += r.tokenLogProbs
                 start += maxWindow; windows += 1
             }
@@ -155,15 +163,24 @@ public class ParakeetASRModel {
     }
 
     /// Encode one mel window and run TDT greedy decode on it.
-    private func encodeAndDecodeWindow(mel: MLMultiArray, actualLength: Int)
+    private func encodeAndDecodeWindow(mel: MLMultiArray, actualLength: Int, maskedTokenIds: Set<Int> = [])
         throws -> (tokens: [Int], tokenLogProbs: [Float], confidence: Float)
     {
         let (paddedMel, effectiveLength) = try padMelToSupportedShape(mel: mel, actualLength: actualLength)
         let encoderOutput = try runEncoder(mel: paddedMel, length: effectiveLength)
         let encoded = encoderOutput.featureValue(for: "encoded")!.multiArrayValue!
         let encodedLength = encoderOutput.featureValue(for: "encoded_length")!.multiArrayValue![0].intValue
-        let tdtDecoder = TDTGreedyDecoder(config: config, decoder: decoder!, joint: joint!)
+        let tdtDecoder = TDTGreedyDecoder(config: config, decoder: decoder!, joint: joint!, maskedTokenIds: maskedTokenIds)
         return try tdtDecoder.decode(encoded: encoded, encodedLength: encodedLength)
+    }
+
+    /// Persistent language steering applied when a per-call `language` isn't given. Accepts an
+    /// ISO code / shortlist ("en", "en,ru"), or nil for auto-detect.
+    public var languageOverride: String?
+
+    static func effectiveLanguageHint(perCall: String?, override: String?) -> String? {
+        let trimmed = perCall?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed?.isEmpty == false ? trimmed : override
     }
 
     /// Copy frames `[start, start+length)` out of a `[1, 128, totalFrames]`

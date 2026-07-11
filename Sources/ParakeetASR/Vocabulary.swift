@@ -12,9 +12,46 @@ public struct ParakeetVocabulary: Sendable {
     /// Number of tokens in the vocabulary (excluding blank).
     public var count: Int { idToToken.count }
 
+    /// Token IDs of language tags (`<|xx|>` for ISO codes, id >= 24 so control tokens like
+    /// `<|pnc|>` / `<|timestamp|>` / `<|predict_lang|>` at 0..23 are excluded), keyed by
+    /// lowercase language code. Used to steer greedy decoding to a chosen language by masking
+    /// the others.
+    public let languageTagIds: [String: Int]
+
     /// Initialize from a pre-loaded dictionary.
     public init(idToToken: [Int: String]) {
         self.idToToken = idToToken
+        self.languageTagIds = Self.extractLanguageTags(from: idToToken)
+    }
+
+    /// Pull `<|xx|>` language tags out of the vocab. Control tokens (`<|pnc|>`, `<|emo:...|>`,
+    /// `<|predict_lang|>`, …) all sit below id 24, so an id + shape filter isolates the
+    /// per-language tags cleanly.
+    private static func extractLanguageTags(from idToToken: [Int: String]) -> [String: Int] {
+        var map = [String: Int]()
+        for (id, token) in idToToken where id >= 24 {
+            guard token.hasPrefix("<|"), token.hasSuffix("|>") else { continue }
+            let code = token.dropFirst(2).dropLast(2)
+            guard (2...3).contains(code.count), code.allSatisfy({ $0.isLetter && $0.isLowercase })
+            else { continue }
+            map[String(code)] = id
+        }
+        return map
+    }
+
+    /// Resolve the language-tag IDs that should be suppressed for a comma-separated allowlist.
+    /// Unknown-only input leaves native auto-detection unchanged instead of masking every tag.
+    func maskedLanguageTokenIds(allowing language: String?) -> Set<Int> {
+        guard let language else { return [] }
+        let requested = language.lowercased()
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !requested.isEmpty else { return [] }
+
+        let allowedIds = Set(requested.compactMap { languageTagIds[$0] })
+        guard !allowedIds.isEmpty else { return [] }
+        return Set(languageTagIds.values).subtracting(allowedIds)
     }
 
     /// Load vocabulary from a `vocab.json` file.
