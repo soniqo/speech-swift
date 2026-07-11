@@ -82,7 +82,26 @@ public enum HuggingFaceDownloader {
             AudioLog.download.debug("Could not list directory \(directory.path): \(error)")
             contents = []
         }
-        return contents.contains { weightFileExtensions.contains($0.pathExtension) }
+        guard contents.contains(where: { weightFileExtensions.contains($0.pathExtension) }) else {
+            return false
+        }
+        // A multi-shard bundle is only complete when every shard named in
+        // its index is present — a stalled download can leave later shards
+        // fully written while earlier ones are missing, and a half-loaded
+        // model runs with random weights (observed as near-silent TTS).
+        let indexURL = directory.appendingPathComponent("model.safetensors.index.json")
+        if fm.fileExists(atPath: indexURL.path),
+            let data = try? Data(contentsOf: indexURL),
+            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let weightMap = json["weight_map"] as? [String: String]
+        {
+            for shard in Set(weightMap.values)
+            where !fm.fileExists(atPath: directory.appendingPathComponent(shard).path) {
+                AudioLog.download.debug("weightsExist: missing shard \(shard) in \(directory.path)")
+                return false
+            }
+        }
+        return true
     }
 
     // MARK: - Download
@@ -147,7 +166,7 @@ public enum HuggingFaceDownloader {
         var lastError: Error?
         for attempt in 1...maxAttempts {
             do {
-                try await withDownloadStallGuard(modelId: modelId) { reportProgress in
+                try await withDownloadStallGuard(modelId: modelId, watchDirectory: directory) { reportProgress in
                     try await hub.snapshot(from: repo, matching: globs) { progress in
                         reportProgress(progress.fractionCompleted)
                         progressHandler?(progress.fractionCompleted)
@@ -194,7 +213,7 @@ public enum HuggingFaceDownloader {
         var lastError: Error?
         for attempt in 1...maxAttempts {
             do {
-                try await withDownloadStallGuard(modelId: modelId) { reportProgress in
+                try await withDownloadStallGuard(modelId: modelId, watchDirectory: directory) { reportProgress in
                     try await hub.snapshot(from: repo, matching: globs) { progress in
                         reportProgress(progress.fractionCompleted)
                         progressHandler?(progress.fractionCompleted)
@@ -369,6 +388,23 @@ public enum HuggingFaceDownloader {
         }
     }
 
+    /// Total bytes under `directory`, including in-flight partial files in
+    /// hidden subdirectories (HubApi writes `.incomplete` files under
+    /// `.cache/huggingface/download/`).
+    private static func directorySize(of directory: URL) -> Int64 {
+        let fm = FileManager.default
+        guard let enumerator = fm.enumerator(
+            at: directory, includingPropertiesForKeys: [.fileSizeKey], options: [])
+        else { return 0 }
+        var total: Int64 = 0
+        for case let url as URL in enumerator {
+            if let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize {
+                total += Int64(size)
+            }
+        }
+        return total
+    }
+
     /// Run a download `operation` that reports fractional progress, and
     /// abort it if progress stalls for `downloadStallTimeoutSeconds`.
     /// On stall the in-flight `hub.snapshot` task is cancelled (URLSession
@@ -377,6 +413,7 @@ public enum HuggingFaceDownloader {
     static func withDownloadStallGuard(
         modelId: String,
         stallTimeoutSeconds: Int? = nil,
+        watchDirectory: URL? = nil,
         _ operation: @escaping (@escaping @Sendable (Double) -> Void) async throws -> Void
     ) async throws {
         let stall = stallTimeoutSeconds ?? downloadStallTimeoutSeconds
@@ -389,9 +426,26 @@ public enum HuggingFaceDownloader {
             group.addTask {
                 // Poll on a fraction of the window so we detect a stall
                 // within ~stall..stall+pollStep seconds.
+                //
+                // `hub.snapshot` only fires its progress callback at file
+                // completion, so a single shard that takes longer than the
+                // stall window to transfer produces zero callbacks and a
+                // healthy download would be killed (a 4.3 GB shard at
+                // ~10 MB/s needs ~430 s against a 300 s window — VoxCPM2
+                // bf16 could never finish). Bytes appearing on disk are
+                // download progress, so also tick whenever the destination
+                // directory grows.
                 let pollStep = max(1, stall / 3)
+                var lastSize = watchDirectory.map(Self.directorySize(of:)) ?? 0
                 while true {
                     try await Task.sleep(for: .seconds(pollStep))
+                    if let dir = watchDirectory {
+                        let size = Self.directorySize(of: dir)
+                        if size != lastSize {
+                            lastSize = size
+                            clock.tick()
+                        }
+                    }
                     if clock.idleSeconds() >= Double(stall) {
                         throw DownloadError.stalled(modelId: modelId, seconds: stall)
                     }
