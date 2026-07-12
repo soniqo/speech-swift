@@ -134,7 +134,7 @@ final class IndexTTS2SemanticGPT {
         generated.reserveCapacity(options.maxSemanticTokens)
         var rng = IndexTTS2SeededRNG(seed: options.seed)
 
-        var cache = GPTKVCache(layerCount: config.gpt.layers)
+        var cache = BatchedGPTKVCache(layerCount: config.gpt.layers)
         var logits = prefillMelLogits(prefixText: prefixText, cache: &cache)
         for _ in 0..<options.maxSemanticTokens {
             let next = sampleToken(logits, previousTokens: generated, options: options, rng: &rng)
@@ -242,16 +242,19 @@ final class IndexTTS2SemanticGPT {
         // sequence (equal lengths by construction). Beam selection reorders
         // rows with a gather instead of forking per-beam caches.
         var active = [SemanticBeam(tokens: [], score: 0, ended: false)]
-        var cache = GPTKVCache(layerCount: config.gpt.layers)
+        var cache = BatchedGPTKVCache(layerCount: config.gpt.layers)
         var batchedLogits = prefillMelLogits(prefixText: prefixText, cache: &cache)
         var completed: [SemanticBeam] = []
+        var profile = BeamLoopProfile()
 
-        for _ in 0..<options.maxSemanticTokens {
+        for step in 0..<options.maxSemanticTokens {
             var candidates: [SemanticCandidate] = []
             let vocab = batchedLogits.dim(-1)
+            var phaseStart = CFAbsoluteTimeGetCurrent()
             let floatLogits = batchedLogits.asType(.float32)
             let logProbs = floatLogits - floatLogits.logSumExp(axis: -1, keepDims: true)
             let allScores = logProbs.asArray(Float.self)
+            profile.record(.eval, since: &phaseStart, warmup: step == 0)
 
             for (beamIndex, beam) in active.enumerated() {
                 var scores = Array(allScores[(beamIndex * vocab)..<((beamIndex + 1) * vocab)])
@@ -316,6 +319,7 @@ final class IndexTTS2SemanticGPT {
 
             active = nextActive
             completed = bestBeams(completed, count: width, lengthPenalty: options.lengthPenalty)
+            profile.record(.host, since: &phaseStart, warmup: step == 0)
             if active.isEmpty || isBeamSampleDone(
                 active: active,
                 completed: completed,
@@ -325,12 +329,14 @@ final class IndexTTS2SemanticGPT {
                 break
             }
 
-            cache = gatherCache(cache, parents: parents)
+            cache.reorderRows(parents)
             batchedLogits = batchedStepMelLogits(
                 tokens: stepTokens,
                 melIndex: active[0].tokens.count,
                 cache: &cache)
+            profile.record(.build, since: &phaseStart, warmup: step == 0)
         }
+        profile.report()
 
         let final = bestBeams(
             completed + active,
@@ -733,14 +739,109 @@ final class IndexTTS2SemanticGPT {
 
     // MARK: - GPT
 
-    /// Per-layer key/value cache for incremental GPT decoding. Value
-    /// semantics: copying the struct shares the immutable arrays, so beam
-    /// branches can fork a parent's cache for free.
-    struct GPTKVCache {
+    /// Per-layer key/value store for incremental GPT decoding. `update`
+    /// appends one step's `[B, heads, T, headDim]` keys/values for a layer
+    /// and returns the full history to attend over; `commit` is called once
+    /// per forward pass after every layer has appended `tokens` timesteps.
+    protocol GPTKeyValueCache {
+        mutating func update(
+            layer: Int, keys: MLXArray, values: MLXArray
+        ) -> (keys: MLXArray, values: MLXArray)
+        mutating func commit(tokens: Int)
+    }
+
+    /// Concat-per-step cache with value semantics: copying the struct shares
+    /// the immutable arrays, so the greedy beam path can fork a parent's
+    /// cache for free.
+    struct GPTKVCache: GPTKeyValueCache {
         var layers: [(keys: MLXArray, values: MLXArray)?]
 
         init(layerCount: Int) {
             layers = Array(repeating: nil, count: layerCount)
+        }
+
+        mutating func update(
+            layer: Int, keys: MLXArray, values: MLXArray
+        ) -> (keys: MLXArray, values: MLXArray) {
+            var k = keys
+            var v = values
+            if let past = layers[layer] {
+                k = concatenated([past.keys, k], axis: 2)
+                v = concatenated([past.values, v], axis: 2)
+            }
+            layers[layer] = (keys: k, values: v)
+            return (k, v)
+        }
+
+        mutating func commit(tokens: Int) {}
+    }
+
+    /// Cache for the batched sampling paths: buffers are preallocated in
+    /// fixed-size chunks and written in place, replacing the two O(history)
+    /// `concatenated` copies per layer per step with one O(step) slice
+    /// write. Reference semantics — the batched paths hold exactly one
+    /// cache and reorder beam rows in place; the fork-by-value greedy beam
+    /// path must stay on `GPTKVCache`.
+    final class BatchedGPTKVCache: GPTKeyValueCache {
+        private static let chunk = 256
+
+        private var buffers: [(keys: MLXArray, values: MLXArray)?]
+        private var offset = 0
+
+        init(layerCount: Int) {
+            buffers = Array(repeating: nil, count: layerCount)
+        }
+
+        func update(
+            layer: Int, keys: MLXArray, values: MLXArray
+        ) -> (keys: MLXArray, values: MLXArray) {
+            let end = offset + keys.dim(2)
+            let rounded = (end + Self.chunk - 1) / Self.chunk * Self.chunk
+            if buffers[layer] == nil {
+                let shape = [keys.dim(0), keys.dim(1), rounded, keys.dim(3)]
+                buffers[layer] = (
+                    keys: MLX.zeros(shape, dtype: keys.dtype),
+                    values: MLX.zeros(shape, dtype: values.dtype))
+            } else if end > buffers[layer]!.keys.dim(2) {
+                let entry = buffers[layer]!
+                let pad = [entry.keys.dim(0), entry.keys.dim(1),
+                           rounded - entry.keys.dim(2), entry.keys.dim(3)]
+                buffers[layer] = (
+                    keys: concatenated(
+                        [entry.keys, MLX.zeros(pad, dtype: entry.keys.dtype)], axis: 2),
+                    values: concatenated(
+                        [entry.values, MLX.zeros(pad, dtype: entry.values.dtype)], axis: 2))
+            }
+            let entry = buffers[layer]!
+            entry.keys[0..., 0..., offset ..< end, 0...] = keys
+            entry.values[0..., 0..., offset ..< end, 0...] = values
+            return (
+                keys: entry.keys[0..., 0..., 0 ..< end, 0...],
+                values: entry.values[0..., 0..., 0 ..< end, 0...])
+        }
+
+        func commit(tokens: Int) {
+            offset += tokens
+        }
+
+        /// Reorders/duplicates the batch rows so row `i` continues
+        /// `parents[i]`'s sequence — the beam-search shuffle. No-op when
+        /// every beam continues its own row.
+        func reorderRows(_ parents: [Int]) {
+            if let entry = buffers.compactMap({ $0 }).first,
+                entry.keys.dim(0) == parents.count,
+                parents.enumerated().allSatisfy({ $0.offset == $0.element })
+            {
+                return
+            }
+            let ids = MLXArray(parents.map(Int32.init))
+            for layer in buffers.indices {
+                if let entry = buffers[layer] {
+                    buffers[layer] = (
+                        keys: take(entry.keys, ids, axis: 0),
+                        values: take(entry.values, ids, axis: 0))
+                }
+            }
         }
     }
 
@@ -754,17 +855,23 @@ final class IndexTTS2SemanticGPT {
     /// generation-time position mapping (index 0 -> position 0, index i -> i + 1).
     private func melTokenEmbedding(_ token: Int32, melIndex: Int) -> MLXArray {
         let tok = embed([token], key: "mel_embedding.weight")
+        return tok + melPositionEmbedding(melIndex: melIndex, dtype: tok.dtype)
+    }
+
+    /// One row of the mel position table as `[1, 1, D]`, sliced on device so
+    /// per-step lookups don't upload an index array from the host.
+    private func melPositionEmbedding(melIndex: Int, dtype: DType) -> MLXArray {
         let position = melIndex == 0 ? 0 : melIndex + 1
-        let pos = weights["mel_pos_embedding.emb.weight"]!
-            .take(MLXArray([Int32(position)], [1]), axis: 0)
+        return weights["mel_pos_embedding.emb.weight"]![position ..< (position + 1)]
             .expandedDimensions(axis: 0)
-            .asType(tok.dtype)
-        return tok + pos
+            .asType(dtype)
     }
 
     /// Prefills the cache with the conditioning/text prefix plus the start-mel
     /// token and returns logits for the first generated token.
-    private func prefillMelLogits(prefixText: MLXArray, cache: inout GPTKVCache) -> MLXArray {
+    private func prefillMelLogits<Cache: GPTKeyValueCache>(
+        prefixText: MLXArray, cache: inout Cache
+    ) -> MLXArray {
         let start = melTokenEmbedding(Int32(config.gpt.startMelToken), melIndex: 0)
         let hidden = gptCachedForward(concatenated([prefixText, start], axis: 1), cache: &cache)
         return melLogits(fromHidden: hidden)
@@ -773,57 +880,37 @@ final class IndexTTS2SemanticGPT {
     /// Feeds one generated token through the cached GPT and returns logits
     /// for the next token. `melIndex` is the token's index in the mel input
     /// (`[start] + generated`).
-    private func stepMelLogits(token: Int32, melIndex: Int, cache: inout GPTKVCache) -> MLXArray {
+    private func stepMelLogits<Cache: GPTKeyValueCache>(
+        token: Int32, melIndex: Int, cache: inout Cache
+    ) -> MLXArray {
         let hidden = gptCachedForward(melTokenEmbedding(token, melIndex: melIndex), cache: &cache)
         return melLogits(fromHidden: hidden)
-    }
-
-    /// Reorders/duplicates the cache's batch rows so row `i` of the result
-    /// continues `parents[i]`'s sequence — the beam-search shuffle.
-    private func gatherCache(_ cache: GPTKVCache, parents: [Int]) -> GPTKVCache {
-        if let entry = cache.layers.compactMap({ $0 }).first,
-            entry.keys.dim(0) == parents.count,
-            parents.enumerated().allSatisfy({ $0.offset == $0.element })
-        {
-            return cache
-        }
-        var result = cache
-        let ids = MLXArray(parents.map(Int32.init))
-        for layer in cache.layers.indices {
-            if let entry = cache.layers[layer] {
-                result.layers[layer] = (
-                    keys: take(entry.keys, ids, axis: 0),
-                    values: take(entry.values, ids, axis: 0))
-            }
-        }
-        return result
     }
 
     /// Feeds one token per beam (all at the same mel index) through the
     /// cached GPT as a single batched forward; returns `[beams, vocab]` logits.
     private func batchedStepMelLogits(
-        tokens: [Int32], melIndex: Int, cache: inout GPTKVCache
+        tokens: [Int32], melIndex: Int, cache: inout BatchedGPTKVCache
     ) -> MLXArray {
         let tok = embed(tokens, key: "mel_embedding.weight").transposed(1, 0, 2)
-        let position = melIndex == 0 ? 0 : melIndex + 1
-        let pos = weights["mel_pos_embedding.emb.weight"]!
-            .take(MLXArray([Int32(position)], [1]), axis: 0)
-            .expandedDimensions(axis: 0)
-            .asType(tok.dtype)
+        let pos = melPositionEmbedding(melIndex: melIndex, dtype: tok.dtype)
         let hidden = gptCachedForward(tok + pos, cache: &cache)
         return melLogits(fromHidden: hidden)
     }
 
-    private func gptCachedForward(_ x: MLXArray, cache: inout GPTKVCache) -> MLXArray {
+    private func gptCachedForward<Cache: GPTKeyValueCache>(
+        _ x: MLXArray, cache: inout Cache
+    ) -> MLXArray {
         var h = x
         for i in 0..<config.gpt.layers {
             h = gptBlockCached(h, prefix: "gpt.h.\(i)", layer: i, cache: &cache)
         }
+        cache.commit(tokens: x.dim(1))
         return layerNorm(h, prefix: "gpt.ln_f")
     }
 
-    private func gptBlockCached(
-        _ x: MLXArray, prefix: String, layer: Int, cache: inout GPTKVCache
+    private func gptBlockCached<Cache: GPTKeyValueCache>(
+        _ x: MLXArray, prefix: String, layer: Int, cache: inout Cache
     ) -> MLXArray {
         var h = x + gptAttentionCached(
             layerNorm(x, prefix: "\(prefix).ln_1"),
@@ -832,25 +919,21 @@ final class IndexTTS2SemanticGPT {
         return h
     }
 
-    private func gptAttentionCached(
-        _ x: MLXArray, prefix: String, layer: Int, cache: inout GPTKVCache
+    private func gptAttentionCached<Cache: GPTKeyValueCache>(
+        _ x: MLXArray, prefix: String, layer: Int, cache: inout Cache
     ) -> MLXArray {
         let b = x.dim(0)
         let t = x.dim(1)
         let qkv = conv1DLinear(x, prefix: "\(prefix).c_attn")
         let parts = split(qkv, parts: 3, axis: -1)
         let q = parts[0].reshaped([b, t, heads, headDim]).transposed(0, 2, 1, 3)
-        var k = parts[1].reshaped([b, t, heads, headDim]).transposed(0, 2, 1, 3)
-        var v = parts[2].reshaped([b, t, heads, headDim]).transposed(0, 2, 1, 3)
-        if let past = cache.layers[layer] {
-            k = concatenated([past.keys, k], axis: 2)
-            v = concatenated([past.values, v], axis: 2)
-        }
-        cache.layers[layer] = (k, v)
+        let (k, v) = cache.update(
+            layer: layer,
+            keys: parts[1].reshaped([b, t, heads, headDim]).transposed(0, 2, 1, 3),
+            values: parts[2].reshaped([b, t, heads, headDim]).transposed(0, 2, 1, 3))
         // Prefill runs with an empty cache (square causal mask); incremental
         // steps are single-token and attend to everything.
-        let mask: MLXFast.ScaledDotProductAttentionMaskMode =
-            t <= 1 ? .none : causalMask(length: t, dtype: x.dtype)
+        let mask: MLXFast.ScaledDotProductAttentionMaskMode = t <= 1 ? .none : .causal
         let out = MLXFast.scaledDotProductAttention(
             queries: q,
             keys: k,
@@ -883,19 +966,26 @@ final class IndexTTS2SemanticGPT {
         let q = parts[0].reshaped([b, t, heads, headDim]).transposed(0, 2, 1, 3)
         let k = parts[1].reshaped([b, t, heads, headDim]).transposed(0, 2, 1, 3)
         let v = parts[2].reshaped([b, t, heads, headDim]).transposed(0, 2, 1, 3)
-        let causal = causalMask(length: t, dtype: x.dtype)
         let out = MLXFast.scaledDotProductAttention(
             queries: q,
             keys: k,
             values: v,
             scale: 1.0 / Foundation.sqrt(Float(headDim)),
-            mask: causal)
+            mask: .causal)
         let merged = out.transposed(0, 2, 1, 3).reshaped([b, t, modelDim])
         return conv1DLinear(merged, prefix: "\(prefix).c_proj")
     }
 
+    /// GPT-2's tanh GELU is a ~7-op elementwise chain; compiled (shapeless,
+    /// so one trace serves prefill and steps) it fuses into a single kernel,
+    /// which matters at 24 launches per decode step.
+    private static let fusedGeluApproximate: @Sendable (MLXArray) -> MLXArray =
+        compile(shapeless: true) { geluApproximate($0) }
+
     private func gptMLP(_ x: MLXArray, prefix: String) -> MLXArray {
-        conv1DLinear(geluApproximate(conv1DLinear(x, prefix: "\(prefix).c_fc")), prefix: "\(prefix).c_proj")
+        conv1DLinear(
+            Self.fusedGeluApproximate(conv1DLinear(x, prefix: "\(prefix).c_fc")),
+            prefix: "\(prefix).c_proj")
     }
 
     private func textEmbeddings(_ ids: [Int32]) -> MLXArray {
@@ -1110,13 +1200,6 @@ final class IndexTTS2SemanticGPT {
         return selected
     }
 
-    private func causalMask(length: Int, dtype: DType) -> MLXFast.ScaledDotProductAttentionMaskMode {
-        let keep = MLXArray.tri(length, type: Float.self)
-        let neg = MLXArray(-Float.greatestFiniteMagnitude)
-        let additive = MLX.where(keep .== MLXArray(Float(0)), neg, MLXArray(Float(0)))
-        return .array(additive.reshaped([1, 1, length, length]).asType(dtype))
-    }
-
     // MARK: - Tensor primitives
 
     private func linear(_ x: MLXArray, prefix: String, bias: Bool = true) -> MLXArray {
@@ -1184,6 +1267,58 @@ final class IndexTTS2SemanticGPT {
             .transposed(0, 3, 1, 2)
         y = y + bias.asType(y.dtype).reshaped([1, bias.dim(0), 1, 1])
         return y
+    }
+}
+
+/// Env-gated (`INDEXTTS2_TIMING=1`) per-phase profiler for the beam-sample
+/// decode loop. `eval` is the GPU sync (materializing the step's log-probs),
+/// `host` is CPU-side candidate filtering/sampling, `build` is lazy graph
+/// construction for the next step. Step 0 is excluded from the stats — its
+/// eval covers the prefill — and reported separately.
+private struct BeamLoopProfile {
+    enum Phase: Int, CaseIterable {
+        case eval, host, build
+
+        var label: String {
+            switch self {
+            case .eval: return "eval"
+            case .host: return "host"
+            case .build: return "build"
+            }
+        }
+    }
+
+    private var totals = [Double](repeating: 0, count: Phase.allCases.count)
+    private var minima = [Double](repeating: .infinity, count: Phase.allCases.count)
+    private var counts = [Int](repeating: 0, count: Phase.allCases.count)
+    private var prefillSeconds: Double = 0
+
+    mutating func record(_ phase: Phase, since start: inout CFAbsoluteTime, warmup: Bool) {
+        guard IndexTTS2StageTimer.enabled else { return }
+        let now = CFAbsoluteTimeGetCurrent()
+        let elapsed = now - start
+        start = now
+        if warmup {
+            if phase == .eval { prefillSeconds = elapsed }
+            return
+        }
+        totals[phase.rawValue] += elapsed
+        minima[phase.rawValue] = min(minima[phase.rawValue], elapsed)
+        counts[phase.rawValue] += 1
+    }
+
+    func report() {
+        guard IndexTTS2StageTimer.enabled, counts[Phase.eval.rawValue] > 0 else { return }
+        var text = "[itts2] beam-loop prefill \(String(format: "%.1f", prefillSeconds * 1000))ms"
+        for phase in Phase.allCases {
+            let n = counts[phase.rawValue]
+            guard n > 0 else { continue }
+            let total = totals[phase.rawValue]
+            text += String(
+                format: " | %@ n=%d total=%.2fs mean=%.1fms min=%.1fms",
+                phase.label, n, total, total / Double(n) * 1000, minima[phase.rawValue] * 1000)
+        }
+        FileHandle.standardError.write(Data((text + "\n").utf8))
     }
 }
 
