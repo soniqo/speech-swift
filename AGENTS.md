@@ -270,6 +270,7 @@ docs/
   audio/                        Audio I/O, playback, voice pipeline
     playback.md                 Streaming playback, pre-buffer, Apple audio architecture
     voice-pipeline.md           VoicePipeline state machine, events, config
+    system-audio-tap.md         System-output capture via Core Audio process taps
   benchmarks/                   WER, DER, RTF results
   shared-protocols.md       Protocol reference (cross-cutting)
 ```
