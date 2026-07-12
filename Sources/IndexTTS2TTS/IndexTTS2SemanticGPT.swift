@@ -782,6 +782,12 @@ final class IndexTTS2SemanticGPT {
     /// write. Reference semantics — the batched paths hold exactly one
     /// cache and reorder beam rows in place; the fork-by-value greedy beam
     /// path must stay on `GPTKVCache`.
+    ///
+    /// History is stored in float32 and attention runs in float32: the
+    /// Metal fp16 SDPA vector kernel degrades ~2.5x per step under the
+    /// buffer states real decoding produces (measured on M5 Pro; dummy
+    /// caches don't trigger it), while the fp32 kernel is immune — and
+    /// float32 attention is also strictly higher precision.
     final class BatchedGPTKVCache: GPTKeyValueCache {
         private static let chunk = 256
 
@@ -793,8 +799,10 @@ final class IndexTTS2SemanticGPT {
         }
 
         func update(
-            layer: Int, keys: MLXArray, values: MLXArray
+            layer: Int, keys rawKeys: MLXArray, values rawValues: MLXArray
         ) -> (keys: MLXArray, values: MLXArray) {
+            let keys = rawKeys.asType(.float32)
+            let values = rawValues.asType(.float32)
             let end = offset + keys.dim(2)
             let rounded = (end + Self.chunk - 1) / Self.chunk * Self.chunk
             if buffers[layer] == nil {
@@ -935,12 +943,12 @@ final class IndexTTS2SemanticGPT {
         // steps are single-token and attend to everything.
         let mask: MLXFast.ScaledDotProductAttentionMaskMode = t <= 1 ? .none : .causal
         let out = MLXFast.scaledDotProductAttention(
-            queries: q,
+            queries: q.asType(k.dtype),
             keys: k,
             values: v,
             scale: 1.0 / Foundation.sqrt(Float(headDim)),
             mask: mask)
-        let merged = out.transposed(0, 2, 1, 3).reshaped([b, t, modelDim])
+        let merged = out.asType(x.dtype).transposed(0, 2, 1, 3).reshaped([b, t, modelDim])
         return conv1DLinear(merged, prefix: "\(prefix).c_proj")
     }
 

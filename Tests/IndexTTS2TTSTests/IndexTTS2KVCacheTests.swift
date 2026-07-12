@@ -44,6 +44,19 @@ final class IndexTTS2KVCacheTests: XCTestCase {
         }
     }
 
+    func testBatchedCachePromotesHalfPrecisionHistoryToFloat32() {
+        // Attention over the cached history runs in float32 (the fp16 SDPA
+        // kernel degrades under real decode buffer states); the cache must
+        // return float32 no matter what dtype the step produces.
+        let batched = IndexTTS2SemanticGPT.BatchedGPTKVCache(layerCount: 1)
+        let (k, v) = step(2, seed: 3)
+        let out = batched.update(layer: 0, keys: k.asType(.float16), values: v.asType(.float16))
+        XCTAssertEqual(out.keys.dtype, .float32)
+        XCTAssertEqual(out.values.dtype, .float32)
+        assertSame(out.keys, k.asType(.float16).asType(.float32), "promoted keys")
+        assertSame(out.values, v.asType(.float16).asType(.float32), "promoted values")
+    }
+
     func testReorderRowsMatchesGatherAndIdentityIsNoOp() {
         let batched = IndexTTS2SemanticGPT.BatchedGPTKVCache(layerCount: 1)
         let (k0, v0) = step(3, seed: 0)
