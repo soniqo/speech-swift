@@ -526,29 +526,20 @@ public final class PyannoteDiarizationPipeline {
 
         diarizedSegments.sort { $0.startTime < $1.startTime }
 
-        // Compact speaker IDs and merge
-        diarizedSegments = DiarizationHelpers.compactSpeakerIds(diarizedSegments)
+        // Compact speaker IDs and their centroids through the same mapping.
+        // Some clusters can lose every segment during center-zone clipping or
+        // minimum-duration filtering, leaving gaps in the active IDs.
+        let compacted = DiarizationHelpers.compactSpeakerIdsAndEmbeddings(
+            diarizedSegments, speakerEmbeddings: centroids)
+        diarizedSegments = compacted.segments
         let merged = DiarizationHelpers.mergeSegments(
             diarizedSegments, minSilence: config.minSilenceDuration)
-        let numSpeakers = Set(merged.map(\.speakerId)).count
-
-        // Re-compact centroids to match compacted speaker IDs
-        let finalCentroids: [[Float]]
-        if numSpeakers <= centroids.count {
-            finalCentroids = Array(centroids.prefix(numSpeakers))
-        } else {
-            // Pad with zero embeddings for speakers that had no embedding
-            var padded = centroids
-            while padded.count < numSpeakers {
-                padded.append([Float](repeating: 0, count: 256))
-            }
-            finalCentroids = padded
-        }
+        let numSpeakers = compacted.speakerEmbeddings.count
 
         return DiarizationResult(
             segments: merged,
             numSpeakers: numSpeakers,
-            speakerEmbeddings: finalCentroids
+            speakerEmbeddings: compacted.speakerEmbeddings
         )
     }
 
