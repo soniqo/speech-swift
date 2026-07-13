@@ -101,7 +101,11 @@ jobs:
             # tests themselves are correct; the runner is the constraint.
             # Skip them in Nightly until we either move S2S E2E off cpuOnly or
             # speed up the cold-cache load.
-            skip: 'testS2SHibikiTranslatesAudio|testS2SPersonaPlexProducesAudio'
+            # The system-audio tap E2E needs physical audio output and an
+            # interactive Screen & System Audio Recording permission grant,
+            # neither of which is available on the virtualized hosted runner.
+            # Keep it enabled in local/physical-Mac isolated E2E runs.
+            skip: 'testS2SHibikiTranslatesAudio|testS2SPersonaPlexProducesAudio|E2ESystemAudioTapTests'
           - name: qwen3-chat-coreml
             filter: 'Qwen3ChatTests'
             skip: ''
