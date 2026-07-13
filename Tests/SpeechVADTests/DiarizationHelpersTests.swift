@@ -109,6 +109,38 @@ final class DiarizationHelpersTests: XCTestCase {
         XCTAssertEqual(result[0].speakerId, 0)
     }
 
+    func testCompactSpeakerIdsKeepsCentroidsAlignedAcrossGaps() {
+        let segs = [
+            DiarizedSegment(startTime: 0, endTime: 1, speakerId: 2),
+            DiarizedSegment(startTime: 1, endTime: 2, speakerId: 5),
+            DiarizedSegment(startTime: 2, endTime: 3, speakerId: 2),
+        ]
+        let embeddings: [[Float]] = (0...5).map { speakerId in
+            [Float(speakerId), Float(speakerId) + 0.5]
+        }
+
+        let result = DiarizationHelpers.compactSpeakerIdsAndEmbeddings(
+            segs, speakerEmbeddings: embeddings)
+
+        XCTAssertEqual(result.segments.map(\.speakerId), [0, 1, 0])
+        XCTAssertEqual(result.speakerEmbeddings, [embeddings[2], embeddings[5]])
+    }
+
+    func testCompactSpeakerIdsPadsOnlyMissingActiveCentroid() {
+        let segs = [
+            DiarizedSegment(startTime: 0, endTime: 1, speakerId: 1),
+            DiarizedSegment(startTime: 1, endTime: 2, speakerId: 4),
+        ]
+
+        let result = DiarizationHelpers.compactSpeakerIdsAndEmbeddings(
+            segs,
+            speakerEmbeddings: [[0, 0], [1, 1]],
+            missingEmbeddingDimension: 2)
+
+        XCTAssertEqual(result.segments.map(\.speakerId), [0, 1])
+        XCTAssertEqual(result.speakerEmbeddings, [[1, 1], [0, 0]])
+    }
+
     // MARK: - resample
 
     func testResampleSameRate() {
