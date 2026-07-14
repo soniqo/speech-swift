@@ -142,31 +142,112 @@ enum NpzReader {
     /// Parse a .npy record at the given offset in the data buffer.
     private static func parseNpy(_ data: Data, npyOffset: Int, npySize: Int) -> [Float]? {
         // Magic: \x93NUMPY
-        guard npySize >= 10,
+        guard npyOffset >= 0,
+              npySize >= 10,
+              npyOffset + npySize <= data.count,
               data[npyOffset] == 0x93,
               data[npyOffset + 1] == 0x4E else { return nil }
 
         let majorVersion = data[npyOffset + 6]
-
         let headerLen: Int
-        if majorVersion == 1 {
+        switch majorVersion {
+        case 1:
             headerLen = Int(readUInt16(data, at: npyOffset + 8))
-        } else {
+        case 2, 3:
+            guard npySize >= 12 else { return nil }
             headerLen = Int(readUInt32(data, at: npyOffset + 8))
+        default:
+            return nil
         }
 
         let headerSize = (majorVersion == 1) ? 10 : 12
-        let floatStart = npyOffset + headerSize + headerLen
+        let headerStart = npyOffset + headerSize
+        let floatStart = headerStart + headerLen
         let numBytes = npySize - headerSize - headerLen
 
-        guard numBytes > 0 else { return nil }
+        guard headerLen > 0,
+              floatStart <= npyOffset + npySize,
+              numBytes > 0,
+              numBytes.isMultiple(of: MemoryLayout<Float>.size),
+              floatStart + numBytes <= data.count,
+              let header = String(
+                data: data[headerStart..<floatStart], encoding: .ascii)
+        else { return nil }
         let numFloats = numBytes / 4
 
-        var result = [Float](repeating: 0, count: numFloats)
-        _ = result.withUnsafeMutableBytes { dst in
+        var raw = [Float](repeating: 0, count: numFloats)
+        _ = raw.withUnsafeMutableBytes { dst in
             data.copyBytes(to: dst, from: floatStart..<floatStart + numFloats * 4)
         }
-        return result
+
+        // NumPy stores transposed/non-contiguous arrays in column-major order
+        // and records that layout in the .npy header. The published DFN3
+        // auxiliary bundle does this for erb_inv_fb [32, 481]. Returning its
+        // bytes unchanged makes callers interpret columns as rows and expands
+        // the predicted ERB mask onto the wrong FFT bins.
+        let fortranOrder = header.contains("'fortran_order': True")
+            || header.contains("\"fortran_order\": True")
+        guard fortranOrder else { return raw }
+        guard let shape = parseShape(fromNpyHeader: header),
+              shape.count > 1,
+              elementCount(of: shape, limit: numFloats) == numFloats
+        else { return nil }
+
+        return fortranToRowMajor(raw, shape: shape)
+    }
+
+    /// Validate the shape while avoiding integer overflow on malformed input.
+    private static func elementCount(of shape: [Int], limit: Int) -> Int? {
+        var count = 1
+        for dimension in shape {
+            guard dimension > 0, count <= limit / dimension else { return nil }
+            count *= dimension
+        }
+        return count
+    }
+
+    /// Extract the tuple following `shape` from a NumPy header dictionary.
+    private static func parseShape(fromNpyHeader header: String) -> [Int]? {
+        guard let shapeKey = header.range(of: "shape"),
+              let open = header[shapeKey.upperBound...].firstIndex(of: "("),
+              let close = header[open...].firstIndex(of: ")")
+        else { return nil }
+
+        let contents = header[header.index(after: open)..<close]
+        var dimensions = [Int]()
+        for part in contents.split(separator: ",") {
+            let value = part.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let dimension = Int(value) else { return nil }
+            dimensions.append(dimension)
+        }
+        return dimensions.isEmpty ? nil : dimensions
+    }
+
+    /// Convert a NumPy Fortran-order flat buffer to conventional row-major
+    /// order while preserving the declared N-dimensional shape.
+    private static func fortranToRowMajor(_ input: [Float], shape: [Int]) -> [Float] {
+        var rowMajorStrides = [Int](repeating: 1, count: shape.count)
+        if shape.count > 1 {
+            for dimension in stride(from: shape.count - 2, through: 0, by: -1) {
+                rowMajorStrides[dimension] = rowMajorStrides[dimension + 1]
+                    * shape[dimension + 1]
+            }
+        }
+
+        var output = [Float](repeating: 0, count: input.count)
+        for rowMajorIndex in output.indices {
+            var remainder = rowMajorIndex
+            var fortranIndex = 0
+            var fortranStride = 1
+            for dimension in shape.indices {
+                let coordinate = remainder / rowMajorStrides[dimension]
+                remainder %= rowMajorStrides[dimension]
+                fortranIndex += coordinate * fortranStride
+                fortranStride *= shape[dimension]
+            }
+            output[rowMajorIndex] = input[fortranIndex]
+        }
+        return output
     }
 
     private static func readUInt16(_ data: Data, at offset: Int) -> UInt16 {

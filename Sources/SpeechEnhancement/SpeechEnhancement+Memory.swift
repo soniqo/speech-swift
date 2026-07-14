@@ -11,7 +11,7 @@ extension SpeechEnhancer: ModelMemoryManageable {
 
     public var memoryFootprint: Int {
         guard _isLoaded else { return 0 }
-        // DeepFilterNet3 CoreML FP16: ~4.2 MB
-        return 4_200_000
+        // DeepFilterNet3 Core ML: 8-bit palettized weights, FP16 compute.
+        return 2_200_000
     }
 }

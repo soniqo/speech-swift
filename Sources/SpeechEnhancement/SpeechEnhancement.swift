@@ -3,7 +3,8 @@ import MLXCommon
 import CoreML
 import AudioCommon
 
-/// Speech enhancement using DeepFilterNet3 on Core ML (FP16, Neural Engine).
+/// Speech enhancement using DeepFilterNet3 on Core ML (8-bit palettized
+/// weights, FP16 compute, Neural Engine).
 ///
 /// Removes background noise from speech audio. The neural network runs on
 /// Apple's Neural Engine via Core ML, while signal processing (STFT, ERB
@@ -100,8 +101,9 @@ public final class SpeechEnhancer {
         let hop = config.hopSize
         let freqBins = config.freqBins  // 481 (960/2 + 1)
 
-        // Pad audio so inverse STFT captures the full signal
-        let paddedSamples = samples + [Float](repeating: 0, count: hop)
+        // libdf appends a full FFT window so the real-time STFT/iSTFT delay
+        // can be removed without truncating non-hop-aligned input lengths.
+        let paddedSamples = samples + [Float](repeating: 0, count: config.fftSize)
 
         // STFT — 960-point DFT producing 481 frequency bins
         let (specReal, specImag) = stft.forward(audio: paddedSamples, analysisMem: &analysisMem)
@@ -214,8 +216,8 @@ public final class SpeechEnhancer {
         // Inverse STFT
         let rawOutput = stft.inverse(real: enhancedReal, imag: enhancedImag, synthesisMem: &synthesisMem)
 
-        // Trim the hop-size latency from prepended analysis memory
-        let trimStart = hop
+        // Compensate the algorithmic delay introduced by the streaming STFT.
+        let trimStart = config.fftSize - hop
         let trimEnd = min(trimStart + samples.count, rawOutput.count)
         guard trimEnd > trimStart else { return [] }
         return Array(rawOutput[trimStart..<trimEnd])
