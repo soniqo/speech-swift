@@ -190,6 +190,7 @@ Aşağıda kompakt bir görünüm. **[Boyutlar, kuantizasyonlar, indirme URL'ler
 | [Silero VAD](https://soniqo.audio/guides/vad) | Ses Etkinlik Algılama | MLX, CoreML | 309K | Bağımsız |
 | [KWS Zipformer](docs/models/kws-zipformer.md) | Audio → Wake word | CoreML (ANE) | 3M | EN/custom keywords |
 | [Pyannote](https://soniqo.audio/guides/diarize) | VAD + Konuşmacı Ayrımı | MLX | 1.5M | Bağımsız |
+| [Pyannote Community-1](https://huggingface.co/aufklarer/Pyannote-Community-1-CoreML) | Konuşmacı ayrıştırma + konuşmacı gömmeleri | CoreML (ANE) + Swift VBx | 8.35M | Bağımsız |
 | [Sortformer](https://soniqo.audio/guides/diarize) | Konuşmacı Ayrımı (E2E) | CoreML (ANE) | — | Bağımsız |
 | [DeepFilterNet3](https://soniqo.audio/guides/denoise) | Konuşma İyileştirme | CoreML | 2.1M | Bağımsız |
 | [Sidon](https://soniqo.audio/guides/restore) | Konuşma Onarımı (gürültü bastırma + yankı giderme, 48 kHz) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | Bağımsız |

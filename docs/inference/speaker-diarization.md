@@ -2,10 +2,11 @@
 
 ## Overview
 
-Speaker diarization identifies **who spoke when** in an audio recording. Two engines are available:
+Speaker diarization identifies **who spoke when** in an audio recording. Three engines are available:
 
 1. **Pyannote** (default) — two-stage pipeline: segmentation + activity-based speaker chaining → post-hoc WeSpeaker embedding
-2. **Sortformer** (CoreML) — NVIDIA's end-to-end neural diarization model, runs on Neural Engine
+2. **Community-1** (CoreML) — Pyannote segmentation + masked WeSpeaker embeddings + native PLDA/VBx clustering
+3. **Sortformer** (CoreML) — NVIDIA's end-to-end neural diarization model, runs on Neural Engine
 
 ## Architecture
 
@@ -13,8 +14,39 @@ Speaker diarization identifies **who spoke when** in an audio recording. Two eng
 
 ```bash
 speech diarize meeting.wav                    # Pyannote (default)
+speech diarize meeting.wav --engine community1  # Community-1 (CoreML + VBx)
 speech diarize meeting.wav --engine sortformer  # Sortformer (CoreML)
 ```
+
+### Community-1 (CoreML + Native VBx)
+
+Community-1 is the accuracy-oriented, embedding-capable CoreML pipeline. Its
+two neural stages run through Core ML; powerset decoding, PLDA transforms, VBx,
+constrained assignment, and timeline reconstruction are native Swift. It does
+not load MLX or require a Metal shader library.
+
+```
+Audio → 10 s / 1 s-hop PyanNet → hard powerset tracks
+      → overlap-masked WeSpeaker embeddings → centroid AHC
+      → 256→128 PLDA transform → VBx → constrained assignment
+      → overlap-add speaker counting → diarized segments + 256-d centroids
+```
+
+- **Segmentation context**: 10 seconds, advanced by 1 second
+- **Local speakers**: up to three powerset tracks per chunk
+- **Embedding masks**: clean single-speaker frames, with the upstream
+  overlap-inclusive fallback for very short tracks
+- **AHC initialization**: centroid linkage over L2-normalized embeddings,
+  Euclidean threshold 0.6
+- **VBx defaults**: `Fa=0.07`, `Fb=0.8`, at most 20 iterations
+- **Assignment**: maximum-weight one-to-one matching inside each chunk
+- **Speaker bounds**: inferred by default; exact, minimum, and maximum counts
+  can be supplied by API or CLI
+
+The bundle is
+[`aufklarer/Pyannote-Community-1-CoreML`](https://huggingface.co/aufklarer/Pyannote-Community-1-CoreML),
+derived from `pyannote/speaker-diarization-community-1` and distributed under
+CC BY 4.0. Preserve its attribution when redistributing the weights.
 
 ### Sortformer (End-to-End, CoreML)
 
@@ -115,6 +147,28 @@ for seg in result.segments {
 print("\(result.numSpeakers) speakers detected")
 ```
 
+### Community-1 Swift API
+
+```swift
+let diarizer = try await Community1DiarizationPipeline.fromPretrained()
+try diarizer.prewarm()
+
+let result = try diarizer.diarize(
+    audio: samples,
+    sampleRate: 16_000,
+    speakerBounds: Community1SpeakerBounds(minimum: 2, maximum: 6)
+)
+
+for segment in result.segments {
+    print("Speaker \(segment.speakerId): \(segment.startTime)s–\(segment.endTime)s")
+}
+// result.speakerEmbeddings contains one 256-d centroid per returned speaker.
+```
+
+Use `Community1SpeakerBounds(exact: 2)` when the number of speakers is known.
+Speaker IDs are local to one result; use the returned centroids to match them
+to a recording-local or persistent voice registry.
+
 #### Progress Reporting & Cancellation
 
 For long audio files, use the `progressHandler` overload to track progress.
@@ -190,6 +244,11 @@ let result = diarizer.diarize(audio: samples, sampleRate: 16000) { progress, sta
 # Pyannote diarization (default)
 speech diarize meeting.wav
 
+# Community-1 (CoreML + native PLDA/VBx)
+speech diarize meeting.wav --engine community1
+speech diarize meeting.wav --engine community1 --num-speakers 2
+speech diarize meeting.wav --engine community1 --min-speakers 2 --max-speakers 6
+
 # Sortformer diarization (CoreML, Neural Engine)
 speech diarize meeting.wav --engine sortformer
 
@@ -207,8 +266,27 @@ speech embed-speaker enrollment.wav
 speech embed-speaker enrollment.wav --engine coreml --json
 ```
 
+Community-1 compute units can be selected with
+`--community1-compute-units ane|cpu|gpu|all` (`ane` is the default).
+
+## Community-1 Parity Check
+
+On the fixed five-file VoxConverse release subset (1,057.49 seconds, 0.25 s
+collar, overlap included), the Swift output rescored with `pyannote.metrics`
+measured **4.66% DER / 21.43% JER**. The published CoreML export measured
+**4.65% / 21.42%** with the same scorer. The residual difference is 0.02
+percentage points of DER and comes from floating-point/tie behavior; detected
+speaker counts match on all five files.
+
+This is a small release parity check, not a dataset-wide quality claim. Do not
+compare these percentages directly with the package's frame-grid benchmark,
+whose collar and boundary accounting are intentionally different.
+
 ## Model Weights
 
+- **Community-1 bundle (CoreML + PLDA/VBx)**:
+  [`aufklarer/Pyannote-Community-1-CoreML`](https://huggingface.co/aufklarer/Pyannote-Community-1-CoreML)
+  (~32 MiB)
 - **Segmentation**: `aufklarer/Pyannote-Segmentation-MLX` (~5.7 MB)
 - **Speaker Embedding (MLX)**: `aufklarer/WeSpeaker-ResNet34-LM-MLX` (~25 MB)
 - **Speaker Embedding (CoreML)**: `aufklarer/WeSpeaker-ResNet34-LM-CoreML` (~13 MB)
@@ -250,6 +328,10 @@ Sources/SpeechVAD/
 ├── PowersetDecoder.swift              7-class powerset → per-speaker probs
 ├── DiarizationHelpers.swift            Merge segments, compact IDs, constrained clustering
 ├── DiarizationPipeline.swift          Pyannote pipeline (embedding clustering + speaker extraction)
+├── Community1Configuration.swift      Published pipeline constants + speaker-count bounds
+├── Community1CoreML.swift             PyanNet + masked WeSpeaker CoreML wrappers
+├── Community1Clustering.swift         PLDA loading, centroid AHC, VBx, assignment
+├── Community1DiarizationPipeline.swift  Community-1 orchestration + reconstruction
 ├── SortformerConfig.swift             Sortformer model configuration
 ├── SortformerMelExtractor.swift       128-dim log-mel for Sortformer (Hann window)
 ├── SortformerModel.swift              CoreML wrapper for Sortformer inference

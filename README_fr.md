@@ -190,6 +190,7 @@ Vue compacte ci-dessous. **[Catalogue complet des modeles avec tailles, quantifi
 | [Silero VAD](https://soniqo.audio/fr/guides/vad) | Detection d'activite vocale | MLX, CoreML | 309K | Agnostique |
 | [KWS Zipformer](docs/models/kws-zipformer.md) | Audio → Wake word | CoreML (ANE) | 3M | EN/custom keywords |
 | [Pyannote](https://soniqo.audio/fr/guides/diarize) | VAD + Diarisation | MLX | 1.5M | Agnostique |
+| [Pyannote Community-1](https://huggingface.co/aufklarer/Pyannote-Community-1-CoreML) | Diarisation + empreintes de locuteur | CoreML (ANE) + Swift VBx | 8.35M | Agnostique |
 | [Sortformer](https://soniqo.audio/fr/guides/diarize) | Diarisation (E2E) | CoreML (ANE) | — | Agnostique |
 | [DeepFilterNet3](https://soniqo.audio/fr/guides/denoise) | Amelioration de la parole | CoreML | 2.1M | Agnostique |
 | [Sidon](https://soniqo.audio/fr/guides/restore) | Restauration de la parole (debruitage + dereverberation, 48 kHz) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | Agnostique |

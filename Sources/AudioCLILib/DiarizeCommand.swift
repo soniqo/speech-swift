@@ -18,7 +18,7 @@ public struct DiarizeCommand: ParsableCommand {
     @Option(name: .long, help: "Enrollment audio for target speaker extraction")
     public var targetSpeaker: String?
 
-    @Option(name: .long, help: "Diarization engine: pyannote (default) or sortformer")
+    @Option(name: .long, help: "Diarization engine: pyannote (default), community1, or sortformer")
     public var engine: String = "pyannote"
 
     @Option(name: .long, help: "Sortformer variant: default (offline, ~125x RTF), balanced (faster first-load, ~hundreds-x RTF), or streaming (low-latency)")
@@ -26,6 +26,18 @@ public struct DiarizeCommand: ParsableCommand {
 
     @Option(name: .long, help: "Sortformer CoreML compute units: ane (default, ANE+CPU), cpu (instant first-load, ~20x RTF), gpu (cpu+gpu), all (every backend; rarely needed)")
     public var sortformerComputeUnits: String = "ane"
+
+    @Option(name: .long, help: "Community-1 CoreML compute units: ane (default), cpu, gpu, or all")
+    public var community1ComputeUnits: String = "ane"
+
+    @Option(name: .long, help: "Known exact speaker count for Community-1")
+    public var numSpeakers: Int?
+
+    @Option(name: .long, help: "Minimum speaker count for Community-1 (default 1)")
+    public var minSpeakers: Int = 1
+
+    @Option(name: .long, help: "Maximum speaker count for Community-1")
+    public var maxSpeakers: Int?
 
     @Option(name: .long, help: "Speaker embedding engine: mlx (default) or coreml")
     public var embeddingEngine: String = "mlx"
@@ -68,10 +80,16 @@ public struct DiarizeCommand: ParsableCommand {
                 #else
                 print("Error: Sortformer requires CoreML (not available on this platform).")
                 #endif
+            } else if engine == "community1" {
+                #if canImport(CoreML)
+                try await runCommunity1(audio: audio)
+                #else
+                print("Error: Community-1 requires CoreML (not available on this platform).")
+                #endif
             } else if engine == "pyannote" {
                 try await runPyannote(audio: audio, config: config)
             } else {
-                print("Error: unknown engine '\(engine)'. Use 'pyannote' or 'sortformer'.")
+                print("Error: unknown engine '\(engine)'. Use 'pyannote', 'community1', or 'sortformer'.")
             }
         }
     }
@@ -119,6 +137,51 @@ public struct DiarizeCommand: ParsableCommand {
         let result = diarizer.diarize(audio: audio, sampleRate: 16000, config: config)
         let elapsed = Date().timeIntervalSince(start)
 
+        outputResult(result, elapsed: elapsed)
+
+        if let refFile = scoreAgainst {
+            try scoreDER(result: result, refFile: refFile)
+        }
+    }
+
+    private func runCommunity1(audio: [Float]) async throws {
+        if targetSpeaker != nil {
+            print("Warning: --target-speaker is not supported with Community-1. Ignoring.")
+        }
+
+        let computeUnits: MLComputeUnits
+        switch community1ComputeUnits.lowercased() {
+        case "ane", "cpuandneuralengine", "neuralengine":
+            computeUnits = .cpuAndNeuralEngine
+        case "cpu", "cpuonly":
+            computeUnits = .cpuOnly
+        case "gpu", "cpuandgpu":
+            computeUnits = .cpuAndGPU
+        case "all":
+            computeUnits = .all
+        default:
+            print("Error: unknown Community-1 compute units '\(community1ComputeUnits)'. Use 'ane', 'cpu', 'gpu', or 'all'.")
+            return
+        }
+
+        print("Loading Community-1 CoreML + native VBx pipeline...")
+        let pipeline = try await Community1DiarizationPipeline.fromPretrained(
+            computeUnits: computeUnits,
+            progressHandler: reportProgress
+        )
+        let bounds = Community1SpeakerBounds(
+            exact: numSpeakers,
+            minimum: minSpeakers,
+            maximum: maxSpeakers
+        )
+        print("Running diarization (Community-1)...")
+        let start = Date()
+        let result = try pipeline.diarize(
+            audio: audio,
+            sampleRate: 16000,
+            speakerBounds: bounds
+        )
+        let elapsed = Date().timeIntervalSince(start)
         outputResult(result, elapsed: elapsed)
 
         if let refFile = scoreAgainst {

@@ -19,7 +19,7 @@ struct DiarizationBench: AsyncParsableCommand {
     var manifest: String
 
     @Option(name: .shortAndLong, parsing: .upToNextOption,
-            help: "Engines: sortformer-default, sortformer-balanced, sortformer-streaming, pyannote-mlx, pyannote-coreml.")
+            help: "Engines: community1-coreml, sortformer-default, sortformer-balanced, sortformer-streaming, pyannote-mlx, pyannote-coreml.")
     var engines: [String] = ["sortformer-default", "pyannote-mlx"]
 
     @Option(name: .shortAndLong, help: "Max files to process.")
@@ -204,6 +204,8 @@ private protocol DiarizationBenchEngine: AnyObject {
 
 private func makeDiarizationEngine(_ id: String) -> DiarizationBenchEngine? {
     switch id.lowercased() {
+    case "community1-coreml":
+        return Community1DiarizationBenchEngine()
     case "sortformer-default":
         return SortformerBenchEngine(name: "sortformer-default", variant: .default)
     case "sortformer-balanced":
@@ -218,6 +220,37 @@ private func makeDiarizationEngine(_ id: String) -> DiarizationBenchEngine? {
         return nil
     }
 }
+
+#if canImport(CoreML)
+private final class Community1DiarizationBenchEngine: DiarizationBenchEngine {
+    let name = "community1-coreml"
+    var pipeline: Community1DiarizationPipeline?
+
+    func load() async throws {
+        pipeline = try await Community1DiarizationPipeline.fromPretrained(
+            computeUnits: .cpuAndNeuralEngine
+        )
+        try pipeline?.prewarm()
+    }
+
+    func diarize(audio: [Float], sampleRate: Int) throws -> DiarizationResult {
+        guard let pipeline else {
+            return DiarizationResult(segments: [], numSpeakers: 0, speakerEmbeddings: [])
+        }
+        return try pipeline.diarize(audio: audio, sampleRate: sampleRate)
+    }
+}
+#else
+private final class Community1DiarizationBenchEngine: DiarizationBenchEngine {
+    let name = "community1-coreml"
+    func load() async throws {
+        throw BenchmarkSupportError.unsupportedReference("Community-1 requires CoreML")
+    }
+    func diarize(audio: [Float], sampleRate: Int) throws -> DiarizationResult {
+        DiarizationResult(segments: [], numSpeakers: 0, speakerEmbeddings: [])
+    }
+}
+#endif
 
 private final class PyannoteDiarizationBenchEngine: DiarizationBenchEngine {
     let name: String

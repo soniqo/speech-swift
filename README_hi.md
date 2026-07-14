@@ -190,6 +190,7 @@ struct DictateView: View {
 | [Silero VAD](https://soniqo.audio/hi/guides/vad) | वॉयस एक्टिविटी डिटेक्शन | MLX, CoreML | 309K | भाषा-तटस्थ |
 | [KWS Zipformer](docs/models/kws-zipformer.md) | Audio → Wake word | CoreML (ANE) | 3M | EN/custom keywords |
 | [Pyannote](https://soniqo.audio/hi/guides/diarize) | VAD + Diarization | MLX | 1.5M | भाषा-तटस्थ |
+| [Pyannote Community-1](https://huggingface.co/aufklarer/Pyannote-Community-1-CoreML) | Diarization + स्पीकर embeddings | CoreML (ANE) + Swift VBx | 8.35M | भाषा-तटस्थ |
 | [Sortformer](https://soniqo.audio/hi/guides/diarize) | Diarization (E2E) | CoreML (ANE) | — | भाषा-तटस्थ |
 | [DeepFilterNet3](https://soniqo.audio/hi/guides/denoise) | स्पीच एन्हांसमेंट | CoreML | 2.1M | भाषा-तटस्थ |
 | [Sidon](https://soniqo.audio/hi/guides/restore) | स्पीच रिस्टोरेशन (नॉइज़ हटाना + डीरीवर्ब, 48 kHz) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | भाषा-तटस्थ |
