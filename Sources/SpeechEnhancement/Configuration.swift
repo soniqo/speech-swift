@@ -44,9 +44,20 @@ public struct DeepFilterNet3Config {
     /// Number of FFT frequency bins (fftSize / 2 + 1)
     public var freqBins: Int { fftSize / 2 + 1 }
 
-    /// Normalization alpha (exponential decay)
+    /// Normalization alpha (exponential decay), rounded like upstream libdf.
     public var normAlpha: Float {
-        exp(-Float(hopSize) / Float(sampleRate) / normTau)
+        let unrounded = exp(-Float(hopSize) / Float(sampleRate) / normTau)
+        var scale: Float = 1_000
+
+        // DeepFilterNet's `get_norm_alpha` starts at three decimal places and
+        // increases precision only if rounding would produce 1.0. The default
+        // model was trained and exported with 0.99, not exp(-0.01).
+        while scale.isFinite {
+            let rounded = (unrounded * scale).rounded() / scale
+            if rounded < 1 { return rounded }
+            scale *= 10
+        }
+        return unrounded
     }
 
     /// Default configuration matching the pretrained DeepFilterNet3 model.

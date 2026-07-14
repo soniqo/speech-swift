@@ -21,8 +21,8 @@ final class SpeechEnhancementTests: XCTestCase {
 
     func testNormAlpha() {
         let config = DeepFilterNet3Config.default
-        // alpha = exp(-480/48000/1.0) = exp(-0.01) ≈ 0.990050
-        XCTAssertEqual(config.normAlpha, exp(-0.01), accuracy: 1e-6)
+        // Upstream get_norm_alpha rounds exp(-0.01) to three decimal places.
+        XCTAssertEqual(config.normAlpha, 0.99, accuracy: 1e-6)
     }
 
     // MARK: - Vorbis Window Tests
@@ -125,6 +125,31 @@ final class SpeechEnhancementTests: XCTestCase {
 
         let expectedFrames = 100
         XCTAssertEqual(real.count, expectedFrames * stft.freqBins)
+    }
+
+    func testSTFTAnalysisMatchesLibDFNormalization() {
+        let fftSize = 960
+        let hopSize = 480
+        let window = computeVorbisWindow(size: fftSize)
+        let stft = STFTProcessor(fftSize: fftSize, hopSize: hopSize, window: window)
+
+        // A unit impulse at N/2 has a real spectrum that alternates sign.
+        // libdf normalizes the analysis DFT by 1/N, so every bin has
+        // magnitude window[N/2] / N.
+        var audio = [Float](repeating: 0, count: hopSize)
+        audio[0] = 1
+        var analysisMem = [Float](repeating: 0, count: hopSize)
+
+        let (real, imag) = stft.forward(audio: audio, analysisMem: &analysisMem)
+        let expectedMagnitude = window[hopSize] / Float(fftSize)
+
+        XCTAssertEqual(real.count, stft.freqBins)
+        XCTAssertEqual(real[0], expectedMagnitude, accuracy: 1e-6)
+        XCTAssertEqual(real[1], -expectedMagnitude, accuracy: 1e-6)
+        XCTAssertEqual(real[2], expectedMagnitude, accuracy: 1e-6)
+        XCTAssertEqual(imag[0], 0, accuracy: 1e-6)
+        XCTAssertEqual(imag[1], 0, accuracy: 1e-6)
+        XCTAssertEqual(imag[2], 0, accuracy: 1e-6)
     }
 
     func testSTFTRoundTrip() {
@@ -264,6 +289,38 @@ final class SpeechEnhancementTests: XCTestCase {
         }
     }
 
+    func testDeepFilteringZeroPadsOutOfRangeFrames() {
+        let numFrames = 3
+        let dfBins = 1
+        let dfOrder = 3
+        let dfLookahead = 1
+        let freqBins = 1
+        let specReal: [Float] = [1, 2, 4]
+        let specImag = [Float](repeating: 0, count: numFrames)
+
+        // Sum the previous, current, and next frame. libdf's temporal unfold
+        // pads beyond the signal with zeros, so the edge sums are 3 and 6.
+        var coefficients = [Float](repeating: 0, count: numFrames * dfOrder * 2)
+        for frame in 0..<numFrames {
+            for tap in 0..<dfOrder {
+                coefficients[(frame * dfOrder + tap) * 2] = 1
+            }
+        }
+
+        let filtered = applyDeepFiltering(
+            specReal: specReal,
+            specImag: specImag,
+            coefs: coefficients,
+            dfBins: dfBins,
+            dfOrder: dfOrder,
+            dfLookahead: dfLookahead,
+            numFrames: numFrames,
+            freqBins: freqBins)
+
+        XCTAssertEqual(filtered.real, [3, 7, 6])
+        XCTAssertEqual(filtered.imag, [0, 0, 0])
+    }
+
     // MARK: - ERB Mask Tests
 
     func testERBMaskApplication() {
@@ -328,15 +385,50 @@ final class SpeechEnhancementTests: XCTestCase {
         XCTAssertEqual(auxData.unitNormState.count, 96)
     }
 
-    func testNpzReader() throws {
-        // Verify the NPZ reader can parse numpy files
-        // Create a temporary npz for testing
-        let tmpDir = FileManager.default.temporaryDirectory
-        let _ = tmpDir.appendingPathComponent("test_aux.npz")
+    func testNpzReaderConvertsFortranOrderToRowMajor() throws {
+        func appendLittleEndian<T: FixedWidthInteger>(_ value: T, to data: inout Data) {
+            var littleEndian = value.littleEndian
+            Swift.withUnsafeBytes(of: &littleEndian) {
+                data.append(contentsOf: $0)
+            }
+        }
 
-        // We can't easily create an npz in Swift, but we can test the structure
-        // Just verify the reader type exists
-        XCTAssertNotNil(NpzReader.self)
+        let dictionary = "{'descr': '<f4', 'fortran_order': True, 'shape': (2, 3), }"
+        let paddingCount = (64 - ((10 + dictionary.utf8.count + 1) % 64)) % 64
+        let header = dictionary + String(repeating: " ", count: paddingCount) + "\n"
+        let headerData = Data(header.utf8)
+        var npy = Data([0x93, 0x4e, 0x55, 0x4d, 0x50, 0x59, 0x01, 0x00])
+        appendLittleEndian(UInt16(headerData.count), to: &npy)
+        npy.append(headerData)
+
+        // Logical matrix [[1, 2, 3], [4, 5, 6]] serialized column-major.
+        for value: Float in [1, 4, 2, 5, 3, 6] {
+            appendLittleEndian(value.bitPattern, to: &npy)
+        }
+
+        let fileName = Data("matrix.npy".utf8)
+        var archive = Data()
+        appendLittleEndian(UInt32(0x04034b50), to: &archive)
+        appendLittleEndian(UInt16(20), to: &archive) // version needed
+        appendLittleEndian(UInt16(0), to: &archive)  // flags
+        appendLittleEndian(UInt16(0), to: &archive)  // stored, not compressed
+        appendLittleEndian(UInt16(0), to: &archive)  // modification time
+        appendLittleEndian(UInt16(0), to: &archive)  // modification date
+        appendLittleEndian(UInt32(0), to: &archive)  // CRC (reader ignores it)
+        appendLittleEndian(UInt32(npy.count), to: &archive)
+        appendLittleEndian(UInt32(npy.count), to: &archive)
+        appendLittleEndian(UInt16(fileName.count), to: &archive)
+        appendLittleEndian(UInt16(0), to: &archive)  // extra field length
+        archive.append(fileName)
+        archive.append(npy)
+
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("fortran-order-\(UUID().uuidString).npz")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try archive.write(to: url, options: .atomic)
+
+        let arrays = try NpzReader.read(url: url)
+        XCTAssertEqual(arrays["matrix"], [1, 2, 3, 4, 5, 6])
     }
 
     // MARK: - E2E Tests
