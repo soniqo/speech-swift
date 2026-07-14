@@ -56,7 +56,7 @@ Mac ve iOS için cihaz üzerinde konuşma tanıma, sentezleme ve anlama. Apple S
 **LLM ve çeviri**
 
 - **[Qwen3Chat](https://soniqo.audio/guides/chat)** — Cihaz üzerinde LLM sohbet (Qwen3.5-0.8B MLX/CoreML artı dense Qwen3 4B ve Gemma 4 E2B/E4B MLX arka uçları, akış token'ları)
-- **[FunctionGemma](https://soniqo.audio/guides/function-calls)** — Cihaz üzerinde yapılandırılmış fonksiyon / araç çağrıları için LLM (Gemma 3 270M, CoreML 8-bit paletleme, Neural Engine, ~252 tok/s)
+- **[FunctionGemma](https://soniqo.audio/guides/functiongemma)** — Cihaz üzerinde yapılandırılmış fonksiyon / araç çağrıları için LLM (Gemma 3 270M, CoreML 8-bit paletleme, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/guides/translate)** — 400+ dil arasında çoktan-çoğa çeviri (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
 
 **Speech-to-Speech ve sesli ajanlar**
@@ -71,7 +71,7 @@ Mac ve iOS için cihaz üzerinde konuşma tanıma, sentezleme ve anlama. Apple S
 - **[Kaynak Ayrıştırma](https://soniqo.audio/guides/separate)** — HTDemucs (Demucs v4) + Open-Unmix ile müzik kaynağı ayrıştırma (UMX-HQ / UMX-L, 4 katman: vokal/davul/bas/diğer, 44,1 kHz stereo)
 - **[MAGNeT](https://soniqo.audio/guides/compose)** — Metinden müziğe üretim (Meta MAGNeT Small 300M / Medium 1.5B, MLX INT8, 32 kHz mono'da 30 sn klipler, maskelenmiş paralel kod çözme)
 - **[Stable Audio 3](docs/models/stable-audio-3.md)** — Text-to-audio/music generation (Stable Audio 3 Medium, MLX INT8/INT4, 44.1 kHz stereo, variable length)
-- **[FlashSR](https://soniqo.audio/guides/upsample)** — Ses süper çözünürlük (FlashSR ICASSP 2025, MLX, 48 kHz mono, 1 adımda damıtılmış difüzyon, INT4 363 MB / INT8 720 MB)
+- **[FlashSR](https://soniqo.audio/guides/flashsr)** — Ses süper çözünürlük (FlashSR ICASSP 2025, MLX, 48 kHz mono, 1 adımda damıtılmış difüzyon, INT4 363 MB / INT8 720 MB)
 
 **Sıra algılama, konuşmacı ayrıştırma ve konuşmacı kimliği**
 
@@ -192,12 +192,12 @@ Aşağıda kompakt bir görünüm. **[Boyutlar, kuantizasyonlar, indirme URL'ler
 | [Pyannote](https://soniqo.audio/guides/diarize) | VAD + Konuşmacı Ayrımı | MLX | 1.5M | Bağımsız |
 | [Sortformer](https://soniqo.audio/guides/diarize) | Konuşmacı Ayrımı (E2E) | CoreML (ANE) | — | Bağımsız |
 | [DeepFilterNet3](https://soniqo.audio/guides/denoise) | Konuşma İyileştirme | CoreML | 2.1M | Bağımsız |
-| [Sidon](https://soniqo.audio/guides/restore) | Konuşma Onarımı (gürültü bastırma + yankı giderme, 48 kHz) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | Bağımsız |
+| [Sidon](https://soniqo.audio/guides/sidon) | Konuşma Onarımı (gürültü bastırma + yankı giderme, 48 kHz) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | Bağımsız |
 | [HTDemucs (Demucs v4)](https://soniqo.audio/guides/separate) | Kaynak Ayrıştırma | MLX | 168M | Bağımsız |
 | [Open-Unmix](https://soniqo.audio/guides/separate) | Kaynak Ayrıştırma | MLX | 8.6M | Bağımsız |
 | [MAGNeT](https://soniqo.audio/guides/compose) | Metin → Müzik (30s @ 32 kHz) | MLX | 300M / 1.5B (int4/int8) | EN prompt'ları |
 | [Stable Audio 3](docs/models/stable-audio-3.md) | Text → Music/audio (44.1 kHz stereo) | MLX | Medium 1.4B (int4/int8) | EN prompts |
-| [FlashSR](https://soniqo.audio/guides/upsample) | Ses süper çözünürlük (48 kHz) | MLX | 363 MB / 720 MB (int4/int8) | Bağımsız |
+| [FlashSR](https://soniqo.audio/guides/flashsr) | Ses süper çözünürlük (48 kHz) | MLX | 363 MB / 720 MB (int4/int8) | Bağımsız |
 | [WeSpeaker](https://soniqo.audio/guides/embed-speaker) | Konuşmacı Gömme | MLX, CoreML | 6.6M | Bağımsız |
 
 ## Kurulum
@@ -410,7 +410,7 @@ let denoiser = try await DeepFilterNet3Model.fromPretrained()
 let clean = try denoiser.enhance(audio: noisySamples, sampleRate: 48000)
 ```
 
-### Konuşma Onarımı — [tam rehber →](https://soniqo.audio/guides/restore)
+### Konuşma Onarımı — [tam rehber →](https://soniqo.audio/guides/sidon)
 
 [Sidon](https://arxiv.org/abs/2509.17052) ile birlikte gürültü bastırma **ve** yankı giderme (w2v-BERT 2.0 tahmincisi + DAC vokoderi, Core ML). Genel bir gürültü bastırıcının aksine, Sidon konuşmacı kimliğini koruyacak şekilde eğitilmiştir; bu nedenle TTS öncesinde gürültülü veya yankılı bir ses klonlama referansını temizlemek için çok uygundur. Giriş 16 kHz; çıkış 48 kHz mono'dur.
 

@@ -56,7 +56,7 @@
 **LLM และการแปล**
 
 - **[Qwen3Chat](https://soniqo.audio/guides/chat)** — แชท LLM บนอุปกรณ์ (Qwen3.5-0.8B MLX/CoreML พร้อมแบ็กเอนด์ MLX ของ dense Qwen3 4B และ Gemma 4 E2B/E4B, สตรีมมิ่งโทเค็น)
-- **[FunctionGemma](https://soniqo.audio/guides/function-calls)** — LLM บนอุปกรณ์สำหรับการเรียกฟังก์ชัน / เครื่องมือแบบมีโครงสร้าง (Gemma 3 270M, CoreML 8-bit palettize, Neural Engine, ~252 tok/s)
+- **[FunctionGemma](https://soniqo.audio/guides/functiongemma)** — LLM บนอุปกรณ์สำหรับการเรียกฟังก์ชัน / เครื่องมือแบบมีโครงสร้าง (Gemma 3 270M, CoreML 8-bit palettize, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/guides/translate)** — การแปลแบบหลายต่อหลายระหว่างกว่า 400 ภาษา (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
 
 **Speech-to-Speech และ voice agents**
@@ -71,7 +71,7 @@
 - **[Source Separation](https://soniqo.audio/guides/separate)** — การแยกแหล่งกำเนิดดนตรีด้วย HTDemucs (Demucs v4) + Open-Unmix (UMX-HQ / UMX-L, 4 stems: เสียงร้อง/กลอง/เบส/อื่นๆ, 44.1 kHz สเตอริโอ)
 - **[MAGNeT](https://soniqo.audio/guides/compose)** — การสร้างดนตรีจากข้อความ (Meta MAGNeT Small 300M / Medium 1.5B, MLX INT8, คลิป 30 วินาทีที่ 32 kHz โมโน, การถอดรหัสแบบขนานที่มีการมาสก์)
 - **[Stable Audio 3](docs/models/stable-audio-3.md)** — Text-to-audio/music generation (Stable Audio 3 Medium, MLX INT8/INT4, 44.1 kHz stereo, variable length)
-- **[FlashSR](https://soniqo.audio/guides/upsample)** — การเพิ่มความละเอียดเสียง (FlashSR ICASSP 2025, MLX, 48 kHz โมโน, diffusion แบบกลั่นใน 1 ขั้น, INT4 363 MB / INT8 720 MB)
+- **[FlashSR](https://soniqo.audio/guides/flashsr)** — การเพิ่มความละเอียดเสียง (FlashSR ICASSP 2025, MLX, 48 kHz โมโน, diffusion แบบกลั่นใน 1 ขั้น, INT4 363 MB / INT8 720 MB)
 
 **การตรวจจับเทิร์น, diarization และอัตลักษณ์ผู้พูด**
 
@@ -192,12 +192,12 @@ struct DictateView: View {
 | [Pyannote](https://soniqo.audio/guides/diarize) | VAD + การแยกผู้พูด | MLX | 1.5M | ไม่จำกัดภาษา |
 | [Sortformer](https://soniqo.audio/guides/diarize) | การแยกผู้พูด (E2E) | CoreML (ANE) | — | ไม่จำกัดภาษา |
 | [DeepFilterNet3](https://soniqo.audio/guides/denoise) | การปรับปรุงเสียงพูด | CoreML | 2.1M | ไม่จำกัดภาษา |
-| [Sidon](https://soniqo.audio/guides/restore) | การฟื้นฟูเสียงพูด (ลดเสียงรบกวน + ลดเสียงก้อง, 48 kHz) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | ไม่จำกัดภาษา |
+| [Sidon](https://soniqo.audio/guides/sidon) | การฟื้นฟูเสียงพูด (ลดเสียงรบกวน + ลดเสียงก้อง, 48 kHz) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | ไม่จำกัดภาษา |
 | [HTDemucs (Demucs v4)](https://soniqo.audio/guides/separate) | การแยกแหล่งกำเนิด | MLX | 168M | ไม่จำกัดภาษา |
 | [Open-Unmix](https://soniqo.audio/guides/separate) | การแยกแหล่งกำเนิด | MLX | 8.6M | ไม่จำกัดภาษา |
 | [MAGNeT](https://soniqo.audio/guides/compose) | ข้อความ → ดนตรี (30 วินาที @ 32 kHz) | MLX | 300M / 1.5B (int4/int8) | พรอมต์ EN |
 | [Stable Audio 3](docs/models/stable-audio-3.md) | Text → Music/audio (44.1 kHz stereo) | MLX | Medium 1.4B (int4/int8) | EN prompts |
-| [FlashSR](https://soniqo.audio/guides/upsample) | การเพิ่มความละเอียดเสียง (48 kHz) | MLX | 363 MB / 720 MB (int4/int8) | ไม่จำกัดภาษา |
+| [FlashSR](https://soniqo.audio/guides/flashsr) | การเพิ่มความละเอียดเสียง (48 kHz) | MLX | 363 MB / 720 MB (int4/int8) | ไม่จำกัดภาษา |
 | [WeSpeaker](https://soniqo.audio/guides/embed-speaker) | Embedding ของผู้พูด | MLX, CoreML | 6.6M | ไม่จำกัดภาษา |
 
 ## การติดตั้ง
@@ -410,7 +410,7 @@ let denoiser = try await DeepFilterNet3Model.fromPretrained()
 let clean = try denoiser.enhance(audio: noisySamples, sampleRate: 48000)
 ```
 
-### การฟื้นฟูเสียงพูด — [คู่มือฉบับเต็ม →](https://soniqo.audio/guides/restore)
+### การฟื้นฟูเสียงพูด — [คู่มือฉบับเต็ม →](https://soniqo.audio/guides/sidon)
 
 ลดเสียงรบกวน **และ** ลดเสียงก้องไปพร้อมกันด้วย [Sidon](https://arxiv.org/abs/2509.17052) (ตัวทำนาย w2v-BERT 2.0 + โวโคเดอร์ DAC, Core ML) ต่างจากตัวลดเสียงรบกวนทั่วไป Sidon ถูกฝึกมาเพื่อรักษาเอกลักษณ์ของผู้พูดไว้ จึงเหมาะอย่างยิ่งสำหรับการทำความสะอาดเสียงอ้างอิงสำหรับการโคลนเสียงที่มีเสียงรบกวนหรือเสียงก้องก่อนทำ TTS อินพุตเป็น 16 kHz เอาต์พุตเป็นโมโน 48 kHz
 

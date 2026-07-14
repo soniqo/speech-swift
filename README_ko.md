@@ -56,7 +56,7 @@ Mac과 iOS를 위한 온디바이스 음성 인식, 합성 및 이해. Apple Sil
 **LLM 및 번역**
 
 - **[Qwen3Chat](https://soniqo.audio/ko/guides/chat)** — 온디바이스 LLM 채팅 (Qwen3.5-0.8B MLX/CoreML에 dense Qwen3 4B 및 Gemma 4 E2B/E4B MLX 백엔드 추가, 스트리밍 토큰)
-- **[FunctionGemma](https://soniqo.audio/ko/guides/function-calls)** — 온디바이스 구조화된 함수 / 도구 호출 LLM (Gemma 3 270M, CoreML 8비트 팔레타이즈, Neural Engine, 약 252 tok/s)
+- **[FunctionGemma](https://soniqo.audio/ko/guides/functiongemma)** — 온디바이스 구조화된 함수 / 도구 호출 LLM (Gemma 3 270M, CoreML 8비트 팔레타이즈, Neural Engine, 약 252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/ko/guides/translate)** — 400+ 언어 간 다대다 번역 (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
 
 **Speech-to-Speech 및 음성 에이전트**
@@ -71,7 +71,7 @@ Mac과 iOS를 위한 온디바이스 음성 인식, 합성 및 이해. Apple Sil
 - **[소스 분리](https://soniqo.audio/ko/guides/separate)** — HTDemucs (Demucs v4) + Open-Unmix 기반 음악 소스 분리 (UMX-HQ / UMX-L, 4개 스템: 보컬/드럼/베이스/기타, 44.1 kHz 스테레오)
 - **[MAGNeT](https://soniqo.audio/ko/guides/compose)** — 텍스트 → 음악 생성 (Meta MAGNeT Small 300M / Medium 1.5B, MLX INT8, 30초 클립 32 kHz 모노, 마스크 병렬 디코딩)
 - **[Stable Audio 3](docs/models/stable-audio-3.md)** — Text-to-audio/music generation (Stable Audio 3 Medium, MLX INT8/INT4, 44.1 kHz stereo, variable length)
-- **[FlashSR](https://soniqo.audio/ko/guides/upsample)** — 오디오 초고해상도 (FlashSR ICASSP 2025, MLX, 48 kHz 모노, 1단계 증류 확산, INT4 363 MB / INT8 720 MB)
+- **[FlashSR](https://soniqo.audio/ko/guides/flashsr)** — 오디오 초고해상도 (FlashSR ICASSP 2025, MLX, 48 kHz 모노, 1단계 증류 확산, INT4 363 MB / INT8 720 MB)
 
 **턴 감지, 화자 분리 및 화자 식별**
 
@@ -182,7 +182,7 @@ struct DictateView: View {
 | [Qwen3.5 Chat](docs/models/qwen35-chat.md) | Text → Text (LLM) | MLX, CoreML | 0.8B | Multi |
 | [Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md) | Text → Text (LLM) | MLX | 4B | Multi |
 | [Gemma 4 Chat](docs/models/gemma4-chat.md) | Text → Text (LLM) | MLX | E2B / E4B (4-bit) | Multi |
-| [FunctionGemma](https://soniqo.audio/ko/guides/function-calls) | 텍스트 → 도구 호출 (LLM) | CoreML | 270M | 영어 위주 |
+| [FunctionGemma](https://soniqo.audio/ko/guides/functiongemma) | 텍스트 → 도구 호출 (LLM) | CoreML | 270M | 영어 위주 |
 | [MADLAD-400](https://soniqo.audio/ko/guides/translate) | 텍스트 → 텍스트 (번역) | MLX | 3B | **400+** |
 | [Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate) | 음성 → 음성 (번역) | MLX | 3B | FR/ES/PT/DE → EN |
 | [PersonaPlex](https://soniqo.audio/ko/guides/respond) | 음성 → 음성 | MLX | 7B | EN |
@@ -192,12 +192,12 @@ struct DictateView: View {
 | [Pyannote](https://soniqo.audio/ko/guides/diarize) | VAD + 화자 분리 | MLX | 1.5M | 언어 무관 |
 | [Sortformer](https://soniqo.audio/ko/guides/diarize) | 화자 분리 (E2E) | CoreML (ANE) | — | 언어 무관 |
 | [DeepFilterNet3](https://soniqo.audio/ko/guides/denoise) | 음성 향상 | CoreML | 2.1M | 언어 무관 |
-| [Sidon](https://soniqo.audio/ko/guides/restore) | 음성 복원 (노이즈 제거 + 잔향 제거, 48 kHz) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | 언어 무관 |
+| [Sidon](https://soniqo.audio/ko/guides/sidon) | 음성 복원 (노이즈 제거 + 잔향 제거, 48 kHz) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | 언어 무관 |
 | [HTDemucs (Demucs v4)](https://soniqo.audio/ko/guides/separate) | 소스 분리 | MLX | 168M | Agnostic |
 | [Open-Unmix](https://soniqo.audio/ko/guides/separate) | 소스 분리 | MLX | 8.6M | Agnostic |
 | [MAGNeT](https://soniqo.audio/ko/guides/compose) | 텍스트 → 음악 (30초 @ 32 kHz) | MLX | 300M / 1.5B (int4/int8) | 영어 프롬프트 |
 | [Stable Audio 3](docs/models/stable-audio-3.md) | Text → Music/audio (44.1 kHz stereo) | MLX | Medium 1.4B (int4/int8) | EN prompts |
-| [FlashSR](https://soniqo.audio/ko/guides/upsample) | 오디오 초고해상도 (48 kHz) | MLX | 363 MB / 720 MB (int4/int8) | 언어 무관 |
+| [FlashSR](https://soniqo.audio/ko/guides/flashsr) | 오디오 초고해상도 (48 kHz) | MLX | 363 MB / 720 MB (int4/int8) | 언어 무관 |
 | [WeSpeaker](https://soniqo.audio/ko/guides/embed-speaker) | 화자 임베딩 | MLX, CoreML | 6.6M | 언어 무관 |
 
 ## 설치
@@ -412,7 +412,7 @@ let denoiser = try await DeepFilterNet3Model.fromPretrained()
 let clean = try denoiser.enhance(audio: noisySamples, sampleRate: 48000)
 ```
 
-### 음성 복원 — [전체 가이드 →](https://soniqo.audio/ko/guides/restore)
+### 음성 복원 — [전체 가이드 →](https://soniqo.audio/ko/guides/sidon)
 
 [Sidon](https://arxiv.org/abs/2509.17052) (w2v-BERT 2.0 예측기 + DAC 보코더, Core ML)으로 노이즈 제거 **및** 잔향 제거를 동시에 수행합니다. 일반적인 노이즈 억제기와 달리 Sidon은 화자의 정체성을 보존하도록 학습되어, TTS 이전에 노이즈가 많거나 잔향이 있는 음성 복제 레퍼런스를 정리하는 데 적합합니다. 입력은 16 kHz이고 출력은 48 kHz 모노입니다.
 

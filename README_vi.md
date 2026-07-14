@@ -56,7 +56,7 @@ Nhận dạng, tổng hợp và hiểu giọng nói trên thiết bị cho Mac v
 **LLM và dịch thuật**
 
 - **[Qwen3Chat](https://soniqo.audio/guides/chat)** — Chat LLM trên thiết bị (Qwen3.5-0.8B MLX/CoreML cùng các backend MLX dense Qwen3 4B và Gemma 4 E2B/E4B, token streaming)
-- **[FunctionGemma](https://soniqo.audio/guides/function-calls)** — LLM trên thiết bị cho các lệnh gọi hàm / công cụ có cấu trúc (Gemma 3 270M, CoreML palette hóa 8-bit, Neural Engine, ~252 tok/s)
+- **[FunctionGemma](https://soniqo.audio/guides/functiongemma)** — LLM trên thiết bị cho các lệnh gọi hàm / công cụ có cấu trúc (Gemma 3 270M, CoreML palette hóa 8-bit, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/guides/translate)** — Dịch nhiều-sang-nhiều giữa hơn 400 ngôn ngữ (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
 
 **Speech-to-Speech và voice agents**
@@ -71,7 +71,7 @@ Nhận dạng, tổng hợp và hiểu giọng nói trên thiết bị cho Mac v
 - **[Tách nguồn](https://soniqo.audio/guides/separate)** — Tách nguồn âm thanh nhạc qua HTDemucs (Demucs v4) + Open-Unmix (UMX-HQ / UMX-L, 4 stem: giọng hát/trống/bass/khác, 44,1 kHz stereo)
 - **[MAGNeT](https://soniqo.audio/guides/compose)** — Tạo nhạc từ văn bản (Meta MAGNeT Small 300M / Medium 1.5B, MLX INT8, đoạn 30 giây ở 32 kHz mono, giải mã song song có mặt nạ)
 - **[Stable Audio 3](docs/models/stable-audio-3.md)** — Text-to-audio/music generation (Stable Audio 3 Medium, MLX INT8/INT4, 44.1 kHz stereo, variable length)
-- **[FlashSR](https://soniqo.audio/guides/upsample)** — Siêu phân giải âm thanh (FlashSR ICASSP 2025, MLX, 48 kHz mono, diffusion chưng cất 1 bước, INT4 363 MB / INT8 720 MB)
+- **[FlashSR](https://soniqo.audio/guides/flashsr)** — Siêu phân giải âm thanh (FlashSR ICASSP 2025, MLX, 48 kHz mono, diffusion chưng cất 1 bước, INT4 363 MB / INT8 720 MB)
 
 **Phát hiện lượt nói, diarization và định danh người nói**
 
@@ -192,12 +192,12 @@ Xem tổng quan gọn bên dưới. **[Danh mục mô hình đầy đủ với k
 | [Pyannote](https://soniqo.audio/guides/diarize) | VAD + Phân tách người nói | MLX | 1.5M | Không phụ thuộc ngôn ngữ |
 | [Sortformer](https://soniqo.audio/guides/diarize) | Phân tách người nói (E2E) | CoreML (ANE) | — | Không phụ thuộc ngôn ngữ |
 | [DeepFilterNet3](https://soniqo.audio/guides/denoise) | Cải thiện chất lượng giọng nói | CoreML | 2.1M | Không phụ thuộc ngôn ngữ |
-| [Sidon](https://soniqo.audio/guides/restore) | Phục hồi giọng nói (khử nhiễu + khử vang, 48 kHz) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | Không phụ thuộc ngôn ngữ |
+| [Sidon](https://soniqo.audio/guides/sidon) | Phục hồi giọng nói (khử nhiễu + khử vang, 48 kHz) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | Không phụ thuộc ngôn ngữ |
 | [HTDemucs (Demucs v4)](https://soniqo.audio/guides/separate) | Tách nguồn | MLX | 168M | Không phụ thuộc ngôn ngữ |
 | [Open-Unmix](https://soniqo.audio/guides/separate) | Tách nguồn | MLX | 8.6M | Không phụ thuộc ngôn ngữ |
 | [MAGNeT](https://soniqo.audio/guides/compose) | Văn bản → Nhạc (30s @ 32 kHz) | MLX | 300M / 1.5B (int4/int8) | Prompt EN |
 | [Stable Audio 3](docs/models/stable-audio-3.md) | Text → Music/audio (44.1 kHz stereo) | MLX | Medium 1.4B (int4/int8) | EN prompts |
-| [FlashSR](https://soniqo.audio/guides/upsample) | Siêu phân giải âm thanh (48 kHz) | MLX | 363 MB / 720 MB (int4/int8) | Không phụ thuộc ngôn ngữ |
+| [FlashSR](https://soniqo.audio/guides/flashsr) | Siêu phân giải âm thanh (48 kHz) | MLX | 363 MB / 720 MB (int4/int8) | Không phụ thuộc ngôn ngữ |
 | [WeSpeaker](https://soniqo.audio/guides/embed-speaker) | Embedding người nói | MLX, CoreML | 6.6M | Không phụ thuộc ngôn ngữ |
 
 ## Cài đặt
@@ -410,7 +410,7 @@ let denoiser = try await DeepFilterNet3Model.fromPretrained()
 let clean = try denoiser.enhance(audio: noisySamples, sampleRate: 48000)
 ```
 
-### Phục hồi giọng nói — [hướng dẫn đầy đủ →](https://soniqo.audio/guides/restore)
+### Phục hồi giọng nói — [hướng dẫn đầy đủ →](https://soniqo.audio/guides/sidon)
 
 Khử nhiễu **và** khử vang đồng thời với [Sidon](https://arxiv.org/abs/2509.17052) (bộ dự đoán w2v-BERT 2.0 + bộ vocoder DAC, Core ML). Khác với một bộ khử nhiễu thông thường, Sidon được huấn luyện để giữ nguyên đặc điểm nhận dạng người nói, nên rất phù hợp để làm sạch một mẫu tham chiếu nhân bản giọng nói bị nhiễu hoặc bị vang trước khi TTS. Đầu vào là 16 kHz; đầu ra là 48 kHz mono.
 

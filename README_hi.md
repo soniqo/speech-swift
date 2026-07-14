@@ -56,7 +56,7 @@ Mac और iOS के लिए ऑन-डिवाइस स्पीच रि
 **LLM और अनुवाद**
 
 - **[Qwen3Chat](https://soniqo.audio/hi/guides/chat)** — ऑन-डिवाइस LLM चैट (Qwen3.5-0.8B MLX/CoreML के साथ dense Qwen3 4B और Gemma 4 E2B/E4B MLX बैकएंड, स्ट्रीमिंग टोकन)
-- **[FunctionGemma](https://soniqo.audio/hi/guides/function-calls)** — संरचित फ़ंक्शन / टूल कॉल के लिए ऑन-डिवाइस LLM (Gemma 3 270M, CoreML 8-बिट पैलेटाइज़, Neural Engine, ~252 tok/s)
+- **[FunctionGemma](https://soniqo.audio/hi/guides/functiongemma)** — संरचित फ़ंक्शन / टूल कॉल के लिए ऑन-डिवाइस LLM (Gemma 3 270M, CoreML 8-बिट पैलेटाइज़, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/hi/guides/translate)** — 400+ भाषाओं में बहु-दिशात्मक अनुवाद (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
 
 **स्पीच-टू-स्पीच और वॉइस एजेंट**
@@ -71,7 +71,7 @@ Mac और iOS के लिए ऑन-डिवाइस स्पीच रि
 - **[सोर्स सेपरेशन](https://soniqo.audio/hi/guides/separate)** — HTDemucs (Demucs v4) + Open-Unmix के ज़रिए म्यूज़िक सोर्स सेपरेशन (UMX-HQ / UMX-L, 4 स्टेम: वोकल/ड्रम्स/बेस/अन्य, 44.1 kHz स्टीरियो)
 - **[MAGNeT](https://soniqo.audio/hi/guides/compose)** — टेक्स्ट से संगीत निर्माण (Meta MAGNeT Small 300M / Medium 1.5B, MLX INT8, 30 सेकंड क्लिप 32 kHz मोनो, मास्क्ड पैरलल डिकोडिंग)
 - **[Stable Audio 3](docs/models/stable-audio-3.md)** — Text-to-audio/music generation (Stable Audio 3 Medium, MLX INT8/INT4, 44.1 kHz stereo, variable length)
-- **[FlashSR](https://soniqo.audio/hi/guides/upsample)** — ऑडियो सुपर-रेज़ोल्यूशन (FlashSR ICASSP 2025, MLX, 48 kHz मोनो, 1-स्टेप डिस्टिल्ड डिफ्यूज़न, INT4 363 MB / INT8 720 MB)
+- **[FlashSR](https://soniqo.audio/hi/guides/flashsr)** — ऑडियो सुपर-रेज़ोल्यूशन (FlashSR ICASSP 2025, MLX, 48 kHz मोनो, 1-स्टेप डिस्टिल्ड डिफ्यूज़न, INT4 363 MB / INT8 720 MB)
 
 **टर्न डिटेक्शन, डायराइज़ेशन और स्पीकर पहचान**
 
@@ -182,7 +182,7 @@ struct DictateView: View {
 | [Qwen3.5 Chat](docs/models/qwen35-chat.md) | Text → Text (LLM) | MLX, CoreML | 0.8B | Multi |
 | [Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md) | Text → Text (LLM) | MLX | 4B | Multi |
 | [Gemma 4 Chat](docs/models/gemma4-chat.md) | Text → Text (LLM) | MLX | E2B / E4B (4-bit) | Multi |
-| [FunctionGemma](https://soniqo.audio/hi/guides/function-calls) | टेक्स्ट → टूल कॉल (LLM) | CoreML | 270M | EN |
+| [FunctionGemma](https://soniqo.audio/hi/guides/functiongemma) | टेक्स्ट → टूल कॉल (LLM) | CoreML | 270M | EN |
 | [MADLAD-400](https://soniqo.audio/hi/guides/translate) | टेक्स्ट → टेक्स्ट (अनुवाद) | MLX | 3B | **400+** |
 | [Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate) | स्पीच → स्पीच (अनुवाद) | MLX | 3B | FR/ES/PT/DE → EN |
 | [PersonaPlex](https://soniqo.audio/hi/guides/respond) | स्पीच → स्पीच | MLX | 7B | EN |
@@ -192,12 +192,12 @@ struct DictateView: View {
 | [Pyannote](https://soniqo.audio/hi/guides/diarize) | VAD + Diarization | MLX | 1.5M | भाषा-तटस्थ |
 | [Sortformer](https://soniqo.audio/hi/guides/diarize) | Diarization (E2E) | CoreML (ANE) | — | भाषा-तटस्थ |
 | [DeepFilterNet3](https://soniqo.audio/hi/guides/denoise) | स्पीच एन्हांसमेंट | CoreML | 2.1M | भाषा-तटस्थ |
-| [Sidon](https://soniqo.audio/hi/guides/restore) | स्पीच रिस्टोरेशन (नॉइज़ हटाना + डीरीवर्ब, 48 kHz) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | भाषा-तटस्थ |
+| [Sidon](https://soniqo.audio/hi/guides/sidon) | स्पीच रिस्टोरेशन (नॉइज़ हटाना + डीरीवर्ब, 48 kHz) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | भाषा-तटस्थ |
 | [HTDemucs (Demucs v4)](https://soniqo.audio/hi/guides/separate) | सोर्स सेपरेशन | MLX | 168M | Agnostic |
 | [Open-Unmix](https://soniqo.audio/hi/guides/separate) | सोर्स सेपरेशन | MLX | 8.6M | Agnostic |
 | [MAGNeT](https://soniqo.audio/hi/guides/compose) | टेक्स्ट → संगीत (30 सेकंड @ 32 kHz) | MLX | 300M / 1.5B (int4/int8) | EN प्रॉम्प्ट्स |
 | [Stable Audio 3](docs/models/stable-audio-3.md) | Text → Music/audio (44.1 kHz stereo) | MLX | Medium 1.4B (int4/int8) | EN prompts |
-| [FlashSR](https://soniqo.audio/hi/guides/upsample) | ऑडियो सुपर-रेज़ोल्यूशन (48 kHz) | MLX | 363 MB / 720 MB (int4/int8) | भाषा-निरपेक्ष |
+| [FlashSR](https://soniqo.audio/hi/guides/flashsr) | ऑडियो सुपर-रेज़ोल्यूशन (48 kHz) | MLX | 363 MB / 720 MB (int4/int8) | भाषा-निरपेक्ष |
 | [WeSpeaker](https://soniqo.audio/hi/guides/embed-speaker) | स्पीकर एम्बेडिंग | MLX, CoreML | 6.6M | भाषा-तटस्थ |
 
 ## इंस्टॉलेशन
@@ -412,7 +412,7 @@ let denoiser = try await DeepFilterNet3Model.fromPretrained()
 let clean = try denoiser.enhance(audio: noisySamples, sampleRate: 48000)
 ```
 
-### स्पीच रिस्टोरेशन — [पूर्ण गाइड →](https://soniqo.audio/hi/guides/restore)
+### स्पीच रिस्टोरेशन — [पूर्ण गाइड →](https://soniqo.audio/hi/guides/sidon)
 
 [Sidon](https://arxiv.org/abs/2509.17052) (w2v-BERT 2.0 प्रेडिक्टर + DAC वोकोडर, Core ML) के साथ संयुक्त नॉइज़ हटाना **और** डीरीवर्ब। एक सामान्य नॉइज़ सप्रेसर के विपरीत, Sidon को स्पीकर की पहचान संरक्षित रखने के लिए ट्रेन किया गया है, इसलिए यह TTS से पहले किसी शोरयुक्त या रीवर्बरेंट वॉयस-क्लोनिंग रेफ़रेंस को साफ़ करने के लिए उपयुक्त है। इनपुट 16 kHz है; आउटपुट 48 kHz मोनो है।
 

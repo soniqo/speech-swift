@@ -56,7 +56,7 @@
 **LLM и перевод**
 
 - **[Qwen3Chat](https://soniqo.audio/ru/guides/chat)** — Локальный чат на базе LLM (Qwen3.5-0.8B MLX/CoreML плюс MLX-бэкенды dense Qwen3 4B и Gemma 4 E2B/E4B, потоковая генерация токенов)
-- **[FunctionGemma](https://soniqo.audio/ru/guides/function-calls)** — Локальный LLM для структурированных вызовов функций / инструментов (Gemma 3 270M, CoreML 8-битная палитризация, Neural Engine, ~252 tok/s)
+- **[FunctionGemma](https://soniqo.audio/ru/guides/functiongemma)** — Локальный LLM для структурированных вызовов функций / инструментов (Gemma 3 270M, CoreML 8-битная палитризация, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/ru/guides/translate)** — Многоязычный перевод между 400+ языками (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
 
 **Speech-to-Speech и голосовые агенты**
@@ -71,7 +71,7 @@
 - **[Разделение источников](https://soniqo.audio/ru/guides/separate)** — Разделение музыкальных источников через HTDemucs (Demucs v4) + Open-Unmix (UMX-HQ / UMX-L, 4 стема: вокал/ударные/бас/остальное, 44,1 кГц стерео)
 - **[MAGNeT](https://soniqo.audio/ru/guides/compose)** — Генерация музыки по тексту (Meta MAGNeT Small 300M / Medium 1.5B, MLX INT8, 30-секундные клипы 32 кГц моно, маскированное параллельное декодирование)
 - **[Stable Audio 3](docs/models/stable-audio-3.md)** — Text-to-audio/music generation (Stable Audio 3 Medium, MLX INT8/INT4, 44.1 kHz stereo, variable length)
-- **[FlashSR](https://soniqo.audio/ru/guides/upsample)** — Аудио супер-разрешение (FlashSR ICASSP 2025, MLX, 48 кГц моно, дистиллированная диффузия за 1 шаг, INT4 363 МБ / INT8 720 МБ)
+- **[FlashSR](https://soniqo.audio/ru/guides/flashsr)** — Аудио супер-разрешение (FlashSR ICASSP 2025, MLX, 48 кГц моно, дистиллированная диффузия за 1 шаг, INT4 363 МБ / INT8 720 МБ)
 
 **Детекция реплик, диаризация и идентичность говорящего**
 
@@ -182,7 +182,7 @@ struct DictateView: View {
 | [Qwen3.5 Chat](docs/models/qwen35-chat.md) | Text → Text (LLM) | MLX, CoreML | 0.8B | Multi |
 | [Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md) | Text → Text (LLM) | MLX | 4B | Multi |
 | [Gemma 4 Chat](docs/models/gemma4-chat.md) | Text → Text (LLM) | MLX | E2B / E4B (4-bit) | Multi |
-| [FunctionGemma](https://soniqo.audio/ru/guides/function-calls) | Текст → Вызовы инструментов (LLM) | CoreML | 270M | EN |
+| [FunctionGemma](https://soniqo.audio/ru/guides/functiongemma) | Текст → Вызовы инструментов (LLM) | CoreML | 270M | EN |
 | [MADLAD-400](https://soniqo.audio/ru/guides/translate) | Текст → Текст (Перевод) | MLX | 3B | **400+** |
 | [Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate) | Речь → Речь (Перевод) | MLX | 3B | FR/ES/PT/DE → EN |
 | [PersonaPlex](https://soniqo.audio/ru/guides/respond) | Речь → Речь | MLX | 7B | EN |
@@ -192,12 +192,12 @@ struct DictateView: View {
 | [Pyannote](https://soniqo.audio/ru/guides/diarize) | VAD + Диаризация | MLX | 1.5M | Универсальный |
 | [Sortformer](https://soniqo.audio/ru/guides/diarize) | Диаризация (E2E) | CoreML (ANE) | — | Универсальный |
 | [DeepFilterNet3](https://soniqo.audio/ru/guides/denoise) | Улучшение речи | CoreML | 2.1M | Универсальный |
-| [Sidon](https://soniqo.audio/ru/guides/restore) | Восстановление речи (подавление шума + дереверберация, 48 кГц) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | Универсальный |
+| [Sidon](https://soniqo.audio/ru/guides/sidon) | Восстановление речи (подавление шума + дереверберация, 48 кГц) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | Универсальный |
 | [HTDemucs (Demucs v4)](https://soniqo.audio/ru/guides/separate) | Разделение источников | MLX | 168M | Agnostic |
 | [Open-Unmix](https://soniqo.audio/ru/guides/separate) | Разделение источников | MLX | 8.6M | Agnostic |
 | [MAGNeT](https://soniqo.audio/ru/guides/compose) | Текст → Музыка (30 с @ 32 кГц) | MLX | 300M / 1.5B (int4/int8) | EN-промпты |
 | [Stable Audio 3](docs/models/stable-audio-3.md) | Text → Music/audio (44.1 kHz stereo) | MLX | Medium 1.4B (int4/int8) | EN prompts |
-| [FlashSR](https://soniqo.audio/ru/guides/upsample) | Аудио супер-разрешение (48 кГц) | MLX | 363 МБ / 720 МБ (int4/int8) | Языконезависимое |
+| [FlashSR](https://soniqo.audio/ru/guides/flashsr) | Аудио супер-разрешение (48 кГц) | MLX | 363 МБ / 720 МБ (int4/int8) | Языконезависимое |
 | [WeSpeaker](https://soniqo.audio/ru/guides/embed-speaker) | Эмбеддинги спикеров | MLX, CoreML | 6.6M | Универсальный |
 
 ## Установка
@@ -412,7 +412,7 @@ let denoiser = try await DeepFilterNet3Model.fromPretrained()
 let clean = try denoiser.enhance(audio: noisySamples, sampleRate: 48000)
 ```
 
-### Восстановление речи — [полное руководство →](https://soniqo.audio/ru/guides/restore)
+### Восстановление речи — [полное руководство →](https://soniqo.audio/ru/guides/sidon)
 
 Совместное подавление шума **и** дереверберация с помощью [Sidon](https://arxiv.org/abs/2509.17052) (предиктор w2v-BERT 2.0 + вокодер DAC, Core ML). В отличие от обычного шумоподавителя, Sidon обучен сохранять идентичность говорящего, поэтому он хорошо подходит для очистки зашумлённого или реверберирующего референса для клонирования голоса перед TTS. Вход — 16 кГц; выход — 48 кГц моно.
 

@@ -56,7 +56,7 @@ Reconocimiento, síntesis y comprensión de voz en el dispositivo para Mac e iOS
 **LLM y traducción**
 
 - **[Qwen3Chat](https://soniqo.audio/es/guides/chat)** — Chat LLM en el dispositivo (Qwen3.5-0.8B con MLX/CoreML, más backends MLX dense Qwen3 4B y Gemma 4 E2B/E4B, tokens en streaming)
-- **[FunctionGemma](https://soniqo.audio/es/guides/function-calls)** — LLM en el dispositivo para llamadas estructuradas a funciones / herramientas (Gemma 3 270M, CoreML paletizado de 8 bits, Neural Engine, ~252 tok/s)
+- **[FunctionGemma](https://soniqo.audio/es/guides/functiongemma)** — LLM en el dispositivo para llamadas estructuradas a funciones / herramientas (Gemma 3 270M, CoreML paletizado de 8 bits, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/es/guides/translate)** — Traducción multidireccional entre 400+ idiomas (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
 
 **Voz a voz y agentes de voz**
@@ -71,7 +71,7 @@ Reconocimiento, síntesis y comprensión de voz en el dispositivo para Mac e iOS
 - **[Separación de fuentes](https://soniqo.audio/es/guides/separate)** — Separación de fuentes musicales con HTDemucs (Demucs v4) + Open-Unmix (UMX-HQ / UMX-L, 4 stems: voces/batería/bajo/otros, 44,1 kHz estéreo)
 - **[MAGNeT](https://soniqo.audio/es/guides/compose)** — Generación de música a partir de texto (Meta MAGNeT Small 300M / Medium 1.5B, MLX INT8, clips de 30 s a 32 kHz mono, decodificación enmascarada en paralelo)
 - **[Stable Audio 3](docs/models/stable-audio-3.md)** — Text-to-audio/music generation (Stable Audio 3 Medium, MLX INT8/INT4, 44.1 kHz stereo, variable length)
-- **[FlashSR](https://soniqo.audio/es/guides/upsample)** — Super-resolución de audio (FlashSR ICASSP 2025, MLX, 48 kHz mono, difusión destilada en 1 paso, INT4 363 MB / INT8 720 MB)
+- **[FlashSR](https://soniqo.audio/es/guides/flashsr)** — Super-resolución de audio (FlashSR ICASSP 2025, MLX, 48 kHz mono, difusión destilada en 1 paso, INT4 363 MB / INT8 720 MB)
 
 **Detección de turnos, diarización e identidad de hablante**
 
@@ -182,7 +182,7 @@ Vista compacta a continuación. **[Catálogo completo de modelos con tamaños, c
 | [Qwen3.5 Chat](docs/models/qwen35-chat.md) | Text → Text (LLM) | MLX, CoreML | 0.8B | Multi |
 | [Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md) | Text → Text (LLM) | MLX | 4B | Multi |
 | [Gemma 4 Chat](docs/models/gemma4-chat.md) | Text → Text (LLM) | MLX | E2B / E4B (4-bit) | Multi |
-| [FunctionGemma](https://soniqo.audio/es/guides/function-calls) | Texto → Llamadas a herramientas (LLM) | CoreML | 270M | EN |
+| [FunctionGemma](https://soniqo.audio/es/guides/functiongemma) | Texto → Llamadas a herramientas (LLM) | CoreML | 270M | EN |
 | [MADLAD-400](https://soniqo.audio/es/guides/translate) | Texto → Texto (Traducción) | MLX | 3B | **400+** |
 | [Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate) | Voz → Voz (Traducción) | MLX | 3B | FR/ES/PT/DE → EN |
 | [PersonaPlex](https://soniqo.audio/es/guides/respond) | Voz → Voz | MLX | 7B | EN |
@@ -192,12 +192,12 @@ Vista compacta a continuación. **[Catálogo completo de modelos con tamaños, c
 | [Pyannote](https://soniqo.audio/es/guides/diarize) | VAD + Diarización | MLX | 1.5M | Agnóstico |
 | [Sortformer](https://soniqo.audio/es/guides/diarize) | Diarización (E2E) | CoreML (ANE) | — | Agnóstico |
 | [DeepFilterNet3](https://soniqo.audio/es/guides/denoise) | Mejora de voz | CoreML | 2.1M | Agnóstico |
-| [Sidon](https://soniqo.audio/es/guides/restore) | Restauración de voz (supresión de ruido + dereverberación, 48 kHz) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | Agnóstico |
+| [Sidon](https://soniqo.audio/es/guides/sidon) | Restauración de voz (supresión de ruido + dereverberación, 48 kHz) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | Agnóstico |
 | [HTDemucs (Demucs v4)](https://soniqo.audio/es/guides/separate) | Separación de fuentes | MLX | 168M | Agnostic |
 | [Open-Unmix](https://soniqo.audio/es/guides/separate) | Separación de fuentes | MLX | 8.6M | Agnostic |
 | [MAGNeT](https://soniqo.audio/es/guides/compose) | Texto → Música (30 s @ 32 kHz) | MLX | 300M / 1.5B (int4/int8) | Prompts en EN |
 | [Stable Audio 3](docs/models/stable-audio-3.md) | Text → Music/audio (44.1 kHz stereo) | MLX | Medium 1.4B (int4/int8) | EN prompts |
-| [FlashSR](https://soniqo.audio/es/guides/upsample) | Super-resolución de audio (48 kHz) | MLX | 363 MB / 720 MB (int4/int8) | Agnóstico |
+| [FlashSR](https://soniqo.audio/es/guides/flashsr) | Super-resolución de audio (48 kHz) | MLX | 363 MB / 720 MB (int4/int8) | Agnóstico |
 | [WeSpeaker](https://soniqo.audio/es/guides/embed-speaker) | Embedding de hablante | MLX, CoreML | 6.6M | Agnóstico |
 
 ## Instalación
@@ -412,7 +412,7 @@ let denoiser = try await DeepFilterNet3Model.fromPretrained()
 let clean = try denoiser.enhance(audio: noisySamples, sampleRate: 48000)
 ```
 
-### Restauración de voz — [guía completa →](https://soniqo.audio/es/guides/restore)
+### Restauración de voz — [guía completa →](https://soniqo.audio/es/guides/sidon)
 
 Supresión de ruido **y** dereverberación conjuntas con [Sidon](https://arxiv.org/abs/2509.17052) (predictor w2v-BERT 2.0 + vocoder DAC, Core ML). A diferencia de un supresor de ruido genérico, Sidon está entrenado para preservar la identidad del hablante, por lo que es ideal para limpiar una referencia de clonación de voz ruidosa o con reverberación antes del TTS. La entrada es de 16 kHz; la salida es mono a 48 kHz.
 
