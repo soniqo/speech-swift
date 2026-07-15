@@ -88,7 +88,7 @@
 - **[كلمة التنبيه](https://soniqo.audio/ar/guides/wake-word)** — اكتشاف الكلمات المفتاحية على الجهاز (KWS Zipformer 3M، CoreML، 26× الزمن الحقيقي، قائمة كلمات مفتاحية قابلة للتهيئة)
 - **[VAD](https://soniqo.audio/ar/guides/vad)** — اكتشاف النشاط الصوتي (Silero تدفقي، Pyannote دون اتصال، FireRedVAD أكثر من 100 لغة)
 - **[تمييز المتحدثين](https://soniqo.audio/ar/guides/diarize)** — من تحدث متى (خط أنابيب Pyannote، Sortformer من طرف إلى طرف على Neural Engine)
-- **[تضمينات المتحدث](https://soniqo.audio/ar/guides/embed-speaker)** — WeSpeaker ResNet34 (256 بُعداً)، CAM++ (192 بُعداً)
+- **[تضمينات المتحدث](https://soniqo.audio/ar/guides/embed-speaker)** — WeSpeaker ResNet34 (256 بُعداً)، ReDimNet2-B6 للهوية الصوتية المسماة (192 بُعداً)، CAM++ (192 بُعداً)
 
 </div>
 
@@ -244,6 +244,7 @@ struct DictateView: View {
 | [Stable Audio 3](docs/models/stable-audio-3.md) | Text → Music/audio (44.1 kHz stereo) | MLX | Medium 1.4B (int4/int8) | EN prompts |
 | [FlashSR](https://soniqo.audio/ar/guides/upsample) | رفع دقة الصوت (48 كيلوهرتز) | MLX | 363 ميغابايت / 720 ميغابايت (int4/int8) | محايد للغة |
 | [WeSpeaker](https://soniqo.audio/ar/guides/embed-speaker) | تضمين المتحدث | MLX, CoreML | 6.6M | محايد للغة |
+| [ReDimNet2-B6](https://huggingface.co/aufklarer/ReDimNet2-B6-CoreML) | هوية صوتية مسماة | CoreML | 12.3M | محايد للغة |
 
 ## التثبيت
 

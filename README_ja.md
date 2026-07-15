@@ -78,7 +78,7 @@ Mac・iOS向けのオンデバイス音声認識・合成・理解。Apple Silic
 - **[ウェイクワード](https://soniqo.audio/ja/guides/wake-word)** — オンデバイスのキーワード検出（KWS Zipformer 3M、CoreML、リアルタイムの26倍、キーワードリスト設定可能）
 - **[VAD](https://soniqo.audio/ja/guides/vad)** — 音声区間検出（Sileroストリーミング、Pyannoteオフライン、FireRedVAD 100以上の言語）
 - **[話者ダイアライゼーション](https://soniqo.audio/ja/guides/diarize)** — 誰がいつ話したか（Pyannoteパイプライン、Neural Engine上のエンドツーエンドSortformer）
-- **[話者埋め込み](https://soniqo.audio/ja/guides/embed-speaker)** — WeSpeaker ResNet34（256次元）、CAM++（192次元）
+- **[話者埋め込み](https://soniqo.audio/ja/guides/embed-speaker)** — WeSpeaker ResNet34（256次元）、ReDimNet2-B6による名前付き音声識別（192次元）、CAM++（192次元）
 
 論文：[Qwen3-ASR](https://arxiv.org/abs/2601.21337) (Alibaba) · [Qwen3-TTS](https://arxiv.org/abs/2601.15621) (Alibaba) · [Omnilingual ASR](https://arxiv.org/abs/2511.09690) (Meta) · [Parakeet TDT](https://arxiv.org/abs/2304.06795) (NVIDIA) · [CosyVoice 3](https://arxiv.org/abs/2505.17589) (Alibaba) · [Kokoro](https://arxiv.org/abs/2301.01695) (StyleTTS 2) · [PersonaPlex](https://arxiv.org/abs/2602.06053) (NVIDIA) · [Mimi](https://arxiv.org/abs/2410.00037) (Kyutai) · [Hibiki](https://arxiv.org/abs/2502.03382) (Kyutai) · [Sortformer](https://arxiv.org/abs/2409.06656) (NVIDIA)
 
@@ -200,6 +200,7 @@ struct DictateView: View {
 | [Stable Audio 3](docs/models/stable-audio-3.md) | Text → Music/audio (44.1 kHz stereo) | MLX | Medium 1.4B (int4/int8) | EN prompts |
 | [FlashSR](https://soniqo.audio/ja/guides/upsample) | オーディオ超解像 (48 kHz) | MLX | 363 MB / 720 MB (int4/int8) | 言語非依存 |
 | [WeSpeaker](https://soniqo.audio/ja/guides/embed-speaker) | 話者埋め込み | MLX、CoreML | 6.6M | 言語非依存 |
+| [ReDimNet2-B6](https://huggingface.co/aufklarer/ReDimNet2-B6-CoreML) | 名前付き音声識別 | CoreML | 12.3M | 言語非依存 |
 
 ## インストール
 

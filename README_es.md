@@ -78,7 +78,7 @@ Reconocimiento, síntesis y comprensión de voz en el dispositivo para Mac e iOS
 - **[Palabra de activación](https://soniqo.audio/es/guides/wake-word)** — Detección de palabras clave en el dispositivo (KWS Zipformer 3M, CoreML, 26× tiempo real, lista de palabras clave configurable)
 - **[VAD](https://soniqo.audio/es/guides/vad)** — Detección de actividad vocal (Silero streaming, Pyannote offline, FireRedVAD 100+ idiomas)
 - **[Diarización de hablantes](https://soniqo.audio/es/guides/diarize)** — Quién habló cuándo (pipeline Pyannote, Sortformer de extremo a extremo en Neural Engine)
-- **[Embeddings de hablante](https://soniqo.audio/es/guides/embed-speaker)** — WeSpeaker ResNet34 (256 dim), CAM++ (192 dim)
+- **[Embeddings de hablante](https://soniqo.audio/es/guides/embed-speaker)** — WeSpeaker ResNet34 (256 dim), ReDimNet2-B6 para identidad de voz con nombre (192 dim), CAM++ (192 dim)
 
 Papers: [Qwen3-ASR](https://arxiv.org/abs/2601.21337) (Alibaba) · [Qwen3-TTS](https://arxiv.org/abs/2601.15621) (Alibaba) · [Omnilingual ASR](https://arxiv.org/abs/2511.09690) (Meta) · [Parakeet TDT](https://arxiv.org/abs/2304.06795) (NVIDIA) · [CosyVoice 3](https://arxiv.org/abs/2505.17589) (Alibaba) · [Kokoro](https://arxiv.org/abs/2301.01695) (StyleTTS 2) · [PersonaPlex](https://arxiv.org/abs/2602.06053) (NVIDIA) · [Mimi](https://arxiv.org/abs/2410.00037) (Kyutai) · [Hibiki](https://arxiv.org/abs/2502.03382) (Kyutai) · [Sortformer](https://arxiv.org/abs/2409.06656) (NVIDIA)
 
@@ -200,6 +200,7 @@ Vista compacta a continuación. **[Catálogo completo de modelos con tamaños, c
 | [Stable Audio 3](docs/models/stable-audio-3.md) | Text → Music/audio (44.1 kHz stereo) | MLX | Medium 1.4B (int4/int8) | EN prompts |
 | [FlashSR](https://soniqo.audio/es/guides/upsample) | Super-resolución de audio (48 kHz) | MLX | 363 MB / 720 MB (int4/int8) | Agnóstico |
 | [WeSpeaker](https://soniqo.audio/es/guides/embed-speaker) | Embedding de hablante | MLX, CoreML | 6.6M | Agnóstico |
+| [ReDimNet2-B6](https://huggingface.co/aufklarer/ReDimNet2-B6-CoreML) | Identidad de voz con nombre | CoreML | 12.3M | Agnóstico |
 
 ## Instalación
 

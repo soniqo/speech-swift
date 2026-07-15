@@ -78,7 +78,7 @@ Mac과 iOS를 위한 온디바이스 음성 인식, 합성 및 이해. Apple Sil
 - **[웨이크워드](https://soniqo.audio/ko/guides/wake-word)** — 온디바이스 키워드 감지 (KWS Zipformer 3M, CoreML, 실시간의 26배, 구성 가능한 키워드 목록)
 - **[VAD](https://soniqo.audio/ko/guides/vad)** — 음성 활동 감지 (Silero 스트리밍, Pyannote 오프라인, FireRedVAD 100+ 개 언어)
 - **[화자 분리](https://soniqo.audio/ko/guides/diarize)** — 누가 언제 말했는지 (Pyannote 파이프라인, Neural Engine 상의 엔드투엔드 Sortformer)
-- **[화자 임베딩](https://soniqo.audio/ko/guides/embed-speaker)** — WeSpeaker ResNet34 (256차원), CAM++ (192차원)
+- **[화자 임베딩](https://soniqo.audio/ko/guides/embed-speaker)** — WeSpeaker ResNet34 (256차원), ReDimNet2-B6 이름 지정 음성 식별 (192차원), CAM++ (192차원)
 
 논문: [Qwen3-ASR](https://arxiv.org/abs/2601.21337) (Alibaba) · [Qwen3-TTS](https://arxiv.org/abs/2601.15621) (Alibaba) · [Omnilingual ASR](https://arxiv.org/abs/2511.09690) (Meta) · [Parakeet TDT](https://arxiv.org/abs/2304.06795) (NVIDIA) · [CosyVoice 3](https://arxiv.org/abs/2505.17589) (Alibaba) · [Kokoro](https://arxiv.org/abs/2301.01695) (StyleTTS 2) · [PersonaPlex](https://arxiv.org/abs/2602.06053) (NVIDIA) · [Mimi](https://arxiv.org/abs/2410.00037) (Kyutai) · [Hibiki](https://arxiv.org/abs/2502.03382) (Kyutai) · [Sortformer](https://arxiv.org/abs/2409.06656) (NVIDIA)
 
@@ -200,6 +200,7 @@ struct DictateView: View {
 | [Stable Audio 3](docs/models/stable-audio-3.md) | Text → Music/audio (44.1 kHz stereo) | MLX | Medium 1.4B (int4/int8) | EN prompts |
 | [FlashSR](https://soniqo.audio/ko/guides/upsample) | 오디오 초고해상도 (48 kHz) | MLX | 363 MB / 720 MB (int4/int8) | 언어 무관 |
 | [WeSpeaker](https://soniqo.audio/ko/guides/embed-speaker) | 화자 임베딩 | MLX, CoreML | 6.6M | 언어 무관 |
+| [ReDimNet2-B6](https://huggingface.co/aufklarer/ReDimNet2-B6-CoreML) | 이름 지정 음성 식별 | CoreML | 12.3M | 언어 무관 |
 
 ## 설치
 

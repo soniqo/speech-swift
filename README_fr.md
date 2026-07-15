@@ -78,7 +78,7 @@ Reconnaissance, synthese et comprehension vocale embarquees pour Mac et iOS. S'e
 - **[Mot de reveil](https://soniqo.audio/fr/guides/wake-word)** -- Detection de mots-cles sur appareil (KWS Zipformer 3M, CoreML, 26x temps reel, liste de mots-cles configurable)
 - **[VAD](https://soniqo.audio/fr/guides/vad)** -- Detection d'activite vocale (Silero streaming, Pyannote hors ligne, FireRedVAD 100+ langues)
 - **[Diarisation de locuteurs](https://soniqo.audio/fr/guides/diarize)** -- Qui a parle quand (pipeline Pyannote, Sortformer de bout en bout sur Neural Engine)
-- **[Empreintes de locuteur](https://soniqo.audio/fr/guides/embed-speaker)** -- WeSpeaker ResNet34 (256 dim), CAM++ (192 dim)
+- **[Empreintes de locuteur](https://soniqo.audio/fr/guides/embed-speaker)** -- WeSpeaker ResNet34 (256 dim), ReDimNet2-B6 pour l’identité vocale nommée (192 dim), CAM++ (192 dim)
 
 Articles : [Qwen3-ASR](https://arxiv.org/abs/2601.21337) (Alibaba) · [Qwen3-TTS](https://arxiv.org/abs/2601.15621) (Alibaba) · [Omnilingual ASR](https://arxiv.org/abs/2511.09690) (Meta) · [Parakeet TDT](https://arxiv.org/abs/2304.06795) (NVIDIA) · [CosyVoice 3](https://arxiv.org/abs/2505.17589) (Alibaba) · [Kokoro](https://arxiv.org/abs/2301.01695) (StyleTTS 2) · [PersonaPlex](https://arxiv.org/abs/2602.06053) (NVIDIA) · [Mimi](https://arxiv.org/abs/2410.00037) (Kyutai) · [Hibiki](https://arxiv.org/abs/2502.03382) (Kyutai) · [Sortformer](https://arxiv.org/abs/2409.06656) (NVIDIA)
 
@@ -200,6 +200,7 @@ Vue compacte ci-dessous. **[Catalogue complet des modeles avec tailles, quantifi
 | [Stable Audio 3](docs/models/stable-audio-3.md) | Text → Music/audio (44.1 kHz stereo) | MLX | Medium 1.4B (int4/int8) | EN prompts |
 | [FlashSR](https://soniqo.audio/fr/guides/upsample) | Super-résolution audio (48 kHz) | MLX | 363 Mo / 720 Mo (int4/int8) | Agnostique |
 | [WeSpeaker](https://soniqo.audio/fr/guides/embed-speaker) | Empreinte de locuteur | MLX, CoreML | 6.6M | Agnostique |
+| [ReDimNet2-B6](https://huggingface.co/aufklarer/ReDimNet2-B6-CoreML) | Identité vocale nommée | CoreML | 12.3M | Agnostique |
 
 ## Installation
 
