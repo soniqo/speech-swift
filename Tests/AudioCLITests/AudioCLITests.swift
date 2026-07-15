@@ -411,6 +411,25 @@ final class DiarizeCommandTests: XCTestCase {
     }
 }
 
+// MARK: - EmbedSpeakerCommand
+
+final class EmbedSpeakerCommandTests: XCTestCase {
+
+    func testParsesReDimNet2Engine() throws {
+        let command = try AudioCLI.parseAsRoot([
+            "embed-speaker", "voice.wav", "--engine", "redimnet2",
+        ])
+        let embedSpeaker = try XCTUnwrap(command as? EmbedSpeakerCommand)
+
+        XCTAssertEqual(embedSpeaker.audioFile, "voice.wav")
+        XCTAssertEqual(embedSpeaker.engine, "redimnet2")
+    }
+
+    func testHelpDocumentsReDimNet2Engine() {
+        XCTAssertTrue(EmbedSpeakerCommand.helpMessage().contains("redimnet2"))
+    }
+}
+
 // MARK: - SpeakCommand
 
 final class SpeakCommandTests: XCTestCase {
