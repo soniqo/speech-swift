@@ -69,12 +69,14 @@ Accepted short model aliases are `default`, `turbo`, `whisper`, `whisper-turbo`,
 
 ## Benchmark
 
-Quick LibriSpeech test-clean slice on Apple M5 Pro, 48 GB, macOS 26.5.1, debug build, 2026-07-01:
+Matched LibriSpeech test-clean benchmark on Apple M5 Pro, 48 GB, macOS 26.5.2, release build, 2026-07-16. Both engines ran in isolated processes over the same first 200 utterances. The table shows the WhisperKit-first run; a reverse-order replication preserved the native speed lead (0.077 versus 0.085 mean RTF and 17.6x versus 16.0x overall throughput):
 
 | Engine | WER% | CER% | Mean RTF | Median RTF | Overall xRT | Load | Peak RSS | RSS Delta |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| WhisperASR native | 1.40 | 0.39 | 0.089 | 0.078 | 14.0x | 6.1s | 384 MB | +295 MB |
-| Direct WhisperKit | 1.53 | 0.46 | 0.085 | 0.074 | 15.5x | 100.2s | 507 MB | +418 MB |
+| WhisperASR native | 1.73 | 0.63 | **0.077** | **0.064** | **17.6x** | **1.3s** | 445 MB | +304 MB |
+| Direct WhisperKit | **1.71** | **0.53** | 0.084 | 0.072 | 16.0x | 7.2s | **427 MB** | +286 MB |
+
+Native WhisperASR has 9.4% lower mean RTF and 5.5x faster cached loading. Accuracy is one word error apart across 4,675 reference words, and peak RSS is within 18 MB.
 
 See [ASR WER benchmark](../benchmarks/asr-wer.md#whisperasr-native-runtime-comparison) for methodology, caveats, and the wider engine table.
 
