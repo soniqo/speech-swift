@@ -735,6 +735,10 @@ let package = Package(
             ]
         ),
         .testTarget(
+            name: "WhisperASRTests",
+            dependencies: ["WhisperASR"]
+        ),
+        .testTarget(
             name: "Qwen3TTSTests",
             dependencies: ["Qwen3TTS", "Qwen3ASR", "AudioCommon"]
         ),

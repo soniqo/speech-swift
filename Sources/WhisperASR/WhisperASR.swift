@@ -7,6 +7,28 @@ public final class WhisperASRModel: SpeechRecognitionModel, @unchecked Sendable 
     public static let defaultModelVariant = "large-v3-v20240930_turbo"
     public static let tokenizerModelId = "openai/whisper-large-v3"
 
+    /// Files that make the published Core ML bundle usable without touching
+    /// the network. Checking the model payloads (not just the `.mlmodelc`
+    /// directories) avoids accepting a cache left incomplete by an interrupted
+    /// snapshot download.
+    static let requiredBundleFiles = [
+        "MelSpectrogram.mlmodelc/metadata.json",
+        "MelSpectrogram.mlmodelc/model.mil",
+        "MelSpectrogram.mlmodelc/weights/weight.bin",
+        "AudioEncoder.mlmodelc/metadata.json",
+        "AudioEncoder.mlmodelc/model.mil",
+        "AudioEncoder.mlmodelc/weights/weight.bin",
+        "TextDecoder.mlmodelc/metadata.json",
+        "TextDecoder.mlmodelc/model.mil",
+        "TextDecoder.mlmodelc/weights/weight.bin",
+        "TextDecoderContextPrefill.mlmodelc/metadata.json",
+        "TextDecoderContextPrefill.mlmodelc/model.mil",
+        "TextDecoderContextPrefill.mlmodelc/weights/weight.bin",
+        "generation_config.json",
+        "tokenizer.json",
+        "tokenizer_config.json",
+    ]
+
     public let inputSampleRate = WhisperCoreMLRuntime.sampleRate
     public let modelId: String
     public let modelFolder: URL
@@ -37,28 +59,32 @@ public final class WhisperASRModel: SpeechRecognitionModel, @unchecked Sendable 
                 underlying: error)
         }
 
-        progressHandler?(0.0, "Downloading Whisper CoreML bundle...")
+        progressHandler?(0.0, "Preparing Whisper CoreML bundle...")
         do {
-            try await HuggingFaceDownloader.downloadWeights(
-                modelId: effectiveModelId,
-                to: resolvedCacheDir,
-                additionalFiles: [
-                    "MelSpectrogram.mlmodelc/**",
-                    "AudioEncoder.mlmodelc/**",
-                    "TextDecoder.mlmodelc/**",
-                    "TextDecoderContextPrefill.mlmodelc/**",
-                    "generation_config.json",
-                    "manifest.json",
-                    "tokenizer.json",
-                    "tokenizer_config.json",
-                    "vocab.json",
-                    "merges.txt",
-                    "normalizer.json",
-                    "preprocessor_config.json",
-                ],
-                offlineMode: offlineMode
-            ) { fraction in
-                progressHandler?(fraction * 0.75, "Downloading Whisper CoreML bundle...")
+            if !hasCompleteCachedBundle(in: resolvedCacheDir) {
+                try await HuggingFaceDownloader.downloadWeights(
+                    modelId: effectiveModelId,
+                    to: resolvedCacheDir,
+                    additionalFiles: [
+                        "MelSpectrogram.mlmodelc/**",
+                        "AudioEncoder.mlmodelc/**",
+                        "TextDecoder.mlmodelc/**",
+                        "TextDecoderContextPrefill.mlmodelc/**",
+                        "generation_config.json",
+                        "manifest.json",
+                        "tokenizer.json",
+                        "tokenizer_config.json",
+                        "vocab.json",
+                        "merges.txt",
+                        "normalizer.json",
+                        "preprocessor_config.json",
+                    ],
+                    offlineMode: offlineMode
+                ) { fraction in
+                    progressHandler?(fraction * 0.75, "Downloading Whisper CoreML bundle...")
+                }
+            } else {
+                progressHandler?(0.75, "Using cached Whisper CoreML bundle")
             }
 
             try await ensureTokenizer(
@@ -85,6 +111,21 @@ public final class WhisperASRModel: SpeechRecognitionModel, @unchecked Sendable 
                 reason: "Failed to initialize native Whisper runtime",
                 underlying: error)
         }
+    }
+
+    static func hasCompleteCachedBundle(in directory: URL) -> Bool {
+        let fileManager = FileManager.default
+        for relativePath in requiredBundleFiles {
+            let url = directory.appendingPathComponent(relativePath)
+            guard fileManager.fileExists(atPath: url.path),
+                  let attributes = try? fileManager.attributesOfItem(atPath: url.path),
+                  let size = attributes[.size] as? NSNumber,
+                  size.int64Value > 0
+            else {
+                return false
+            }
+        }
+        return true
     }
 
     /// Transcribe PCM Float32 audio. Input is resampled to 16 kHz when needed.

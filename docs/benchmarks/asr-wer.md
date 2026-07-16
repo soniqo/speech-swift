@@ -9,12 +9,13 @@
 
 The `asr-bench` tool runs each engine in a separate child process (`--isolated`) so the peak RSS column is the **real per-engine** allocation rather than a cumulative high-water mark across a sequential run. WER computed via a Whisper-style normalizer + Levenshtein on whitespace tokens.
 
-**Machine**: Apple M5 Pro, 48 GB, macOS 25.5, release build with compiled metallib. LibriSpeech test-clean, first 200 utterances (~30 min audio).
+**Machine**: Apple M5 Pro, 48 GB, release build with compiled metallib. LibriSpeech test-clean, first 200 utterances (~30 min audio). The Whisper rows were refreshed on macOS 26.5.2 on 2026-07-16; the remaining rows were recorded on macOS 25.5.
 
-| Engine | Backend | Quant | WER% | RTF | xRT | Peak RSS | Cold load |
+| Engine | Backend | Quant | WER% | RTF | xRT | Peak RSS | Cached load |
 |---|---|---|---|---|---|---|---|
 | Qwen3-ASR 1.7B | MLX (GPU) | 8-bit | **1.52** | 0.033 | 30.5x | 2 706 MB | 2.5s |
-| WhisperKit Large-v3 Turbo | CoreML (ANE) | FP16 | 1.71 | 0.084 | 11.9x | 428 MB | 5.9s |
+| WhisperKit Large-v3 Turbo | CoreML (ANE) | FP16 | 1.71 | 0.084 | 11.9x | 427 MB | 7.2s |
+| WhisperASR native Large-v3 Turbo | CoreML (ANE) | FP16 | 1.73 | 0.077 | 13.1x | 445 MB | **1.3s** |
 | Qwen3-ASR 0.6B | MLX (GPU) | 8-bit | 1.82 | 0.015 | 66.0x | 1 306 MB | 2.2s |
 | Qwen3-ASR 0.6B | MLX (GPU) | 4-bit | 2.20 | 0.012 | 85.6x | 1 022 MB | 2.1s |
 | Parakeet TDT 0.6B v3 | CoreML (ANE) | INT8 | 2.37 | 0.009 | **117.4x** | 897 MB | 3.1s |
@@ -25,7 +26,8 @@ The `asr-bench` tool runs each engine in a separate child process (`--isolated`)
 
 **Headline picks:**
 - **Best WER**: Qwen3-ASR MLX 1.7B 8-bit at 1.52% — beats WhisperKit Large-v3 Turbo (1.71%) and runs 2.6x faster, at a 6x memory cost.
-- **Best WER under WhisperKit memory**: WhisperKit Large-v3 Turbo itself (1.71%, 428 MB) and Qwen3-ASR MLX 0.6B 4-bit (2.20%, 1 022 MB) for the next size class.
+- **Fastest Whisper path**: native WhisperASR — 9% lower mean RTF and 5.5x faster cached loading than direct WhisperKit, with one additional word error across the matched 200-utterance fixture.
+- **Best WER under WhisperKit memory**: WhisperKit Large-v3 Turbo itself (1.71%, 427 MB) and Qwen3-ASR MLX 0.6B 4-bit (2.20%, 1 022 MB) for the next size class.
 - **Fastest English**: Parakeet TDT v3 INT8 — 117x real-time at 897 MB, English-only (25 European languages).
 - **Multilingual throughput leader**: Omnilingual MLX 300M 4-bit — 222x real-time, 384 MB peak, 1 672 languages, 4.26% WER on English test-clean.
 - **Streaming**: Nemotron at 2.82% on whole-utterance batch (post-PR #304 vocab fix that strips `<en-US>`/`<ar-AR>` language tags from decoded output) — competitive with offline engines while retaining 160 ms streaming chunks with 1-chunk right context.
@@ -42,22 +44,24 @@ The `whisper-asr-turbo` engine loads the published `aufklarer/Whisper-Large-v3-T
 
 Current native runtime scope: fixed 30 s CoreML mel input, CoreML encoder, CoreML decoder prefill, explicit KV-cache updates, WhisperKit-style CoreML compute placement (mel on CPU/GPU; encoder/decoder on CPU/Neural Engine), greedy no-timestamp decoding, byte-level tokenizer decode, optional language detection, and a narrow repeated-word stop guard for greedy hallucination loops. Timestamp decoding, word timestamps, VAD/chunk seeking, and temperature fallback heuristics are not yet parity with WhisperKit.
 
-Quick LibriSpeech test-clean slice on Apple M5 Pro, 48 GB, macOS 26.5.1, debug build, 2026-07-01:
+Matched LibriSpeech test-clean run on Apple M5 Pro, 48 GB, macOS 26.5.2, release build, 2026-07-16. Each engine ran in a fresh child process over the same first 200 utterances (~30 minutes of audio). The displayed run starts with WhisperKit; a reverse-order replication is summarized below.
 
 ```bash
-.build/debug/asr-bench \
-  --dataset ~/Library/Caches/qwen3-speech/datasets/LibriSpeech/test-clean \
-  --engines whisper-asr-turbo whisperkit-large-v3-turbo \
-  --language en \
-  --limit 100
+.build/release/asr-bench \
+  --dataset ~/datasets/LibriSpeech/test-clean \
+  --engines whisperkit-large-v3-turbo whisper-asr-turbo \
+  --isolated \
+  --limit 200
 ```
 
 | Engine | WER% | CER% | Mean RTF | Median RTF | Overall xRT | Load | Peak RSS | RSS Delta |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| WhisperASR native | 1.40 | 0.39 | 0.089 | 0.078 | 14.0x | 6.1s | 384 MB | +295 MB |
-| Direct WhisperKit | 1.53 | 0.46 | 0.085 | 0.074 | 15.5x | 100.2s | 507 MB | +418 MB |
+| WhisperASR native | 1.73 | 0.63 | **0.077** | **0.064** | **17.6x** | **1.3s** | 445 MB | +304 MB |
+| Direct WhisperKit | **1.71** | **0.53** | 0.084 | 0.072 | 16.0x | 7.2s | **427 MB** | +286 MB |
 
-The native runtime is memory-competitive on this slice after switching away from `.all` compute units and adding per-chunk autorelease pools; peak RSS drops from 4.8 GB to 384 MB. The first run after a model or compute-unit change can still pay CoreML specialization time. It also avoids the previous repeated-token hallucination on `again again`. Remaining errors are mostly decoding-policy/normalization-sensitive variants (`10` vs `ten`, `ardor` vs `ardour`, `st` vs `saint`, name spellings). Re-run the full isolated release benchmark before using these quick-slice numbers as release data.
+Native WhisperASR is the faster Whisper implementation here: mean RTF is 9.4% lower, overall throughput is 10.2% higher, and a complete cached bundle loads 5.5x faster because the loader no longer revalidates and recopies the 1.2 GB snapshot. Accuracy and memory are effectively tied at this scale: WhisperKit makes 80 word errors versus native WhisperASR's 81, while native peak RSS is 18 MB higher. The first run after a model or compute-unit change can still pay CoreML specialization time. Remaining errors are mostly decoding-policy/normalization-sensitive variants (`10` vs `ten`, `ardor` vs `ardour`, `st` vs `saint`, name spellings).
+
+The reverse-order replication reproduced the speed result: native mean RTF was 0.077 versus WhisperKit's 0.085, with 17.6x versus 16.0x overall throughput. Native cached load remained 1.3s; WhisperKit took 13.2s in that run, so the 7.2s value in the displayed comparison is the more conservative loading baseline. Peak RSS remained 18 MB apart (442 MB native versus 424 MB WhisperKit).
 
 ## Comparison with published models
 
