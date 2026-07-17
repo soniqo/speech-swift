@@ -8,6 +8,8 @@ Spracherkennung, -synthese und -verständnis auf dem Gerät für Mac und iOS. L�
 
 **[📚 Vollständige Dokumentation →](https://soniqo.audio/de)** · **[🤗 HuggingFace-Modelle](https://huggingface.co/aufklarer)** · **[📝 Blog](https://blog.ivan.digital)** · **[💬 Discord](https://discord.gg/TnCryqEMgu)**
 
+[![Homebrew installs](https://img.shields.io/homebrew/installs/dm/speech.svg?logo=homebrew&label=Homebrew%20installs&color=FBB040)](https://formulae.brew.sh/formula/speech)
+
 <p align="center">
   <a href="https://trendshift.io/repositories/24196?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24196" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/24196/daily?language=Swift" alt="soniqo%2Fspeech-swift | Trendshift" width="250" height="55"/></a>
 </p>
@@ -23,9 +25,9 @@ Spracherkennung, -synthese und -verständnis auf dem Gerät für Mac und iOS. L�
 
 ## Mit Speech Swift entwickelt
 
-Öffentliche Projekte mit überprüfbaren Speech-Swift-Integrationen.
+29 öffentliche Repositories mit überprüfbaren Verweisen auf das Speech-Swift-Paket.
 
-[Palmier Pro](https://github.com/palmier-io/palmier-pro) · [Anarlog](https://github.com/fastrepl/anarlog) · [VoxFlow](https://github.com/xingbofeng/VoxFlow) · [Ora](https://github.com/wuwangzhang1216/ora) · [Jabber](https://github.com/rselbach/jabber) · [ClawdHome](https://github.com/ThinkInAIXYZ/clawdhome)
+[Palmier Pro](https://github.com/palmier-io/palmier-pro) · [Anarlog](https://github.com/fastrepl/anarlog) · [VoxFlow](https://github.com/xingbofeng/VoxFlow) · [Ora](https://github.com/wuwangzhang1216/ora) · [Jabber](https://github.com/rselbach/jabber) · [ClawdHome](https://github.com/ThinkInAIXYZ/clawdhome) · [Anything Voice](https://github.com/jakemaly/anything-voice) · [Conversational MLX](https://github.com/ottokafka/conversational_mlx) · [DexDictate macOS](https://github.com/westkitty/DexDictate_MacOS) · [FriSpeak](https://github.com/KSubedi/FriSpeak) · [HachiSpeak](https://github.com/sarinali/hachispeak) · [HushType](https://github.com/felixfu824/HushType) · [JustTalk](https://github.com/d0zingcat/JustTalk) · [Kioku](https://github.com/matthewmorrone/Kioku) · [LokalBot](https://github.com/stevyhacker/lokalbot) · [Luxicon](https://github.com/DavidsonCollege/luxicon) · [Mako](https://github.com/bn-l/mako) · [Meeting Emo Transcriber](https://github.com/kouko/meeting-emo-transcriber) · [MeetingSummary](https://github.com/a9650615/MeetingSummary) · [Scribe](https://github.com/itchat/Scribe) · [Stenograf](https://github.com/ivan-digital/stenograf) · [Toast](https://github.com/drbh/toast) · [TxtVoiceApp](https://github.com/2mauis/TxtVoiceApp) · [video_to_srt](https://github.com/dogacan/video_to_srt) · [VoicePen](https://github.com/dot-sk/VoicePen) · [Voicey](https://github.com/jonathanKingston/voicey) · [Warmth iOS](https://github.com/molyleelatham/gtmhackathon) · [Watchtower](https://github.com/aiwatchtowers/watchtower) · [Wishper App](https://github.com/irangareddy/wishper-app)
 
 **Fähigkeitsgruppen:** STT / ASR · Alignment · TTS · LLMs und Übersetzung · Speech-to-Speech · Verbesserung / Restaurierung · Quellentrennung · Musik- / Audiogenerierung · Wake Word, VAD, Diarisierung und Sprecheridentität
 
@@ -211,8 +213,6 @@ Kompakte Übersicht unten. **[Vollständiger Modellkatalog mit Größen, Quantis
 ## Installation
 
 ### Homebrew
-
-[![Homebrew installs](https://img.shields.io/homebrew/installs/dm/speech.svg?logo=homebrew&label=Homebrew%20installs&color=FBB040)](https://formulae.brew.sh/formula/speech)
 
 Erfordert natives ARM-Homebrew (`/opt/homebrew`). Rosetta/x86_64-Homebrew wird nicht unterstützt.
 
