@@ -25,18 +25,7 @@
 
 以下公开项目包含可验证的 Speech Swift 集成。
 
-<table>
-  <tr>
-    <td align="center" width="33%"><a href="https://github.com/palmier-io/palmier-pro"><img src="https://github.com/palmier-io.png?size=96" width="64" height="64" alt="Palmier Pro"><br><strong>Palmier Pro</strong></a><br><sub>视频编辑 · VAD · 降噪</sub></td>
-    <td align="center" width="33%"><a href="https://github.com/fastrepl/anarlog"><img src="https://github.com/fastrepl.png?size=96" width="64" height="64" alt="Anarlog"><br><strong>Anarlog</strong></a><br><sub>会议笔记 · 本地 ASR</sub></td>
-    <td align="center" width="33%"><a href="https://github.com/xingbofeng/VoxFlow"><img src="https://github.com/xingbofeng.png?size=96" width="64" height="64" alt="VoxFlow"><br><strong>VoxFlow</strong></a><br><sub>语音工作台 · ASR · TTS</sub></td>
-  </tr>
-  <tr>
-    <td align="center" width="33%"><a href="https://github.com/wuwangzhang1216/ora"><img src="https://github.com/wuwangzhang1216.png?size=96" width="64" height="64" alt="Ora"><br><strong>Ora</strong></a><br><sub>实时翻译 · ASR · VAD</sub></td>
-    <td align="center" width="33%"><a href="https://github.com/rselbach/jabber"><img src="https://github.com/rselbach.png?size=96" width="64" height="64" alt="Jabber"><br><strong>Jabber</strong></a><br><sub>本地听写 · 流式 ASR</sub></td>
-    <td align="center" width="33%"><a href="https://github.com/ThinkInAIXYZ/clawdhome"><img src="https://github.com/ThinkInAIXYZ.png?size=96" width="64" height="64" alt="ClawdHome"><br><strong>ClawdHome</strong></a><br><sub>智能体控制台 · Qwen3 ASR</sub></td>
-  </tr>
-</table>
+[Palmier Pro](https://github.com/palmier-io/palmier-pro) · [Anarlog](https://github.com/fastrepl/anarlog) · [VoxFlow](https://github.com/xingbofeng/VoxFlow) · [Ora](https://github.com/wuwangzhang1216/ora) · [Jabber](https://github.com/rselbach/jabber) · [ClawdHome](https://github.com/ThinkInAIXYZ/clawdhome)
 
 **能力分组：** STT / ASR · 对齐 · TTS · LLM 与翻译 · 语音到语音 · 增强 / 修复 · 源分离 · 音乐 / 音频生成 · 唤醒词、VAD、说话人分离与说话人身份
 

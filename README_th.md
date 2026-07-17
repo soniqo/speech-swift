@@ -25,18 +25,7 @@
 
 โปรเจกต์สาธารณะที่ตรวจสอบการผสานรวม Speech Swift ได้จากซอร์สโค้ด
 
-<table>
-  <tr>
-    <td align="center" width="33%"><a href="https://github.com/palmier-io/palmier-pro"><img src="https://github.com/palmier-io.png?size=96" width="64" height="64" alt="Palmier Pro"><br><strong>Palmier Pro</strong></a><br><sub>ตัดต่อวิดีโอ · VAD · ลดเสียงรบกวน</sub></td>
-    <td align="center" width="33%"><a href="https://github.com/fastrepl/anarlog"><img src="https://github.com/fastrepl.png?size=96" width="64" height="64" alt="Anarlog"><br><strong>Anarlog</strong></a><br><sub>บันทึกการประชุม · ASR ในเครื่อง</sub></td>
-    <td align="center" width="33%"><a href="https://github.com/xingbofeng/VoxFlow"><img src="https://github.com/xingbofeng.png?size=96" width="64" height="64" alt="VoxFlow"><br><strong>VoxFlow</strong></a><br><sub>เวิร์กเบนช์เสียง · ASR · TTS</sub></td>
-  </tr>
-  <tr>
-    <td align="center" width="33%"><a href="https://github.com/wuwangzhang1216/ora"><img src="https://github.com/wuwangzhang1216.png?size=96" width="64" height="64" alt="Ora"><br><strong>Ora</strong></a><br><sub>แปลสด · ASR · VAD</sub></td>
-    <td align="center" width="33%"><a href="https://github.com/rselbach/jabber"><img src="https://github.com/rselbach.png?size=96" width="64" height="64" alt="Jabber"><br><strong>Jabber</strong></a><br><sub>การเขียนตามคำบอกในเครื่อง · ASR แบบสตรีม</sub></td>
-    <td align="center" width="33%"><a href="https://github.com/ThinkInAIXYZ/clawdhome"><img src="https://github.com/ThinkInAIXYZ.png?size=96" width="64" height="64" alt="ClawdHome"><br><strong>ClawdHome</strong></a><br><sub>คอนโซลเอเจนต์ · Qwen3 ASR</sub></td>
-  </tr>
-</table>
+[Palmier Pro](https://github.com/palmier-io/palmier-pro) · [Anarlog](https://github.com/fastrepl/anarlog) · [VoxFlow](https://github.com/xingbofeng/VoxFlow) · [Ora](https://github.com/wuwangzhang1216/ora) · [Jabber](https://github.com/rselbach/jabber) · [ClawdHome](https://github.com/ThinkInAIXYZ/clawdhome)
 
 **กลุ่มความสามารถ:** STT / ASR · การจัดแนว · TTS · LLM และการแปล · Speech-to-Speech · การปรับปรุง / การฟื้นฟู · การแยกแหล่งเสียง · การสร้างดนตรี / เสียง · Wake word, VAD, diarization และอัตลักษณ์ผู้พูด
 

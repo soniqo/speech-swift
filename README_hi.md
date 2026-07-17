@@ -25,18 +25,7 @@ Mac और iOS के लिए ऑन-डिवाइस स्पीच रि
 
 सार्वजनिक प्रोजेक्ट जिनमें Speech Swift का सत्यापन योग्य इंटीग्रेशन है।
 
-<table>
-  <tr>
-    <td align="center" width="33%"><a href="https://github.com/palmier-io/palmier-pro"><img src="https://github.com/palmier-io.png?size=96" width="64" height="64" alt="Palmier Pro"><br><strong>Palmier Pro</strong></a><br><sub>वीडियो एडिटिंग · VAD · नॉइज़ रिडक्शन</sub></td>
-    <td align="center" width="33%"><a href="https://github.com/fastrepl/anarlog"><img src="https://github.com/fastrepl.png?size=96" width="64" height="64" alt="Anarlog"><br><strong>Anarlog</strong></a><br><sub>मीटिंग नोट्स · लोकल ASR</sub></td>
-    <td align="center" width="33%"><a href="https://github.com/xingbofeng/VoxFlow"><img src="https://github.com/xingbofeng.png?size=96" width="64" height="64" alt="VoxFlow"><br><strong>VoxFlow</strong></a><br><sub>वॉइस वर्कबेंच · ASR · TTS</sub></td>
-  </tr>
-  <tr>
-    <td align="center" width="33%"><a href="https://github.com/wuwangzhang1216/ora"><img src="https://github.com/wuwangzhang1216.png?size=96" width="64" height="64" alt="Ora"><br><strong>Ora</strong></a><br><sub>लाइव अनुवाद · ASR · VAD</sub></td>
-    <td align="center" width="33%"><a href="https://github.com/rselbach/jabber"><img src="https://github.com/rselbach.png?size=96" width="64" height="64" alt="Jabber"><br><strong>Jabber</strong></a><br><sub>लोकल डिक्टेशन · स्ट्रीमिंग ASR</sub></td>
-    <td align="center" width="33%"><a href="https://github.com/ThinkInAIXYZ/clawdhome"><img src="https://github.com/ThinkInAIXYZ.png?size=96" width="64" height="64" alt="ClawdHome"><br><strong>ClawdHome</strong></a><br><sub>एजेंट कंसोल · Qwen3 ASR</sub></td>
-  </tr>
-</table>
+[Palmier Pro](https://github.com/palmier-io/palmier-pro) · [Anarlog](https://github.com/fastrepl/anarlog) · [VoxFlow](https://github.com/xingbofeng/VoxFlow) · [Ora](https://github.com/wuwangzhang1216/ora) · [Jabber](https://github.com/rselbach/jabber) · [ClawdHome](https://github.com/ThinkInAIXYZ/clawdhome)
 
 **क्षमता समूह:** STT / ASR · अलाइनमेंट · TTS · LLM और अनुवाद · स्पीच-टू-स्पीच · एन्हांसमेंट / रिस्टोरेशन · सोर्स सेपरेशन · संगीत / ऑडियो जनरेशन · वेक वर्ड, VAD, डायराइज़ेशन और स्पीकर पहचान
 

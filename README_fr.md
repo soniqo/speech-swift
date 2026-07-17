@@ -25,18 +25,7 @@ Reconnaissance, synthese et comprehension vocale embarquees pour Mac et iOS. S'e
 
 Projets publics dont l’intégration de Speech Swift est vérifiable.
 
-<table>
-  <tr>
-    <td align="center" width="33%"><a href="https://github.com/palmier-io/palmier-pro"><img src="https://github.com/palmier-io.png?size=96" width="64" height="64" alt="Palmier Pro"><br><strong>Palmier Pro</strong></a><br><sub>Montage vidéo · VAD · débruitage</sub></td>
-    <td align="center" width="33%"><a href="https://github.com/fastrepl/anarlog"><img src="https://github.com/fastrepl.png?size=96" width="64" height="64" alt="Anarlog"><br><strong>Anarlog</strong></a><br><sub>Notes de réunion · ASR local</sub></td>
-    <td align="center" width="33%"><a href="https://github.com/xingbofeng/VoxFlow"><img src="https://github.com/xingbofeng.png?size=96" width="64" height="64" alt="VoxFlow"><br><strong>VoxFlow</strong></a><br><sub>Atelier vocal · ASR · TTS</sub></td>
-  </tr>
-  <tr>
-    <td align="center" width="33%"><a href="https://github.com/wuwangzhang1216/ora"><img src="https://github.com/wuwangzhang1216.png?size=96" width="64" height="64" alt="Ora"><br><strong>Ora</strong></a><br><sub>Traduction en direct · ASR · VAD</sub></td>
-    <td align="center" width="33%"><a href="https://github.com/rselbach/jabber"><img src="https://github.com/rselbach.png?size=96" width="64" height="64" alt="Jabber"><br><strong>Jabber</strong></a><br><sub>Dictée locale · ASR en streaming</sub></td>
-    <td align="center" width="33%"><a href="https://github.com/ThinkInAIXYZ/clawdhome"><img src="https://github.com/ThinkInAIXYZ.png?size=96" width="64" height="64" alt="ClawdHome"><br><strong>ClawdHome</strong></a><br><sub>Console d’agents · Qwen3 ASR</sub></td>
-  </tr>
-</table>
+[Palmier Pro](https://github.com/palmier-io/palmier-pro) · [Anarlog](https://github.com/fastrepl/anarlog) · [VoxFlow](https://github.com/xingbofeng/VoxFlow) · [Ora](https://github.com/wuwangzhang1216/ora) · [Jabber](https://github.com/rselbach/jabber) · [ClawdHome](https://github.com/ThinkInAIXYZ/clawdhome)
 
 **Groupes de capacités :** STT / ASR · Alignement · TTS · LLM et traduction · Speech-to-Speech · Amélioration / restauration · Séparation de sources · Génération musique / audio · Mot de réveil, VAD, diarisation et identité de locuteur
 
