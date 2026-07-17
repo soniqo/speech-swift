@@ -9,6 +9,11 @@
 **[📚 完整文档 →](https://soniqo.audio/zh)** · **[🤗 HuggingFace 模型](https://huggingface.co/aufklarer)** · **[📝 博客](https://blog.ivan.digital)**
 
 <p align="center">
+  <a href="https://formulae.brew.sh/formula/speech"><img src="https://img.shields.io/homebrew/installs/dm/speech.svg?logo=homebrew&amp;label=Homebrew%20installs&amp;color=FBB040" alt="Homebrew installs"></a>
+  <a href="https://github.com/soniqo/speech-swift#built-with-speech-swift"><img src="https://img.shields.io/badge/verified%20public%20repositories-15-2ea44f?logo=github" alt="Verified public repositories: 15"></a>
+</p>
+
+<p align="center">
   <a href="https://trendshift.io/repositories/24196?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24196" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/24196/daily?language=Swift" alt="soniqo%2Fspeech-swift | Trendshift" width="250" height="55"/></a>
 </p>
 
@@ -20,6 +25,12 @@
 <p align="center"><em>在 MacBook 上运行的本地语音 AI —— 在 YouTube 上观看四分钟开源库导览</em></p>
 
 **使用场景：** [语音代理](https://soniqo.audio/zh/voice-agents) · [转录](https://soniqo.audio/zh/transcription) · [语音合成](https://soniqo.audio/zh/speech-generation)
+
+## 使用 Speech Swift 构建
+
+15 个公开代码仓库包含可验证的 Speech Swift 包引用。
+
+[Palmier Pro](https://github.com/palmier-io/palmier-pro) · [Anarlog](https://github.com/fastrepl/anarlog) · [ClawdHome](https://github.com/ThinkInAIXYZ/clawdhome) · [Jabber](https://github.com/rselbach/jabber) · [Ora](https://github.com/wuwangzhang1216/ora) · [VoxFlow](https://github.com/xingbofeng/VoxFlow) · [LokalBot](https://github.com/stevyhacker/lokalbot) · [Voicey](https://github.com/jonathanKingston/voicey) · [HushType](https://github.com/felixfu824/HushType) · [DexDictate macOS](https://github.com/westkitty/DexDictate_MacOS) · [Watchtower](https://github.com/aiwatchtowers/watchtower) · [Wishper App](https://github.com/irangareddy/wishper-app) · [FriSpeak](https://github.com/KSubedi/FriSpeak) · [Scribe](https://github.com/itchat/Scribe) · [VoicePen](https://github.com/dot-sk/VoicePen)
 
 **能力分组：** STT / ASR · 对齐 · TTS · LLM 与翻译 · 语音到语音 · 增强 / 修复 · 源分离 · 音乐 / 音频生成 · 唤醒词、VAD、说话人分离与说话人身份
 
@@ -77,8 +88,8 @@
 
 - **[唤醒词](https://soniqo.audio/zh/guides/wake-word)** — 设备端关键词识别（KWS Zipformer 3M，CoreML，26× 实时，可配置关键词列表）
 - **[VAD](https://soniqo.audio/zh/guides/vad)** — 语音活动检测（Silero 流式、Pyannote 离线、FireRedVAD 100+ 种语言）
-- **[说话人分离](https://soniqo.audio/zh/guides/diarize)** — 谁在什么时间说话（Pyannote 流水线，神经引擎上的端到端 Sortformer）
-- **[说话人嵌入向量](https://soniqo.audio/zh/guides/embed-speaker)** — WeSpeaker ResNet34（256 维）、CAM++（192 维）
+- **[说话人分离](https://soniqo.audio/zh/guides/diarize)** — 谁在什么时间说话（Pyannote 流水线，神经引擎上的端到端 Sortformer） — 现支持增量流式会话（说话人 ID 稳定，每 480 毫秒更新）
+- **[说话人嵌入向量](https://soniqo.audio/zh/guides/embed-speaker)** — WeSpeaker ResNet34（256 维）、ReDimNet2-B6 命名语音身份（192 维）、CAM++（192 维）
 
 论文：[Qwen3-ASR](https://arxiv.org/abs/2601.21337) (Alibaba) · [Qwen3-TTS](https://arxiv.org/abs/2601.15621) (Alibaba) · [Omnilingual ASR](https://arxiv.org/abs/2511.09690) (Meta) · [Parakeet TDT](https://arxiv.org/abs/2304.06795) (NVIDIA) · [CosyVoice 3](https://arxiv.org/abs/2505.17589) (Alibaba) · [Kokoro](https://arxiv.org/abs/2301.01695) (StyleTTS 2) · [PersonaPlex](https://arxiv.org/abs/2602.06053) (NVIDIA) · [Mimi](https://arxiv.org/abs/2410.00037) (Kyutai) · [Hibiki](https://arxiv.org/abs/2502.03382) (Kyutai) · [Sortformer](https://arxiv.org/abs/2409.06656) (NVIDIA)
 
@@ -190,7 +201,8 @@ struct DictateView: View {
 | [Silero VAD](https://soniqo.audio/zh/guides/vad) | 语音活动检测 | MLX、CoreML | 309K | 语言无关 |
 | [KWS Zipformer](docs/models/kws-zipformer.md) | Audio → Wake word | CoreML (ANE) | 3M | EN/custom keywords |
 | [Pyannote](https://soniqo.audio/zh/guides/diarize) | VAD + 说话人分离 | MLX | 1.5M | 语言无关 |
-| [Sortformer](https://soniqo.audio/zh/guides/diarize) | 说话人分离（端到端） | CoreML (ANE) | — | 语言无关 |
+| [Pyannote Community-1](https://huggingface.co/aufklarer/Pyannote-Community-1-CoreML) | 说话人分离 + 说话人嵌入 | CoreML (ANE) + Swift VBx | 8.35M | 语言无关 |
+| [Sortformer](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) | [说话人分离（端到端）, 增量流式](https://soniqo.audio/zh/guides/diarize) | CoreML (ANE) | 117M | 语言无关 |
 | [DeepFilterNet3](https://soniqo.audio/zh/guides/denoise) | 语音增强 | CoreML | 2.1M | 语言无关 |
 | [Sidon](https://soniqo.audio/zh/guides/restore) | 语音修复（降噪 + 去混响，48 kHz） | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | 语言无关 |
 | [HTDemucs (Demucs v4)](https://soniqo.audio/zh/guides/separate) | 音源分离 | MLX | 168M | Agnostic |
@@ -199,6 +211,7 @@ struct DictateView: View {
 | [Stable Audio 3](docs/models/stable-audio-3.md) | Text → Music/audio (44.1 kHz stereo) | MLX | Medium 1.4B (int4/int8) | EN prompts |
 | [FlashSR](https://soniqo.audio/zh/guides/upsample) | 音频超分辨率 (48 kHz) | MLX | 363 MB / 720 MB (int4/int8) | 通用 |
 | [WeSpeaker](https://soniqo.audio/zh/guides/embed-speaker) | 说话人嵌入向量 | MLX、CoreML | 6.6M | 语言无关 |
+| [ReDimNet2-B6](https://huggingface.co/aufklarer/ReDimNet2-B6-CoreML) | 命名语音身份 | CoreML | 12.3M | 语言无关 |
 
 ## 安装
 

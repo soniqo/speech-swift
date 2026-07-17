@@ -9,6 +9,11 @@ Mac・iOS向けのオンデバイス音声認識・合成・理解。Apple Silic
 **[📚 ドキュメント →](https://soniqo.audio/ja)** · **[🤗 HuggingFaceモデル](https://huggingface.co/aufklarer)** · **[📝 ブログ](https://blog.ivan.digital)**
 
 <p align="center">
+  <a href="https://formulae.brew.sh/formula/speech"><img src="https://img.shields.io/homebrew/installs/dm/speech.svg?logo=homebrew&amp;label=Homebrew%20installs&amp;color=FBB040" alt="Homebrew installs"></a>
+  <a href="https://github.com/soniqo/speech-swift#built-with-speech-swift"><img src="https://img.shields.io/badge/verified%20public%20repositories-15-2ea44f?logo=github" alt="Verified public repositories: 15"></a>
+</p>
+
+<p align="center">
   <a href="https://trendshift.io/repositories/24196?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24196" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/24196/daily?language=Swift" alt="soniqo%2Fspeech-swift | Trendshift" width="250" height="55"/></a>
 </p>
 
@@ -20,6 +25,12 @@ Mac・iOS向けのオンデバイス音声認識・合成・理解。Apple Silic
 <p align="center"><em>MacBook で動くローカル音声 AI ―― YouTube で 4 分間のオープンソースライブラリツアーを視聴</em></p>
 
 **ユースケース：** [音声エージェント](https://soniqo.audio/ja/voice-agents) · [文字起こし](https://soniqo.audio/ja/transcription) · [音声合成](https://soniqo.audio/ja/speech-generation)
+
+## Speech Swift で構築
+
+Speech Swift パッケージへの参照を公開ソースで確認できる 15 個のリポジトリです。
+
+[Palmier Pro](https://github.com/palmier-io/palmier-pro) · [Anarlog](https://github.com/fastrepl/anarlog) · [ClawdHome](https://github.com/ThinkInAIXYZ/clawdhome) · [Jabber](https://github.com/rselbach/jabber) · [Ora](https://github.com/wuwangzhang1216/ora) · [VoxFlow](https://github.com/xingbofeng/VoxFlow) · [LokalBot](https://github.com/stevyhacker/lokalbot) · [Voicey](https://github.com/jonathanKingston/voicey) · [HushType](https://github.com/felixfu824/HushType) · [DexDictate macOS](https://github.com/westkitty/DexDictate_MacOS) · [Watchtower](https://github.com/aiwatchtowers/watchtower) · [Wishper App](https://github.com/irangareddy/wishper-app) · [FriSpeak](https://github.com/KSubedi/FriSpeak) · [Scribe](https://github.com/itchat/Scribe) · [VoicePen](https://github.com/dot-sk/VoicePen)
 
 **機能グループ：** STT / ASR · アラインメント · TTS · LLM と翻訳 · Speech-to-Speech · 強化 / 復元 · 音源分離 · 音楽 / オーディオ生成 · ウェイクワード、VAD、話者分離、話者識別
 
@@ -77,8 +88,8 @@ Mac・iOS向けのオンデバイス音声認識・合成・理解。Apple Silic
 
 - **[ウェイクワード](https://soniqo.audio/ja/guides/wake-word)** — オンデバイスのキーワード検出（KWS Zipformer 3M、CoreML、リアルタイムの26倍、キーワードリスト設定可能）
 - **[VAD](https://soniqo.audio/ja/guides/vad)** — 音声区間検出（Sileroストリーミング、Pyannoteオフライン、FireRedVAD 100以上の言語）
-- **[話者ダイアライゼーション](https://soniqo.audio/ja/guides/diarize)** — 誰がいつ話したか（Pyannoteパイプライン、Neural Engine上のエンドツーエンドSortformer）
-- **[話者埋め込み](https://soniqo.audio/ja/guides/embed-speaker)** — WeSpeaker ResNet34（256次元）、CAM++（192次元）
+- **[話者ダイアライゼーション](https://soniqo.audio/ja/guides/diarize)** — 誰がいつ話したか（Pyannoteパイプライン、Neural Engine上のエンドツーエンドSortformer） — インクリメンタルなストリーミングセッションに対応（話者 ID は安定、480 ミリ秒ごとに更新）
+- **[話者埋め込み](https://soniqo.audio/ja/guides/embed-speaker)** — WeSpeaker ResNet34（256次元）、ReDimNet2-B6による名前付き音声識別（192次元）、CAM++（192次元）
 
 論文：[Qwen3-ASR](https://arxiv.org/abs/2601.21337) (Alibaba) · [Qwen3-TTS](https://arxiv.org/abs/2601.15621) (Alibaba) · [Omnilingual ASR](https://arxiv.org/abs/2511.09690) (Meta) · [Parakeet TDT](https://arxiv.org/abs/2304.06795) (NVIDIA) · [CosyVoice 3](https://arxiv.org/abs/2505.17589) (Alibaba) · [Kokoro](https://arxiv.org/abs/2301.01695) (StyleTTS 2) · [PersonaPlex](https://arxiv.org/abs/2602.06053) (NVIDIA) · [Mimi](https://arxiv.org/abs/2410.00037) (Kyutai) · [Hibiki](https://arxiv.org/abs/2502.03382) (Kyutai) · [Sortformer](https://arxiv.org/abs/2409.06656) (NVIDIA)
 
@@ -190,7 +201,8 @@ struct DictateView: View {
 | [Silero VAD](https://soniqo.audio/ja/guides/vad) | 音声区間検出 | MLX、CoreML | 309K | 言語非依存 |
 | [KWS Zipformer](docs/models/kws-zipformer.md) | Audio → Wake word | CoreML (ANE) | 3M | EN/custom keywords |
 | [Pyannote](https://soniqo.audio/ja/guides/diarize) | VAD + ダイアライゼーション | MLX | 1.5M | 言語非依存 |
-| [Sortformer](https://soniqo.audio/ja/guides/diarize) | ダイアライゼーション（E2E） | CoreML (ANE) | — | 言語非依存 |
+| [Pyannote Community-1](https://huggingface.co/aufklarer/Pyannote-Community-1-CoreML) | ダイアライゼーション + 話者embedding | CoreML (ANE) + Swift VBx | 8.35M | 言語非依存 |
+| [Sortformer](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) | [ダイアライゼーション（E2E）, インクリメンタルストリーミング](https://soniqo.audio/ja/guides/diarize) | CoreML (ANE) | 117M | 言語非依存 |
 | [DeepFilterNet3](https://soniqo.audio/ja/guides/denoise) | 音声強調 | CoreML | 2.1M | 言語非依存 |
 | [Sidon](https://soniqo.audio/ja/guides/restore) | 音声修復（ノイズ抑制 + 残響除去、48 kHz） | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | 言語非依存 |
 | [HTDemucs (Demucs v4)](https://soniqo.audio/ja/guides/separate) | 音源分離 | MLX | 168M | Agnostic |
@@ -199,6 +211,7 @@ struct DictateView: View {
 | [Stable Audio 3](docs/models/stable-audio-3.md) | Text → Music/audio (44.1 kHz stereo) | MLX | Medium 1.4B (int4/int8) | EN prompts |
 | [FlashSR](https://soniqo.audio/ja/guides/upsample) | オーディオ超解像 (48 kHz) | MLX | 363 MB / 720 MB (int4/int8) | 言語非依存 |
 | [WeSpeaker](https://soniqo.audio/ja/guides/embed-speaker) | 話者埋め込み | MLX、CoreML | 6.6M | 言語非依存 |
+| [ReDimNet2-B6](https://huggingface.co/aufklarer/ReDimNet2-B6-CoreML) | 名前付き音声識別 | CoreML | 12.3M | 言語非依存 |
 
 ## インストール
 

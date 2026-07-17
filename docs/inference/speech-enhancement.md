@@ -2,10 +2,10 @@
 
 ## Overview
 
-DeepFilterNet3 (Interspeech 2023) removes background noise from speech in real-time. Runs on Apple Neural Engine via Core ML (~2.1M params, FP16, ~4.2 MB).
+DeepFilterNet3 (Interspeech 2023) removes background noise from speech in real-time. Runs on Apple Neural Engine via Core ML (~2.1M params, 8-bit palettized weights with FP16 compute, ~2.2 MB).
 
 ```
-Audio 48kHz → STFT (960-pt, 480 hop, Vorbis window) → 481 complex bins
+Audio 48kHz → STFT (960-pt, 480 hop, Vorbis window, 1/960 analysis scale) → 481 complex bins
   → Encoder (Conv2d + SqueezedGRU) → ERB mask + DF coefficients
   → ERB mask applied to full spectrum (broadband noise removal)
   → Deep filtering on lowest 96 bins (fine-grained enhancement)
@@ -13,6 +13,37 @@ Audio 48kHz → STFT (960-pt, 480 hop, Vorbis window) → 481 complex bins
 ```
 
 Neural network runs on **Neural Engine** (Core ML). Signal processing (STFT, ERB filterbank, deep filtering) runs on **CPU** (Accelerate/vDSP).
+
+The STFT follows the reference `libdf` normalization convention: the forward
+DFT is scaled by `1 / fftSize` and the inverse DFT is unscaled. Moving that
+factor to the inverse preserves a time-domain STFT round trip, but changes the
+spectral magnitudes presented to the neural network and degrades enhancement
+quality.
+
+The remaining DSP conventions also match the official implementation: the
+normalization decay is the upstream rounded value (`0.99`), out-of-range deep
+filter taps are zero-padded, and NumPy C/Fortran array order is honored when
+loading the ERB matrices. The published `erb_inv_fb` matrix is Fortran-ordered;
+interpreting its bytes as row-major applies the predicted mask to the wrong FFT
+bins.
+
+## Quality parity
+
+The reference-compatible pipeline was measured on a fixed 20-clip subset of
+the VoiceBank-DEMAND test set. Enhancement ran at 48 kHz; PESQ-WB, STOI, and
+SI-SDR were evaluated against the clean references at 16 kHz.
+
+| Implementation | PESQ-WB | STOI | SI-SDR |
+|----------------|---------|------|--------|
+| Noisy input | 2.244 | 0.948 | 9.19 dB |
+| Previous speech-swift pipeline | 1.839 | 0.911 | 12.66 dB |
+| speech-swift Core ML | **3.097** | **0.964** | **19.12 dB** |
+| Official Python DeepFilterNet3 | 3.029 | 0.962 | 18.31 dB |
+
+The reference-compatible Swift path improved all three metrics over the
+pre-fix pipeline on 20/20 clips. It exceeded the official result on 16/20
+clips by PESQ and 18/20 by both STOI and SI-SDR. The public model ID, bundle,
+and API remain unchanged.
 
 ## Parameters
 
@@ -22,7 +53,7 @@ Neural network runs on **Neural Engine** (Core ML). Signal processing (STFT, ERB
 | ERB bands | 32 |
 | DF bins / order | 96 / 5 taps |
 | GRU hidden | 256 |
-| Params | ~2.1M (~4.2 MB FP16) |
+| Params | ~2.1M (~2.2 MB, 8-bit palettized weights / FP16 compute) |
 | Single-shot cap | ~60 s (6000 frames @ 10 ms hop, `RangeDim(1, 6000)` in the exported CoreML graph) |
 | Long-form | `enhanceChunked(...)` auto-windows above the cap (see below) |
 
@@ -62,9 +93,9 @@ re-converges; the default 500 ms crossfade masks this for
 speech-dominated content. Stationary low-SNR noise may show a brief
 noise-floor flicker at boundaries.
 
-A reference 90 s synthetic test (sine + low-level noise) measures the
-seam RMS energy within 1 dB of adjacent windows — below the threshold a
-typical listener would notice. See
+A reference 90 s synthetic test (sine + low-level noise) checks that retained
+audio stays within 1.5 dB of adjacent windows, or that a signal classified as
+noise remains below -50 dBFS across the seam. See
 `Tests/SpeechEnhancementTests/E2EDeepFilterNet3ChunkingTests.swift`.
 
 For seamless GRU streaming we'd need a model re-export with the hidden
@@ -86,16 +117,12 @@ swift run speech denoise long.wav --chunk-seconds 30 --overlap-ms 300
 swift run speech denoise short.wav --no-chunk     # error if > 60 s
 ```
 
-## Conversion
+## Model bundle
 
-```bash
-python scripts/convert_deepfilternet3.py [--output OUTPUT_DIR]
-```
+The default HuggingFace repository publishes the Core ML model and auxiliary
+DSP constants. speech-swift downloads the compiled bundle directly:
 
-Outputs (the publish flow compiles the `.mlpackage` to `.mlmodelc` and ships
-both for backward compatibility; speech-swift only loads the compiled bundle):
-- `DeepFilterNet3.mlmodelc` (~4.2 MB) — Core ML FP16 model, pre-compiled
-- `DeepFilterNet3.mlpackage` (~4.2 MB) — source `.mlpackage`, kept for legacy clients
+- `DeepFilterNet3.mlmodelc` (~2.2 MB) — pre-compiled Core ML model with 8-bit palettized weights and FP16 compute
 - `auxiliary.npz` (~126 KB) — ERB filterbank, Vorbis window, normalization states
 
 ## References

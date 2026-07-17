@@ -9,6 +9,11 @@ On-device speech recognition, synthesis, and understanding for Mac and iOS. Runs
 **[📚 Full Documentation →](https://soniqo.audio)** · **[🤗 HuggingFace Models](https://huggingface.co/aufklarer)** · **[📝 Blog](https://blog.ivan.digital)** · **[💬 Discord](https://discord.gg/TnCryqEMgu)**
 
 <p align="center">
+  <a href="https://formulae.brew.sh/formula/speech"><img src="https://img.shields.io/homebrew/installs/dm/speech.svg?logo=homebrew&amp;label=Homebrew%20installs&amp;color=FBB040" alt="Homebrew installs"></a>
+  <a href="https://github.com/soniqo/speech-swift#built-with-speech-swift"><img src="https://img.shields.io/badge/verified%20public%20repositories-15-2ea44f?logo=github" alt="Verified public repositories: 15"></a>
+</p>
+
+<p align="center">
   <a href="https://trendshift.io/repositories/24196?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24196" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/24196/daily?language=Swift" alt="soniqo%2Fspeech-swift | Trendshift" width="250" height="55"/></a>
 </p>
 
@@ -20,6 +25,12 @@ On-device speech recognition, synthesis, and understanding for Mac and iOS. Runs
 <p align="center"><em>Local Speech AI on a MacBook — watch the 4-minute open-source library tour on YouTube</em></p>
 
 **Use cases:** [Voice Agents](https://soniqo.audio/voice-agents) · [Transcription](https://soniqo.audio/transcription) · [Speech Generation](https://soniqo.audio/speech-generation)
+
+## Built with Speech Swift
+
+15 public repositories with verifiable Speech Swift package references.
+
+[Palmier Pro](https://github.com/palmier-io/palmier-pro) · [Anarlog](https://github.com/fastrepl/anarlog) · [ClawdHome](https://github.com/ThinkInAIXYZ/clawdhome) · [Jabber](https://github.com/rselbach/jabber) · [Ora](https://github.com/wuwangzhang1216/ora) · [VoxFlow](https://github.com/xingbofeng/VoxFlow) · [LokalBot](https://github.com/stevyhacker/lokalbot) · [Voicey](https://github.com/jonathanKingston/voicey) · [HushType](https://github.com/felixfu824/HushType) · [DexDictate macOS](https://github.com/westkitty/DexDictate_MacOS) · [Watchtower](https://github.com/aiwatchtowers/watchtower) · [Wishper App](https://github.com/irangareddy/wishper-app) · [FriSpeak](https://github.com/KSubedi/FriSpeak) · [Scribe](https://github.com/itchat/Scribe) · [VoicePen](https://github.com/dot-sk/VoicePen)
 
 **Capability groups:** STT / ASR · Alignment · TTS · LLMs & translation · Speech-to-speech · Enhancement/restoration · Source separation · Music/audio generation · Wake word, VAD, diarization & speaker identity
 
@@ -77,8 +88,8 @@ On-device speech recognition, synthesis, and understanding for Mac and iOS. Runs
 
 - **[Wake-word](https://soniqo.audio/guides/wake-word)** — On-device keyword spotting (KWS Zipformer 3M, CoreML, 26× real-time, configurable keyword list)
 - **[VAD](https://soniqo.audio/guides/vad)** — Voice activity detection (Silero streaming, Pyannote offline, FireRedVAD 100+ languages)
-- **[Speaker Diarization](https://soniqo.audio/guides/diarize)** — Who spoke when (Pyannote pipeline, Sortformer end-to-end on Neural Engine)
-- **[Speaker Embeddings](https://soniqo.audio/guides/embed-speaker)** — WeSpeaker ResNet34 (256-dim), CAM++ (192-dim)
+- **[Speaker Diarization](https://soniqo.audio/guides/diarize)** — Who spoke when (Pyannote pipeline, Sortformer end-to-end on Neural Engine) — now with an incremental streaming session (stable speaker IDs, updates every 480 ms)
+- **[Speaker Embeddings](https://soniqo.audio/guides/embed-speaker)** — WeSpeaker ResNet34 (256-dim), ReDimNet2-B6 named identity (192-dim), CAM++ (192-dim)
 
 Papers: [Qwen3-ASR](https://arxiv.org/abs/2601.21337) (Alibaba) · [Qwen3-TTS](https://arxiv.org/abs/2601.15621) (Alibaba) · [Omnilingual ASR](https://arxiv.org/abs/2511.09690) (Meta) · [Parakeet TDT](https://arxiv.org/abs/2304.06795) (NVIDIA) · [CosyVoice 3](https://arxiv.org/abs/2505.17589) (Alibaba) · [Kokoro](https://arxiv.org/abs/2301.01695) (StyleTTS 2) · [PersonaPlex](https://arxiv.org/abs/2602.06053) (NVIDIA) · [Mimi](https://arxiv.org/abs/2410.00037) (Kyutai) · [Hibiki](https://arxiv.org/abs/2502.03382) (Kyutai) · [Sortformer](https://arxiv.org/abs/2409.06656) (NVIDIA)
 
@@ -193,7 +204,8 @@ Compact view below. **[Full model catalogue with sizes, quantisations, download 
 | [Silero VAD](https://soniqo.audio/guides/vad) | Voice Activity Detection | MLX, CoreML | 309K | Agnostic |
 | [KWS Zipformer](docs/models/kws-zipformer.md) | Audio → Wake word | CoreML (ANE) | 3M | EN/custom keywords |
 | [Pyannote](https://soniqo.audio/guides/diarize) | VAD + Diarization | MLX | 1.5M | Agnostic |
-| [Sortformer](https://soniqo.audio/guides/diarize) | Diarization (E2E) | CoreML (ANE) | — | Agnostic |
+| [Pyannote Community-1](https://huggingface.co/aufklarer/Pyannote-Community-1-CoreML) | Diarization + speaker embeddings | CoreML (ANE) + Swift VBx | 8.35M | Agnostic |
+| [Sortformer](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) | [Diarization (E2E), incremental streaming](https://soniqo.audio/guides/diarize) | CoreML (ANE) | 117M | Agnostic |
 | [DeepFilterNet3](https://soniqo.audio/guides/denoise) | Speech Enhancement | CoreML | 2.1M | Agnostic |
 | [Sidon](https://soniqo.audio/guides/restore) | Speech Restoration (denoise + dereverb, 48 kHz) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | Agnostic |
 | [HTDemucs (Demucs v4)](https://soniqo.audio/guides/separate) | Source Separation | MLX | 168M | Agnostic |
@@ -202,6 +214,7 @@ Compact view below. **[Full model catalogue with sizes, quantisations, download 
 | [Stable Audio 3](docs/models/stable-audio-3.md) | Text → Music/audio (44.1 kHz stereo) | MLX | Medium 1.4B (int4/int8) | EN prompts |
 | [FlashSR](https://soniqo.audio/guides/upsample) | Audio super-resolution (48 kHz) | MLX | 363 MB / 720 MB (int4/int8) | Agnostic |
 | [WeSpeaker](https://soniqo.audio/guides/embed-speaker) | Speaker Embedding | MLX, CoreML | 6.6M | Agnostic |
+| [ReDimNet2-B6](https://huggingface.co/aufklarer/ReDimNet2-B6-CoreML) | Named Voice Identity | CoreML | 12.3M | Agnostic |
 
 ## Installation
 

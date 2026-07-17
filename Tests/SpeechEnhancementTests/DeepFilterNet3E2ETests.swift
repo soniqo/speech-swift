@@ -16,12 +16,12 @@ final class DeepFilterNet3E2ETests: XCTestCase {
     func testHubFromPretrained() async throws {
         let enhancer = try await SpeechEnhancer.fromPretrained()
 
-        // One-second 48 kHz silence -> enhance should return the same length.
+        // Non-hop-aligned silence -> enhance should still return the same length.
         // We don't care about the output content here — this asserts that the
         // full pipeline (download, .mlmodelc load, ERB/DF signal processing,
         // auxiliary.npz parsing) works end-to-end.
         let sampleRate = 48000
-        let samples = [Float](repeating: 0, count: sampleRate)
+        let samples = [Float](repeating: 0, count: sampleRate + 1)
         let enhanced = try enhancer.enhance(audio: samples, sampleRate: sampleRate)
 
         XCTAssertEqual(enhanced.count, samples.count,

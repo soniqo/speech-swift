@@ -17,6 +17,11 @@
 </div>
 
 <p align="center">
+  <a href="https://formulae.brew.sh/formula/speech"><img src="https://img.shields.io/homebrew/installs/dm/speech.svg?logo=homebrew&amp;label=Homebrew%20installs&amp;color=FBB040" alt="Homebrew installs"></a>
+  <a href="https://github.com/soniqo/speech-swift#built-with-speech-swift"><img src="https://img.shields.io/badge/verified%20public%20repositories-15-2ea44f?logo=github" alt="Verified public repositories: 15"></a>
+</p>
+
+<p align="center">
   <a href="https://trendshift.io/repositories/24196?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24196" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/24196/daily?language=Swift" alt="soniqo%2Fspeech-swift | Trendshift" width="250" height="55"/></a>
 </p>
 
@@ -30,6 +35,12 @@
 <div dir="rtl">
 
 **حالات الاستخدام:** [وكلاء الصوت](https://soniqo.audio/ar/voice-agents) · [النسخ النصي](https://soniqo.audio/ar/transcription) · [توليد الكلام](https://soniqo.audio/ar/speech-generation)
+
+## مشاريع مبنية باستخدام Speech Swift
+
+15 مستودعاً عاماً يتضمن مرجعاً يمكن التحقق منه لحزمة Speech Swift.
+
+[Palmier Pro](https://github.com/palmier-io/palmier-pro) · [Anarlog](https://github.com/fastrepl/anarlog) · [ClawdHome](https://github.com/ThinkInAIXYZ/clawdhome) · [Jabber](https://github.com/rselbach/jabber) · [Ora](https://github.com/wuwangzhang1216/ora) · [VoxFlow](https://github.com/xingbofeng/VoxFlow) · [LokalBot](https://github.com/stevyhacker/lokalbot) · [Voicey](https://github.com/jonathanKingston/voicey) · [HushType](https://github.com/felixfu824/HushType) · [DexDictate macOS](https://github.com/westkitty/DexDictate_MacOS) · [Watchtower](https://github.com/aiwatchtowers/watchtower) · [Wishper App](https://github.com/irangareddy/wishper-app) · [FriSpeak](https://github.com/KSubedi/FriSpeak) · [Scribe](https://github.com/itchat/Scribe) · [VoicePen](https://github.com/dot-sk/VoicePen)
 
 **مجموعات القدرات:** STT / ASR · المحاذاة · TTS · نماذج LLM والترجمة · الكلام إلى كلام · التحسين / الاستعادة · فصل المصادر · توليد الموسيقى / الصوت · كلمة التنبيه، VAD، diarization وهوية المتحدث
 
@@ -87,8 +98,8 @@
 
 - **[كلمة التنبيه](https://soniqo.audio/ar/guides/wake-word)** — اكتشاف الكلمات المفتاحية على الجهاز (KWS Zipformer 3M، CoreML، 26× الزمن الحقيقي، قائمة كلمات مفتاحية قابلة للتهيئة)
 - **[VAD](https://soniqo.audio/ar/guides/vad)** — اكتشاف النشاط الصوتي (Silero تدفقي، Pyannote دون اتصال، FireRedVAD أكثر من 100 لغة)
-- **[تمييز المتحدثين](https://soniqo.audio/ar/guides/diarize)** — من تحدث متى (خط أنابيب Pyannote، Sortformer من طرف إلى طرف على Neural Engine)
-- **[تضمينات المتحدث](https://soniqo.audio/ar/guides/embed-speaker)** — WeSpeaker ResNet34 (256 بُعداً)، CAM++ (192 بُعداً)
+- **[تمييز المتحدثين](https://soniqo.audio/ar/guides/diarize)** — من تحدث متى (خط أنابيب Pyannote، Sortformer من طرف إلى طرف على Neural Engine) — الآن مع جلسة بث تزايدي (معرّفات متحدثين ثابتة وتحديث كل 480 مللي ثانية)
+- **[تضمينات المتحدث](https://soniqo.audio/ar/guides/embed-speaker)** — WeSpeaker ResNet34 (256 بُعداً)، ReDimNet2-B6 للهوية الصوتية المسماة (192 بُعداً)، CAM++ (192 بُعداً)
 
 </div>
 
@@ -234,7 +245,8 @@ struct DictateView: View {
 | [Silero VAD](https://soniqo.audio/ar/guides/vad) | اكتشاف النشاط الصوتي | MLX, CoreML | 309K | محايد للغة |
 | [KWS Zipformer](docs/models/kws-zipformer.md) | Audio → Wake word | CoreML (ANE) | 3M | EN/custom keywords |
 | [Pyannote](https://soniqo.audio/ar/guides/diarize) | VAD + تمييز | MLX | 1.5M | محايد للغة |
-| [Sortformer](https://soniqo.audio/ar/guides/diarize) | تمييز (E2E) | CoreML (ANE) | — | محايد للغة |
+| [Pyannote Community-1](https://huggingface.co/aufklarer/Pyannote-Community-1-CoreML) | فرز المتحدثين + تضمينات المتحدث | CoreML (ANE) + Swift VBx | 8.35M | محايد للغة |
+| [Sortformer](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) | [تمييز (E2E), بث تزايدي](https://soniqo.audio/ar/guides/diarize) | CoreML (ANE) | 117M | محايد للغة |
 | [DeepFilterNet3](https://soniqo.audio/ar/guides/denoise) | تحسين الكلام | CoreML | 2.1M | محايد للغة |
 | [Sidon](https://soniqo.audio/ar/guides/restore) | استعادة الكلام (إزالة الضوضاء + إزالة الصدى، 48 kHz) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | محايد للغة |
 | [HTDemucs (Demucs v4)](https://soniqo.audio/ar/guides/separate) | فصل المصادر | MLX | 168M | محايد للغة |
@@ -243,6 +255,7 @@ struct DictateView: View {
 | [Stable Audio 3](docs/models/stable-audio-3.md) | Text → Music/audio (44.1 kHz stereo) | MLX | Medium 1.4B (int4/int8) | EN prompts |
 | [FlashSR](https://soniqo.audio/ar/guides/upsample) | رفع دقة الصوت (48 كيلوهرتز) | MLX | 363 ميغابايت / 720 ميغابايت (int4/int8) | محايد للغة |
 | [WeSpeaker](https://soniqo.audio/ar/guides/embed-speaker) | تضمين المتحدث | MLX, CoreML | 6.6M | محايد للغة |
+| [ReDimNet2-B6](https://huggingface.co/aufklarer/ReDimNet2-B6-CoreML) | هوية صوتية مسماة | CoreML | 12.3M | محايد للغة |
 
 ## التثبيت
 

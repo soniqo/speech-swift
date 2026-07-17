@@ -9,6 +9,11 @@ Mac और iOS के लिए ऑन-डिवाइस स्पीच रि
 **[📚 पूर्ण डॉक्यूमेंटेशन →](https://soniqo.audio/hi)** · **[🤗 HuggingFace मॉडल](https://huggingface.co/aufklarer)** · **[📝 ब्लॉग](https://blog.ivan.digital)**
 
 <p align="center">
+  <a href="https://formulae.brew.sh/formula/speech"><img src="https://img.shields.io/homebrew/installs/dm/speech.svg?logo=homebrew&amp;label=Homebrew%20installs&amp;color=FBB040" alt="Homebrew installs"></a>
+  <a href="https://github.com/soniqo/speech-swift#built-with-speech-swift"><img src="https://img.shields.io/badge/verified%20public%20repositories-15-2ea44f?logo=github" alt="Verified public repositories: 15"></a>
+</p>
+
+<p align="center">
   <a href="https://trendshift.io/repositories/24196?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24196" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/24196/daily?language=Swift" alt="soniqo%2Fspeech-swift | Trendshift" width="250" height="55"/></a>
 </p>
 
@@ -20,6 +25,12 @@ Mac और iOS के लिए ऑन-डिवाइस स्पीच रि
 <p align="center"><em>MacBook पर लोकल स्पीच AI — YouTube पर चार मिनट का ओपन-सोर्स लाइब्रेरी टूर देखें</em></p>
 
 **यूज़-केस:** [वॉइस एजेंट](https://soniqo.audio/hi/voice-agents) · [ट्रांसक्रिप्शन](https://soniqo.audio/hi/transcription) · [स्पीच जनरेशन](https://soniqo.audio/hi/speech-generation)
+
+## Speech Swift के साथ निर्मित
+
+Speech Swift पैकेज के सत्यापन योग्य संदर्भ वाले 15 सार्वजनिक रिपॉज़िटरी।
+
+[Palmier Pro](https://github.com/palmier-io/palmier-pro) · [Anarlog](https://github.com/fastrepl/anarlog) · [ClawdHome](https://github.com/ThinkInAIXYZ/clawdhome) · [Jabber](https://github.com/rselbach/jabber) · [Ora](https://github.com/wuwangzhang1216/ora) · [VoxFlow](https://github.com/xingbofeng/VoxFlow) · [LokalBot](https://github.com/stevyhacker/lokalbot) · [Voicey](https://github.com/jonathanKingston/voicey) · [HushType](https://github.com/felixfu824/HushType) · [DexDictate macOS](https://github.com/westkitty/DexDictate_MacOS) · [Watchtower](https://github.com/aiwatchtowers/watchtower) · [Wishper App](https://github.com/irangareddy/wishper-app) · [FriSpeak](https://github.com/KSubedi/FriSpeak) · [Scribe](https://github.com/itchat/Scribe) · [VoicePen](https://github.com/dot-sk/VoicePen)
 
 **क्षमता समूह:** STT / ASR · अलाइनमेंट · TTS · LLM और अनुवाद · स्पीच-टू-स्पीच · एन्हांसमेंट / रिस्टोरेशन · सोर्स सेपरेशन · संगीत / ऑडियो जनरेशन · वेक वर्ड, VAD, डायराइज़ेशन और स्पीकर पहचान
 
@@ -77,8 +88,8 @@ Mac और iOS के लिए ऑन-डिवाइस स्पीच रि
 
 - **[वेक-वर्ड](https://soniqo.audio/hi/guides/wake-word)** — ऑन-डिवाइस कीवर्ड स्पॉटिंग (KWS Zipformer 3M, CoreML, 26× रियल-टाइम, कॉन्फ़िगरेबल कीवर्ड सूची)
 - **[VAD](https://soniqo.audio/hi/guides/vad)** — वॉयस एक्टिविटी डिटेक्शन (Silero स्ट्रीमिंग, Pyannote ऑफ़लाइन, FireRedVAD 100+ भाषाएँ)
-- **[Speaker Diarization](https://soniqo.audio/hi/guides/diarize)** — कौन कब बोला (Pyannote पाइपलाइन, Neural Engine पर एंड-टू-एंड Sortformer)
-- **[Speaker Embeddings](https://soniqo.audio/hi/guides/embed-speaker)** — WeSpeaker ResNet34 (256-dim), CAM++ (192-dim)
+- **[Speaker Diarization](https://soniqo.audio/hi/guides/diarize)** — कौन कब बोला (Pyannote पाइपलाइन, Neural Engine पर एंड-टू-एंड Sortformer) — अब इंक्रीमेंटल स्ट्रीमिंग सत्र के साथ (स्थिर स्पीकर ID, हर 480 ms पर अपडेट)
+- **[Speaker Embeddings](https://soniqo.audio/hi/guides/embed-speaker)** — WeSpeaker ResNet34 (256-dim), ReDimNet2-B6 नामित आवाज़ पहचान (192-dim), CAM++ (192-dim)
 
 पेपर: [Qwen3-ASR](https://arxiv.org/abs/2601.21337) (Alibaba) · [Qwen3-TTS](https://arxiv.org/abs/2601.15621) (Alibaba) · [Omnilingual ASR](https://arxiv.org/abs/2511.09690) (Meta) · [Parakeet TDT](https://arxiv.org/abs/2304.06795) (NVIDIA) · [CosyVoice 3](https://arxiv.org/abs/2505.17589) (Alibaba) · [Kokoro](https://arxiv.org/abs/2301.01695) (StyleTTS 2) · [PersonaPlex](https://arxiv.org/abs/2602.06053) (NVIDIA) · [Mimi](https://arxiv.org/abs/2410.00037) (Kyutai) · [Hibiki](https://arxiv.org/abs/2502.03382) (Kyutai) · [Sortformer](https://arxiv.org/abs/2409.06656) (NVIDIA)
 
@@ -190,7 +201,8 @@ struct DictateView: View {
 | [Silero VAD](https://soniqo.audio/hi/guides/vad) | वॉयस एक्टिविटी डिटेक्शन | MLX, CoreML | 309K | भाषा-तटस्थ |
 | [KWS Zipformer](docs/models/kws-zipformer.md) | Audio → Wake word | CoreML (ANE) | 3M | EN/custom keywords |
 | [Pyannote](https://soniqo.audio/hi/guides/diarize) | VAD + Diarization | MLX | 1.5M | भाषा-तटस्थ |
-| [Sortformer](https://soniqo.audio/hi/guides/diarize) | Diarization (E2E) | CoreML (ANE) | — | भाषा-तटस्थ |
+| [Pyannote Community-1](https://huggingface.co/aufklarer/Pyannote-Community-1-CoreML) | Diarization + स्पीकर embeddings | CoreML (ANE) + Swift VBx | 8.35M | भाषा-तटस्थ |
+| [Sortformer](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) | [Diarization (E2E), इंक्रीमेंटल स्ट्रीमिंग](https://soniqo.audio/hi/guides/diarize) | CoreML (ANE) | 117M | भाषा-तटस्थ |
 | [DeepFilterNet3](https://soniqo.audio/hi/guides/denoise) | स्पीच एन्हांसमेंट | CoreML | 2.1M | भाषा-तटस्थ |
 | [Sidon](https://soniqo.audio/hi/guides/restore) | स्पीच रिस्टोरेशन (नॉइज़ हटाना + डीरीवर्ब, 48 kHz) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | भाषा-तटस्थ |
 | [HTDemucs (Demucs v4)](https://soniqo.audio/hi/guides/separate) | सोर्स सेपरेशन | MLX | 168M | Agnostic |
@@ -199,6 +211,7 @@ struct DictateView: View {
 | [Stable Audio 3](docs/models/stable-audio-3.md) | Text → Music/audio (44.1 kHz stereo) | MLX | Medium 1.4B (int4/int8) | EN prompts |
 | [FlashSR](https://soniqo.audio/hi/guides/upsample) | ऑडियो सुपर-रेज़ोल्यूशन (48 kHz) | MLX | 363 MB / 720 MB (int4/int8) | भाषा-निरपेक्ष |
 | [WeSpeaker](https://soniqo.audio/hi/guides/embed-speaker) | स्पीकर एम्बेडिंग | MLX, CoreML | 6.6M | भाषा-तटस्थ |
+| [ReDimNet2-B6](https://huggingface.co/aufklarer/ReDimNet2-B6-CoreML) | नामित आवाज़ पहचान | CoreML | 12.3M | भाषा-तटस्थ |
 
 ## इंस्टॉलेशन
 

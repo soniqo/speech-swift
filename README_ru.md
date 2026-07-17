@@ -9,6 +9,11 @@
 **[📚 Полная документация →](https://soniqo.audio/ru)** · **[🤗 Модели на HuggingFace](https://huggingface.co/aufklarer)** · **[📝 Блог](https://blog.ivan.digital)**
 
 <p align="center">
+  <a href="https://formulae.brew.sh/formula/speech"><img src="https://img.shields.io/homebrew/installs/dm/speech.svg?logo=homebrew&amp;label=Homebrew%20installs&amp;color=FBB040" alt="Homebrew installs"></a>
+  <a href="https://github.com/soniqo/speech-swift#built-with-speech-swift"><img src="https://img.shields.io/badge/verified%20public%20repositories-15-2ea44f?logo=github" alt="Verified public repositories: 15"></a>
+</p>
+
+<p align="center">
   <a href="https://trendshift.io/repositories/24196?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24196" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/24196/daily?language=Swift" alt="soniqo%2Fspeech-swift | Trendshift" width="250" height="55"/></a>
 </p>
 
@@ -20,6 +25,12 @@
 <p align="center"><em>Локальный речевой ИИ на MacBook — четырёхминутный обзор open source библиотеки на YouTube</em></p>
 
 **Сценарии:** [Голосовые агенты](https://soniqo.audio/ru/voice-agents) · [Транскрипция](https://soniqo.audio/ru/transcription) · [Синтез речи](https://soniqo.audio/ru/speech-generation)
+
+## Создано с Speech Swift
+
+15 открытых репозиториев с проверяемой ссылкой на пакет Speech Swift.
+
+[Palmier Pro](https://github.com/palmier-io/palmier-pro) · [Anarlog](https://github.com/fastrepl/anarlog) · [ClawdHome](https://github.com/ThinkInAIXYZ/clawdhome) · [Jabber](https://github.com/rselbach/jabber) · [Ora](https://github.com/wuwangzhang1216/ora) · [VoxFlow](https://github.com/xingbofeng/VoxFlow) · [LokalBot](https://github.com/stevyhacker/lokalbot) · [Voicey](https://github.com/jonathanKingston/voicey) · [HushType](https://github.com/felixfu824/HushType) · [DexDictate macOS](https://github.com/westkitty/DexDictate_MacOS) · [Watchtower](https://github.com/aiwatchtowers/watchtower) · [Wishper App](https://github.com/irangareddy/wishper-app) · [FriSpeak](https://github.com/KSubedi/FriSpeak) · [Scribe](https://github.com/itchat/Scribe) · [VoicePen](https://github.com/dot-sk/VoicePen)
 
 **Группы возможностей:** STT / ASR · Выравнивание · TTS · LLM и перевод · Speech-to-Speech · Улучшение / восстановление · Разделение источников · Генерация музыки / аудио · Wake word, VAD, диаризация и идентичность говорящего
 
@@ -77,8 +88,8 @@
 
 - **[Активационное слово](https://soniqo.audio/ru/guides/wake-word)** — Локальное распознавание ключевых слов (KWS Zipformer 3M, CoreML, 26× реального времени, настраиваемый список ключевых слов)
 - **[VAD](https://soniqo.audio/ru/guides/vad)** — Обнаружение голосовой активности (Silero потоковый, Pyannote офлайн, FireRedVAD 100+ языков)
-- **[Speaker Diarization](https://soniqo.audio/ru/guides/diarize)** — Кто говорил и когда (Pyannote-пайплайн, сквозной Sortformer на Neural Engine)
-- **[Speaker Embeddings](https://soniqo.audio/ru/guides/embed-speaker)** — WeSpeaker ResNet34 (256-мерные векторы), CAM++ (192-мерные)
+- **[Speaker Diarization](https://soniqo.audio/ru/guides/diarize)** — Кто говорил и когда (Pyannote-пайплайн, сквозной Sortformer на Neural Engine) — теперь с инкрементальной стриминговой сессией (стабильные ID говорящих, обновления каждые 480 мс)
+- **[Speaker Embeddings](https://soniqo.audio/ru/guides/embed-speaker)** — WeSpeaker ResNet34 (256-мерные векторы), ReDimNet2-B6 для именованной идентификации голоса (192-мерные), CAM++ (192-мерные)
 
 Статьи: [Qwen3-ASR](https://arxiv.org/abs/2601.21337) (Alibaba) · [Qwen3-TTS](https://arxiv.org/abs/2601.15621) (Alibaba) · [Omnilingual ASR](https://arxiv.org/abs/2511.09690) (Meta) · [Parakeet TDT](https://arxiv.org/abs/2304.06795) (NVIDIA) · [CosyVoice 3](https://arxiv.org/abs/2505.17589) (Alibaba) · [Kokoro](https://arxiv.org/abs/2301.01695) (StyleTTS 2) · [PersonaPlex](https://arxiv.org/abs/2602.06053) (NVIDIA) · [Mimi](https://arxiv.org/abs/2410.00037) (Kyutai) · [Hibiki](https://arxiv.org/abs/2502.03382) (Kyutai) · [Sortformer](https://arxiv.org/abs/2409.06656) (NVIDIA)
 
@@ -190,7 +201,8 @@ struct DictateView: View {
 | [Silero VAD](https://soniqo.audio/ru/guides/vad) | Детектор речи | MLX, CoreML | 309K | Универсальный |
 | [KWS Zipformer](docs/models/kws-zipformer.md) | Audio → Wake word | CoreML (ANE) | 3M | EN/custom keywords |
 | [Pyannote](https://soniqo.audio/ru/guides/diarize) | VAD + Диаризация | MLX | 1.5M | Универсальный |
-| [Sortformer](https://soniqo.audio/ru/guides/diarize) | Диаризация (E2E) | CoreML (ANE) | — | Универсальный |
+| [Pyannote Community-1](https://huggingface.co/aufklarer/Pyannote-Community-1-CoreML) | Диаризация + эмбеддинги спикеров | CoreML (ANE) + Swift VBx | 8.35M | Универсальный |
+| [Sortformer](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) | [Диаризация (E2E), инкрементальный стриминг](https://soniqo.audio/ru/guides/diarize) | CoreML (ANE) | 117M | Универсальный |
 | [DeepFilterNet3](https://soniqo.audio/ru/guides/denoise) | Улучшение речи | CoreML | 2.1M | Универсальный |
 | [Sidon](https://soniqo.audio/ru/guides/restore) | Восстановление речи (подавление шума + дереверберация, 48 кГц) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | Универсальный |
 | [HTDemucs (Demucs v4)](https://soniqo.audio/ru/guides/separate) | Разделение источников | MLX | 168M | Agnostic |
@@ -199,6 +211,7 @@ struct DictateView: View {
 | [Stable Audio 3](docs/models/stable-audio-3.md) | Text → Music/audio (44.1 kHz stereo) | MLX | Medium 1.4B (int4/int8) | EN prompts |
 | [FlashSR](https://soniqo.audio/ru/guides/upsample) | Аудио супер-разрешение (48 кГц) | MLX | 363 МБ / 720 МБ (int4/int8) | Языконезависимое |
 | [WeSpeaker](https://soniqo.audio/ru/guides/embed-speaker) | Эмбеддинги спикеров | MLX, CoreML | 6.6M | Универсальный |
+| [ReDimNet2-B6](https://huggingface.co/aufklarer/ReDimNet2-B6-CoreML) | Именованная идентификация голоса | CoreML | 12.3M | Универсальный |
 
 ## Установка
 

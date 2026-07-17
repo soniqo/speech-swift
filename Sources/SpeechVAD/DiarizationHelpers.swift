@@ -44,17 +44,47 @@ enum DiarizationHelpers {
         return merged
     }
 
-    /// Remap speaker IDs to contiguous 0-based range, preserving order of first appearance.
+    /// Remap speaker IDs to a contiguous 0-based range in ascending original-ID order.
     static func compactSpeakerIds(_ segments: [DiarizedSegment]) -> [DiarizedSegment] {
+        compactSpeakerIdsWithMapping(segments).segments
+    }
+
+    /// Remap speaker IDs and their centroid embeddings together.
+    ///
+    /// Clustering can produce a centroid that has no surviving segment after
+    /// center-zone clipping and minimum-duration filtering. Compacting only the
+    /// segments would then shift their IDs while leaving the centroid array in
+    /// the old coordinate space. This helper keeps both outputs aligned.
+    static func compactSpeakerIdsAndEmbeddings(
+        _ segments: [DiarizedSegment],
+        speakerEmbeddings: [[Float]],
+        missingEmbeddingDimension: Int = 256
+    ) -> (segments: [DiarizedSegment], speakerEmbeddings: [[Float]]) {
+        let compacted = compactSpeakerIdsWithMapping(segments)
+        let dimension = speakerEmbeddings.first(where: { !$0.isEmpty })?.count
+            ?? missingEmbeddingDimension
+        let zeroEmbedding = [Float](repeating: 0, count: max(0, dimension))
+        let compactedEmbeddings = compacted.originalSpeakerIds.map { speakerId in
+            speakerEmbeddings.indices.contains(speakerId)
+                ? speakerEmbeddings[speakerId]
+                : zeroEmbedding
+        }
+        return (compacted.segments, compactedEmbeddings)
+    }
+
+    private static func compactSpeakerIdsWithMapping(
+        _ segments: [DiarizedSegment]
+    ) -> (segments: [DiarizedSegment], originalSpeakerIds: [Int]) {
         let usedIds = Set(segments.map(\.speakerId)).sorted()
         let idMap = Dictionary(uniqueKeysWithValues: usedIds.enumerated().map { ($1, $0) })
-        return segments.map {
+        let compacted = segments.map {
             DiarizedSegment(
                 startTime: $0.startTime,
                 endTime: $0.endTime,
                 speakerId: idMap[$0.speakerId] ?? $0.speakerId
             )
         }
+        return (compacted, usedIds)
     }
 
     /// Resample audio via AVAudioConverter (delegates to AudioFileLoader).

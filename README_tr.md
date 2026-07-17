@@ -9,6 +9,11 @@ Mac ve iOS için cihaz üzerinde konuşma tanıma, sentezleme ve anlama. Apple S
 **[📚 Tam Dokümantasyon →](https://soniqo.audio)** · **[🤗 HuggingFace Modelleri](https://huggingface.co/aufklarer)** · **[📝 Blog](https://blog.ivan.digital)** · **[💬 Discord](https://discord.gg/TnCryqEMgu)**
 
 <p align="center">
+  <a href="https://formulae.brew.sh/formula/speech"><img src="https://img.shields.io/homebrew/installs/dm/speech.svg?logo=homebrew&amp;label=Homebrew%20installs&amp;color=FBB040" alt="Homebrew installs"></a>
+  <a href="https://github.com/soniqo/speech-swift#built-with-speech-swift"><img src="https://img.shields.io/badge/verified%20public%20repositories-15-2ea44f?logo=github" alt="Verified public repositories: 15"></a>
+</p>
+
+<p align="center">
   <a href="https://trendshift.io/repositories/24196?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24196" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/24196/daily?language=Swift" alt="soniqo%2Fspeech-swift | Trendshift" width="250" height="55"/></a>
 </p>
 
@@ -20,6 +25,12 @@ Mac ve iOS için cihaz üzerinde konuşma tanıma, sentezleme ve anlama. Apple S
 <p align="center"><em>MacBook üzerinde yerel konuşma yapay zekası — açık kaynak kütüphanenin 4 dakikalık tanıtımını YouTube'da izleyin</em></p>
 
 **Kullanım senaryoları:** [Sesli Ajanlar](https://soniqo.audio/voice-agents) · [Transkripsiyon](https://soniqo.audio/transcription) · [Konuşma Üretimi](https://soniqo.audio/speech-generation)
+
+## Speech Swift ile geliştirildi
+
+Speech Swift paketine doğrulanabilir biçimde başvuran 15 açık depo.
+
+[Palmier Pro](https://github.com/palmier-io/palmier-pro) · [Anarlog](https://github.com/fastrepl/anarlog) · [ClawdHome](https://github.com/ThinkInAIXYZ/clawdhome) · [Jabber](https://github.com/rselbach/jabber) · [Ora](https://github.com/wuwangzhang1216/ora) · [VoxFlow](https://github.com/xingbofeng/VoxFlow) · [LokalBot](https://github.com/stevyhacker/lokalbot) · [Voicey](https://github.com/jonathanKingston/voicey) · [HushType](https://github.com/felixfu824/HushType) · [DexDictate macOS](https://github.com/westkitty/DexDictate_MacOS) · [Watchtower](https://github.com/aiwatchtowers/watchtower) · [Wishper App](https://github.com/irangareddy/wishper-app) · [FriSpeak](https://github.com/KSubedi/FriSpeak) · [Scribe](https://github.com/itchat/Scribe) · [VoicePen](https://github.com/dot-sk/VoicePen)
 
 **Yetenek grupları:** STT / ASR · Hizalama · TTS · LLM ve çeviri · Speech-to-Speech · İyileştirme / restorasyon · Kaynak ayırma · Müzik / ses üretimi · Wake word, VAD, konuşmacı ayrıştırma ve konuşmacı kimliği
 
@@ -77,8 +88,8 @@ Mac ve iOS için cihaz üzerinde konuşma tanıma, sentezleme ve anlama. Apple S
 
 - **[Uyandırma kelimesi](https://soniqo.audio/guides/wake-word)** — Cihaz üzerinde anahtar kelime tespiti (KWS Zipformer 3M, CoreML, 26× gerçek zaman, yapılandırılabilir anahtar kelime listesi)
 - **[VAD](https://soniqo.audio/guides/vad)** — Ses etkinlik algılama (Silero akış, Pyannote çevrimdışı, FireRedVAD 100+ dil)
-- **[Konuşmacı Ayrımı](https://soniqo.audio/guides/diarize)** — Kim ne zaman konuştu (Pyannote pipeline, Neural Engine üzerinde uçtan uca Sortformer)
-- **[Konuşmacı Gömmeleri](https://soniqo.audio/guides/embed-speaker)** — WeSpeaker ResNet34 (256-boyut), CAM++ (192-boyut)
+- **[Konuşmacı Ayrımı](https://soniqo.audio/guides/diarize)** — Kim ne zaman konuştu (Pyannote pipeline, Neural Engine üzerinde uçtan uca Sortformer) — artık artımlı akış oturumuyla (sabit konuşmacı kimlikleri, 480 ms'de bir güncelleme)
+- **[Konuşmacı Gömmeleri](https://soniqo.audio/guides/embed-speaker)** — WeSpeaker ResNet34 (256-boyut), ReDimNet2-B6 ile adlandırılmış ses kimliği (192-boyut), CAM++ (192-boyut)
 
 Makaleler: [Qwen3-ASR](https://arxiv.org/abs/2601.21337) (Alibaba) · [Qwen3-TTS](https://arxiv.org/abs/2601.15621) (Alibaba) · [Omnilingual ASR](https://arxiv.org/abs/2511.09690) (Meta) · [Parakeet TDT](https://arxiv.org/abs/2304.06795) (NVIDIA) · [CosyVoice 3](https://arxiv.org/abs/2505.17589) (Alibaba) · [Kokoro](https://arxiv.org/abs/2301.01695) (StyleTTS 2) · [PersonaPlex](https://arxiv.org/abs/2602.06053) (NVIDIA) · [Mimi](https://arxiv.org/abs/2410.00037) (Kyutai) · [Hibiki](https://arxiv.org/abs/2502.03382) (Kyutai) · [Sortformer](https://arxiv.org/abs/2409.06656) (NVIDIA)
 
@@ -190,7 +201,8 @@ Aşağıda kompakt bir görünüm. **[Boyutlar, kuantizasyonlar, indirme URL'ler
 | [Silero VAD](https://soniqo.audio/guides/vad) | Ses Etkinlik Algılama | MLX, CoreML | 309K | Bağımsız |
 | [KWS Zipformer](docs/models/kws-zipformer.md) | Audio → Wake word | CoreML (ANE) | 3M | EN/custom keywords |
 | [Pyannote](https://soniqo.audio/guides/diarize) | VAD + Konuşmacı Ayrımı | MLX | 1.5M | Bağımsız |
-| [Sortformer](https://soniqo.audio/guides/diarize) | Konuşmacı Ayrımı (E2E) | CoreML (ANE) | — | Bağımsız |
+| [Pyannote Community-1](https://huggingface.co/aufklarer/Pyannote-Community-1-CoreML) | Konuşmacı ayrıştırma + konuşmacı gömmeleri | CoreML (ANE) + Swift VBx | 8.35M | Bağımsız |
+| [Sortformer](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) | [Konuşmacı Ayrımı (E2E), artımlı akış](https://soniqo.audio/tr/guides/diarize) | CoreML (ANE) | 117M | Bağımsız |
 | [DeepFilterNet3](https://soniqo.audio/guides/denoise) | Konuşma İyileştirme | CoreML | 2.1M | Bağımsız |
 | [Sidon](https://soniqo.audio/guides/restore) | Konuşma Onarımı (gürültü bastırma + yankı giderme, 48 kHz) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | Bağımsız |
 | [HTDemucs (Demucs v4)](https://soniqo.audio/guides/separate) | Kaynak Ayrıştırma | MLX | 168M | Bağımsız |
@@ -199,6 +211,7 @@ Aşağıda kompakt bir görünüm. **[Boyutlar, kuantizasyonlar, indirme URL'ler
 | [Stable Audio 3](docs/models/stable-audio-3.md) | Text → Music/audio (44.1 kHz stereo) | MLX | Medium 1.4B (int4/int8) | EN prompts |
 | [FlashSR](https://soniqo.audio/guides/upsample) | Ses süper çözünürlük (48 kHz) | MLX | 363 MB / 720 MB (int4/int8) | Bağımsız |
 | [WeSpeaker](https://soniqo.audio/guides/embed-speaker) | Konuşmacı Gömme | MLX, CoreML | 6.6M | Bağımsız |
+| [ReDimNet2-B6](https://huggingface.co/aufklarer/ReDimNet2-B6-CoreML) | Adlandırılmış Ses Kimliği | CoreML | 12.3M | Bağımsız |
 
 ## Kurulum
 

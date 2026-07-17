@@ -121,15 +121,15 @@ final class STFTProcessor {
     let window: [Float]
     let forwardSetup: OpaquePointer
     let inverseSetup: OpaquePointer
-    /// Inverse DFT scale: 1/fftSize
-    let inverseScale: Float
+    /// libdf normalizes the analysis DFT by 1/fftSize.
+    let analysisScale: Float
 
     init(fftSize: Int, hopSize: Int, window: [Float]) {
         self.fftSize = fftSize
         self.hopSize = hopSize
         self.window = window
         self.freqBins = fftSize / 2 + 1  // 481 for 960-point DFT
-        self.inverseScale = 1.0 / Float(fftSize)
+        self.analysisScale = 1.0 / Float(fftSize)
 
         guard let fwd = vDSP_DFT_zop_CreateSetup(nil, vDSP_Length(fftSize), .FORWARD) else {
             fatalError("Failed to create forward DFT setup for N=\(fftSize)")
@@ -184,6 +184,12 @@ final class STFTProcessor {
                 windowedFrame, zeroImag,
                 &outReal, &outImag)
 
+            // vDSP leaves both DFT directions unnormalized. libdf applies
+            // 1/N during analysis and expects synthesis to remain unscaled.
+            var scale = analysisScale
+            vDSP_vsmul(outReal, 1, &scale, &outReal, 1, vDSP_Length(freqBins))
+            vDSP_vsmul(outImag, 1, &scale, &outImag, 1, vDSP_Length(freqBins))
+
             // Copy first freqBins (481) unique bins (conjugate symmetry)
             let baseIdx = frame * freqBins
             for k in 0..<freqBins {
@@ -236,10 +242,6 @@ final class STFTProcessor {
             vDSP_DFT_Execute(inverseSetup,
                 fullReal, fullImag,
                 &outReal, &outImag)
-
-            // Scale by 1/N (vDSP_DFT doesn't include normalization)
-            var scale = inverseScale
-            vDSP_vsmul(outReal, 1, &scale, &outReal, 1, vDSP_Length(fftSize))
 
             // Apply synthesis window
             var windowed = [Float](repeating: 0, count: fftSize)
@@ -413,9 +415,11 @@ func applyDeepFiltering(
                 let wRe = coefs[coefIdx]
                 let wIm = coefs[coefIdx + 1]
 
-                // Clamp source frame index
-                let clampedT = max(0, min(numFrames - 1, srcT))
-                let srcIdx = clampedT * freqBins + f
+                // libdf pads the time axis with zeros before unfolding.
+                // Out-of-range taps therefore contribute nothing; repeating
+                // the edge frame changes the first/last filtered frames.
+                guard srcT >= 0, srcT < numFrames else { continue }
+                let srcIdx = srcT * freqBins + f
 
                 let xRe = specReal[srcIdx]
                 let xIm = specImag[srcIdx]

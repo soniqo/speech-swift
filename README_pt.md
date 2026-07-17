@@ -9,6 +9,11 @@ Reconhecimento, sintese e compreensao de fala no dispositivo para Mac e iOS. Exe
 **[📚 Documentacao completa →](https://soniqo.audio/pt)** · **[🤗 Modelos no HuggingFace](https://huggingface.co/aufklarer)** · **[📝 Blog](https://blog.ivan.digital)** · **[💬 Discord](https://discord.gg/TnCryqEMgu)**
 
 <p align="center">
+  <a href="https://formulae.brew.sh/formula/speech"><img src="https://img.shields.io/homebrew/installs/dm/speech.svg?logo=homebrew&amp;label=Homebrew%20installs&amp;color=FBB040" alt="Homebrew installs"></a>
+  <a href="https://github.com/soniqo/speech-swift#built-with-speech-swift"><img src="https://img.shields.io/badge/verified%20public%20repositories-15-2ea44f?logo=github" alt="Verified public repositories: 15"></a>
+</p>
+
+<p align="center">
   <a href="https://trendshift.io/repositories/24196?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24196" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/24196/daily?language=Swift" alt="soniqo%2Fspeech-swift | Trendshift" width="250" height="55"/></a>
 </p>
 
@@ -20,6 +25,12 @@ Reconhecimento, sintese e compreensao de fala no dispositivo para Mac e iOS. Exe
 <p align="center"><em>IA de voz local em um MacBook — assista no YouTube ao tour de quatro minutos pela biblioteca open source</em></p>
 
 **Casos de uso:** [Agentes de voz](https://soniqo.audio/pt/voice-agents) · [Transcricao](https://soniqo.audio/pt/transcription) · [Sintese de voz](https://soniqo.audio/pt/speech-generation)
+
+## Projetos criados com Speech Swift
+
+15 repositórios públicos com referências verificáveis ao pacote Speech Swift.
+
+[Palmier Pro](https://github.com/palmier-io/palmier-pro) · [Anarlog](https://github.com/fastrepl/anarlog) · [ClawdHome](https://github.com/ThinkInAIXYZ/clawdhome) · [Jabber](https://github.com/rselbach/jabber) · [Ora](https://github.com/wuwangzhang1216/ora) · [VoxFlow](https://github.com/xingbofeng/VoxFlow) · [LokalBot](https://github.com/stevyhacker/lokalbot) · [Voicey](https://github.com/jonathanKingston/voicey) · [HushType](https://github.com/felixfu824/HushType) · [DexDictate macOS](https://github.com/westkitty/DexDictate_MacOS) · [Watchtower](https://github.com/aiwatchtowers/watchtower) · [Wishper App](https://github.com/irangareddy/wishper-app) · [FriSpeak](https://github.com/KSubedi/FriSpeak) · [Scribe](https://github.com/itchat/Scribe) · [VoicePen](https://github.com/dot-sk/VoicePen)
 
 **Grupos de capacidades:** STT / ASR · Alinhamento · TTS · LLMs e tradução · Fala-para-fala · Aprimoramento / restauração · Separação de fontes · Geração de música / áudio · Wake word, VAD, diarização e identidade de falante
 
@@ -77,8 +88,8 @@ Reconhecimento, sintese e compreensao de fala no dispositivo para Mac e iOS. Exe
 
 - **[Palavra de ativacao](https://soniqo.audio/pt/guides/wake-word)** — Deteccao de palavras-chave no dispositivo (KWS Zipformer 3M, CoreML, 26x tempo real, lista de palavras-chave configuravel)
 - **[VAD](https://soniqo.audio/pt/guides/vad)** — Deteccao de atividade de voz (Silero streaming, Pyannote offline, FireRedVAD 100+ idiomas)
-- **[Diarizacao de falantes](https://soniqo.audio/pt/guides/diarize)** — Quem falou quando (pipeline Pyannote, Sortformer ponta-a-ponta no Neural Engine)
-- **[Embeddings de falante](https://soniqo.audio/pt/guides/embed-speaker)** — WeSpeaker ResNet34 (256 dim), CAM++ (192 dim)
+- **[Diarizacao de falantes](https://soniqo.audio/pt/guides/diarize)** — Quem falou quando (pipeline Pyannote, Sortformer ponta-a-ponta no Neural Engine) — agora com uma sessão de streaming incremental (IDs de falante estáveis, atualizações a cada 480 ms)
+- **[Embeddings de falante](https://soniqo.audio/pt/guides/embed-speaker)** — WeSpeaker ResNet34 (256 dim), ReDimNet2-B6 para identidade de voz nomeada (192 dim), CAM++ (192 dim)
 
 Papers: [Qwen3-ASR](https://arxiv.org/abs/2601.21337) (Alibaba) · [Qwen3-TTS](https://arxiv.org/abs/2601.15621) (Alibaba) · [Omnilingual ASR](https://arxiv.org/abs/2511.09690) (Meta) · [Parakeet TDT](https://arxiv.org/abs/2304.06795) (NVIDIA) · [CosyVoice 3](https://arxiv.org/abs/2505.17589) (Alibaba) · [Kokoro](https://arxiv.org/abs/2301.01695) (StyleTTS 2) · [PersonaPlex](https://arxiv.org/abs/2602.06053) (NVIDIA) · [Mimi](https://arxiv.org/abs/2410.00037) (Kyutai) · [Hibiki](https://arxiv.org/abs/2502.03382) (Kyutai) · [Sortformer](https://arxiv.org/abs/2409.06656) (NVIDIA)
 
@@ -190,7 +201,8 @@ Vista compacta abaixo. **[Catalogo completo de modelos com tamanhos, quantizacoe
 | [Silero VAD](https://soniqo.audio/pt/guides/vad) | Deteccao de atividade de voz | MLX, CoreML | 309K | Agnostico |
 | [KWS Zipformer](docs/models/kws-zipformer.md) | Audio → Wake word | CoreML (ANE) | 3M | EN/custom keywords |
 | [Pyannote](https://soniqo.audio/pt/guides/diarize) | VAD + Diarizacao | MLX | 1.5M | Agnostico |
-| [Sortformer](https://soniqo.audio/pt/guides/diarize) | Diarizacao (E2E) | CoreML (ANE) | — | Agnostico |
+| [Pyannote Community-1](https://huggingface.co/aufklarer/Pyannote-Community-1-CoreML) | Diarizacao + embeddings de falante | CoreML (ANE) + Swift VBx | 8.35M | Agnostico |
+| [Sortformer](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) | [Diarizacao (E2E), streaming incremental](https://soniqo.audio/pt/guides/diarize) | CoreML (ANE) | 117M | Agnostico |
 | [DeepFilterNet3](https://soniqo.audio/pt/guides/denoise) | Aprimoramento de fala | CoreML | 2.1M | Agnostico |
 | [Sidon](https://soniqo.audio/pt/guides/restore) | Restauracao de fala (denoise + dereverb, 48 kHz) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | Agnostico |
 | [HTDemucs (Demucs v4)](https://soniqo.audio/pt/guides/separate) | Separação de fontes | MLX | 168M | Agnostic |
@@ -199,6 +211,7 @@ Vista compacta abaixo. **[Catalogo completo de modelos com tamanhos, quantizacoe
 | [Stable Audio 3](docs/models/stable-audio-3.md) | Text → Music/audio (44.1 kHz stereo) | MLX | Medium 1.4B (int4/int8) | EN prompts |
 | [FlashSR](https://soniqo.audio/pt/guides/upsample) | Super-resolução de áudio (48 kHz) | MLX | 363 MB / 720 MB (int4/int8) | Agnóstico |
 | [WeSpeaker](https://soniqo.audio/pt/guides/embed-speaker) | Embedding de falante | MLX, CoreML | 6.6M | Agnostico |
+| [ReDimNet2-B6](https://huggingface.co/aufklarer/ReDimNet2-B6-CoreML) | Identidade de voz nomeada | CoreML | 12.3M | Agnostico |
 
 ## Instalacao
 

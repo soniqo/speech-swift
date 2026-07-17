@@ -34,6 +34,16 @@ let pipeline = try await PyannoteDiarizationPipeline.fromPretrained(
 // VAD (opt.)   → appModels/models/aufklarer/Silero-VAD-v6.2.1-MLX/
 ```
 
+Community-1 is one self-contained bundle, so it uses the regular `cacheDir`
+parameter:
+
+```swift
+let community1 = try await Community1DiarizationPipeline.fromPretrained(
+    cacheDir: appModels.appendingPathComponent("community1"),
+    offlineMode: true
+)
+```
+
 ## HuggingFace Mirror (`HF_ENDPOINT`)
 
 Downloads default to `https://huggingface.co`. Users in regions where that host is slow or blocked — notably mainland China — can point the downloader at a mirror by setting the `HF_ENDPOINT` environment variable (the same name Python's `huggingface_hub` uses):
@@ -90,8 +100,10 @@ All models support both parameters:
 | `PyannoteVADModel` | `cacheDir`, `offlineMode` |
 | `FireRedVADModel` | `cacheDir`, `offlineMode` |
 | `WeSpeakerModel` | `cacheDir`, `offlineMode` |
+| `ReDimNet2SpeakerModel` | `cacheDir`, `offlineMode` |
 | `SpeechEnhancer` | `cacheDir`, `offlineMode` |
 | `SortformerDiarizer` | `cacheDir`, `offlineMode` |
+| `Community1DiarizationPipeline` | `cacheDir`, `offlineMode` |
 | `PyannoteDiarizationPipeline` | `cacheBaseDir`, `offlineMode` |
 | `Qwen35CoreMLChat` | `cacheDir`, `offlineMode` |
 | `Qwen35MLXChat` | `cacheDir`, `offlineMode` |

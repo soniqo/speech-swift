@@ -377,6 +377,59 @@ final class AlignCommandTests: XCTestCase {
     }
 }
 
+// MARK: - DiarizeCommand
+
+final class DiarizeCommandTests: XCTestCase {
+
+    func testCommunity1Defaults() throws {
+        let cmd = try AudioCLI.parseAsRoot([
+            "diarize", "meeting.wav", "--engine", "community1",
+        ])
+        let diarize = try XCTUnwrap(cmd as? DiarizeCommand)
+        XCTAssertEqual(diarize.audioFile, "meeting.wav")
+        XCTAssertEqual(diarize.engine, "community1")
+        XCTAssertEqual(diarize.community1ComputeUnits, "ane")
+        XCTAssertNil(diarize.numSpeakers)
+        XCTAssertEqual(diarize.minSpeakers, 1)
+        XCTAssertNil(diarize.maxSpeakers)
+    }
+
+    func testCommunity1SpeakerBoundsAndComputeUnitsParse() throws {
+        let cmd = try AudioCLI.parseAsRoot([
+            "diarize", "meeting.wav",
+            "--engine", "community1",
+            "--community1-compute-units", "cpu",
+            "--num-speakers", "3",
+            "--min-speakers", "2",
+            "--max-speakers", "5",
+        ])
+        let diarize = try XCTUnwrap(cmd as? DiarizeCommand)
+        XCTAssertEqual(diarize.community1ComputeUnits, "cpu")
+        XCTAssertEqual(diarize.numSpeakers, 3)
+        XCTAssertEqual(diarize.minSpeakers, 2)
+        XCTAssertEqual(diarize.maxSpeakers, 5)
+    }
+}
+
+// MARK: - EmbedSpeakerCommand
+
+final class EmbedSpeakerCommandTests: XCTestCase {
+
+    func testParsesReDimNet2Engine() throws {
+        let command = try AudioCLI.parseAsRoot([
+            "embed-speaker", "voice.wav", "--engine", "redimnet2",
+        ])
+        let embedSpeaker = try XCTUnwrap(command as? EmbedSpeakerCommand)
+
+        XCTAssertEqual(embedSpeaker.audioFile, "voice.wav")
+        XCTAssertEqual(embedSpeaker.engine, "redimnet2")
+    }
+
+    func testHelpDocumentsReDimNet2Engine() {
+        XCTAssertTrue(EmbedSpeakerCommand.helpMessage().contains("redimnet2"))
+    }
+}
+
 // MARK: - SpeakCommand
 
 final class SpeakCommandTests: XCTestCase {

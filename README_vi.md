@@ -9,6 +9,11 @@ Nhận dạng, tổng hợp và hiểu giọng nói trên thiết bị cho Mac v
 **[📚 Tài liệu đầy đủ →](https://soniqo.audio)** · **[🤗 Mô hình HuggingFace](https://huggingface.co/aufklarer)** · **[📝 Blog](https://blog.ivan.digital)** · **[💬 Discord](https://discord.gg/TnCryqEMgu)**
 
 <p align="center">
+  <a href="https://formulae.brew.sh/formula/speech"><img src="https://img.shields.io/homebrew/installs/dm/speech.svg?logo=homebrew&amp;label=Homebrew%20installs&amp;color=FBB040" alt="Homebrew installs"></a>
+  <a href="https://github.com/soniqo/speech-swift#built-with-speech-swift"><img src="https://img.shields.io/badge/verified%20public%20repositories-15-2ea44f?logo=github" alt="Verified public repositories: 15"></a>
+</p>
+
+<p align="center">
   <a href="https://trendshift.io/repositories/24196?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24196" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/24196/daily?language=Swift" alt="soniqo%2Fspeech-swift | Trendshift" width="250" height="55"/></a>
 </p>
 
@@ -20,6 +25,12 @@ Nhận dạng, tổng hợp và hiểu giọng nói trên thiết bị cho Mac v
 <p align="center"><em>AI giọng nói cục bộ trên MacBook — xem trên YouTube video 4 phút giới thiệu thư viện mã nguồn mở</em></p>
 
 **Trường hợp sử dụng:** [Voice Agents](https://soniqo.audio/voice-agents) · [Phiên âm](https://soniqo.audio/transcription) · [Tổng hợp giọng nói](https://soniqo.audio/speech-generation)
+
+## Được xây dựng bằng Speech Swift
+
+15 kho mã nguồn công khai có tham chiếu xác minh được đến gói Speech Swift.
+
+[Palmier Pro](https://github.com/palmier-io/palmier-pro) · [Anarlog](https://github.com/fastrepl/anarlog) · [ClawdHome](https://github.com/ThinkInAIXYZ/clawdhome) · [Jabber](https://github.com/rselbach/jabber) · [Ora](https://github.com/wuwangzhang1216/ora) · [VoxFlow](https://github.com/xingbofeng/VoxFlow) · [LokalBot](https://github.com/stevyhacker/lokalbot) · [Voicey](https://github.com/jonathanKingston/voicey) · [HushType](https://github.com/felixfu824/HushType) · [DexDictate macOS](https://github.com/westkitty/DexDictate_MacOS) · [Watchtower](https://github.com/aiwatchtowers/watchtower) · [Wishper App](https://github.com/irangareddy/wishper-app) · [FriSpeak](https://github.com/KSubedi/FriSpeak) · [Scribe](https://github.com/itchat/Scribe) · [VoicePen](https://github.com/dot-sk/VoicePen)
 
 **Nhóm năng lực:** STT / ASR · Căn chỉnh · TTS · LLM và dịch thuật · Speech-to-Speech · Nâng cấp / phục hồi · Tách nguồn · Tạo nhạc / âm thanh · Wake word, VAD, diarization và định danh người nói
 
@@ -77,8 +88,8 @@ Nhận dạng, tổng hợp và hiểu giọng nói trên thiết bị cho Mac v
 
 - **[Từ kích hoạt](https://soniqo.audio/guides/wake-word)** — Phát hiện từ khóa trên thiết bị (KWS Zipformer 3M, CoreML, 26× thời gian thực, danh sách từ khóa có thể cấu hình)
 - **[VAD](https://soniqo.audio/guides/vad)** — Phát hiện hoạt động giọng nói (Silero streaming, Pyannote ngoại tuyến, FireRedVAD hơn 100 ngôn ngữ)
-- **[Phân tách người nói](https://soniqo.audio/guides/diarize)** — Ai nói khi nào (pipeline Pyannote, Sortformer end-to-end trên Neural Engine)
-- **[Embedding người nói](https://soniqo.audio/guides/embed-speaker)** — WeSpeaker ResNet34 (256 chiều), CAM++ (192 chiều)
+- **[Phân tách người nói](https://soniqo.audio/guides/diarize)** — Ai nói khi nào (pipeline Pyannote, Sortformer end-to-end trên Neural Engine) — nay có phiên streaming tăng dần (ID người nói ổn định, cập nhật mỗi 480 ms)
+- **[Embedding người nói](https://soniqo.audio/guides/embed-speaker)** — WeSpeaker ResNet34 (256 chiều), ReDimNet2-B6 để nhận dạng giọng nói có tên (192 chiều), CAM++ (192 chiều)
 
 Papers: [Qwen3-ASR](https://arxiv.org/abs/2601.21337) (Alibaba) · [Qwen3-TTS](https://arxiv.org/abs/2601.15621) (Alibaba) · [Omnilingual ASR](https://arxiv.org/abs/2511.09690) (Meta) · [Parakeet TDT](https://arxiv.org/abs/2304.06795) (NVIDIA) · [CosyVoice 3](https://arxiv.org/abs/2505.17589) (Alibaba) · [Kokoro](https://arxiv.org/abs/2301.01695) (StyleTTS 2) · [PersonaPlex](https://arxiv.org/abs/2602.06053) (NVIDIA) · [Mimi](https://arxiv.org/abs/2410.00037) (Kyutai) · [Hibiki](https://arxiv.org/abs/2502.03382) (Kyutai) · [Sortformer](https://arxiv.org/abs/2409.06656) (NVIDIA)
 
@@ -190,7 +201,8 @@ Xem tổng quan gọn bên dưới. **[Danh mục mô hình đầy đủ với k
 | [Silero VAD](https://soniqo.audio/guides/vad) | Phát hiện hoạt động giọng nói | MLX, CoreML | 309K | Không phụ thuộc ngôn ngữ |
 | [KWS Zipformer](docs/models/kws-zipformer.md) | Audio → Wake word | CoreML (ANE) | 3M | EN/custom keywords |
 | [Pyannote](https://soniqo.audio/guides/diarize) | VAD + Phân tách người nói | MLX | 1.5M | Không phụ thuộc ngôn ngữ |
-| [Sortformer](https://soniqo.audio/guides/diarize) | Phân tách người nói (E2E) | CoreML (ANE) | — | Không phụ thuộc ngôn ngữ |
+| [Pyannote Community-1](https://huggingface.co/aufklarer/Pyannote-Community-1-CoreML) | Phân tách người nói + embedding người nói | CoreML (ANE) + Swift VBx | 8.35M | Không phụ thuộc ngôn ngữ |
+| [Sortformer](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) | [Phân tách người nói (E2E), streaming tăng dần](https://soniqo.audio/vi/guides/diarize) | CoreML (ANE) | 117M | Không phụ thuộc ngôn ngữ |
 | [DeepFilterNet3](https://soniqo.audio/guides/denoise) | Cải thiện chất lượng giọng nói | CoreML | 2.1M | Không phụ thuộc ngôn ngữ |
 | [Sidon](https://soniqo.audio/guides/restore) | Phục hồi giọng nói (khử nhiễu + khử vang, 48 kHz) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | Không phụ thuộc ngôn ngữ |
 | [HTDemucs (Demucs v4)](https://soniqo.audio/guides/separate) | Tách nguồn | MLX | 168M | Không phụ thuộc ngôn ngữ |
@@ -199,6 +211,7 @@ Xem tổng quan gọn bên dưới. **[Danh mục mô hình đầy đủ với k
 | [Stable Audio 3](docs/models/stable-audio-3.md) | Text → Music/audio (44.1 kHz stereo) | MLX | Medium 1.4B (int4/int8) | EN prompts |
 | [FlashSR](https://soniqo.audio/guides/upsample) | Siêu phân giải âm thanh (48 kHz) | MLX | 363 MB / 720 MB (int4/int8) | Không phụ thuộc ngôn ngữ |
 | [WeSpeaker](https://soniqo.audio/guides/embed-speaker) | Embedding người nói | MLX, CoreML | 6.6M | Không phụ thuộc ngôn ngữ |
+| [ReDimNet2-B6](https://huggingface.co/aufklarer/ReDimNet2-B6-CoreML) | Nhận dạng giọng nói có tên | CoreML | 12.3M | Không phụ thuộc ngôn ngữ |
 
 ## Cài đặt
 
