@@ -10,8 +10,7 @@ Mac・iOS向けのオンデバイス音声認識・合成・理解。Apple Silic
 
 <p align="center">
   <a href="https://formulae.brew.sh/formula/speech"><img src="https://img.shields.io/homebrew/installs/dm/speech.svg?logo=homebrew&amp;label=Homebrew%20installs&amp;color=FBB040" alt="Homebrew installs"></a>
-  <a href="https://github.com/soniqo/speech-swift/stargazers"><img src="https://img.shields.io/github/stars/soniqo/speech-swift.svg?style=flat&amp;logo=github&amp;label=GitHub%20stars" alt="GitHub stars"></a>
-  <a href="https://github.com/soniqo/speech-swift/releases"><img src="https://img.shields.io/github/downloads/soniqo/speech-swift/total.svg?style=flat&amp;logo=github&amp;label=release%20downloads" alt="Release downloads"></a>
+  <a href="https://github.com/soniqo/speech-swift/releases"><img src="https://img.shields.io/github/downloads/soniqo/speech-swift/total.svg?style=flat&amp;logo=github&amp;label=release%20downloads%20%28all%20time%29" alt="Release downloads, all time"></a>
 </p>
 
 <p align="center">
