@@ -98,6 +98,44 @@ final class E2ENemotronLangTagLeakTests: XCTestCase {
         }
     }
 
+    /// Word timings must track the audio: emission-aligned words stay in
+    /// lockstep with the transcript, start monotonically, and remain bounded
+    /// by the (padded) stream duration.
+    func testStreamingWordTimingsAreMonotonicAndBounded() throws {
+        let m = try model
+        let audioURL = Bundle.module.url(forResource: "test_audio", withExtension: "wav")!
+        let audio = try AudioFileLoader.load(url: audioURL, targetSampleRate: 16000)
+        let duration = Double(audio.count) / 16_000
+
+        let session = try m.createSession(language: "en-US")
+        var last: NemotronStreamingASRModel.PartialTranscript?
+        for lower in stride(from: 0, to: audio.count, by: 16_000) {
+            let upper = min(audio.count, lower + 16_000)
+            for partial in try session.pushAudio(Array(audio[lower..<upper])) {
+                last = partial
+            }
+        }
+        for partial in try session.finalize() { last = partial }
+
+        let final = try XCTUnwrap(last)
+        XCTAssertTrue(final.isFinal)
+        XCTAssertFalse(final.words.isEmpty)
+        XCTAssertEqual(
+            final.words.map(\.text).joined(separator: " "),
+            final.text,
+            "timed words must reproduce the transcript exactly")
+        var previousStart = -Double.infinity
+        for word in final.words {
+            XCTAssertLessThanOrEqual(word.startTime, word.endTime)
+            XCTAssertGreaterThanOrEqual(word.startTime, previousStart)
+            previousStart = word.startTime
+        }
+        XCTAssertGreaterThanOrEqual(final.words.first!.startTime, 0)
+        // Greedy RNN-T emission trails the acoustics, but never beyond the
+        // padded final chunk.
+        XCTAssertLessThanOrEqual(final.words.last!.endTime, duration + 1.0)
+    }
+
     /// Same audio through the batch path and the streaming path must produce
     /// transcripts whose content words substantially overlap. A streaming pass
     /// that drops one or more words from the batch reference (e.g. losing a

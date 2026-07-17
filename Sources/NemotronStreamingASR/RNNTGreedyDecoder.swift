@@ -23,6 +23,10 @@ class ReusableFeatureProvider: MLFeatureProvider {
 struct RNNTDecodeResult {
     let tokens: [Int]
     let tokenLogProbs: [Float]
+    /// Chunk-relative encoder frame at which each token was emitted, aligned
+    /// with `tokens`. The caller adds its running frame offset to make these
+    /// session-absolute.
+    let tokenFrames: [Int]
     let wordBoostingChangedDecisions: Int
 }
 
@@ -52,6 +56,7 @@ struct RNNTGreedyDecoder {
     ) throws -> RNNTDecodeResult {
         var tokens = [Int]()
         var tokenLogProbs = [Float]()
+        var tokenFrames = [Int]()
         var wordBoostingChangedDecisions = 0
 
         let tokenPtr = tokenArray.dataPointer.assumingMemoryBound(to: Int32.self)
@@ -82,6 +87,7 @@ struct RNNTGreedyDecoder {
                 tokens.append(tokenId)
                 let logProb = logSoftmax(logits, tokenId: tokenId, count: totalClasses, floatBuf: argmaxBuf)
                 tokenLogProbs.append(logProb)
+                tokenFrames.append(i)
 
                 tokenPtr.pointee = Int32(tokenId)
                 decoderProvider.update("h", h)
@@ -99,6 +105,7 @@ struct RNNTGreedyDecoder {
         return RNNTDecodeResult(
             tokens: tokens,
             tokenLogProbs: tokenLogProbs,
+            tokenFrames: tokenFrames,
             wordBoostingChangedDecisions: wordBoostingChangedDecisions
         )
     }

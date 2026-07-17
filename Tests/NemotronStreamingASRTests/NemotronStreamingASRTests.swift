@@ -120,6 +120,34 @@ final class NemotronVocabularyTests: XCTestCase {
         XCTAssertEqual(vocab.decode([0, 999, 1]), "the cat")
     }
 
+    func testDecodeTimedWordsSpansMultiTokenWordsAndSkipsSpecials() {
+        let vocab = NemotronVocabulary(idToToken: [
+            0: "▁hello",
+            1: "▁wor",
+            2: "ld",
+            3: "<en-US>",
+        ])
+        let words = vocab.decodeTimedWords([3, 0, 1, 2], frames: [0, 2, 5, 6])
+        XCTAssertEqual(words, [
+            TimedWordPiece(word: "hello", startFrame: 2, endFrame: 2),
+            TimedWordPiece(word: "world", startFrame: 5, endFrame: 6),
+        ])
+        // The word list must stay in lockstep with the plain transcript.
+        XCTAssertEqual(
+            words.map(\.word).joined(separator: " "),
+            vocab.decode([3, 0, 1, 2]))
+    }
+
+    func testDecodeTimedWordsHandlesLeadingContinuationAndBadInput() {
+        let vocab = NemotronVocabulary(idToToken: [2: "ld"])
+        // A session can begin mid-word after a language tag; the fragment
+        // still gets its own frames instead of a zero default.
+        XCTAssertEqual(
+            vocab.decodeTimedWords([2], frames: [4]),
+            [TimedWordPiece(word: "ld", startFrame: 4, endFrame: 4)])
+        XCTAssertEqual(vocab.decodeTimedWords([2], frames: []), [])
+    }
+
     func testDecodeWordsEmitsConfidences() {
         let vocab = NemotronVocabulary(idToToken: [
             0: "▁hello",
