@@ -38,6 +38,7 @@ struct AudioServerCommand: AsyncParsableCommand {
         print("Endpoints:")
         print("  POST /transcribe     - Speech-to-text (WAV body or JSON with audio_base64)")
         print("  POST /v1/audio/transcriptions - OpenAI-compatible STT (multipart/form-data)")
+        print("  POST /v1/audio/speech - OpenAI-compatible TTS (JSON body)")
         print("  POST /speak          - Text-to-speech (JSON: {text, engine?, language?})")
         print("  POST /respond        - Speech-to-speech (WAV body, voice/max_steps via query)")
         print("  POST /enhance        - Speech enhancement (WAV body)")

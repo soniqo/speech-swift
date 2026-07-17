@@ -123,7 +123,11 @@ public let MODEL_REGISTRY: [ModelVariant] = [
     .init(name: "kokoro-82m-coreml",
           engine: "kokoro",
           modelId: KokoroTTSModel.defaultModelId,
-          aliases: ["kokoro", "kokoro-82m"],
+          aliases: [
+              "kokoro", "kokoro-82m",
+              "tts-1", "tts-1-hd", "gpt-4o-mini-tts",
+              "gpt-4o-mini-tts-2025-12-15",
+          ],
           kind: .tts),
     .init(name: "cosyvoice-3-0.5b-mlx-bf16",
           engine: "cosyvoice",
