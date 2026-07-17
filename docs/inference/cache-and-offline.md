@@ -100,6 +100,7 @@ All models support both parameters:
 | `PyannoteVADModel` | `cacheDir`, `offlineMode` |
 | `FireRedVADModel` | `cacheDir`, `offlineMode` |
 | `WeSpeakerModel` | `cacheDir`, `offlineMode` |
+| `ReDimNet2SpeakerModel` | `cacheDir`, `offlineMode` |
 | `SpeechEnhancer` | `cacheDir`, `offlineMode` |
 | `SortformerDiarizer` | `cacheDir`, `offlineMode` |
 | `Community1DiarizationPipeline` | `cacheDir`, `offlineMode` |

@@ -142,6 +142,10 @@ public protocol SpeakerEmbeddingModel: AnyObject {
 
 **Conforming types:** `WeSpeakerModel`
 
+`ReDimNet2SpeakerModel` is the separate persistent identity encoder. Its
+`embed` method throws so model or input failures remain explicit; it is used
+through its concrete API rather than this legacy non-throwing protocol.
+
 ### SpeakerDiarizationModel
 
 Models that assign speaker identities to speech segments.
@@ -440,6 +444,7 @@ Sources/
 │   ├── DiarizationHelpers.swift   Shared helpers (merge, compact IDs, resample)
 │   ├── SortformerDiarizer.swift   SortformerDiarizer: SpeakerDiarizationModel (CoreML)
 │   ├── WeSpeaker.swift        WeSpeakerModel: SpeakerEmbeddingModel
+│   ├── ReDimNet2Speaker.swift ReDimNet2SpeakerModel: persistent named voice identity (CoreML)
 │   └── PowersetDecoder.swift  7-class powerset → per-speaker probabilities
 │
 ├── SpeechCore/                Voice pipeline (wraps speech-core C++ engine)

@@ -8,6 +8,10 @@ Speaker diarization identifies **who spoke when** in an audio recording. Three e
 2. **Community-1** (CoreML) — Pyannote segmentation + masked WeSpeaker embeddings + native PLDA/VBx clustering
 3. **Sortformer** (CoreML) — NVIDIA's end-to-end neural diarization model, runs on Neural Engine
 
+Named voice identity is a separate operation. `ReDimNet2SpeakerModel` compares
+clean voice samples across recordings; it does not replace the embedding and
+clustering stages inside any diarization engine.
+
 ## Architecture
 
 ### Engine Selection
@@ -125,6 +129,36 @@ The CoreML model uses EnumeratedShapes for variable mel lengths (20–2000 frame
 
 MLX and CoreML embeddings are **not interchangeable** — NHWC vs NCHW layout causes stats pooling to flatten features in different orders. Each backend is self-consistent (cosine sim 1.0 for same input) but cross-backend similarity is low (~0.15). Use the same backend for enrollment and comparison.
 
+### ReDimNet2-B6 Named Voice Identity
+
+ReDimNet2-B6 is the separate Core ML encoder for recording-local and persistent
+named voice matching. It accepts clean speaker-only PCM rather than a mixed
+meeting waveform and returns one 192-dimensional, L2-normalized embedding.
+
+```swift
+let identity = try await ReDimNet2SpeakerModel.fromPretrained()
+try identity.prewarm()
+
+let enrollment = try identity.embed(audio: enrollmentAudio, sampleRate: 16_000)
+let candidate = try identity.embed(audio: candidateAudio, sampleRate: 16_000)
+let similarity = ReDimNet2SpeakerModel.cosineSimilarity(enrollment, candidate)
+```
+
+- Input is fixed at six seconds / 96,000 mono samples for the fast Core ML path.
+- Clean clips from two to six seconds are repeated to fill the window.
+- Longer clips are center-cropped; clips shorter than two seconds fail explicitly.
+- The model uses 192-dimensional embeddings. They cannot be compared with
+  WeSpeaker's 256-dimensional embeddings or Community-1 centroids.
+- Matching thresholds must be calibrated for ReDimNet2; do not reuse WeSpeaker
+  thresholds.
+- Voice embeddings support labeling, not biometric authentication or spoofing
+  resistance.
+
+The fixed-shape compiled model is approximately 25 MiB and measured about
+13.6 ms per warm six-second inference on an Apple M2 Max. This encoder remains
+outside Community-1: Community-1's masked WeSpeaker, PLDA, and VBx stages stay
+in their original shared embedding space.
+
 ### Mel Feature Extraction
 
 80-dim log-mel spectrogram via vDSP (same pipeline as WhisperFeatureExtractor but with different parameters):
@@ -200,6 +234,14 @@ let embedding = model.embed(audio: samples, sampleRate: 16000)
 // embedding: [Float] of length 256, L2-normalized
 ```
 
+For named identity across recordings, use the throwing ReDimNet2 API instead:
+
+```swift
+let model = try await ReDimNet2SpeakerModel.fromPretrained()
+let embedding = try model.embed(audio: cleanSpeakerAudio, sampleRate: 16_000)
+// embedding: [Float] of length 192, L2-normalized
+```
+
 ### Speaker Extraction
 
 Given a reference audio of a target speaker, extract only their segments:
@@ -264,6 +306,7 @@ speech diarize meeting.wav --target-speaker enrollment.wav
 # Embed a speaker's voice
 speech embed-speaker enrollment.wav
 speech embed-speaker enrollment.wav --engine coreml --json
+speech embed-speaker enrollment.wav --engine redimnet2 --json
 ```
 
 Community-1 compute units can be selected with
@@ -290,6 +333,7 @@ whose collar and boundary accounting are intentionally different.
 - **Segmentation**: `aufklarer/Pyannote-Segmentation-MLX` (~5.7 MB)
 - **Speaker Embedding (MLX)**: `aufklarer/WeSpeaker-ResNet34-LM-MLX` (~25 MB)
 - **Speaker Embedding (CoreML)**: `aufklarer/WeSpeaker-ResNet34-LM-CoreML` (~13 MB)
+- **Named Voice Identity (CoreML)**: `aufklarer/ReDimNet2-B6-CoreML` (~25 MiB)
 - **Sortformer (CoreML)**: `aufklarer/Sortformer-Diarization-CoreML` (~240 MB)
 - Cache: `~/Library/Caches/qwen3-speech/`
 
@@ -325,6 +369,7 @@ Sources/SpeechVAD/
 ├── WeSpeakerWeightLoading.swift       Weight loading from safetensors
 ├── WeSpeaker.swift                    Public API: embed(), fromPretrained(), engine selection
 ├── CoreMLWeSpeakerInference.swift     CoreML inference (EnumeratedShapes, float16)
+├── ReDimNet2Speaker.swift             Persistent identity encoder (fixed-waveform CoreML)
 ├── PowersetDecoder.swift              7-class powerset → per-speaker probs
 ├── DiarizationHelpers.swift            Merge segments, compact IDs, constrained clustering
 ├── DiarizationPipeline.swift          Pyannote pipeline (embedding clustering + speaker extraction)

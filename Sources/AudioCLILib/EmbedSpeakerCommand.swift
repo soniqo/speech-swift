@@ -13,7 +13,7 @@ public struct EmbedSpeakerCommand: ParsableCommand {
     @Argument(help: "Audio file containing speaker voice (WAV, any sample rate)")
     public var audioFile: String
 
-    @Option(name: .long, help: "Inference engine: mlx, coreml (WeSpeaker), or camplusplus (CAM++ CoreML)")
+    @Option(name: .long, help: "Inference engine: mlx, coreml (WeSpeaker), redimnet2 (identity CoreML), or camplusplus (CAM++ CoreML)")
     public var engine: String = "mlx"
 
     @Flag(name: .long, help: "Output as JSON")
@@ -32,7 +32,17 @@ public struct EmbedSpeakerCommand: ParsableCommand {
             let embedding: [Float]
             let elapsed: TimeInterval
 
-            if engine == "camplusplus" {
+            if engine == "redimnet2" {
+                print("Loading ReDimNet2 speaker identity model (CoreML)...")
+                let model = try await ReDimNet2SpeakerModel.fromPretrained(
+                    progressHandler: reportProgress
+                )
+
+                print("Extracting speaker identity embedding...")
+                let start = Date()
+                embedding = try model.embed(audio: audio, sampleRate: 16000)
+                elapsed = Date().timeIntervalSince(start)
+            } else if engine == "camplusplus" {
                 print("Loading CAM++ speaker model (CoreML)...")
                 let model = try await CamPlusPlusSpeaker.fromPretrained(
                     progressHandler: reportProgress
@@ -44,7 +54,7 @@ public struct EmbedSpeakerCommand: ParsableCommand {
                 elapsed = Date().timeIntervalSince(start)
             } else {
                 guard let embEngine = WeSpeakerEngine(rawValue: engine) else {
-                    print("Error: unknown engine '\(engine)'. Use 'mlx', 'coreml', or 'camplusplus'.")
+                    print("Error: unknown engine '\(engine)'. Use 'mlx', 'coreml', 'redimnet2', or 'camplusplus'.")
                     return
                 }
 

@@ -78,7 +78,7 @@ Nhận dạng, tổng hợp và hiểu giọng nói trên thiết bị cho Mac v
 - **[Từ kích hoạt](https://soniqo.audio/guides/wake-word)** — Phát hiện từ khóa trên thiết bị (KWS Zipformer 3M, CoreML, 26× thời gian thực, danh sách từ khóa có thể cấu hình)
 - **[VAD](https://soniqo.audio/guides/vad)** — Phát hiện hoạt động giọng nói (Silero streaming, Pyannote ngoại tuyến, FireRedVAD hơn 100 ngôn ngữ)
 - **[Phân tách người nói](https://soniqo.audio/guides/diarize)** — Ai nói khi nào (pipeline Pyannote, Sortformer end-to-end trên Neural Engine)
-- **[Embedding người nói](https://soniqo.audio/guides/embed-speaker)** — WeSpeaker ResNet34 (256 chiều), CAM++ (192 chiều)
+- **[Embedding người nói](https://soniqo.audio/guides/embed-speaker)** — WeSpeaker ResNet34 (256 chiều), ReDimNet2-B6 để nhận dạng giọng nói có tên (192 chiều), CAM++ (192 chiều)
 
 Papers: [Qwen3-ASR](https://arxiv.org/abs/2601.21337) (Alibaba) · [Qwen3-TTS](https://arxiv.org/abs/2601.15621) (Alibaba) · [Omnilingual ASR](https://arxiv.org/abs/2511.09690) (Meta) · [Parakeet TDT](https://arxiv.org/abs/2304.06795) (NVIDIA) · [CosyVoice 3](https://arxiv.org/abs/2505.17589) (Alibaba) · [Kokoro](https://arxiv.org/abs/2301.01695) (StyleTTS 2) · [PersonaPlex](https://arxiv.org/abs/2602.06053) (NVIDIA) · [Mimi](https://arxiv.org/abs/2410.00037) (Kyutai) · [Hibiki](https://arxiv.org/abs/2502.03382) (Kyutai) · [Sortformer](https://arxiv.org/abs/2409.06656) (NVIDIA)
 
@@ -200,6 +200,7 @@ Xem tổng quan gọn bên dưới. **[Danh mục mô hình đầy đủ với k
 | [Stable Audio 3](docs/models/stable-audio-3.md) | Text → Music/audio (44.1 kHz stereo) | MLX | Medium 1.4B (int4/int8) | EN prompts |
 | [FlashSR](https://soniqo.audio/guides/upsample) | Siêu phân giải âm thanh (48 kHz) | MLX | 363 MB / 720 MB (int4/int8) | Không phụ thuộc ngôn ngữ |
 | [WeSpeaker](https://soniqo.audio/guides/embed-speaker) | Embedding người nói | MLX, CoreML | 6.6M | Không phụ thuộc ngôn ngữ |
+| [ReDimNet2-B6](https://huggingface.co/aufklarer/ReDimNet2-B6-CoreML) | Nhận dạng giọng nói có tên | CoreML | 12.3M | Không phụ thuộc ngôn ngữ |
 
 ## Cài đặt
 
