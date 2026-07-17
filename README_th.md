@@ -77,7 +77,7 @@
 
 - **[Wake-word](https://soniqo.audio/guides/wake-word)** — การตรวจจับคำสั่งปลุกบนอุปกรณ์ (KWS Zipformer 3M, CoreML, เร็วกว่าเรียลไทม์ 26 เท่า, รายการคำสั่งปลุกปรับแต่งได้)
 - **[VAD](https://soniqo.audio/guides/vad)** — การตรวจจับเสียงพูด (Silero streaming, Pyannote offline, FireRedVAD รองรับกว่า 100 ภาษา)
-- **[Speaker Diarization](https://soniqo.audio/guides/diarize)** — ใครพูดเมื่อใด (pipeline Pyannote, Sortformer แบบ end-to-end บน Neural Engine)
+- **[Speaker Diarization](https://soniqo.audio/guides/diarize)** — ใครพูดเมื่อใด (pipeline Pyannote, Sortformer แบบ end-to-end บน Neural Engine) — ตอนนี้มีเซสชันสตรีมมิงแบบเพิ่มทีละส่วน (ID ผู้พูดคงที่ อัปเดตทุก 480 ms)
 - **[Speaker Embeddings](https://soniqo.audio/guides/embed-speaker)** — WeSpeaker ResNet34 (256 มิติ), ReDimNet2-B6 สำหรับการระบุตัวตนเสียงแบบตั้งชื่อ (192 มิติ), CAM++ (192 มิติ)
 
 Papers: [Qwen3-ASR](https://arxiv.org/abs/2601.21337) (Alibaba) · [Qwen3-TTS](https://arxiv.org/abs/2601.15621) (Alibaba) · [Omnilingual ASR](https://arxiv.org/abs/2511.09690) (Meta) · [Parakeet TDT](https://arxiv.org/abs/2304.06795) (NVIDIA) · [CosyVoice 3](https://arxiv.org/abs/2505.17589) (Alibaba) · [Kokoro](https://arxiv.org/abs/2301.01695) (StyleTTS 2) · [PersonaPlex](https://arxiv.org/abs/2602.06053) (NVIDIA) · [Mimi](https://arxiv.org/abs/2410.00037) (Kyutai) · [Hibiki](https://arxiv.org/abs/2502.03382) (Kyutai) · [Sortformer](https://arxiv.org/abs/2409.06656) (NVIDIA)
@@ -191,7 +191,7 @@ struct DictateView: View {
 | [KWS Zipformer](docs/models/kws-zipformer.md) | Audio → Wake word | CoreML (ANE) | 3M | EN/custom keywords |
 | [Pyannote](https://soniqo.audio/guides/diarize) | VAD + การแยกผู้พูด | MLX | 1.5M | ไม่จำกัดภาษา |
 | [Pyannote Community-1](https://huggingface.co/aufklarer/Pyannote-Community-1-CoreML) | การแยกผู้พูด + เอ็มเบดดิงผู้พูด | CoreML (ANE) + Swift VBx | 8.35M | ไม่จำกัดภาษา |
-| [Sortformer](https://soniqo.audio/guides/diarize) | การแยกผู้พูด (E2E) | CoreML (ANE) | — | ไม่จำกัดภาษา |
+| [Sortformer](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) | [การแยกผู้พูด (E2E), สตรีมมิงแบบเพิ่มทีละส่วน](https://soniqo.audio/th/guides/diarize) | CoreML (ANE) | 117M | ไม่จำกัดภาษา |
 | [DeepFilterNet3](https://soniqo.audio/guides/denoise) | การปรับปรุงเสียงพูด | CoreML | 2.1M | ไม่จำกัดภาษา |
 | [Sidon](https://soniqo.audio/guides/restore) | การฟื้นฟูเสียงพูด (ลดเสียงรบกวน + ลดเสียงก้อง, 48 kHz) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | ไม่จำกัดภาษา |
 | [HTDemucs (Demucs v4)](https://soniqo.audio/guides/separate) | การแยกแหล่งกำเนิด | MLX | 168M | ไม่จำกัดภาษา |

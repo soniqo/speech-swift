@@ -34,6 +34,11 @@ struct DiarizationBench: AsyncParsableCommand {
     @Option(name: .long, help: "Frame scoring resolution in seconds.")
     var resolution: Float = 0.01
 
+    @Option(name: .long, help: """
+        Comma-separated key=value Sortformer tuning overrides applied to the         sortformer engines: onset, offset, minSpeechDuration,         minSilenceDuration, silenceThreshold, predScoreThreshold,         scoresBoostLatest, strongBoostRate, weakBoostRate, minPosScoresRate,         spkcacheSilFramesPerSpk.
+        """)
+    var sortformerTuning: String?
+
     mutating func run() async throws {
         setlinebuf(stdout)
 
@@ -48,9 +53,10 @@ struct DiarizationBench: AsyncParsableCommand {
         let totalAudio = decoded.reduce(0.0) { $0 + $1.duration }
         print(String(format: "Total audio: %.1f s\n", totalAudio))
 
+        let tuning = try SortformerTuning(argument: sortformerTuning)
         var results: [DiarizationEngineResult] = []
         for engineID in engines {
-            guard let engine = makeDiarizationEngine(engineID) else {
+            guard let engine = makeDiarizationEngine(engineID, tuning: tuning) else {
                 fputs("Unknown diarization engine: \(engineID)\n", stderr)
                 throw ExitCode(2)
             }
@@ -202,16 +208,77 @@ private protocol DiarizationBenchEngine: AnyObject {
     func diarize(audio: [Float], sampleRate: Int) throws -> DiarizationResult
 }
 
-private func makeDiarizationEngine(_ id: String) -> DiarizationBenchEngine? {
+/// Parsed --sortformer-tuning overrides. Cache-update keys mutate the
+/// SortformerConfig the model loads with; binarization keys mutate the
+/// DiarizationConfig used when probabilities become segments.
+struct SortformerTuning {
+    var apply: (inout SortformerConfig) -> Void = { _ in }
+    var thresholds = DiarizationConfig.default
+
+    init(argument: String?) throws {
+        guard let argument, !argument.isEmpty else { return }
+        var configEdits: [(inout SortformerConfig) -> Void] = []
+        for pair in argument.split(separator: ",") {
+            let parts = pair.split(separator: "=", maxSplits: 1)
+            guard parts.count == 2, let value = Float(parts[1]) else {
+                throw ValidationError("Bad --sortformer-tuning entry: \(pair)")
+            }
+            switch parts[0] {
+            case "onset": thresholds.onset = value
+            case "offset": thresholds.offset = value
+            case "minSpeechDuration": thresholds.minSpeechDuration = value
+            case "minSilenceDuration": thresholds.minSilenceDuration = value
+            case "silenceThreshold":
+                configEdits.append { $0.silenceThreshold = value }
+            case "predScoreThreshold":
+                configEdits.append { $0.predScoreThreshold = value }
+            case "scoresBoostLatest":
+                configEdits.append { $0.scoresBoostLatest = value }
+            case "strongBoostRate":
+                configEdits.append { $0.strongBoostRate = value }
+            case "weakBoostRate":
+                configEdits.append { $0.weakBoostRate = value }
+            case "minPosScoresRate":
+                configEdits.append { $0.minPosScoresRate = value }
+            case "spkcacheSilFramesPerSpk":
+                configEdits.append { $0.spkcacheSilFramesPerSpk = Int(value) }
+            default:
+                throw ValidationError("Unknown --sortformer-tuning key: \(parts[0])")
+            }
+        }
+        apply = { config in
+            for edit in configEdits { edit(&config) }
+        }
+    }
+
+    func tuned(_ base: SortformerConfig) -> SortformerConfig {
+        var config = base
+        apply(&config)
+        return config
+    }
+}
+
+private func makeDiarizationEngine(
+    _ id: String, tuning: SortformerTuning
+) -> DiarizationBenchEngine? {
     switch id.lowercased() {
     case "community1-coreml":
         return Community1DiarizationBenchEngine()
     case "sortformer-default":
-        return SortformerBenchEngine(name: "sortformer-default", variant: .default)
+        return SortformerBenchEngine(
+            name: "sortformer-default", variant: tuning.tuned(.default),
+            thresholds: tuning.thresholds)
     case "sortformer-balanced":
-        return SortformerBenchEngine(name: "sortformer-balanced", variant: .balanced)
+        return SortformerBenchEngine(
+            name: "sortformer-balanced", variant: tuning.tuned(.balanced),
+            thresholds: tuning.thresholds)
     case "sortformer-streaming":
-        return SortformerBenchEngine(name: "sortformer-streaming", variant: .streaming)
+        return SortformerBenchEngine(
+            name: "sortformer-streaming", variant: tuning.tuned(.streaming),
+            thresholds: tuning.thresholds)
+    case "sortformer-session":
+        return SortformerSessionBenchEngine(
+            config: tuning.tuned(.streaming), thresholds: tuning.thresholds)
     case "pyannote-mlx":
         return PyannoteDiarizationBenchEngine(name: "pyannote-mlx", embeddingEngine: .mlx)
     case "pyannote-coreml":
@@ -277,11 +344,16 @@ private final class PyannoteDiarizationBenchEngine: DiarizationBenchEngine {
 private final class SortformerBenchEngine: DiarizationBenchEngine {
     let name: String
     let variant: SortformerConfig
+    let thresholds: DiarizationConfig
     var diarizer: SortformerDiarizer?
 
-    init(name: String, variant: SortformerConfig) {
+    init(
+        name: String, variant: SortformerConfig,
+        thresholds: DiarizationConfig = .default
+    ) {
         self.name = name
         self.variant = variant
+        self.thresholds = thresholds
     }
 
     func load() async throws {
@@ -296,7 +368,72 @@ private final class SortformerBenchEngine: DiarizationBenchEngine {
         guard let diarizer else {
             return DiarizationResult(segments: [], numSpeakers: 0, speakerEmbeddings: [])
         }
-        return diarizer.diarize(audio: audio, sampleRate: sampleRate)
+        return diarizer.diarize(audio: audio, sampleRate: sampleRate, config: thresholds)
+    }
+}
+
+/// Drives ``SortformerStreamingSession`` the way a live consumer would:
+/// 480 ms pushes through the incremental API, one snapshot per push, final
+/// flush at end of file. Scores the same as batch engines while also
+/// printing per-push latency, the number a realtime caller actually feels.
+private final class SortformerSessionBenchEngine: DiarizationBenchEngine {
+    let name = "sortformer-session"
+    let config: SortformerConfig
+    let thresholds: DiarizationConfig
+    var session: SortformerStreamingSession?
+    private var pushMilliseconds: [Double] = []
+
+    init(
+        config: SortformerConfig = .streaming,
+        thresholds: DiarizationConfig = .default
+    ) {
+        self.config = config
+        self.thresholds = thresholds
+    }
+
+    func load() async throws {
+        #if canImport(CoreML)
+        session = try await SortformerStreamingSession.fromPretrained(
+            config: config,
+            computeUnits: .cpuAndNeuralEngine)
+        session?.binarization = thresholds
+        #else
+        throw BenchmarkSupportError.unsupportedReference("Sortformer requires CoreML")
+        #endif
+    }
+
+    func diarize(audio: [Float], sampleRate: Int) throws -> DiarizationResult {
+        #if canImport(CoreML)
+        guard let session else {
+            return DiarizationResult(segments: [], numSpeakers: 0, speakerEmbeddings: [])
+        }
+        session.reset()
+        let samples = sampleRate == 16_000
+            ? audio
+            : AudioFileLoader.resample(audio, from: sampleRate, to: 16_000)
+        let pushSize = 16_000 / 2
+        var cursor = 0
+        while cursor < samples.count {
+            let end = min(samples.count, cursor + pushSize)
+            let started = Date()
+            _ = try session.push(audio: Array(samples[cursor..<end]))
+            pushMilliseconds.append(Date().timeIntervalSince(started) * 1000)
+            cursor = end
+        }
+        let result = try session.finish()
+        let sorted = pushMilliseconds.sorted()
+        if !sorted.isEmpty {
+            let p50 = sorted[sorted.count / 2]
+            let p95 = sorted[min(sorted.count - 1, Int(Double(sorted.count) * 0.95))]
+            print(String(
+                format: "    session push latency: p50 %.1f ms · p95 %.1f ms (%d pushes)",
+                p50, p95, sorted.count))
+            pushMilliseconds.removeAll(keepingCapacity: true)
+        }
+        return result
+        #else
+        return DiarizationResult(segments: [], numSpeakers: 0, speakerEmbeddings: [])
+        #endif
     }
 }
 

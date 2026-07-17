@@ -17,6 +17,27 @@ AI speech models for Apple Silicon (MLX Swift). ASR, TTS, speech-to-speech, VAD,
 - **Every README.md change must update all 13 translations** (`README_zh.md`, `README_ja.md`, `README_ko.md`, `README_es.md`, `README_de.md`, `README_fr.md`, `README_hi.md`, `README_pt.md`, `README_ru.md`, `README_ar.md`, `README_th.md`, `README_tr.md`, `README_vi.md`). No exceptions.
 - **Keep docs and comments scoped to this package.** Model docs, code comments, and PR descriptions describe this package's models, APIs, and formats only — never downstream consumer apps or their integration rules.
 
+## Running Tests and Benchmarks — Sequential and Memory-Aware
+
+Heavy operations in this repo load multi-gigabyte CoreML/MLX models. Run
+them strictly one at a time — overlapping them has exhausted memory and
+rebooted development machines.
+
+- Never run the full `swift test` concurrently with anything else: not with
+  another build, not with a benchmark, not with a model-loading app, not
+  with another agent's test run in a different worktree. Each worktree has
+  its own `.build`, so the SwiftPM lock does **not** protect you across
+  worktrees — check for other `swift`/bench processes before starting.
+- For the full suite, bound memory by disabling test parallelization:
+  `swift test --no-parallel`. Model-gated suites otherwise load their
+  models simultaneously.
+- While iterating, prefer targeted runs: `swift test --filter <Suite>`.
+- Benchmarks (`diarization-bench`, ASR benches) also load models — run them
+  after tests finish, never alongside, and one benchmark process at a time.
+- If a second SwiftPM command queues on the same `.build` lock, don't leave
+  it queued — it will pile its model loads on top of the first the moment
+  the lock frees. Cancel it and rerun after the first completes.
+
 ## Git Conventions
 
 - Never mention Claude, Codex, AI, or any AI tool in commit messages, PR titles, PR descriptions, comments, docs, or co-author tags. Do not add tool-name prefixes such as `[codex]`; use neutral project wording.

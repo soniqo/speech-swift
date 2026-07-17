@@ -77,7 +77,7 @@ Nhận dạng, tổng hợp và hiểu giọng nói trên thiết bị cho Mac v
 
 - **[Từ kích hoạt](https://soniqo.audio/guides/wake-word)** — Phát hiện từ khóa trên thiết bị (KWS Zipformer 3M, CoreML, 26× thời gian thực, danh sách từ khóa có thể cấu hình)
 - **[VAD](https://soniqo.audio/guides/vad)** — Phát hiện hoạt động giọng nói (Silero streaming, Pyannote ngoại tuyến, FireRedVAD hơn 100 ngôn ngữ)
-- **[Phân tách người nói](https://soniqo.audio/guides/diarize)** — Ai nói khi nào (pipeline Pyannote, Sortformer end-to-end trên Neural Engine)
+- **[Phân tách người nói](https://soniqo.audio/guides/diarize)** — Ai nói khi nào (pipeline Pyannote, Sortformer end-to-end trên Neural Engine) — nay có phiên streaming tăng dần (ID người nói ổn định, cập nhật mỗi 480 ms)
 - **[Embedding người nói](https://soniqo.audio/guides/embed-speaker)** — WeSpeaker ResNet34 (256 chiều), ReDimNet2-B6 để nhận dạng giọng nói có tên (192 chiều), CAM++ (192 chiều)
 
 Papers: [Qwen3-ASR](https://arxiv.org/abs/2601.21337) (Alibaba) · [Qwen3-TTS](https://arxiv.org/abs/2601.15621) (Alibaba) · [Omnilingual ASR](https://arxiv.org/abs/2511.09690) (Meta) · [Parakeet TDT](https://arxiv.org/abs/2304.06795) (NVIDIA) · [CosyVoice 3](https://arxiv.org/abs/2505.17589) (Alibaba) · [Kokoro](https://arxiv.org/abs/2301.01695) (StyleTTS 2) · [PersonaPlex](https://arxiv.org/abs/2602.06053) (NVIDIA) · [Mimi](https://arxiv.org/abs/2410.00037) (Kyutai) · [Hibiki](https://arxiv.org/abs/2502.03382) (Kyutai) · [Sortformer](https://arxiv.org/abs/2409.06656) (NVIDIA)
@@ -191,7 +191,7 @@ Xem tổng quan gọn bên dưới. **[Danh mục mô hình đầy đủ với k
 | [KWS Zipformer](docs/models/kws-zipformer.md) | Audio → Wake word | CoreML (ANE) | 3M | EN/custom keywords |
 | [Pyannote](https://soniqo.audio/guides/diarize) | VAD + Phân tách người nói | MLX | 1.5M | Không phụ thuộc ngôn ngữ |
 | [Pyannote Community-1](https://huggingface.co/aufklarer/Pyannote-Community-1-CoreML) | Phân tách người nói + embedding người nói | CoreML (ANE) + Swift VBx | 8.35M | Không phụ thuộc ngôn ngữ |
-| [Sortformer](https://soniqo.audio/guides/diarize) | Phân tách người nói (E2E) | CoreML (ANE) | — | Không phụ thuộc ngôn ngữ |
+| [Sortformer](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) | [Phân tách người nói (E2E), streaming tăng dần](https://soniqo.audio/vi/guides/diarize) | CoreML (ANE) | 117M | Không phụ thuộc ngôn ngữ |
 | [DeepFilterNet3](https://soniqo.audio/guides/denoise) | Cải thiện chất lượng giọng nói | CoreML | 2.1M | Không phụ thuộc ngôn ngữ |
 | [Sidon](https://soniqo.audio/guides/restore) | Phục hồi giọng nói (khử nhiễu + khử vang, 48 kHz) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | Không phụ thuộc ngôn ngữ |
 | [HTDemucs (Demucs v4)](https://soniqo.audio/guides/separate) | Tách nguồn | MLX | 168M | Không phụ thuộc ngôn ngữ |

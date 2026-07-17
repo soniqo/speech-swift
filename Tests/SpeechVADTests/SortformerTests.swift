@@ -173,6 +173,66 @@ final class SortformerTests: XCTestCase {
     }
 
     #if canImport(CoreML)
+    // MARK: - Streaming session equivalence (requires model download)
+
+    /// The incremental session must reproduce whole-buffer diarization with
+    /// the same `.streaming` preset: identical chunk math fed identical mel.
+    /// Arbitrary push sizes exercise the PCM carry and mel-margin logic.
+    func testStreamingSessionMatchesWholeBufferDiarization() async throws {
+        let diarizer: SortformerDiarizer
+        do {
+            diarizer = try await SortformerDiarizer.fromPretrained(
+                offlineMode: true, config: .streaming)
+        } catch {
+            throw XCTSkip("Sortformer streaming model not cached: \(error)")
+        }
+
+        // Deterministic two-voice-shaped audio: alternating band-limited
+        // bursts with silence gaps, 19 s so the FIFO spills into the cache.
+        var seed: UInt64 = 0x5EED_2026
+        func nextFloat() -> Float {
+            seed = seed &* 6364136223846793005 &+ 1442695040888963407
+            return Float(Int64(bitPattern: seed >> 11)) / Float(Int64.max)
+        }
+        var audio = [Float](repeating: 0, count: 19 * 16_000)
+        var cursor = 0
+        var voice = 0
+        while cursor < audio.count {
+            let burst = 16_000 + Int(abs(nextFloat()) * 16_000)
+            let gap = 4_000 + Int(abs(nextFloat()) * 4_000)
+            let end = min(audio.count, cursor + burst)
+            let carrier: Float = voice == 0 ? 180 : 320
+            for i in cursor..<end {
+                let envelope = 0.5 + 0.5 * sin(
+                    2 * .pi * carrier * Float(i) / 16_000)
+                audio[i] = 0.2 * nextFloat() * envelope
+            }
+            cursor = end + gap
+            voice = 1 - voice
+        }
+
+        let offline = diarizer.diarize(
+            audio: audio, sampleRate: 16_000, config: .default)
+
+        let session = diarizer.makeStreamingSession()
+        var pushed = 0
+        var pushSize = 1_000
+        while pushed < audio.count {
+            let end = min(audio.count, pushed + pushSize)
+            _ = try session.push(audio: Array(audio[pushed..<end]))
+            pushed = end
+            pushSize = pushSize == 1_000 ? 7_333 : 1_000
+        }
+        let streamed = try session.finish()
+
+        XCTAssertEqual(streamed.segments.count, offline.segments.count)
+        for (lhs, rhs) in zip(streamed.segments, offline.segments) {
+            XCTAssertEqual(lhs.speakerId, rhs.speakerId)
+            XCTAssertEqual(lhs.startTime, rhs.startTime, accuracy: 0.09)
+            XCTAssertEqual(lhs.endTime, rhs.endTime, accuracy: 0.09)
+        }
+    }
+
     // MARK: - E2E Integration Test (requires model download)
 
     func testE2EWithRealModel() async throws {
