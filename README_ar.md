@@ -18,7 +18,7 @@
 
 <p align="center">
   <a href="https://formulae.brew.sh/formula/speech"><img src="https://img.shields.io/homebrew/installs/dm/speech.svg?logo=homebrew&amp;label=Homebrew%20installs&amp;color=FBB040" alt="Homebrew installs"></a>
-  <a href="https://github.com/soniqo/speech-swift/releases"><img src="https://img.shields.io/github/downloads/soniqo/speech-swift/total.svg?style=flat&amp;logo=github&amp;label=release%20downloads%20%28all%20time%29" alt="Release downloads, all time"></a>
+  <a href="https://github.com/soniqo/speech-swift#built-with-speech-swift"><img src="https://img.shields.io/badge/verified%20public%20repositories-29-2ea44f?logo=github" alt="Verified public repositories: 29"></a>
 </p>
 
 <p align="center">
