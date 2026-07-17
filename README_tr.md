@@ -21,6 +21,23 @@ Mac ve iOS için cihaz üzerinde konuşma tanıma, sentezleme ve anlama. Apple S
 
 **Kullanım senaryoları:** [Sesli Ajanlar](https://soniqo.audio/voice-agents) · [Transkripsiyon](https://soniqo.audio/transcription) · [Konuşma Üretimi](https://soniqo.audio/speech-generation)
 
+## Speech Swift ile geliştirildi
+
+Doğrulanabilir Speech Swift entegrasyonlarına sahip açık projeler.
+
+<table>
+  <tr>
+    <td align="center" width="33%"><a href="https://github.com/palmier-io/palmier-pro"><img src="https://github.com/palmier-io.png?size=96" width="64" height="64" alt="Palmier Pro"><br><strong>Palmier Pro</strong></a><br><sub>Video düzenleme · VAD · gürültü giderme</sub></td>
+    <td align="center" width="33%"><a href="https://github.com/fastrepl/anarlog"><img src="https://github.com/fastrepl.png?size=96" width="64" height="64" alt="Anarlog"><br><strong>Anarlog</strong></a><br><sub>Toplantı notları · yerel ASR</sub></td>
+    <td align="center" width="33%"><a href="https://github.com/xingbofeng/VoxFlow"><img src="https://github.com/xingbofeng.png?size=96" width="64" height="64" alt="VoxFlow"><br><strong>VoxFlow</strong></a><br><sub>Ses çalışma alanı · ASR · TTS</sub></td>
+  </tr>
+  <tr>
+    <td align="center" width="33%"><a href="https://github.com/wuwangzhang1216/ora"><img src="https://github.com/wuwangzhang1216.png?size=96" width="64" height="64" alt="Ora"><br><strong>Ora</strong></a><br><sub>Canlı çeviri · ASR · VAD</sub></td>
+    <td align="center" width="33%"><a href="https://github.com/rselbach/jabber"><img src="https://github.com/rselbach.png?size=96" width="64" height="64" alt="Jabber"><br><strong>Jabber</strong></a><br><sub>Yerel dikte · akış ASR</sub></td>
+    <td align="center" width="33%"><a href="https://github.com/ThinkInAIXYZ/clawdhome"><img src="https://github.com/ThinkInAIXYZ.png?size=96" width="64" height="64" alt="ClawdHome"><br><strong>ClawdHome</strong></a><br><sub>Ajan konsolu · Qwen3 ASR</sub></td>
+  </tr>
+</table>
+
 **Yetenek grupları:** STT / ASR · Hizalama · TTS · LLM ve çeviri · Speech-to-Speech · İyileştirme / restorasyon · Kaynak ayırma · Müzik / ses üretimi · Wake word, VAD, konuşmacı ayrıştırma ve konuşmacı kimliği
 
 **STT / ASR**
@@ -205,6 +222,8 @@ Aşağıda kompakt bir görünüm. **[Boyutlar, kuantizasyonlar, indirme URL'ler
 ## Kurulum
 
 ### Homebrew
+
+[![Homebrew installs](https://img.shields.io/homebrew/installs/dm/speech.svg?logo=homebrew&label=Homebrew%20installs&color=FBB040)](https://formulae.brew.sh/formula/speech)
 
 Yerel ARM Homebrew (`/opt/homebrew`) gerektirir. Rosetta/x86_64 Homebrew desteklenmez.
 

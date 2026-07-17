@@ -21,6 +21,23 @@ Nhận dạng, tổng hợp và hiểu giọng nói trên thiết bị cho Mac v
 
 **Trường hợp sử dụng:** [Voice Agents](https://soniqo.audio/voice-agents) · [Phiên âm](https://soniqo.audio/transcription) · [Tổng hợp giọng nói](https://soniqo.audio/speech-generation)
 
+## Được xây dựng bằng Speech Swift
+
+Các dự án công khai có tích hợp Speech Swift có thể kiểm chứng.
+
+<table>
+  <tr>
+    <td align="center" width="33%"><a href="https://github.com/palmier-io/palmier-pro"><img src="https://github.com/palmier-io.png?size=96" width="64" height="64" alt="Palmier Pro"><br><strong>Palmier Pro</strong></a><br><sub>Biên tập video · VAD · khử nhiễu</sub></td>
+    <td align="center" width="33%"><a href="https://github.com/fastrepl/anarlog"><img src="https://github.com/fastrepl.png?size=96" width="64" height="64" alt="Anarlog"><br><strong>Anarlog</strong></a><br><sub>Ghi chú cuộc họp · ASR cục bộ</sub></td>
+    <td align="center" width="33%"><a href="https://github.com/xingbofeng/VoxFlow"><img src="https://github.com/xingbofeng.png?size=96" width="64" height="64" alt="VoxFlow"><br><strong>VoxFlow</strong></a><br><sub>Bàn làm việc giọng nói · ASR · TTS</sub></td>
+  </tr>
+  <tr>
+    <td align="center" width="33%"><a href="https://github.com/wuwangzhang1216/ora"><img src="https://github.com/wuwangzhang1216.png?size=96" width="64" height="64" alt="Ora"><br><strong>Ora</strong></a><br><sub>Dịch trực tiếp · ASR · VAD</sub></td>
+    <td align="center" width="33%"><a href="https://github.com/rselbach/jabber"><img src="https://github.com/rselbach.png?size=96" width="64" height="64" alt="Jabber"><br><strong>Jabber</strong></a><br><sub>Đọc chính tả cục bộ · ASR streaming</sub></td>
+    <td align="center" width="33%"><a href="https://github.com/ThinkInAIXYZ/clawdhome"><img src="https://github.com/ThinkInAIXYZ.png?size=96" width="64" height="64" alt="ClawdHome"><br><strong>ClawdHome</strong></a><br><sub>Bảng điều khiển agent · Qwen3 ASR</sub></td>
+  </tr>
+</table>
+
 **Nhóm năng lực:** STT / ASR · Căn chỉnh · TTS · LLM và dịch thuật · Speech-to-Speech · Nâng cấp / phục hồi · Tách nguồn · Tạo nhạc / âm thanh · Wake word, VAD, diarization và định danh người nói
 
 **STT / ASR**
@@ -205,6 +222,8 @@ Xem tổng quan gọn bên dưới. **[Danh mục mô hình đầy đủ với k
 ## Cài đặt
 
 ### Homebrew
+
+[![Homebrew installs](https://img.shields.io/homebrew/installs/dm/speech.svg?logo=homebrew&label=Homebrew%20installs&color=FBB040)](https://formulae.brew.sh/formula/speech)
 
 Yêu cầu Homebrew ARM gốc (`/opt/homebrew`). Homebrew Rosetta/x86_64 không được hỗ trợ.
 
