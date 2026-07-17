@@ -59,6 +59,10 @@ public class NemotronStreamingASRModel {
         public let confidence: Float
         public let segmentIndex: Int
         public let wordBoostingChangedDecisions: Int
+        /// Cumulative emission-aligned word timings for the whole session so
+        /// far, in seconds of session audio (one encoder frame ≈ 80 ms;
+        /// see `TimedWord` for the emission-lag caveat).
+        public let words: [TimedWord]
     }
 
     /// Create a streaming session. `language` is a BCP-47 tag (e.g. `"en-US"`,

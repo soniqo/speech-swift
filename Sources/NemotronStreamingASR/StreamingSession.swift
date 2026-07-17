@@ -34,6 +34,10 @@ public class StreamingSession {
 
     private var allTokens: [Int] = []
     private var allLogProbs: [Float] = []
+    /// Session-absolute encoder frame at which each token in `allTokens`
+    /// was emitted.
+    private var allTokenFrames: [Int] = []
+    private var encoderFrameOffset = 0
     private var sampleBuffer: [Float] = []
     private var segmentIndex: Int = 0
     internal private(set) var wordBoostingChangedDecisions: Int = 0
@@ -140,6 +144,23 @@ public class StreamingSession {
         argmaxBuf.deallocate()
     }
 
+    /// Seconds of audio represented by one encoder output frame.
+    public var frameDurationSeconds: Double {
+        Double(config.subsamplingFactor * config.hopLength) / Double(config.sampleRate)
+    }
+
+    /// Cumulative emission-aligned word timings for the whole session so
+    /// far, in seconds of session audio.
+    private func currentTimedWords() -> [TimedWord] {
+        let duration = frameDurationSeconds
+        return vocabulary.decodeTimedWords(allTokens, frames: allTokenFrames).map { piece in
+            TimedWord(
+                text: piece.word,
+                startTime: Double(piece.startFrame) * duration,
+                endTime: Double(piece.endFrame + 1) * duration)
+        }
+    }
+
     public func pushAudio(_ samples: [Float]) throws -> [NemotronStreamingASRModel.PartialTranscript] {
         sampleBuffer.append(contentsOf: samples)
 
@@ -199,7 +220,8 @@ public class StreamingSession {
             isFinal: true,
             confidence: confidence,
             segmentIndex: segmentIndex,
-            wordBoostingChangedDecisions: wordBoostingChangedDecisions
+            wordBoostingChangedDecisions: wordBoostingChangedDecisions,
+            words: currentTimedWords()
         )]
     }
 
@@ -262,6 +284,8 @@ public class StreamingSession {
 
         allTokens.append(contentsOf: result.tokens)
         allLogProbs.append(contentsOf: result.tokenLogProbs)
+        allTokenFrames.append(contentsOf: result.tokenFrames.map { encoderFrameOffset + $0 })
+        encoderFrameOffset += encodedLength
         wordBoostingChangedDecisions += result.wordBoostingChangedDecisions
 
         let text = vocabulary.decode(allTokens)
@@ -280,7 +304,8 @@ public class StreamingSession {
             isFinal: false,
             confidence: confidence,
             segmentIndex: segmentIndex,
-            wordBoostingChangedDecisions: wordBoostingChangedDecisions
+            wordBoostingChangedDecisions: wordBoostingChangedDecisions,
+            words: currentTimedWords()
         )
     }
 

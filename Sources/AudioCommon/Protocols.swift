@@ -128,6 +128,23 @@ public struct WordConfidence: Sendable {
     }
 }
 
+/// A word with the time span it was emitted over, in seconds of session
+/// audio. Streaming transducer decoders emit a token only once the acoustics
+/// are unambiguous, so a word's span trails its true onset by a small,
+/// roughly constant lag; treat the times as emission-aligned rather than
+/// forced-aligned.
+public struct TimedWord: Sendable, Equatable {
+    public let text: String
+    public let startTime: Double
+    public let endTime: Double
+
+    public init(text: String, startTime: Double, endTime: Double) {
+        self.text = text
+        self.startTime = startTime
+        self.endTime = endTime
+    }
+}
+
 /// Result of speech recognition including detected language.
 public struct TranscriptionResult: Sendable {
     public let text: String
