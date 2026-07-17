@@ -156,9 +156,9 @@ func handleOpenAITranscriptions(
 /// `{"error": {"message": "...", "type": "invalid_request_error", "code": null, "param": null}}`.
 /// The official openai-python / openai-node SDKs parse `error.message` as a
 /// nested field; returning a bare `{"error": "string"}` crashes their error
-/// handling. Kept local to this file so the shared `errorResponse` used by
-/// other endpoints (e.g. `/transcribe`) keeps its existing shape.
-private func openAIErrorResponse(
+/// handling. Shared by the OpenAI-shaped audio routes while native endpoints
+/// keep their existing `errorResponse` shape.
+func openAIErrorResponse(
     _ message: String,
     status: HTTPResponse.Status
 ) -> Response {

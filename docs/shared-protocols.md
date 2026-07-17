@@ -499,6 +499,35 @@ All model classes are **not thread-safe** by design. ML inference is inherently 
 **Sendable config types** — The following value types conform to `Sendable` and can be safely passed across concurrency boundaries:
 `SegmentationConfig`, `VADConfig`, `DiarizationConfig`, `VADPipeline`, `Qwen3AudioEncoderConfig`, `Qwen3ASRTokens`, `SlottedText`, `TextChunker`
 
+## OpenAI-Compatible HTTP Audio
+
+The `speech-server` binary exposes the OpenAI audio request shapes alongside
+its native REST endpoints:
+
+- `POST /v1/audio/transcriptions` accepts multipart audio and returns an
+  OpenAI transcription response.
+- `POST /v1/audio/speech` accepts JSON with `model`, `input`, and `voice` and
+  returns synthesized audio.
+
+```bash
+curl http://localhost:8080/v1/audio/speech \
+  -H "Content-Type: application/json" \
+  -d '{"model":"tts-1","voice":"alloy","input":"Hello","response_format":"wav"}' \
+  -o output.wav
+```
+
+The OpenAI model aliases `tts-1`, `tts-1-hd`, `gpt-4o-mini-tts`, and
+`gpt-4o-mini-tts-2025-12-15` select Kokoro. Native registry aliases select
+their corresponding TTS engine. Generic OpenAI voice names use the selected
+engine's default voice, while native Kokoro and Qwen3-TTS voice names pass
+through. `speed` is supported by Kokoro; the optional `language` extension
+defaults to English.
+
+The endpoint defaults to WAV and also supports headerless 24 kHz mono PCM16
+little-endian output with `response_format: "pcm"`. Compressed OpenAI formats
+are rejected explicitly rather than returning PCM under an incorrect media
+type.
+
 ## Error Handling
 
 ### Realtime WebSocket errors

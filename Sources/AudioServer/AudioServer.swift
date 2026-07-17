@@ -131,6 +131,10 @@ public struct AudioServer {
             try await handleOpenAITranscriptions(request: request, state: state)
         }
 
+        router.post("/v1/audio/speech") { request, _ in
+            try await handleOpenAISpeech(request: request, state: state)
+        }
+
         router.post("/transcribe") { request, _ in
             let body = try await request.body.collect(upTo: 50 * 1024 * 1024)
             let params = try RequestParams.parse(body, contentType: request.headers[.contentType])
@@ -1521,16 +1525,22 @@ func dispatchSynthesize(
     variant: ModelVariant,
     language: String,
     state: ModelState,
+    voice: String? = nil,
+    speed: Float = 1.0,
     cloneReferenceAudio: [Float]? = nil,
     cloneReferenceText: String? = nil
 ) async throws -> [Float] {
     switch variant.engine {
     case "kokoro":
         let model = try await state.loadKokoro(modelId: variant.modelId)
-        return try model.synthesize(text: text, language: mapToKokoroLanguageCode(language))
+        return try model.synthesize(
+            text: text,
+            voice: voice ?? KokoroTTSModel.defaultVoice,
+            language: mapToKokoroLanguageCode(language),
+            speed: speed)
     case "qwen3-tts":
         let model = try await state.loadQwen3TTS(modelId: variant.modelId)
-        return model.synthesize(text: text, language: language)
+        return model.synthesize(text: text, language: language, speaker: voice)
     case "qwen3-tts-coreml":
         let model = try await state.loadQwen3TTSCoreML(modelId: variant.modelId)
         return try model.synthesize(text: text, language: language)
