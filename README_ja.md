@@ -9,6 +9,11 @@ Mac・iOS向けのオンデバイス音声認識・合成・理解。Apple Silic
 **[📚 ドキュメント →](https://soniqo.audio/ja)** · **[🤗 HuggingFaceモデル](https://huggingface.co/aufklarer)** · **[📝 ブログ](https://blog.ivan.digital)**
 
 <p align="center">
+  <a href="https://formulae.brew.sh/formula/speech"><img src="https://img.shields.io/homebrew/installs/dm/speech.svg?logo=homebrew&amp;label=Homebrew%20installs&amp;color=FBB040" alt="Homebrew installs"></a>
+  <a href="https://github.com/soniqo/speech-swift#built-with-speech-swift"><img src="https://img.shields.io/badge/verified%20public%20repositories-29-2ea44f?logo=github" alt="Verified public repositories: 29"></a>
+</p>
+
+<p align="center">
   <a href="https://trendshift.io/repositories/24196?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24196" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/24196/daily?language=Swift" alt="soniqo%2Fspeech-swift | Trendshift" width="250" height="55"/></a>
 </p>
 
@@ -20,6 +25,12 @@ Mac・iOS向けのオンデバイス音声認識・合成・理解。Apple Silic
 <p align="center"><em>MacBook で動くローカル音声 AI ―― YouTube で 4 分間のオープンソースライブラリツアーを視聴</em></p>
 
 **ユースケース：** [音声エージェント](https://soniqo.audio/ja/voice-agents) · [文字起こし](https://soniqo.audio/ja/transcription) · [音声合成](https://soniqo.audio/ja/speech-generation)
+
+## Speech Swift で構築
+
+Speech Swift パッケージへの参照を公開ソースで確認できる 29 個のリポジトリです。
+
+[Palmier Pro](https://github.com/palmier-io/palmier-pro) · [Anarlog](https://github.com/fastrepl/anarlog) · [ClawdHome](https://github.com/ThinkInAIXYZ/clawdhome) · [Jabber](https://github.com/rselbach/jabber) · [Ora](https://github.com/wuwangzhang1216/ora) · [VoxFlow](https://github.com/xingbofeng/VoxFlow) · [LokalBot](https://github.com/stevyhacker/lokalbot) · [Voicey](https://github.com/jonathanKingston/voicey) · [HushType](https://github.com/felixfu824/HushType) · [DexDictate macOS](https://github.com/westkitty/DexDictate_MacOS) · [Watchtower](https://github.com/aiwatchtowers/watchtower) · [Wishper App](https://github.com/irangareddy/wishper-app) · [FriSpeak](https://github.com/KSubedi/FriSpeak) · [Scribe](https://github.com/itchat/Scribe) · [VoicePen](https://github.com/dot-sk/VoicePen) · [Anything Voice](https://github.com/jakemaly/anything-voice) · [Conversational MLX](https://github.com/ottokafka/conversational_mlx) · [HachiSpeak](https://github.com/sarinali/hachispeak) · [JustTalk](https://github.com/d0zingcat/JustTalk) · [Kioku](https://github.com/matthewmorrone/Kioku) · [Luxicon](https://github.com/DavidsonCollege/luxicon) · [Mako](https://github.com/bn-l/mako) · [Meeting Emo Transcriber](https://github.com/kouko/meeting-emo-transcriber) · [MeetingSummary](https://github.com/a9650615/MeetingSummary) · [Stenograf](https://github.com/ivan-digital/stenograf) · [Toast](https://github.com/drbh/toast) · [TxtVoiceApp](https://github.com/2mauis/TxtVoiceApp) · [video_to_srt](https://github.com/dogacan/video_to_srt) · [Warmth iOS](https://github.com/molyleelatham/gtmhackathon)
 
 **機能グループ：** STT / ASR · アラインメント · TTS · LLM と翻訳 · Speech-to-Speech · 強化 / 復元 · 音源分離 · 音楽 / オーディオ生成 · ウェイクワード、VAD、話者分離、話者識別
 

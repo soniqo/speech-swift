@@ -9,6 +9,11 @@ Mac과 iOS를 위한 온디바이스 음성 인식, 합성 및 이해. Apple Sil
 **[📚 전체 문서 →](https://soniqo.audio/ko)** · **[🤗 HuggingFace 모델](https://huggingface.co/aufklarer)** · **[📝 블로그](https://blog.ivan.digital)**
 
 <p align="center">
+  <a href="https://formulae.brew.sh/formula/speech"><img src="https://img.shields.io/homebrew/installs/dm/speech.svg?logo=homebrew&amp;label=Homebrew%20installs&amp;color=FBB040" alt="Homebrew installs"></a>
+  <a href="https://github.com/soniqo/speech-swift#built-with-speech-swift"><img src="https://img.shields.io/badge/verified%20public%20repositories-29-2ea44f?logo=github" alt="Verified public repositories: 29"></a>
+</p>
+
+<p align="center">
   <a href="https://trendshift.io/repositories/24196?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24196" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/24196/daily?language=Swift" alt="soniqo%2Fspeech-swift | Trendshift" width="250" height="55"/></a>
 </p>
 
@@ -20,6 +25,12 @@ Mac과 iOS를 위한 온디바이스 음성 인식, 합성 및 이해. Apple Sil
 <p align="center"><em>MacBook에서 동작하는 로컬 음성 AI — YouTube에서 4분 분량의 오픈소스 라이브러리 투어 시청</em></p>
 
 **사용 사례:** [음성 에이전트](https://soniqo.audio/ko/voice-agents) · [전사](https://soniqo.audio/ko/transcription) · [음성 합성](https://soniqo.audio/ko/speech-generation)
+
+## Speech Swift로 구축
+
+Speech Swift 패키지 참조를 공개 소스에서 확인할 수 있는 저장소 29개입니다.
+
+[Palmier Pro](https://github.com/palmier-io/palmier-pro) · [Anarlog](https://github.com/fastrepl/anarlog) · [ClawdHome](https://github.com/ThinkInAIXYZ/clawdhome) · [Jabber](https://github.com/rselbach/jabber) · [Ora](https://github.com/wuwangzhang1216/ora) · [VoxFlow](https://github.com/xingbofeng/VoxFlow) · [LokalBot](https://github.com/stevyhacker/lokalbot) · [Voicey](https://github.com/jonathanKingston/voicey) · [HushType](https://github.com/felixfu824/HushType) · [DexDictate macOS](https://github.com/westkitty/DexDictate_MacOS) · [Watchtower](https://github.com/aiwatchtowers/watchtower) · [Wishper App](https://github.com/irangareddy/wishper-app) · [FriSpeak](https://github.com/KSubedi/FriSpeak) · [Scribe](https://github.com/itchat/Scribe) · [VoicePen](https://github.com/dot-sk/VoicePen) · [Anything Voice](https://github.com/jakemaly/anything-voice) · [Conversational MLX](https://github.com/ottokafka/conversational_mlx) · [HachiSpeak](https://github.com/sarinali/hachispeak) · [JustTalk](https://github.com/d0zingcat/JustTalk) · [Kioku](https://github.com/matthewmorrone/Kioku) · [Luxicon](https://github.com/DavidsonCollege/luxicon) · [Mako](https://github.com/bn-l/mako) · [Meeting Emo Transcriber](https://github.com/kouko/meeting-emo-transcriber) · [MeetingSummary](https://github.com/a9650615/MeetingSummary) · [Stenograf](https://github.com/ivan-digital/stenograf) · [Toast](https://github.com/drbh/toast) · [TxtVoiceApp](https://github.com/2mauis/TxtVoiceApp) · [video_to_srt](https://github.com/dogacan/video_to_srt) · [Warmth iOS](https://github.com/molyleelatham/gtmhackathon)
 
 **기능 그룹:** STT / ASR · 정렬 · TTS · LLM 및 번역 · Speech-to-Speech · 향상 / 복원 · 소스 분리 · 음악 / 오디오 생성 · 웨이크워드, VAD, 화자 분리 및 화자 식별
 

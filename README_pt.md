@@ -9,6 +9,11 @@ Reconhecimento, sintese e compreensao de fala no dispositivo para Mac e iOS. Exe
 **[📚 Documentacao completa →](https://soniqo.audio/pt)** · **[🤗 Modelos no HuggingFace](https://huggingface.co/aufklarer)** · **[📝 Blog](https://blog.ivan.digital)** · **[💬 Discord](https://discord.gg/TnCryqEMgu)**
 
 <p align="center">
+  <a href="https://formulae.brew.sh/formula/speech"><img src="https://img.shields.io/homebrew/installs/dm/speech.svg?logo=homebrew&amp;label=Homebrew%20installs&amp;color=FBB040" alt="Homebrew installs"></a>
+  <a href="https://github.com/soniqo/speech-swift#built-with-speech-swift"><img src="https://img.shields.io/badge/verified%20public%20repositories-29-2ea44f?logo=github" alt="Verified public repositories: 29"></a>
+</p>
+
+<p align="center">
   <a href="https://trendshift.io/repositories/24196?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24196" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/24196/daily?language=Swift" alt="soniqo%2Fspeech-swift | Trendshift" width="250" height="55"/></a>
 </p>
 
@@ -20,6 +25,12 @@ Reconhecimento, sintese e compreensao de fala no dispositivo para Mac e iOS. Exe
 <p align="center"><em>IA de voz local em um MacBook — assista no YouTube ao tour de quatro minutos pela biblioteca open source</em></p>
 
 **Casos de uso:** [Agentes de voz](https://soniqo.audio/pt/voice-agents) · [Transcricao](https://soniqo.audio/pt/transcription) · [Sintese de voz](https://soniqo.audio/pt/speech-generation)
+
+## Projetos criados com Speech Swift
+
+29 repositórios públicos com referências verificáveis ao pacote Speech Swift.
+
+[Palmier Pro](https://github.com/palmier-io/palmier-pro) · [Anarlog](https://github.com/fastrepl/anarlog) · [ClawdHome](https://github.com/ThinkInAIXYZ/clawdhome) · [Jabber](https://github.com/rselbach/jabber) · [Ora](https://github.com/wuwangzhang1216/ora) · [VoxFlow](https://github.com/xingbofeng/VoxFlow) · [LokalBot](https://github.com/stevyhacker/lokalbot) · [Voicey](https://github.com/jonathanKingston/voicey) · [HushType](https://github.com/felixfu824/HushType) · [DexDictate macOS](https://github.com/westkitty/DexDictate_MacOS) · [Watchtower](https://github.com/aiwatchtowers/watchtower) · [Wishper App](https://github.com/irangareddy/wishper-app) · [FriSpeak](https://github.com/KSubedi/FriSpeak) · [Scribe](https://github.com/itchat/Scribe) · [VoicePen](https://github.com/dot-sk/VoicePen) · [Anything Voice](https://github.com/jakemaly/anything-voice) · [Conversational MLX](https://github.com/ottokafka/conversational_mlx) · [HachiSpeak](https://github.com/sarinali/hachispeak) · [JustTalk](https://github.com/d0zingcat/JustTalk) · [Kioku](https://github.com/matthewmorrone/Kioku) · [Luxicon](https://github.com/DavidsonCollege/luxicon) · [Mako](https://github.com/bn-l/mako) · [Meeting Emo Transcriber](https://github.com/kouko/meeting-emo-transcriber) · [MeetingSummary](https://github.com/a9650615/MeetingSummary) · [Stenograf](https://github.com/ivan-digital/stenograf) · [Toast](https://github.com/drbh/toast) · [TxtVoiceApp](https://github.com/2mauis/TxtVoiceApp) · [video_to_srt](https://github.com/dogacan/video_to_srt) · [Warmth iOS](https://github.com/molyleelatham/gtmhackathon)
 
 **Grupos de capacidades:** STT / ASR · Alinhamento · TTS · LLMs e tradução · Fala-para-fala · Aprimoramento / restauração · Separação de fontes · Geração de música / áudio · Wake word, VAD, diarização e identidade de falante
 

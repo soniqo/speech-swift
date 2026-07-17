@@ -9,6 +9,11 @@
 **[📚 เอกสารฉบับเต็ม →](https://soniqo.audio)** · **[🤗 โมเดลบน HuggingFace](https://huggingface.co/aufklarer)** · **[📝 Blog](https://blog.ivan.digital)** · **[💬 Discord](https://discord.gg/TnCryqEMgu)**
 
 <p align="center">
+  <a href="https://formulae.brew.sh/formula/speech"><img src="https://img.shields.io/homebrew/installs/dm/speech.svg?logo=homebrew&amp;label=Homebrew%20installs&amp;color=FBB040" alt="Homebrew installs"></a>
+  <a href="https://github.com/soniqo/speech-swift#built-with-speech-swift"><img src="https://img.shields.io/badge/verified%20public%20repositories-29-2ea44f?logo=github" alt="Verified public repositories: 29"></a>
+</p>
+
+<p align="center">
   <a href="https://trendshift.io/repositories/24196?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24196" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/24196/daily?language=Swift" alt="soniqo%2Fspeech-swift | Trendshift" width="250" height="55"/></a>
 </p>
 
@@ -20,6 +25,12 @@
 <p align="center"><em>Speech AI ที่ทำงานในเครื่องบน MacBook — ชมทัวร์ไลบรารีโอเพนซอร์สความยาว 4 นาทีบน YouTube</em></p>
 
 **กรณีการใช้งาน:** [Voice Agents](https://soniqo.audio/voice-agents) · [การถอดเสียง](https://soniqo.audio/transcription) · [การสังเคราะห์เสียงพูด](https://soniqo.audio/speech-generation)
+
+## สร้างด้วย Speech Swift
+
+รีโพสาธารณะ 29 แห่งที่ตรวจสอบการอ้างอิงแพ็กเกจ Speech Swift ได้
+
+[Palmier Pro](https://github.com/palmier-io/palmier-pro) · [Anarlog](https://github.com/fastrepl/anarlog) · [ClawdHome](https://github.com/ThinkInAIXYZ/clawdhome) · [Jabber](https://github.com/rselbach/jabber) · [Ora](https://github.com/wuwangzhang1216/ora) · [VoxFlow](https://github.com/xingbofeng/VoxFlow) · [LokalBot](https://github.com/stevyhacker/lokalbot) · [Voicey](https://github.com/jonathanKingston/voicey) · [HushType](https://github.com/felixfu824/HushType) · [DexDictate macOS](https://github.com/westkitty/DexDictate_MacOS) · [Watchtower](https://github.com/aiwatchtowers/watchtower) · [Wishper App](https://github.com/irangareddy/wishper-app) · [FriSpeak](https://github.com/KSubedi/FriSpeak) · [Scribe](https://github.com/itchat/Scribe) · [VoicePen](https://github.com/dot-sk/VoicePen) · [Anything Voice](https://github.com/jakemaly/anything-voice) · [Conversational MLX](https://github.com/ottokafka/conversational_mlx) · [HachiSpeak](https://github.com/sarinali/hachispeak) · [JustTalk](https://github.com/d0zingcat/JustTalk) · [Kioku](https://github.com/matthewmorrone/Kioku) · [Luxicon](https://github.com/DavidsonCollege/luxicon) · [Mako](https://github.com/bn-l/mako) · [Meeting Emo Transcriber](https://github.com/kouko/meeting-emo-transcriber) · [MeetingSummary](https://github.com/a9650615/MeetingSummary) · [Stenograf](https://github.com/ivan-digital/stenograf) · [Toast](https://github.com/drbh/toast) · [TxtVoiceApp](https://github.com/2mauis/TxtVoiceApp) · [video_to_srt](https://github.com/dogacan/video_to_srt) · [Warmth iOS](https://github.com/molyleelatham/gtmhackathon)
 
 **กลุ่มความสามารถ:** STT / ASR · การจัดแนว · TTS · LLM และการแปล · Speech-to-Speech · การปรับปรุง / การฟื้นฟู · การแยกแหล่งเสียง · การสร้างดนตรี / เสียง · Wake word, VAD, diarization และอัตลักษณ์ผู้พูด
 
