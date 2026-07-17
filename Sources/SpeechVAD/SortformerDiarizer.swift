@@ -280,14 +280,20 @@ public final class SortformerDiarizer {
                         count: fifoCapacity * dim - paddedFifo.count))
 
             do {
-                let output = try model.predict(
-                    chunk: chunkMel,
-                    chunkLength: actualLen,
-                    spkcache: paddedSpkcache,
-                    spkcacheLength: state.spkcacheLength,
-                    fifo: paddedFifo,
-                    fifoLength: state.fifoLength
-                )
+                // Pool per prediction: this loop has no draining run loop, so
+                // autoreleased IOSurface-backed CoreML buffers otherwise
+                // accumulate across chunks until allocation fails on long
+                // inputs.
+                let output = try autoreleasepool {
+                    try model.predict(
+                        chunk: chunkMel,
+                        chunkLength: actualLen,
+                        spkcache: paddedSpkcache,
+                        spkcacheLength: state.spkcacheLength,
+                        fifo: paddedFifo,
+                        fifoLength: state.fifoLength
+                    )
+                }
 
                 let lcFrames = Int(Float(leftOffset) / Float(subFactor) + 0.5)
                 let rcFrames = Int(ceil(Float(rightOffset) / Float(subFactor)))

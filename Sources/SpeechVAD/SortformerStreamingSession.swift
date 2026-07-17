@@ -33,6 +33,11 @@ public final class SortformerStreamingSession {
     private let melExtractor: SortformerMelExtractor
     private var state: SortformerStreamingState
 
+    /// Thresholds used when snapshots binarize the confirmed-frame history.
+    /// Adjustable per session so consumers can trade misses against false
+    /// alarms without reloading the model.
+    public var binarization: DiarizationConfig = .default
+
     /// PCM retained for mel extraction, with `pcmBaseSample` giving the
     /// absolute index of `pcm[0]`. Only the span still needed for the next
     /// chunk (plus reflect-padding margin) is kept.
@@ -66,6 +71,7 @@ public final class SortformerStreamingSession {
         modelId: String = SortformerDiarizer.defaultModelId,
         cacheDir: URL? = nil,
         offlineMode: Bool = false,
+        config: SortformerConfig = .streaming,
         computeUnits: MLComputeUnits = .cpuAndNeuralEngine,
         progressHandler: ((Double, String) -> Void)? = nil
     ) async throws -> SortformerStreamingSession {
@@ -73,7 +79,7 @@ public final class SortformerStreamingSession {
             modelId: modelId,
             cacheDir: cacheDir,
             offlineMode: offlineMode,
-            config: .streaming,
+            config: config,
             computeUnits: computeUnits,
             progressHandler: progressHandler)
         return diarizer.makeStreamingSession()
@@ -127,7 +133,7 @@ public final class SortformerStreamingSession {
             frameCount: frames,
             audioDuration: duration,
             config: config,
-            thresholds: .default)
+            thresholds: binarization)
         let usedSpeakers = Set(segments.map(\.speakerId))
         return DiarizationResult(
             segments: segments,
@@ -237,13 +243,18 @@ public final class SortformerStreamingSession {
         paddedFifo.append(contentsOf: [Float](
             repeating: 0, count: config.fifoLen * dim - paddedFifo.count))
 
-        let output = try model.predict(
-            chunk: chunkMel,
-            chunkLength: framesToCopy,
-            spkcache: paddedSpkcache,
-            spkcacheLength: state.spkcacheLength,
-            fifo: paddedFifo,
-            fifoLength: state.fifoLength)
+        // Pool per prediction: the push loop has no draining run loop, and
+        // without this the autoreleased IOSurface-backed CoreML buffers
+        // accumulate across chunks until allocation fails on long streams.
+        let output = try autoreleasepool {
+            try model.predict(
+                chunk: chunkMel,
+                chunkLength: framesToCopy,
+                spkcache: paddedSpkcache,
+                spkcacheLength: state.spkcacheLength,
+                fifo: paddedFifo,
+                fifoLength: state.fifoLength)
+        }
 
         let lcFrames = Int(Float(leftOffset) / Float(subFactor) + 0.5)
         let rcFrames = Int(ceil(Float(rightOffset) / Float(subFactor)))
