@@ -77,7 +77,7 @@
 
 - **[唤醒词](https://soniqo.audio/zh/guides/wake-word)** — 设备端关键词识别（KWS Zipformer 3M，CoreML，26× 实时，可配置关键词列表）
 - **[VAD](https://soniqo.audio/zh/guides/vad)** — 语音活动检测（Silero 流式、Pyannote 离线、FireRedVAD 100+ 种语言）
-- **[说话人分离](https://soniqo.audio/zh/guides/diarize)** — 谁在什么时间说话（Pyannote 流水线，神经引擎上的端到端 Sortformer）
+- **[说话人分离](https://soniqo.audio/zh/guides/diarize)** — 谁在什么时间说话（Pyannote 流水线，神经引擎上的端到端 Sortformer） — 现支持增量流式会话（说话人 ID 稳定，每 480 毫秒更新）
 - **[说话人嵌入向量](https://soniqo.audio/zh/guides/embed-speaker)** — WeSpeaker ResNet34（256 维）、ReDimNet2-B6 命名语音身份（192 维）、CAM++（192 维）
 
 论文：[Qwen3-ASR](https://arxiv.org/abs/2601.21337) (Alibaba) · [Qwen3-TTS](https://arxiv.org/abs/2601.15621) (Alibaba) · [Omnilingual ASR](https://arxiv.org/abs/2511.09690) (Meta) · [Parakeet TDT](https://arxiv.org/abs/2304.06795) (NVIDIA) · [CosyVoice 3](https://arxiv.org/abs/2505.17589) (Alibaba) · [Kokoro](https://arxiv.org/abs/2301.01695) (StyleTTS 2) · [PersonaPlex](https://arxiv.org/abs/2602.06053) (NVIDIA) · [Mimi](https://arxiv.org/abs/2410.00037) (Kyutai) · [Hibiki](https://arxiv.org/abs/2502.03382) (Kyutai) · [Sortformer](https://arxiv.org/abs/2409.06656) (NVIDIA)
@@ -191,7 +191,7 @@ struct DictateView: View {
 | [KWS Zipformer](docs/models/kws-zipformer.md) | Audio → Wake word | CoreML (ANE) | 3M | EN/custom keywords |
 | [Pyannote](https://soniqo.audio/zh/guides/diarize) | VAD + 说话人分离 | MLX | 1.5M | 语言无关 |
 | [Pyannote Community-1](https://huggingface.co/aufklarer/Pyannote-Community-1-CoreML) | 说话人分离 + 说话人嵌入 | CoreML (ANE) + Swift VBx | 8.35M | 语言无关 |
-| [Sortformer](https://soniqo.audio/zh/guides/diarize) | 说话人分离（端到端） | CoreML (ANE) | — | 语言无关 |
+| [Sortformer](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) | 说话人分离（端到端）, 增量流式 | CoreML (ANE) | 117M | 语言无关 |
 | [DeepFilterNet3](https://soniqo.audio/zh/guides/denoise) | 语音增强 | CoreML | 2.1M | 语言无关 |
 | [Sidon](https://soniqo.audio/zh/guides/restore) | 语音修复（降噪 + 去混响，48 kHz） | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | 语言无关 |
 | [HTDemucs (Demucs v4)](https://soniqo.audio/zh/guides/separate) | 音源分离 | MLX | 168M | Agnostic |
