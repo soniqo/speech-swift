@@ -342,14 +342,35 @@ public final class SortformerDiarizer {
         minSpeechDuration: Float,
         minSilenceDuration: Float
     ) -> [DiarizedSegment] {
-        // Concatenate all chunk predictions into one flat array
         var allProbs = [Float]()
         for chunkProbs in allChunkProbs {
             allProbs.append(contentsOf: chunkProbs)
         }
+        return Self.binarize(
+            probs: allProbs,
+            frameCount: allProbs.count / numSpeakers,
+            audioDuration: audioDuration,
+            config: config,
+            thresholds: DiarizationConfig(
+                onset: onset,
+                offset: offset,
+                minSpeechDuration: minSpeechDuration,
+                minSilenceDuration: minSilenceDuration))
+    }
 
-        let totalFrames = allProbs.count / numSpeakers
-        guard totalFrames > 0 else { return [] }
+    /// Turn flat per-frame speaker probabilities into labeled segments.
+    /// Shared by whole-buffer diarization and the incremental streaming
+    /// session, which re-binarizes its growing confirmed-frame history.
+    static func binarize(
+        probs: [Float],
+        frameCount: Int,
+        audioDuration: Float,
+        config: SortformerConfig,
+        thresholds: DiarizationConfig
+    ) -> [DiarizedSegment] {
+        guard frameCount > 0 else { return [] }
+        let numSpeakers = config.maxSpeakers
+        var allProbs = probs
 
         // Apply sigmoid if predictions are logits
         for i in 0..<allProbs.count {
@@ -358,25 +379,25 @@ public final class SortformerDiarizer {
             }
         }
 
-        // Binarize each speaker track
+        let frameDuration = Float(config.subsamplingFactor * config.hopLength)
+            / Float(config.sampleRate)
         var allSegments = [DiarizedSegment]()
-
         for spk in 0..<numSpeakers {
-            var probs = [Float](repeating: 0, count: totalFrames)
-            for f in 0..<totalFrames {
-                probs[f] = allProbs[f * numSpeakers + spk]
+            var track = [Float](repeating: 0, count: frameCount)
+            for f in 0..<frameCount {
+                track[f] = allProbs[f * numSpeakers + spk]
             }
 
             let rawSegments = PowersetDecoder.binarize(
-                probs: probs,
-                onset: onset,
-                offset: offset,
+                probs: track,
+                onset: thresholds.onset,
+                offset: thresholds.offset,
                 frameDuration: frameDuration
             )
 
             for seg in rawSegments {
                 let duration = seg.endTime - seg.startTime
-                guard duration >= minSpeechDuration else { continue }
+                guard duration >= thresholds.minSpeechDuration else { continue }
                 allSegments.append(DiarizedSegment(
                     startTime: seg.startTime,
                     endTime: min(seg.endTime, audioDuration),
@@ -386,9 +407,15 @@ public final class SortformerDiarizer {
         }
 
         allSegments.sort { $0.startTime < $1.startTime }
-        let merged = DiarizationHelpers.mergeSegments(allSegments, minSilence: minSilenceDuration)
+        let merged = DiarizationHelpers.mergeSegments(
+            allSegments, minSilence: thresholds.minSilenceDuration)
         return DiarizationHelpers.compactSpeakerIds(merged)
     }
+
+    // MARK: - Streaming session support
+
+    var coreMLModel: SortformerCoreMLModel { model }
+    var configuration: SortformerConfig { config }
 }
 
 // MARK: - SpeakerDiarizationModel

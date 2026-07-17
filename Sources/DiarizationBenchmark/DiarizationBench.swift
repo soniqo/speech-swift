@@ -212,6 +212,8 @@ private func makeDiarizationEngine(_ id: String) -> DiarizationBenchEngine? {
         return SortformerBenchEngine(name: "sortformer-balanced", variant: .balanced)
     case "sortformer-streaming":
         return SortformerBenchEngine(name: "sortformer-streaming", variant: .streaming)
+    case "sortformer-session":
+        return SortformerSessionBenchEngine()
     case "pyannote-mlx":
         return PyannoteDiarizationBenchEngine(name: "pyannote-mlx", embeddingEngine: .mlx)
     case "pyannote-coreml":
@@ -297,6 +299,59 @@ private final class SortformerBenchEngine: DiarizationBenchEngine {
             return DiarizationResult(segments: [], numSpeakers: 0, speakerEmbeddings: [])
         }
         return diarizer.diarize(audio: audio, sampleRate: sampleRate)
+    }
+}
+
+/// Drives ``SortformerStreamingSession`` the way a live consumer would:
+/// 480 ms pushes through the incremental API, one snapshot per push, final
+/// flush at end of file. Scores the same as batch engines while also
+/// printing per-push latency, the number a realtime caller actually feels.
+private final class SortformerSessionBenchEngine: DiarizationBenchEngine {
+    let name = "sortformer-session"
+    var session: SortformerStreamingSession?
+    private var pushMilliseconds: [Double] = []
+
+    func load() async throws {
+        #if canImport(CoreML)
+        session = try await SortformerStreamingSession.fromPretrained(
+            computeUnits: .cpuAndNeuralEngine)
+        #else
+        throw BenchmarkSupportError.unsupportedReference("Sortformer requires CoreML")
+        #endif
+    }
+
+    func diarize(audio: [Float], sampleRate: Int) throws -> DiarizationResult {
+        #if canImport(CoreML)
+        guard let session else {
+            return DiarizationResult(segments: [], numSpeakers: 0, speakerEmbeddings: [])
+        }
+        session.reset()
+        let samples = sampleRate == 16_000
+            ? audio
+            : AudioFileLoader.resample(audio, from: sampleRate, to: 16_000)
+        let pushSize = 16_000 / 2
+        var cursor = 0
+        while cursor < samples.count {
+            let end = min(samples.count, cursor + pushSize)
+            let started = Date()
+            _ = try session.push(audio: Array(samples[cursor..<end]))
+            pushMilliseconds.append(Date().timeIntervalSince(started) * 1000)
+            cursor = end
+        }
+        let result = try session.finish()
+        let sorted = pushMilliseconds.sorted()
+        if !sorted.isEmpty {
+            let p50 = sorted[sorted.count / 2]
+            let p95 = sorted[min(sorted.count - 1, Int(Double(sorted.count) * 0.95))]
+            print(String(
+                format: "    session push latency: p50 %.1f ms · p95 %.1f ms (%d pushes)",
+                p50, p95, sorted.count))
+            pushMilliseconds.removeAll(keepingCapacity: true)
+        }
+        return result
+        #else
+        return DiarizationResult(segments: [], numSpeakers: 0, speakerEmbeddings: [])
+        #endif
     }
 }
 
