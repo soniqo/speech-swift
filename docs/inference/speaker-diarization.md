@@ -280,6 +280,35 @@ let result = diarizer.diarize(audio: samples, sampleRate: 16000) { progress, sta
 }
 ```
 
+### Incremental streaming session
+
+`SortformerStreamingSession` runs the same model incrementally for live
+audio. Feed 16 kHz PCM in arbitrary sizes; every 480 ms of accumulated audio
+triggers one Neural Engine step (~8 ms), and speaker IDs are Arrival-Order
+Speaker Cache slots — stable for the whole session, with no window
+re-clustering and no renumbering. Each push returns a whole-stream snapshot;
+the model's 560 ms right context means the newest ~1 s stays pending until
+the next chunk (or `finish()`).
+
+```swift
+let session = try await SortformerStreamingSession.fromPretrained()
+while let samples = captureNextBuffer() {           // any push size
+    let snapshot = try session.push(audio: samples)
+    render(snapshot.segments)                       // stable speaker IDs
+}
+let final = try session.finish()                    // flushes the tail
+```
+
+An existing `SortformerDiarizer` loaded with the `.streaming` preset can open
+sessions without reloading the model via `makeStreamingSession()`. The
+session reproduces whole-buffer `diarize` output for the same preset —
+chunk mel is extracted with reflect-padding margins that keep every consumed
+frame bit-identical to whole-file extraction.
+
+Measured on VoxConverse-dev samples (M-series ANE): DER on par with the
+offline Community-1 pipeline, 12 ms median latency per 500 ms push, ~39×
+realtime end to end.
+
 ### CLI Commands
 
 ```bash
