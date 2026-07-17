@@ -191,7 +191,7 @@ Vue compacte ci-dessous. **[Catalogue complet des modeles avec tailles, quantifi
 | [KWS Zipformer](docs/models/kws-zipformer.md) | Audio → Wake word | CoreML (ANE) | 3M | EN/custom keywords |
 | [Pyannote](https://soniqo.audio/fr/guides/diarize) | VAD + Diarisation | MLX | 1.5M | Agnostique |
 | [Pyannote Community-1](https://huggingface.co/aufklarer/Pyannote-Community-1-CoreML) | Diarisation + empreintes de locuteur | CoreML (ANE) + Swift VBx | 8.35M | Agnostique |
-| [Sortformer](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) | Diarisation (E2E), streaming incrémental | CoreML (ANE) | 117M | Agnostique |
+| [Sortformer](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) | [Diarisation (E2E), streaming incrémental](https://soniqo.audio/fr/guides/diarize) | CoreML (ANE) | 117M | Agnostique |
 | [DeepFilterNet3](https://soniqo.audio/fr/guides/denoise) | Amelioration de la parole | CoreML | 2.1M | Agnostique |
 | [Sidon](https://soniqo.audio/fr/guides/restore) | Restauration de la parole (debruitage + dereverberation, 48 kHz) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | Agnostique |
 | [HTDemucs (Demucs v4)](https://soniqo.audio/fr/guides/separate) | Séparation de sources | MLX | 168M | Agnostic |

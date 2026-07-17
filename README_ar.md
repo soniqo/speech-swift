@@ -235,7 +235,7 @@ struct DictateView: View {
 | [KWS Zipformer](docs/models/kws-zipformer.md) | Audio → Wake word | CoreML (ANE) | 3M | EN/custom keywords |
 | [Pyannote](https://soniqo.audio/ar/guides/diarize) | VAD + تمييز | MLX | 1.5M | محايد للغة |
 | [Pyannote Community-1](https://huggingface.co/aufklarer/Pyannote-Community-1-CoreML) | فرز المتحدثين + تضمينات المتحدث | CoreML (ANE) + Swift VBx | 8.35M | محايد للغة |
-| [Sortformer](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) | تمييز (E2E), بث تزايدي | CoreML (ANE) | 117M | محايد للغة |
+| [Sortformer](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) | [تمييز (E2E), بث تزايدي](https://soniqo.audio/ar/guides/diarize) | CoreML (ANE) | 117M | محايد للغة |
 | [DeepFilterNet3](https://soniqo.audio/ar/guides/denoise) | تحسين الكلام | CoreML | 2.1M | محايد للغة |
 | [Sidon](https://soniqo.audio/ar/guides/restore) | استعادة الكلام (إزالة الضوضاء + إزالة الصدى، 48 kHz) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | محايد للغة |
 | [HTDemucs (Demucs v4)](https://soniqo.audio/ar/guides/separate) | فصل المصادر | MLX | 168M | محايد للغة |

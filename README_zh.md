@@ -191,7 +191,7 @@ struct DictateView: View {
 | [KWS Zipformer](docs/models/kws-zipformer.md) | Audio → Wake word | CoreML (ANE) | 3M | EN/custom keywords |
 | [Pyannote](https://soniqo.audio/zh/guides/diarize) | VAD + 说话人分离 | MLX | 1.5M | 语言无关 |
 | [Pyannote Community-1](https://huggingface.co/aufklarer/Pyannote-Community-1-CoreML) | 说话人分离 + 说话人嵌入 | CoreML (ANE) + Swift VBx | 8.35M | 语言无关 |
-| [Sortformer](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) | 说话人分离（端到端）, 增量流式 | CoreML (ANE) | 117M | 语言无关 |
+| [Sortformer](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) | [说话人分离（端到端）, 增量流式](https://soniqo.audio/zh/guides/diarize) | CoreML (ANE) | 117M | 语言无关 |
 | [DeepFilterNet3](https://soniqo.audio/zh/guides/denoise) | 语音增强 | CoreML | 2.1M | 语言无关 |
 | [Sidon](https://soniqo.audio/zh/guides/restore) | 语音修复（降噪 + 去混响，48 kHz） | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | 语言无关 |
 | [HTDemucs (Demucs v4)](https://soniqo.audio/zh/guides/separate) | 音源分离 | MLX | 168M | Agnostic |

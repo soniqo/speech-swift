@@ -191,7 +191,7 @@ struct DictateView: View {
 | [KWS Zipformer](docs/models/kws-zipformer.md) | Audio → Wake word | CoreML (ANE) | 3M | EN/custom keywords |
 | [Pyannote](https://soniqo.audio/guides/diarize) | VAD + การแยกผู้พูด | MLX | 1.5M | ไม่จำกัดภาษา |
 | [Pyannote Community-1](https://huggingface.co/aufklarer/Pyannote-Community-1-CoreML) | การแยกผู้พูด + เอ็มเบดดิงผู้พูด | CoreML (ANE) + Swift VBx | 8.35M | ไม่จำกัดภาษา |
-| [Sortformer](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) | การแยกผู้พูด (E2E), สตรีมมิงแบบเพิ่มทีละส่วน | CoreML (ANE) | 117M | ไม่จำกัดภาษา |
+| [Sortformer](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) | [การแยกผู้พูด (E2E), สตรีมมิงแบบเพิ่มทีละส่วน](https://soniqo.audio/th/guides/diarize) | CoreML (ANE) | 117M | ไม่จำกัดภาษา |
 | [DeepFilterNet3](https://soniqo.audio/guides/denoise) | การปรับปรุงเสียงพูด | CoreML | 2.1M | ไม่จำกัดภาษา |
 | [Sidon](https://soniqo.audio/guides/restore) | การฟื้นฟูเสียงพูด (ลดเสียงรบกวน + ลดเสียงก้อง, 48 kHz) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | ไม่จำกัดภาษา |
 | [HTDemucs (Demucs v4)](https://soniqo.audio/guides/separate) | การแยกแหล่งกำเนิด | MLX | 168M | ไม่จำกัดภาษา |

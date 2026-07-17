@@ -194,7 +194,7 @@ Compact view below. **[Full model catalogue with sizes, quantisations, download 
 | [KWS Zipformer](docs/models/kws-zipformer.md) | Audio → Wake word | CoreML (ANE) | 3M | EN/custom keywords |
 | [Pyannote](https://soniqo.audio/guides/diarize) | VAD + Diarization | MLX | 1.5M | Agnostic |
 | [Pyannote Community-1](https://huggingface.co/aufklarer/Pyannote-Community-1-CoreML) | Diarization + speaker embeddings | CoreML (ANE) + Swift VBx | 8.35M | Agnostic |
-| [Sortformer](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) | Diarization (E2E), incremental streaming | CoreML (ANE) | 117M | Agnostic |
+| [Sortformer](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) | [Diarization (E2E), incremental streaming](https://soniqo.audio/guides/diarize) | CoreML (ANE) | 117M | Agnostic |
 | [DeepFilterNet3](https://soniqo.audio/guides/denoise) | Speech Enhancement | CoreML | 2.1M | Agnostic |
 | [Sidon](https://soniqo.audio/guides/restore) | Speech Restoration (denoise + dereverb, 48 kHz) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | Agnostic |
 | [HTDemucs (Demucs v4)](https://soniqo.audio/guides/separate) | Source Separation | MLX | 168M | Agnostic |

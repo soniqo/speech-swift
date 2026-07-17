@@ -191,7 +191,7 @@ struct DictateView: View {
 | [KWS Zipformer](docs/models/kws-zipformer.md) | Audio → Wake word | CoreML (ANE) | 3M | EN/custom keywords |
 | [Pyannote](https://soniqo.audio/ru/guides/diarize) | VAD + Диаризация | MLX | 1.5M | Универсальный |
 | [Pyannote Community-1](https://huggingface.co/aufklarer/Pyannote-Community-1-CoreML) | Диаризация + эмбеддинги спикеров | CoreML (ANE) + Swift VBx | 8.35M | Универсальный |
-| [Sortformer](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) | Диаризация (E2E), инкрементальный стриминг | CoreML (ANE) | 117M | Универсальный |
+| [Sortformer](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) | [Диаризация (E2E), инкрементальный стриминг](https://soniqo.audio/ru/guides/diarize) | CoreML (ANE) | 117M | Универсальный |
 | [DeepFilterNet3](https://soniqo.audio/ru/guides/denoise) | Улучшение речи | CoreML | 2.1M | Универсальный |
 | [Sidon](https://soniqo.audio/ru/guides/restore) | Восстановление речи (подавление шума + дереверберация, 48 кГц) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | Универсальный |
 | [HTDemucs (Demucs v4)](https://soniqo.audio/ru/guides/separate) | Разделение источников | MLX | 168M | Agnostic |
