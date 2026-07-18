@@ -32,6 +32,8 @@ Speech Swift पैकेज के सत्यापन योग्य सं
 
 [Palmier Pro](https://github.com/palmier-io/palmier-pro) · [Anarlog](https://github.com/fastrepl/anarlog) · [ClawdHome](https://github.com/ThinkInAIXYZ/clawdhome) · [Jabber](https://github.com/rselbach/jabber) · [Ora](https://github.com/wuwangzhang1216/ora) · [VoxFlow](https://github.com/xingbofeng/VoxFlow) · [LokalBot](https://github.com/stevyhacker/lokalbot) · [Voicey](https://github.com/jonathanKingston/voicey) · [HushType](https://github.com/felixfu824/HushType) · [DexDictate macOS](https://github.com/westkitty/DexDictate_MacOS) · [Watchtower](https://github.com/aiwatchtowers/watchtower) · [Wishper App](https://github.com/irangareddy/wishper-app) · [FriSpeak](https://github.com/KSubedi/FriSpeak) · [Scribe](https://github.com/itchat/Scribe) · [VoicePen](https://github.com/dot-sk/VoicePen)
 
+**OpenAI-संगत ऐप्स:** [AnythingLLM](https://github.com/Mintplex-Labs/anything-llm) ([मर्ज किया गया WAV समर्थन](https://github.com/Mintplex-Labs/anything-llm/pull/6012))
+
 **क्षमता समूह:** STT / ASR · अलाइनमेंट · TTS · LLM और अनुवाद · स्पीच-टू-स्पीच · एन्हांसमेंट / रिस्टोरेशन · सोर्स सेपरेशन · संगीत / ऑडियो जनरेशन · वेक वर्ड, VAD, डायराइज़ेशन और स्पीकर पहचान
 
 **STT / ASR**

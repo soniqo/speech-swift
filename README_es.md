@@ -32,6 +32,8 @@ Reconocimiento, síntesis y comprensión de voz en el dispositivo para Mac e iOS
 
 [Palmier Pro](https://github.com/palmier-io/palmier-pro) · [Anarlog](https://github.com/fastrepl/anarlog) · [ClawdHome](https://github.com/ThinkInAIXYZ/clawdhome) · [Jabber](https://github.com/rselbach/jabber) · [Ora](https://github.com/wuwangzhang1216/ora) · [VoxFlow](https://github.com/xingbofeng/VoxFlow) · [LokalBot](https://github.com/stevyhacker/lokalbot) · [Voicey](https://github.com/jonathanKingston/voicey) · [HushType](https://github.com/felixfu824/HushType) · [DexDictate macOS](https://github.com/westkitty/DexDictate_MacOS) · [Watchtower](https://github.com/aiwatchtowers/watchtower) · [Wishper App](https://github.com/irangareddy/wishper-app) · [FriSpeak](https://github.com/KSubedi/FriSpeak) · [Scribe](https://github.com/itchat/Scribe) · [VoicePen](https://github.com/dot-sk/VoicePen)
 
+**Aplicaciones compatibles con OpenAI:** [AnythingLLM](https://github.com/Mintplex-Labs/anything-llm) ([compatibilidad con WAV integrada](https://github.com/Mintplex-Labs/anything-llm/pull/6012))
+
 **Grupos de capacidades:** STT / ASR · Alineación · TTS · LLM y traducción · Voz a voz · Mejora / restauración · Separación de fuentes · Generación de música / audio · Wake word, VAD, diarización e identidad de hablante
 
 **STT / ASR**
