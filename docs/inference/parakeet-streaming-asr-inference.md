@@ -18,6 +18,28 @@ let text = try model.transcribeAudio(audioSamples, sampleRate: 16000)
 Conforms to `SpeechRecognitionModel`, so it drops into any code path that
 accepts a generic STT model (voice pipelines, diarization + ASR, etc.).
 
+## Preinstalled and offline models
+
+Use `cacheDir` to control where `fromPretrained()` stores the model and
+`offlineMode` to reuse an existing cache without a network request:
+
+```swift
+let model = try await ParakeetStreamingASRModel.fromPretrained(
+    cacheDir: appModelsDirectory,
+    offlineMode: true
+)
+```
+
+Apps that install and verify the model themselves can bypass the downloader
+entirely. The directory must contain `encoder.mlmodelc/`, `decoder.mlmodelc/`,
+`joint.mlmodelc/`, `vocab.json`, and optionally `config.json`:
+
+```swift
+let model = try await ParakeetStreamingASRModel.fromLocal(
+    bundleDir: installedModelDirectory
+)
+```
+
 ## Quick start — AsyncSequence streaming
 
 ```swift

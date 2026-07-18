@@ -90,6 +90,7 @@ All models support both parameters:
 |-------|-----------|
 | `Qwen3ASRModel` | `cacheDir`, `offlineMode` |
 | `ParakeetASRModel` | `cacheDir`, `offlineMode` |
+| `ParakeetStreamingASRModel` | `cacheDir`, `offlineMode`, `fromLocal` |
 | `CoreMLASRModel` | `cacheDir`, `offlineMode` |
 | `KokoroTTSModel` | `cacheDir`, `offlineMode` |
 | `Qwen3TTSModel` | `cacheDir`, `offlineMode` |

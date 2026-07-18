@@ -152,14 +152,16 @@ public class ParakeetStreamingASRModel {
 
     public static func fromPretrained(
         modelId: String? = nil,
+        cacheDir: URL? = nil,
+        offlineMode: Bool = false,
         progressHandler: ((Double, String) -> Void)? = nil
     ) async throws -> ParakeetStreamingASRModel {
         let effectiveModelId = modelId ?? defaultModelId
         AudioLog.modelLoading.info("Loading Parakeet EOU model: \(effectiveModelId)")
 
-        let cacheDir: URL
+        let resolvedCacheDir: URL
         do {
-            cacheDir = try HuggingFaceDownloader.getCacheDirectory(for: effectiveModelId)
+            resolvedCacheDir = try cacheDir ?? HuggingFaceDownloader.getCacheDirectory(for: effectiveModelId)
         } catch {
             throw AudioModelError.modelLoadFailed(
                 modelId: effectiveModelId, reason: "Failed to resolve cache directory", underlying: error)
@@ -169,14 +171,15 @@ public class ParakeetStreamingASRModel {
         do {
             try await HuggingFaceDownloader.downloadWeights(
                 modelId: effectiveModelId,
-                to: cacheDir,
+                to: resolvedCacheDir,
                 additionalFiles: [
                     "encoder.mlmodelc/**",
                     "decoder.mlmodelc/**",
                     "joint.mlmodelc/**",
                     "vocab.json",
                     "config.json",
-                ]
+                ],
+                offlineMode: offlineMode
             ) { fraction in
                 progressHandler?(fraction * 0.7, "Downloading model...")
             }
@@ -185,6 +188,34 @@ public class ParakeetStreamingASRModel {
                 modelId: effectiveModelId, reason: "Download failed", underlying: error)
         }
 
+        return try await load(
+            from: resolvedCacheDir,
+            source: effectiveModelId,
+            progressHandler: progressHandler
+        )
+    }
+
+    /// Load a model from an existing local directory without downloading files.
+    ///
+    /// The directory must contain `encoder.mlmodelc/`, `decoder.mlmodelc/`,
+    /// `joint.mlmodelc/`, `vocab.json`, and optionally `config.json`.
+    public static func fromLocal(
+        bundleDir: URL,
+        progressHandler: ((Double, String) -> Void)? = nil
+    ) async throws -> ParakeetStreamingASRModel {
+        AudioLog.modelLoading.info("Loading Parakeet EOU model from local: \(bundleDir.path)")
+        return try await load(
+            from: bundleDir,
+            source: bundleDir.path,
+            progressHandler: progressHandler
+        )
+    }
+
+    private static func load(
+        from cacheDir: URL,
+        source: String,
+        progressHandler: ((Double, String) -> Void)?
+    ) async throws -> ParakeetStreamingASRModel {
         progressHandler?(0.70, "Loading configuration...")
         let config: ParakeetEOUConfig
         let configURL = cacheDir.appendingPathComponent("config.json")
@@ -197,7 +228,16 @@ public class ParakeetStreamingASRModel {
 
         progressHandler?(0.75, "Loading vocabulary...")
         let vocabURL = cacheDir.appendingPathComponent("vocab.json")
-        let vocabulary = try ParakeetEOUVocabulary.load(from: vocabURL)
+        let vocabulary: ParakeetEOUVocabulary
+        do {
+            vocabulary = try ParakeetEOUVocabulary.load(from: vocabURL)
+        } catch {
+            throw AudioModelError.modelLoadFailed(
+                modelId: source,
+                reason: "Failed to load vocabulary",
+                underlying: error
+            )
+        }
 
         progressHandler?(0.80, "Loading CoreML models...")
         let encoder = try loadCoreMLModel(name: "encoder", from: cacheDir, computeUnits: .cpuAndGPU)

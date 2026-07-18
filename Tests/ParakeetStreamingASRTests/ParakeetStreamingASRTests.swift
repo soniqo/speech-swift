@@ -65,6 +65,23 @@ final class ParakeetStreamingASRTests: XCTestCase {
         )
     }
 
+    func testFromLocalRejectsMissingVocabularyWithoutDownloading() async throws {
+        let bundleDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("parakeet-streaming-local-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: bundleDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: bundleDir) }
+
+        do {
+            _ = try await ParakeetStreamingASRModel.fromLocal(bundleDir: bundleDir)
+            XCTFail("Expected a missing local vocabulary to fail")
+        } catch let AudioModelError.modelLoadFailed(modelId, reason, _) {
+            XCTAssertEqual(modelId, bundleDir.path)
+            XCTAssertEqual(reason, "Failed to load vocabulary")
+        } catch {
+            XCTFail("Expected AudioModelError.modelLoadFailed, got \(error)")
+        }
+    }
+
     // MARK: - Vocabulary Tests
 
     func testVocabularyDecode() {
@@ -247,6 +264,33 @@ final class E2EParakeetStreamingASRTests: XCTestCase {
         XCTAssertTrue(m.isLoaded)
         XCTAssertEqual(m.config.encoderHidden, 512)
         XCTAssertEqual(m.config.encoderLayers, 17)
+    }
+
+    func testLocalModelLoading() async throws {
+        let cacheDir = try HuggingFaceDownloader.getCacheDirectory(
+            for: ParakeetStreamingASRModel.defaultModelId
+        )
+        let local = try await ParakeetStreamingASRModel.fromLocal(bundleDir: cacheDir)
+        defer { local.unload() }
+
+        XCTAssertTrue(local.isLoaded)
+        XCTAssertEqual(local.config.encoderHidden, 512)
+        XCTAssertEqual(local.config.encoderLayers, 17)
+    }
+
+    func testCachedOfflineModelLoading() async throws {
+        let cacheDir = try HuggingFaceDownloader.getCacheDirectory(
+            for: ParakeetStreamingASRModel.defaultModelId
+        )
+        let cached = try await ParakeetStreamingASRModel.fromPretrained(
+            cacheDir: cacheDir,
+            offlineMode: true
+        )
+        defer { cached.unload() }
+
+        XCTAssertTrue(cached.isLoaded)
+        XCTAssertEqual(cached.config.encoderHidden, 512)
+        XCTAssertEqual(cached.config.encoderLayers, 17)
     }
 
     func testWarmup() throws {
