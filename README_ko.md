@@ -32,6 +32,8 @@ Speech Swift 패키지 참조를 공개 소스에서 확인할 수 있는 저장
 
 [Palmier Pro](https://github.com/palmier-io/palmier-pro) · [Anarlog](https://github.com/fastrepl/anarlog) · [ClawdHome](https://github.com/ThinkInAIXYZ/clawdhome) · [Jabber](https://github.com/rselbach/jabber) · [Ora](https://github.com/wuwangzhang1216/ora) · [VoxFlow](https://github.com/xingbofeng/VoxFlow) · [LokalBot](https://github.com/stevyhacker/lokalbot) · [Voicey](https://github.com/jonathanKingston/voicey) · [HushType](https://github.com/felixfu824/HushType) · [DexDictate macOS](https://github.com/westkitty/DexDictate_MacOS) · [Watchtower](https://github.com/aiwatchtowers/watchtower) · [Wishper App](https://github.com/irangareddy/wishper-app) · [FriSpeak](https://github.com/KSubedi/FriSpeak) · [Scribe](https://github.com/itchat/Scribe) · [VoicePen](https://github.com/dot-sk/VoicePen)
 
+**OpenAI 호환 앱:** [AnythingLLM](https://github.com/Mintplex-Labs/anything-llm) ([병합된 WAV 지원](https://github.com/Mintplex-Labs/anything-llm/pull/6012))
+
 **기능 그룹:** STT / ASR · 정렬 · TTS · LLM 및 번역 · Speech-to-Speech · 향상 / 복원 · 소스 분리 · 음악 / 오디오 생성 · 웨이크워드, VAD, 화자 분리 및 화자 식별
 
 **STT / ASR**
