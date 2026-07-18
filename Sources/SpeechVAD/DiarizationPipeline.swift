@@ -309,7 +309,9 @@ public final class PyannoteDiarizationPipeline {
         let windowSamples = Int(windowDuration * Float(sampleRate))
         let framesPerChunk = 589
         let frameDuration = windowDuration / Float(framesPerChunk)
-        let stepSamples = windowSamples / 2  // 50% overlap
+        // Match the segmentation model's reference inference recipe: a 10%
+        // step gives 90% overlap between consecutive 10-second windows.
+        let stepSamples = windowSamples / 10
 
         let numSamples = samples.count
         guard numSamples > 0 else {
@@ -363,7 +365,7 @@ public final class PyannoteDiarizationPipeline {
 
             let input = MLXArray(flat).reshaped(batchEnd - batchStart, 1, windowSamples)
             let posteriors = segmentationModel(input)
-            let speakerProbs = PowersetDecoder.speakerProbabilities(from: posteriors)
+            let speakerProbs = PowersetDecoder.hardSpeakerActivity(from: posteriors)
             eval(speakerProbs)
 
             for (bi, p) in (batchStart..<batchEnd).enumerated() {
@@ -456,7 +458,7 @@ public final class PyannoteDiarizationPipeline {
                 embedding: $0.embedding)
         }
 
-        let (clusterAssignment, centroids) = DiarizationHelpers.constrainedAgglomerativeClustering(
+        let (clusterAssignment, centroids) = DiarizationHelpers.agglomerativeClustering(
             items: clusterItems, threshold: config.clusteringThreshold)
 
         // Build mapping: (windowIndex, localSpeakerId) → global cluster ID
