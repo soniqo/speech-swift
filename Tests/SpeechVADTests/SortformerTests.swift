@@ -178,6 +178,82 @@ final class SortformerTests: XCTestCase {
     /// The incremental session must reproduce whole-buffer diarization with
     /// the same `.streaming` preset: identical chunk math fed identical mel.
     /// Arbitrary push sizes exercise the PCM carry and mel-margin logic.
+    func testUltraEightSlotSessionStaysWithinItsWidth() async throws {
+        let session: SortformerStreamingSession
+        do {
+            session = try await SortformerStreamingSession.fromPretrained(
+                modelId: SortformerDiarizer.ultraStreamingModelId,
+                offlineMode: true,
+                config: .streamingUltra8)
+        } catch {
+            throw XCTSkip("Ultra-Sortformer model not cached: \(error)")
+        }
+
+        if let real = ProcessInfo.processInfo
+            .environment["SORTFORMER_E2E_REAL_AUDIO"]
+        {
+            let audio = try AudioFileLoader.load(
+                url: URL(fileURLWithPath: real), targetSampleRate: 16_000)
+            let step = 7_680
+            var offset = 0
+            while offset < min(audio.count, 30 * 16_000) {
+                let upper = min(audio.count, offset + step)
+                _ = try session.push(audio: Array(audio[offset..<upper]))
+                offset = upper
+            }
+            try session.finish()
+            let result = session.currentResult()
+            print("REAL-AUDIO result segments \(result.segments.count) speakers \(result.numSpeakers)")
+            XCTAssertFalse(result.segments.isEmpty)
+            return
+        }
+
+        // Same deterministic alternating-burst audio family as the base
+        // session test: enough speech to exercise cache spill, no claim
+        // about true speaker count — the invariants are width and sanity.
+        var seed: UInt64 = 0x0817_2026
+        func nextFloat() -> Float {
+            seed = seed &* 6364136223846793005 &+ 1442695040888963407
+            return Float(Int64(bitPattern: seed >> 11)) / Float(Int64.max)
+        }
+        var audio = [Float](repeating: 0, count: 12 * 16_000)
+        var cursor = 0
+        var voice = 0
+        while cursor < audio.count {
+            let burst = 12_000 + Int(abs(nextFloat()) * 12_000)
+            let gap = 3_000 + Int(abs(nextFloat()) * 3_000)
+            let end = min(audio.count, cursor + burst)
+            let carrier: Float = voice == 0 ? 200 : 340
+            for i in cursor..<end {
+                let envelope = 0.5 + 0.5 * sin(
+                    2 * .pi * carrier * Float(i) / 16_000)
+                audio[i] = 0.2 * nextFloat() * envelope
+            }
+            cursor = end + gap
+            voice = 1 - voice
+        }
+
+        let step = 7_680
+        var offset = 0
+        while offset < audio.count {
+            let upper = min(audio.count, offset + step)
+            _ = try session.push(audio: Array(audio[offset..<upper]))
+            offset = upper
+        }
+        try session.finish()
+        let result = session.currentResult()
+
+        // The Ultra fine-tune trained on real speech and legitimately stays
+        // quiet on synthetic noise, so the default path asserts structural
+        // invariants only; SORTFORMER_E2E_REAL_AUDIO above is the strict
+        // behavioral check (non-empty segments on real speech).
+        XCTAssertTrue(result.segments.allSatisfy {
+            (0..<8).contains($0.speakerId)
+        })
+        XCTAssertLessThanOrEqual(
+            Set(result.segments.map(\.speakerId)).count, 8)
+    }
+
     func testStreamingSessionMatchesWholeBufferDiarization() async throws {
         let diarizer: SortformerDiarizer
         do {

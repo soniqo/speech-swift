@@ -30,6 +30,30 @@ enum PowersetDecoder {
         return stacked([spk1, spk2, spk3], axis: -1)
     }
 
+    /// Convert powerset posteriors to hard per-speaker activity tracks.
+    ///
+    /// This matches pyannote's inference conversion: select the winning
+    /// powerset class at each frame, then expand that class to its one- or
+    /// two-speaker membership vector. It avoids activating a weak local track
+    /// merely because probability mass from several losing overlap classes
+    /// happens to cross a soft threshold.
+    static func hardSpeakerActivity(from posteriors: MLXArray) -> MLXArray {
+        let winner = argMax(posteriors, axis: -1).asType(.int32)
+        let spk1 = logicalOr(
+            logicalOr(winner .== Int32(1), winner .== Int32(4)),
+            winner .== Int32(5)
+        ).asType(.float32)
+        let spk2 = logicalOr(
+            logicalOr(winner .== Int32(2), winner .== Int32(4)),
+            winner .== Int32(6)
+        ).asType(.float32)
+        let spk3 = logicalOr(
+            logicalOr(winner .== Int32(3), winner .== Int32(5)),
+            winner .== Int32(6)
+        ).asType(.float32)
+        return stacked([spk1, spk2, spk3], axis: -1)
+    }
+
     /// Apply hysteresis binarization to per-speaker probabilities.
     ///
     /// Expects probabilities in `[0, 1]` range (post-softmax or post-sigmoid).

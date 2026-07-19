@@ -24,6 +24,11 @@ public final class SortformerDiarizer {
 
     /// Default HuggingFace model ID for the CoreML Sortformer model
     public static let defaultModelId = "aufklarer/Sortformer-Diarization-CoreML"
+    /// Ultra-Sortformer 8-speaker fine-tune, converted with the same
+    /// pipeline and streaming state protocol. Pair with
+    /// `SortformerConfig.streamingUltra8`.
+    public static let ultraStreamingModelId =
+        "aufklarer/Ultra-Sortformer-Diarization-CoreML"
 
     private let model: SortformerCoreMLModel
     private let melExtractor: SortformerMelExtractor

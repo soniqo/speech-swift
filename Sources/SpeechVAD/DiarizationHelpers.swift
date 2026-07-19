@@ -212,6 +212,93 @@ enum DiarizationHelpers {
         return (assignment, finalCentroids)
     }
 
+    /// Agglomerative clustering with centroid linkage and cosine distance.
+    ///
+    /// Unlike ``constrainedAgglomerativeClustering(items:threshold:)``, this
+    /// first estimates global speaker clusters without applying a transitive
+    /// same-window cannot-link constraint. This mirrors the reference
+    /// pyannote pipeline, which clusters globally and only constrains the later
+    /// per-window assignment step. A false local track can therefore merge
+    /// back into its real speaker instead of forcing a new global identity.
+    static func agglomerativeClustering(
+        items: [ClusterItem],
+        threshold: Float
+    ) -> (clusterAssignment: [Int], centroids: [[Float]]) {
+        guard !items.isEmpty else { return ([], []) }
+        if items.count == 1 {
+            return ([0], [items[0].embedding])
+        }
+
+        let n = items.count
+        let dim = items[0].embedding.count
+        var clusterOf = Array(0..<n)
+        var centroids = items.map(\.embedding)
+        var clusterMembers = (0..<n).map { [$0] }
+        var active = Set(0..<n)
+
+        var dist = [Float](repeating: .infinity, count: n * n)
+        for i in 0..<n {
+            for j in (i + 1)..<n {
+                let d = cosineDistance(centroids[i], centroids[j])
+                dist[i * n + j] = d
+                dist[j * n + i] = d
+            }
+        }
+
+        while active.count > 1 {
+            var bestDist = Float.greatestFiniteMagnitude
+            var bestI = -1
+            var bestJ = -1
+
+            let activeList = active.sorted()
+            for ai in 0..<activeList.count {
+                for aj in (ai + 1)..<activeList.count {
+                    let ci = activeList[ai]
+                    let cj = activeList[aj]
+                    let d = dist[ci * n + cj]
+                    if d < bestDist {
+                        bestDist = d
+                        bestI = ci
+                        bestJ = cj
+                    }
+                }
+            }
+
+            guard bestDist < threshold && bestI >= 0 else { break }
+
+            let sizeI = clusterMembers[bestI].count
+            let sizeJ = clusterMembers[bestJ].count
+            let totalSize = Float(sizeI + sizeJ)
+            var newCentroid = [Float](repeating: 0, count: dim)
+            for d in 0..<dim {
+                newCentroid[d] = (
+                    centroids[bestI][d] * Float(sizeI)
+                        + centroids[bestJ][d] * Float(sizeJ)
+                ) / totalSize
+            }
+            centroids[bestI] = newCentroid
+
+            for member in clusterMembers[bestJ] {
+                clusterOf[member] = bestI
+            }
+            clusterMembers[bestI].append(contentsOf: clusterMembers[bestJ])
+            active.remove(bestJ)
+
+            for other in active where other != bestI {
+                let d = cosineDistance(centroids[bestI], centroids[other])
+                dist[bestI * n + other] = d
+                dist[other * n + bestI] = d
+            }
+        }
+
+        let activeSorted = active.sorted()
+        let clusterMap = Dictionary(
+            uniqueKeysWithValues: activeSorted.enumerated().map { ($1, $0) })
+        let assignment = (0..<n).map { clusterMap[clusterOf[$0]]! }
+        let finalCentroids = activeSorted.map { centroids[$0] }
+        return (assignment, finalCentroids)
+    }
+
     /// Cosine distance between two vectors: 1 - cosine_similarity.
     /// Returns value in [0, 2].
     static func cosineDistance(_ a: [Float], _ b: [Float]) -> Float {

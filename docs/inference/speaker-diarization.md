@@ -418,3 +418,33 @@ Sources/AudioCLILib/EmbedSpeakerCommand.swift  `speech embed-speaker` (--engine)
 scripts/convert_wespeaker.py                    MLX weight conversion
 scripts/convert_wespeaker_coreml.py             CoreML weight conversion
 ```
+
+
+## Ultra-Sortformer: eight streaming speaker slots
+
+`aufklarer/Ultra-Sortformer-Diarization-CoreML` hosts the
+[Ultra-Sortformer](https://github.com/mago-research/Ultra-Sortformer)
+8-speaker fine-tune of the same streaming architecture, converted with the
+same pipeline and validated by the same NeMo streaming-parity gate. The
+head widens 4 → 8; chunk shape, cache geometry, and the session protocol
+are unchanged.
+
+```swift
+let session = try await SortformerStreamingSession.fromPretrained(
+    modelId: SortformerDiarizer.ultraStreamingModelId,
+    config: .streamingUltra8)
+```
+
+Benchmark it against the 4-speaker base with the diarization bench:
+
+```bash
+swift run -c release diarization-bench \
+  --manifest suite.tsv \
+  --engines sortformer-session sortformer-session-ultra8
+```
+
+The fine-tune trained on synthetic multi-speaker sessions and its authors
+publish real-corpus rankings only for the 4-speaker base, so treat the
+extra capacity as something to validate on your own data: crowded scenes
+are the target, and 2–4 speaker behavior should be regression-checked
+before switching defaults.

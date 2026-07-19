@@ -84,23 +84,20 @@ final class SortformerCoreMLModel {
         let predsShape = (0..<predsArray.shape.count).map { predsArray.shape[$0].intValue }
         let embsShape = (0..<embsArray.shape.count).map { embsArray.shape[$0].intValue }
 
-        let totalPreds = predsShape.reduce(1, *)
-        let totalEmbs = embsShape.reduce(1, *)
-
-        var preds = [Float](repeating: 0, count: totalPreds)
-        let predsPtr = predsArray.dataPointer.assumingMemoryBound(to: Float.self)
-        for i in 0..<totalPreds { preds[i] = predsPtr[i] }
-
-        var embs = [Float](repeating: 0, count: totalEmbs)
-        let embsPtr = embsArray.dataPointer.assumingMemoryBound(to: Float.self)
-        for i in 0..<totalEmbs { embs[i] = embsPtr[i] }
+        // ANE-backed outputs are not guaranteed to be contiguous Float32:
+        // the 8-speaker Ultra head comes back as Float16 with the last
+        // dimension padded 8 -> 16 (strides [3872, 16, 1]). Honor the
+        // array's declared dtype and strides instead of assuming layout —
+        // a raw contiguous read scrambles frames into single-spike noise.
+        let preds = Self.denseFloats(from: predsArray)
+        let embs = Self.denseFloats(from: embsArray)
 
         let embsLenPtr = embsLenArray.dataPointer.assumingMemoryBound(to: Int32.self)
         let validEmbFrames = Int(embsLenPtr[0])
 
         return SortformerOutput(
             speakerPreds: preds,
-            predsFrames: predsShape.count >= 2 ? predsShape[predsShape.count - 2] : totalPreds / config.maxSpeakers,
+            predsFrames: predsShape.count >= 2 ? predsShape[predsShape.count - 2] : preds.count / config.maxSpeakers,
             numSpeakers: config.maxSpeakers,
             encoderEmbs: embs,
             encoderEmbFrames: embsShape.count >= 2 ? embsShape[embsShape.count - 2] : validEmbFrames,
@@ -123,6 +120,49 @@ final class SortformerCoreMLModel {
             ptr[i] = 0
         }
         return array
+    }
+
+    /// Copy an MLMultiArray into a dense row-major `[Float]`, honoring the
+    /// array's dtype and strides. CoreML chooses both per compute backend.
+    static func denseFloats(from array: MLMultiArray) -> [Float] {
+        let dims = array.shape.count
+        let shape = (0..<dims).map { array.shape[$0].intValue }
+        let strides = (0..<dims).map { array.strides[$0].intValue }
+        let count = shape.reduce(1, *)
+        var out = [Float](repeating: 0, count: count)
+
+        func fill(read: (Int) -> Float) {
+            var logical = 0
+            var index = [Int](repeating: 0, count: dims)
+            while logical < count {
+                var offset = 0
+                for d in 0..<dims { offset += index[d] * strides[d] }
+                out[logical] = read(offset)
+                logical += 1
+                var d = dims - 1
+                while d >= 0 {
+                    index[d] += 1
+                    if index[d] < shape[d] { break }
+                    index[d] = 0
+                    d -= 1
+                }
+            }
+        }
+
+        switch array.dataType {
+        case .float16:
+            let ptr = array.dataPointer.assumingMemoryBound(to: Float16.self)
+            fill { Float(ptr[$0]) }
+        case .float32:
+            let ptr = array.dataPointer.assumingMemoryBound(to: Float.self)
+            fill { ptr[$0] }
+        case .double:
+            let ptr = array.dataPointer.assumingMemoryBound(to: Double.self)
+            fill { Float(ptr[$0]) }
+        default:
+            for i in 0..<count { out[i] = array[i].floatValue }
+        }
+        return out
     }
 
     private func makeScalarInt32Array(value: Int32) throws -> MLMultiArray {

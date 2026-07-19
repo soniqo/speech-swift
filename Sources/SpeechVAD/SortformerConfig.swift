@@ -205,6 +205,35 @@ public struct SortformerConfig: Sendable {
         variantName: "streaming"
     )
 
+    /// Ultra-Sortformer 8-speaker fine-tune of the same streaming
+    /// architecture: the speaker head widens 4 → 8 while the chunk shape and
+    /// cache geometry stay identical, so the session protocol is unchanged.
+    /// Load with `fromPretrained(modelId:
+    /// SortformerDiarizer.ultraStreamingModelId, config: .streamingUltra8)`.
+    /// The fine-tune trained on synthetic multi-speaker sessions;
+    /// regression-check 2–4 speaker behavior on your own audio before
+    /// preferring it over `.streaming`.
+    public static let streamingUltra8 = SortformerConfig(
+        nMels: 128,
+        nFFT: 400,
+        hopLength: 160,
+        sampleRate: 16000,
+        chunkLenSeconds: 6.0,
+        leftContextSeconds: 1.0,
+        rightContextSeconds: 7.0,
+        subsamplingFactor: 8,
+        spkcacheLen: 188,
+        fifoLen: 40,
+        fcDModel: 512,
+        maxSpeakers: 8,
+        onset: 0.5,
+        offset: 0.3,
+        minSpeechDuration: 0.3,
+        minSilenceDuration: 0.15,
+        spkcacheUpdatePeriod: 32,
+        variantName: "streaming"
+    )
+
     public init(
         nMels: Int = 128,
         nFFT: Int = 400,

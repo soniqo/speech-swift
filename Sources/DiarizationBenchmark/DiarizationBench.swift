@@ -19,7 +19,7 @@ struct DiarizationBench: AsyncParsableCommand {
     var manifest: String
 
     @Option(name: .shortAndLong, parsing: .upToNextOption,
-            help: "Engines: community1-coreml, sortformer-default, sortformer-balanced, sortformer-streaming, pyannote-mlx, pyannote-coreml.")
+            help: "Engines: community1-coreml, sortformer-default, sortformer-balanced, sortformer-streaming, sortformer-session, sortformer-streaming-ultra8, sortformer-session-ultra8, pyannote-mlx, pyannote-coreml.")
     var engines: [String] = ["sortformer-default", "pyannote-mlx"]
 
     @Option(name: .shortAndLong, help: "Max files to process.")
@@ -279,6 +279,18 @@ private func makeDiarizationEngine(
     case "sortformer-session":
         return SortformerSessionBenchEngine(
             config: tuning.tuned(.streaming), thresholds: tuning.thresholds)
+    case "sortformer-streaming-ultra8":
+        return SortformerBenchEngine(
+            name: "sortformer-streaming-ultra8",
+            variant: tuning.tuned(.streamingUltra8),
+            thresholds: tuning.thresholds,
+            modelId: SortformerDiarizer.ultraStreamingModelId)
+    case "sortformer-session-ultra8":
+        return SortformerSessionBenchEngine(
+            config: tuning.tuned(.streamingUltra8),
+            thresholds: tuning.thresholds,
+            modelId: SortformerDiarizer.ultraStreamingModelId,
+            name: "sortformer-session-ultra8")
     case "pyannote-mlx":
         return PyannoteDiarizationBenchEngine(name: "pyannote-mlx", embeddingEngine: .mlx)
     case "pyannote-coreml":
@@ -345,20 +357,24 @@ private final class SortformerBenchEngine: DiarizationBenchEngine {
     let name: String
     let variant: SortformerConfig
     let thresholds: DiarizationConfig
+    let modelId: String
     var diarizer: SortformerDiarizer?
 
     init(
         name: String, variant: SortformerConfig,
-        thresholds: DiarizationConfig = .default
+        thresholds: DiarizationConfig = .default,
+        modelId: String = SortformerDiarizer.defaultModelId
     ) {
         self.name = name
         self.variant = variant
         self.thresholds = thresholds
+        self.modelId = modelId
     }
 
     func load() async throws {
         #if canImport(CoreML)
-        diarizer = try await SortformerDiarizer.fromPretrained(config: variant, computeUnits: .cpuAndNeuralEngine)
+        diarizer = try await SortformerDiarizer.fromPretrained(
+            modelId: modelId, config: variant, computeUnits: .cpuAndNeuralEngine)
         #else
         throw BenchmarkSupportError.unsupportedReference("Sortformer requires CoreML")
         #endif
@@ -377,23 +393,29 @@ private final class SortformerBenchEngine: DiarizationBenchEngine {
 /// flush at end of file. Scores the same as batch engines while also
 /// printing per-push latency, the number a realtime caller actually feels.
 private final class SortformerSessionBenchEngine: DiarizationBenchEngine {
-    let name = "sortformer-session"
+    let name: String
     let config: SortformerConfig
     let thresholds: DiarizationConfig
+    let modelId: String
     var session: SortformerStreamingSession?
     private var pushMilliseconds: [Double] = []
 
     init(
         config: SortformerConfig = .streaming,
-        thresholds: DiarizationConfig = .default
+        thresholds: DiarizationConfig = .default,
+        modelId: String = SortformerDiarizer.defaultModelId,
+        name: String = "sortformer-session"
     ) {
         self.config = config
         self.thresholds = thresholds
+        self.modelId = modelId
+        self.name = name
     }
 
     func load() async throws {
         #if canImport(CoreML)
         session = try await SortformerStreamingSession.fromPretrained(
+            modelId: modelId,
             config: config,
             computeUnits: .cpuAndNeuralEngine)
         session?.binarization = thresholds
