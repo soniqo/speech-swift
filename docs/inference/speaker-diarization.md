@@ -443,6 +443,12 @@ swift run -c release diarization-bench \
   --engines sortformer-session sortformer-session-ultra8
 ```
 
+The benchmark groups pooled DER by the number of unique speakers in each
+reference RTTM, so 2-, 3-, and 4-speaker regressions are reported separately in
+both the console table and JSON. See
+[Speaker Diarization Benchmarks](../benchmarks/diarization.md) for the published
+CALLHOME baseline and the local reporting protocol.
+
 The fine-tune trained on synthetic multi-speaker sessions and its authors
 publish real-corpus rankings only for the 4-speaker base, so treat the
 extra capacity as something to validate on your own data: crowded scenes
