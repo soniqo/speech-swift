@@ -1,5 +1,28 @@
 import Foundation
 
+// MARK: - Captured Audio Chunk
+
+/// A timestamped chunk produced by a live audio capture source.
+///
+/// `hostTime` is the host-clock time of the first input frame before
+/// resampling. Capture APIs leave it nil only when the underlying audio API
+/// did not provide a valid host timestamp. Consumers can use the shared host
+/// clock to order independently captured streams without mixing their PCM.
+public struct CapturedAudioChunk: Sendable, Equatable {
+    /// Mono Float32 PCM at `sampleRate`.
+    public let samples: [Float]
+    /// Delivered sample rate after capture-side resampling.
+    public let sampleRate: Int
+    /// Mach host-clock time for the first captured input frame, when valid.
+    public let hostTime: UInt64?
+
+    public init(samples: [Float], sampleRate: Int, hostTime: UInt64?) {
+        self.samples = samples
+        self.sampleRate = sampleRate
+        self.hostTime = hostTime
+    }
+}
+
 // MARK: - Model Memory Management
 
 /// Memory statistics for a loaded model.

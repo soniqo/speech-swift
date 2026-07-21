@@ -89,6 +89,22 @@ final class SystemAudioTapTests: XCTestCase {
         XCTAssertEqual(SystemAudioTap.nonSilentCount([], threshold: 1e-6), 0)
     }
 
+    // MARK: Capture timestamps
+
+    func testValidHostTimeIsPreserved() {
+        var timestamp = AudioTimeStamp()
+        timestamp.mHostTime = 42
+        timestamp.mFlags = .hostTimeValid
+        XCTAssertEqual(SystemAudioTap.hostTime(from: timestamp), 42)
+    }
+
+    func testInvalidHostTimeIsNil() {
+        var timestamp = AudioTimeStamp()
+        timestamp.mHostTime = 42
+        timestamp.mFlags = []
+        XCTAssertNil(SystemAudioTap.hostTime(from: timestamp))
+    }
+
     // MARK: OSStatus rendering
 
     func testDescribeOSStatusRendersFourCharCode() {

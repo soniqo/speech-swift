@@ -8,7 +8,8 @@ The `AudioCommon` module defines shared protocols that provide model-agnostic in
 ┌─────────────────────────────────────────────────────────┐
 │                    AudioCommon                          │
 │                                                         │
-│  AudioChunk          SpeechGenerationModel (TTS)        │
+│  AudioChunk / CapturedAudioChunk                        │
+│                      SpeechGenerationModel (TTS)        │
 │  AlignedWord         SpeechRecognitionModel (STT)       │
 │  SpeechSegment       ForcedAlignmentModel                │
 │  TranscriptionResult SpeechToSpeechModel                 │
@@ -254,6 +255,28 @@ config.warmupSTT = true             // warm up Neural Engine at pipeline start
 | `error` | STT/LLM/TTS failure |
 
 ## Shared Types
+
+### CapturedAudioChunk
+
+Timestamped mono PCM from live capture. `SystemAudioTap.startTimestamped` and
+`AudioIO.startMicrophoneTimestamped` both return this type, using the same Mach
+host clock so callers can keep independent source pipelines and merge only
+their derived events.
+
+```swift
+public struct CapturedAudioChunk: Sendable, Equatable {
+    public let samples: [Float]
+    public let sampleRate: Int
+    public let hostTime: UInt64?
+}
+```
+
+`hostTime` identifies the first input frame before capture-side resampling. It
+is nil only when the underlying audio callback supplies no valid host time.
+For full-duplex capture, construct `AudioIO(enableAEC: true)` to apply Apple's
+echo-cancelled microphone input before timestamped chunks reach the caller.
+Listen-only clients can additionally pass `enablePlayback: false` to omit the
+streaming player from the engine graph.
 
 ### AudioChunk
 

@@ -68,6 +68,11 @@ public class NemotronStreamingASRModel {
     /// Create a streaming session. `language` is a BCP-47 tag (e.g. `"en-US"`,
     /// `"ja-JP"`); `nil` or unknown falls back to the model's `"auto"` slot.
     /// `wordBoosting` biases RNN-T decoding toward the provided phrases.
+    ///
+    /// Sessions own independent encoder, decoder, and token state. A caller may
+    /// interleave multiple sessions on one loaded model to avoid duplicating
+    /// weights, provided every call remains serialized; the model and sessions
+    /// are not safe for concurrent inference.
     public func createSession(
         language: String? = nil,
         wordBoosting: WordBoostingConfig? = nil

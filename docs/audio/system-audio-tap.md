@@ -16,6 +16,38 @@ try tap.start(targetSampleRate: 16000) { samples in
 tap.stop()
 ```
 
+For independently processed sources, use the timestamped capture overload so
+system output can be ordered against microphone chunks without mixing PCM:
+
+```swift
+try tap.startTimestamped(targetSampleRate: 16000) { chunk in
+    systemPipeline.pushAudio(
+        chunk.samples,
+        hostTime: chunk.hostTime)
+}
+
+let microphone = AudioIO(enableAEC: true, enablePlayback: false)
+try microphone.startMicrophoneTimestamped(targetSampleRate: 16000) { chunk in
+    microphonePipeline.pushAudio(
+        chunk.samples,
+        hostTime: chunk.hostTime)
+}
+```
+
+`enableAEC: true` enables Apple's Voice Processing I/O before the microphone
+format is read. On macOS this removes audio played by the output device from
+the microphone signal while leaving the system tap as its own untouched
+source. The capture fails instead of silently falling back to raw microphone
+audio if Voice Processing cannot start. Other-audio ducking is set to Apple's
+minimum level on macOS 14 and newer. `enablePlayback: false` keeps a listen-only
+capture graph from attaching the otherwise available TTS player.
+
+`CapturedAudioChunk.hostTime` refers to the first input frame before
+resampling. Both Core Audio and AVAudioEngine express it on the Mach host
+clock, allowing consumers to retain source provenance while merging derived
+events onto one timeline. It is nil only when the underlying callback did not
+provide a valid host timestamp.
+
 ## How it works
 
 The capture path is the Core Audio process-tap API (macOS 14.4+):
