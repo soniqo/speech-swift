@@ -61,8 +61,8 @@ public enum SystemAudioTapError: Error, LocalizedError {
 /// - A global tap follows processes, not a specific device, so it keeps
 ///   capturing across default-output-device switches. The delivered sample rate
 ///   can change on such a switch; a property listener re-reads the tap format
-///   and the internal resampler is rebuilt on the fly. `onSamples` always
-///   receives mono Float32 at `targetSampleRate`.
+///   and the internal resampler is rebuilt on the fly. Both capture callbacks
+///   always receive mono Float32 at `targetSampleRate`.
 ///
 /// Permission: the host app must declare `NSAudioCaptureUsageDescription`;
 /// macOS prompts on first tap creation. **If the permission is denied, Core
@@ -103,7 +103,7 @@ public final class SystemAudioTap {
     private var resampler: AVAudioConverter?
     private var resamplerInputRate: Double = 0
     private var targetSampleRate: Double = 16000
-    private var onSamples: (([Float]) -> Void)?
+    private var onChunk: ((CapturedAudioChunk) -> Void)?
 
     // Shared counters (IO queue writes, any thread reads).
     private var statsLock = os_unfair_lock()
@@ -177,12 +177,23 @@ public final class SystemAudioTap {
         targetSampleRate: Int = 16000,
         onSamples: @escaping ([Float]) -> Void
     ) throws {
+        try startTimestamped(targetSampleRate: targetSampleRate) { chunk in
+            onSamples(chunk.samples)
+        }
+    }
+
+    /// Start capturing the system output mix with each input buffer's host
+    /// timestamp preserved through downmixing and resampling.
+    public func startTimestamped(
+        targetSampleRate: Int = 16000,
+        onChunk: @escaping (CapturedAudioChunk) -> Void
+    ) throws {
         guard case .stopped = captureState else {
             throw SystemAudioTapError.alreadyRunning
         }
 
         do {
-            try activate(targetSampleRate: Double(targetSampleRate), onSamples: onSamples)
+            try activate(targetSampleRate: Double(targetSampleRate), onChunk: onChunk)
             captureState = .running
             Self.log.info("System audio tap started, tap rate \(self.tapSampleRate) Hz → \(targetSampleRate) Hz")
         } catch {
@@ -193,8 +204,8 @@ public final class SystemAudioTap {
     }
 
     /// Stop capturing and destroy the tap, aggregate device, and listeners.
-    /// Idempotent. Must not be called from inside `onSamples` — teardown joins
-    /// the capture queue that the callback runs on.
+    /// Idempotent. Must not be called from inside either capture callback —
+    /// teardown joins the capture queue that the callback runs on.
     public func stop() {
         if let listener = formatListener, tapID != kAudioObjectUnknown {
             var address = Self.tapFormatAddress
@@ -224,7 +235,7 @@ public final class SystemAudioTap {
         ioQueue.sync {
             resampler = nil
             resamplerInputRate = 0
-            onSamples = nil
+            onChunk = nil
         }
         os_unfair_lock_lock(&statsLock)
         _tapSampleRate = 0
@@ -235,7 +246,10 @@ public final class SystemAudioTap {
 
     // MARK: - Capture pipeline
 
-    private func activate(targetSampleRate: Double, onSamples: @escaping ([Float]) -> Void) throws {
+    private func activate(
+        targetSampleRate: Double,
+        onChunk: @escaping (CapturedAudioChunk) -> Void
+    ) throws {
         os_unfair_lock_lock(&statsLock)
         _framesCaptured = 0
         _nonSilentFrames = 0
@@ -244,7 +258,7 @@ public final class SystemAudioTap {
 
         ioQueue.sync {
             self.targetSampleRate = targetSampleRate
-            self.onSamples = onSamples
+            self.onChunk = onChunk
         }
 
         // 1. Translate the exclusion pids to HAL process objects. Excluding a
@@ -313,8 +327,8 @@ public final class SystemAudioTap {
         // 5. IO proc on the aggregate: the tap arrives as the input buffer list.
         var newIOProcID: AudioDeviceIOProcID?
         let ioStatus = AudioDeviceCreateIOProcIDWithBlock(&newIOProcID, aggregateID, ioQueue) {
-            [weak self] _, inInputData, _, _, _ in
-            self?.handleInput(inInputData)
+            [weak self] _, inInputData, inInputTime, _, _ in
+            self?.handleInput(inInputData, timestamp: inInputTime.pointee)
         }
         guard ioStatus == noErr, let procID = newIOProcID else {
             throw SystemAudioTapError.ioProcCreationFailed(status: ioStatus)
@@ -329,7 +343,10 @@ public final class SystemAudioTap {
 
     /// Runs on `ioQueue`. Downmixes the tap buffers to mono, updates counters,
     /// resamples to the target rate, and delivers the batch.
-    private func handleInput(_ list: UnsafePointer<AudioBufferList>) {
+    private func handleInput(
+        _ list: UnsafePointer<AudioBufferList>,
+        timestamp: AudioTimeStamp
+    ) {
         let buffers = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: list))
         guard buffers.count > 0 else { return }
 
@@ -371,15 +388,22 @@ public final class SystemAudioTap {
         os_unfair_lock_unlock(&statsLock)
 
         guard inputRate > 0 else { return }
-        guard let delivery = onSamples else { return }
+        guard let delivery = onChunk else { return }
+        let hostTime = Self.hostTime(from: timestamp)
 
         if inputRate == targetSampleRate {
-            delivery(mono)
+            delivery(CapturedAudioChunk(
+                samples: mono,
+                sampleRate: Int(targetSampleRate),
+                hostTime: hostTime))
             return
         }
         guard let resampled = resampleOnIOQueue(mono, from: inputRate) else { return }
         if !resampled.isEmpty {
-            delivery(resampled)
+            delivery(CapturedAudioChunk(
+                samples: resampled,
+                sampleRate: Int(targetSampleRate),
+                hostTime: hostTime))
         }
     }
 
@@ -455,6 +479,11 @@ public final class SystemAudioTap {
     }
 
     // MARK: - Pure helpers (unit-tested)
+
+    static func hostTime(from timestamp: AudioTimeStamp) -> UInt64? {
+        timestamp.mFlags.contains(.hostTimeValid)
+            ? timestamp.mHostTime : nil
+    }
 
     /// Exclusion list actually applied to the tap: the explicit pids plus the
     /// current process (unless opted out), deduplicated, in stable order.
