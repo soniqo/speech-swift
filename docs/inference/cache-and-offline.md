@@ -102,6 +102,7 @@ All models support both parameters:
 | `WeSpeakerModel` | `cacheDir`, `offlineMode` |
 | `ReDimNet2SpeakerModel` | `cacheDir`, `offlineMode` |
 | `SpeechEnhancer` | `cacheDir`, `offlineMode` |
+| `LocalVQEEchoCanceller` | `cacheDir`, `offlineMode` |
 | `SortformerDiarizer` | `cacheDir`, `offlineMode` |
 | `Community1DiarizationPipeline` | `cacheDir`, `offlineMode` |
 | `PyannoteDiarizationPipeline` | `cacheBaseDir`, `offlineMode` |

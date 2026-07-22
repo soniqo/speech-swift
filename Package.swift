@@ -379,10 +379,19 @@ let package = Package(
             ]
         ),
         .target(
+            name: "LocalVQEAECFrontend",
+            path: "Sources/LocalVQEAECFrontend",
+            publicHeadersPath: "include",
+            cxxSettings: [
+                .headerSearchPath("include"),
+            ]
+        ),
+        .target(
             name: "SpeechEnhancement",
             dependencies: [
                 "AudioCommon",
                 "MLXCommon",
+                "LocalVQEAECFrontend",
             ]
         ),
         .target(
