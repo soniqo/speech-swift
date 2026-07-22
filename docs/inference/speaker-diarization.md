@@ -141,12 +141,21 @@ try identity.prewarm()
 
 let enrollment = try identity.embed(audio: enrollmentAudio, sampleRate: 16_000)
 let candidate = try identity.embed(audio: candidateAudio, sampleRate: 16_000)
+let shortProbe = try identity.embedShortUtterance(
+    audio: shortCleanAudio,
+    sampleRate: 16_000)
 let similarity = ReDimNet2SpeakerModel.cosineSimilarity(enrollment, candidate)
 ```
 
 - Input is fixed at six seconds / 96,000 mono samples for the fast Core ML path.
 - Clean clips from two to six seconds are repeated to fill the window.
-- Longer clips are center-cropped; clips shorter than two seconds fail explicitly.
+- Longer clips are center-cropped; clips shorter than two seconds fail explicitly
+  through the default `embed` API.
+- `embedShortUtterance` explicitly accepts clean, non-overlapped 0.6-to-2-second
+  input. Repetition only satisfies the fixed graph shape; it adds no evidence.
+  Use these vectors solely as stricter, duration-calibrated probes against an
+  identity anchored by at least two seconds. Never enroll, create, or update an
+  identity with them.
 - The model uses 192-dimensional embeddings. They cannot be compared with
   WeSpeaker's 256-dimensional embeddings or Community-1 centroids.
 - Matching thresholds must be calibrated for ReDimNet2; do not reuse WeSpeaker
@@ -239,6 +248,9 @@ For named identity across recordings, use the throwing ReDimNet2 API instead:
 ```swift
 let model = try await ReDimNet2SpeakerModel.fromPretrained()
 let embedding = try model.embed(audio: cleanSpeakerAudio, sampleRate: 16_000)
+let shortProbe = try model.embedShortUtterance(
+    audio: shortCleanSpeakerAudio,
+    sampleRate: 16_000)
 // embedding: [Float] of length 192, L2-normalized
 ```
 

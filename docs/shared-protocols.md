@@ -145,7 +145,10 @@ public protocol SpeakerEmbeddingModel: AnyObject {
 
 `ReDimNet2SpeakerModel` is the separate persistent identity encoder. Its
 `embed` method throws so model or input failures remain explicit; it is used
-through its concrete API rather than this legacy non-throwing protocol.
+through its concrete API rather than this legacy non-throwing protocol. Its
+explicit `embedShortUtterance` method accepts clean 0.6-to-2-second retrieval
+probes, but those lower-evidence vectors must never enroll or update an
+identity.
 
 ### SpeakerDiarizationModel
 
