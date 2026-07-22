@@ -12,6 +12,9 @@ final class ReDimNet2SpeakerTests: XCTestCase {
         XCTAssertEqual(ReDimNet2SpeakerModel.inputSampleRate, 16_000)
         XCTAssertEqual(ReDimNet2SpeakerModel.inputSampleCount, 96_000)
         XCTAssertEqual(ReDimNet2SpeakerModel.minimumSampleCount, 32_000)
+        XCTAssertEqual(
+            ReDimNet2SpeakerModel.minimumShortUtteranceSampleCount,
+            9_600)
         XCTAssertEqual(ReDimNet2SpeakerModel.embeddingDimension, 192)
     }
 
@@ -81,6 +84,25 @@ final class ReDimNet2SpeakerTests: XCTestCase {
         }
     }
 
+    func testPreparedShortUtteranceRepeatsSixTenthsOfASecond() throws {
+        let samples = (0..<9_600).map(Float.init)
+        let prepared = try ReDimNet2SpeakerModel.preparedShortUtteranceAudio(samples)
+
+        XCTAssertEqual(prepared.count, 96_000)
+        for repetition in 0..<10 {
+            let start = repetition * samples.count
+            XCTAssertEqual(Array(prepared[start..<(start + samples.count)]), samples)
+        }
+    }
+
+    func testPreparedShortUtteranceRejectsLessThanSixTenthsOfASecond() {
+        XCTAssertThrowsError(
+            try ReDimNet2SpeakerModel.preparedShortUtteranceAudio(
+                [Float](repeating: 0, count: 9_599))) { error in
+            XCTAssertTrue(error.localizedDescription.contains("at least 0.6 seconds"))
+        }
+    }
+
     func testPreparedAudioRejectsNonFiniteSamples() {
         var samples = [Float](repeating: 0, count: 32_000)
         samples[100] = .nan
@@ -127,6 +149,29 @@ final class E2EReDimNet2SpeakerTests: XCTestCase {
         XCTAssertEqual(first.count, 192)
         let norm = sqrt(first.reduce(Float(0)) { $0 + $1 * $1 })
         XCTAssertEqual(norm, 1, accuracy: 0.002)
+        XCTAssertEqual(
+            ReDimNet2SpeakerModel.cosineSimilarity(first, second),
+            1,
+            accuracy: 0.0001)
+    }
+
+    func testE2EShortUtteranceEmbeddingIsNormalizedAndDeterministic() async throws {
+        let model = try await loadModel()
+        let audioURL = URL(
+            fileURLWithPath: "Tests/Qwen3ASRTests/Resources/test_audio.wav")
+        let (samples, sampleRate) = try AudioFileLoader.loadWAV(url: audioURL)
+        let shortSamples = Array(samples.prefix(Int(Double(sampleRate) * 0.75)))
+
+        let first = try model.embedShortUtterance(
+            audio: shortSamples, sampleRate: sampleRate)
+        let second = try model.embedShortUtterance(
+            audio: shortSamples, sampleRate: sampleRate)
+
+        XCTAssertEqual(first.count, 192)
+        XCTAssertEqual(
+            sqrt(first.reduce(Float(0)) { $0 + $1 * $1 }),
+            1,
+            accuracy: 0.002)
         XCTAssertEqual(
             ReDimNet2SpeakerModel.cosineSimilarity(first, second),
             1,

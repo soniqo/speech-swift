@@ -31,13 +31,17 @@ struct ReDimNet2ModelConfiguration: Decodable, Equatable {
 ///
 /// Input audio is resampled to 16 kHz and prepared as one fixed six-second
 /// window. Two-to-six-second clips are repeated to fill the window; longer
-/// clips are center-cropped. Clips shorter than two seconds are rejected
-/// because they did not meet the quality threshold used for identity matching.
+/// clips are center-cropped. The default API rejects clips shorter than two
+/// seconds because they did not meet the quality threshold used for identity
+/// matching. `embedShortUtterance` is an explicit, lower-confidence path for
+/// matching 0.6-to-2-second speech against an identity established from longer
+/// audio; it must not be used to enroll or create an identity.
 public final class ReDimNet2SpeakerModel {
     public static let defaultModelId = "aufklarer/ReDimNet2-B6-CoreML"
     public static let inputSampleRate = 16_000
     public static let inputSampleCount = 96_000
     public static let minimumSampleCount = 32_000
+    public static let minimumShortUtteranceSampleCount = 9_600
     public static let embeddingDimension = 192
 
     private let model: MLModel
@@ -135,20 +139,22 @@ public final class ReDimNet2SpeakerModel {
     /// - Throws: An explicit input or inference error. No zero-vector fallback
     ///   is returned when identity extraction fails.
     public func embed(audio: [Float], sampleRate: Int) throws -> [Float] {
-        let resampled: [Float]
-        if sampleRate == Self.inputSampleRate {
-            resampled = audio
-        } else {
-            guard sampleRate > 0 else {
-                throw AudioModelError.invalidConfiguration(
-                    model: "ReDimNet2-B6",
-                    reason: "sample rate must be greater than zero")
-            }
-            resampled = AudioFileLoader.resample(
-                audio, from: sampleRate, to: Self.inputSampleRate)
-        }
-
+        let resampled = try Self.resampled(audio, sampleRate: sampleRate)
         return try predict(Self.preparedAudio(resampled))
+    }
+
+    /// Extract a normalized embedding from 0.6-to-2 seconds of clean speech.
+    ///
+    /// Short inputs contain less identity evidence than the default two-second
+    /// minimum. Use this only for conservative retrieval against identities
+    /// established from `embed`; never use it for enrollment, cluster creation,
+    /// or centroid updates. Match thresholds require duration-specific
+    /// calibration on the target domain.
+    public func embedShortUtterance(
+        audio: [Float], sampleRate: Int
+    ) throws -> [Float] {
+        let resampled = try Self.resampled(audio, sampleRate: sampleRate)
+        return try predict(Self.preparedShortUtteranceAudio(resampled))
     }
 
     /// Compile and execute the graph once before latency-sensitive use.
@@ -162,13 +168,39 @@ public final class ReDimNet2SpeakerModel {
     }
 
     static func preparedAudio(_ samples: [Float]) throws -> [Float] {
+        try preparedAudio(samples, minimumSampleCount: minimumSampleCount)
+    }
+
+    static func preparedShortUtteranceAudio(_ samples: [Float]) throws -> [Float] {
+        try preparedAudio(
+            samples,
+            minimumSampleCount: minimumShortUtteranceSampleCount)
+    }
+
+    private static func resampled(
+        _ audio: [Float], sampleRate: Int
+    ) throws -> [Float] {
+        if sampleRate == inputSampleRate { return audio }
+        guard sampleRate > 0 else {
+            throw AudioModelError.invalidConfiguration(
+                model: "ReDimNet2-B6",
+                reason: "sample rate must be greater than zero")
+        }
+        return AudioFileLoader.resample(
+            audio, from: sampleRate, to: inputSampleRate)
+    }
+
+    private static func preparedAudio(
+        _ samples: [Float], minimumSampleCount: Int
+    ) throws -> [Float] {
         guard samples.count >= minimumSampleCount else {
             let seconds = Double(samples.count) / Double(inputSampleRate)
+            let minimumSeconds = Double(minimumSampleCount) / Double(inputSampleRate)
             throw AudioModelError.invalidConfiguration(
                 model: "ReDimNet2-B6",
                 reason: String(
-                    format: "speaker identity requires at least 2.0 seconds of clean audio (received %.2f seconds)",
-                    seconds))
+                    format: "speaker identity requires at least %.1f seconds of clean audio (received %.2f seconds)",
+                    minimumSeconds, seconds))
         }
         guard samples.allSatisfy(\.isFinite) else {
             throw AudioModelError.invalidConfiguration(

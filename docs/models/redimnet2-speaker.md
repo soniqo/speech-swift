@@ -40,6 +40,13 @@ shapes. Runtime preparation follows the benchmarked policy:
 - keep an exact six-second input unchanged;
 - center-crop longer input.
 
+An explicit `embedShortUtterance` path accepts 0.6-to-2 seconds and repeats it
+to the same fixed window. Repetition satisfies the graph shape but adds no voice
+evidence. These embeddings are lower-confidence retrieval probes only: match
+them against an identity established from at least two seconds, and do not use
+them for enrollment, new-cluster creation, or centroid updates. Calibrate a
+stricter threshold and ambiguity margin for each target domain.
+
 Inference failures throw an error. The model never substitutes a zero embedding.
 
 ## Validation
@@ -61,6 +68,9 @@ let model = try await ReDimNet2SpeakerModel.fromPretrained()
 try model.prewarm()
 
 let profile = try model.embed(audio: cleanAudio, sampleRate: sampleRate)
+let shortProbe = try model.embedShortUtterance(
+    audio: shortCleanAudio,
+    sampleRate: sampleRate)
 let score = ReDimNet2SpeakerModel.cosineSimilarity(profile, candidate)
 ```
 
