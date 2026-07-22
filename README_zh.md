@@ -81,6 +81,7 @@
 **增强、分离与音频生成**
 
 - **[DeepFilterNet3](https://soniqo.audio/zh/guides/denoise)** — 实时噪声抑制（2.1M 参数，48 kHz）。超过 60 s 单次处理上限的长音频会自动分块并使用 crossfade 拼接 — 参见 `enhanceChunked(...)`
+- **[LocalVQE v1.4-AEC](https://soniqo.audio/zh/guides/echo-cancellation)** — 基于独立、同步的麦克风与播放参考流进行流式声学回声消除（Core ML + 原生自适应滤波器，16 kHz，16 ms 算法延迟）
 - **[音源分离](https://soniqo.audio/zh/guides/separate)** — 通过 HTDemucs (Demucs v4) + Open-Unmix 进行音乐源分离（UMX-HQ / UMX-L，4 声轨：人声/鼓/贝斯/其他，44.1 kHz 立体声）
 - **[MAGNeT](https://soniqo.audio/zh/guides/compose)** — 文本到音乐生成（Meta MAGNeT Small 300M / Medium 1.5B，MLX INT8，30 秒片段 32 kHz 单声道，掩码并行解码）
 - **[Stable Audio 3](docs/models/stable-audio-3.md)** — Text-to-audio/music generation (Stable Audio 3 Medium, MLX INT8/INT4, 44.1 kHz stereo, variable length)
@@ -206,6 +207,7 @@ struct DictateView: View {
 | [Pyannote Community-1](https://huggingface.co/aufklarer/Pyannote-Community-1-CoreML) | 说话人分离 + 说话人嵌入 | CoreML (ANE) + Swift VBx | 8.35M | 语言无关 |
 | [Sortformer](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) | [说话人分离（端到端）, 增量流式](https://soniqo.audio/zh/guides/diarize) | CoreML (ANE) | 117M | 语言无关 |
 | [DeepFilterNet3](https://soniqo.audio/zh/guides/denoise) | 语音增强 | CoreML | 2.1M | 语言无关 |
+| [LocalVQE v1.4-AEC](https://soniqo.audio/zh/guides/echo-cancellation) | 声学回声消除 | CoreML + C++ | 200K + 2,742 | 语言无关 |
 | [Sidon](https://soniqo.audio/zh/guides/restore) | 语音修复（降噪 + 去混响，48 kHz） | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | 语言无关 |
 | [HTDemucs (Demucs v4)](https://soniqo.audio/zh/guides/separate) | 音源分离 | MLX | 168M | Agnostic |
 | [Open-Unmix](https://soniqo.audio/zh/guides/separate) | 音源分离 | MLX | 8.6M | Agnostic |
@@ -427,6 +429,18 @@ let denoiser = try await DeepFilterNet3Model.fromPretrained()
 let clean = try denoiser.enhance(audio: noisySamples, sampleRate: 48000)
 ```
 
+### 声学回声消除 — [完整指南 →](https://soniqo.audio/zh/guides/echo-cancellation)
+
+```swift
+import SpeechEnhancement
+
+let aec = try await LocalVQEEchoCanceller.fromPretrained()
+let cleanMicrophone = try aec.processFrame(
+    microphone: microphoneFrame,
+    reference: playbackReferenceFrame
+)
+```
+
 ### 语音修复 — [完整指南 →](https://soniqo.audio/zh/guides/restore)
 
 使用 [Sidon](https://arxiv.org/abs/2509.17052)（w2v-BERT 2.0 预测器 + DAC 声码器，Core ML）同时进行降噪**和**去混响。与通用降噪器不同，Sidon 经过训练以保留说话人身份，因此非常适合在 TTS 之前清理嘈杂或带混响的声音克隆参考音频。输入为 16 kHz；输出为 48 kHz 单声道。
@@ -483,6 +497,7 @@ speech-swift 把每个模型拆成独立的 SPM target，因此使用者只为 i
 本地文档（仓库内）：
 - **模型：** [Qwen3-ASR](docs/models/asr-model.md) · [WhisperASR](docs/models/whisper-asr.md) · [Qwen3-TTS](docs/models/tts-model.md) · [CosyVoice](docs/models/cosyvoice-tts.md) · [Kokoro](docs/models/kokoro-tts.md) · [VoxCPM2](docs/models/voxcpm2-tts.md) · [IndexTTS2](docs/models/indextts2.md) · [F5-TTS](docs/models/f5-tts.md) · [Higgs TTS 3](docs/models/higgs-tts.md) · [VibeVoice](docs/models/vibevoice.md) · [Supertonic](docs/models/supertonic-tts.md) · [Chatterbox](docs/models/chatterbox-tts.md) · [Indic-Mio](docs/models/indic-mio-tts.md) · [Fish Audio S2 Pro](docs/models/fish-audio-s2-pro.md) · [Magpie TTS](docs/models/magpie-tts.md) · [Parakeet TDT](docs/models/parakeet-asr.md) · [Parakeet Streaming](docs/models/parakeet-streaming-asr.md) · [Nemotron Streaming](docs/models/nemotron-asr-streaming.md) · [Omnilingual ASR](docs/models/omnilingual-asr.md) · [PersonaPlex](docs/models/personaplex.md) · [Hibiki](docs/models/hibiki.md) · [MADLAD-400](docs/models/madlad-translation.md) · [FunctionGemma](docs/models/function-gemma.md) · [Qwen3.5 Chat](docs/models/qwen35-chat.md) · [Gemma 4 Chat](docs/models/gemma4-chat.md) · [Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md) · [FireRedVAD](docs/models/fireredvad.md) · [KWS Zipformer](docs/models/kws-zipformer.md) · [Sidon](docs/models/sidon.md) · [Source Separation](docs/models/source-separation.md) · [HTDemucs](docs/models/htdemucs.md) · [MAGNeT](docs/models/magnet-music-gen.md) · [Stable Audio 3](docs/models/stable-audio-3.md) · [FlashSR](docs/models/flashsr.md) · [Audio2Face-3D](docs/models/audio2face3d.md)
 - **推理：** [Qwen3-ASR](docs/inference/qwen3-asr-inference.md) · [WhisperASR](docs/inference/whisper-asr-inference.md) · [Parakeet TDT](docs/inference/parakeet-asr-inference.md) · [Parakeet Streaming](docs/inference/parakeet-streaming-asr-inference.md) · [Nemotron Streaming](docs/inference/nemotron-asr-streaming.md) · [Omnilingual ASR](docs/inference/omnilingual-asr-inference.md) · [TTS](docs/inference/qwen3-tts-inference.md) · [VoxCPM2](docs/inference/voxcpm2-inference.md) · [IndexTTS2](docs/inference/indextts2.md) · [F5-TTS](docs/inference/f5-tts.md) · [Higgs TTS 3](docs/inference/higgs-tts.md) · [VibeVoice](docs/inference/vibevoice-inference.md) · [Fish Audio S2 Pro](docs/inference/fish-audio-s2-pro.md) · [Magpie TTS](docs/inference/magpie-tts.md) · [Hibiki](docs/inference/hibiki-inference.md) · [MADLAD-400](docs/inference/madlad-translation.md) · [MAGNeT](docs/inference/magnet-music-gen.md) · [Stable Audio 3](docs/inference/stable-audio-3.md) · [FlashSR](docs/inference/flashsr.md) · [Forced Aligner](docs/inference/forced-aligner.md) · [Silero VAD](docs/inference/silero-vad.md) · [FireRedVAD](docs/inference/fireredvad.md) · [Wake-word](docs/inference/wake-word.md) · [Speaker Diarization](docs/inference/speaker-diarization.md) · [Speech Enhancement](docs/inference/speech-enhancement.md) · [Sidon](docs/inference/sidon.md) · [Cache/offline](docs/inference/cache-and-offline.md)
+- **回声消除：** [LocalVQE AEC](docs/inference/echo-cancellation.md)
 - **参考：** [共享协议](docs/shared-protocols.md)
 
 ## 缓存配置
