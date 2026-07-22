@@ -203,6 +203,14 @@ Critical ordering: `setVoiceProcessingEnabled(true)` must be called on the input
 
 If you read the format before enabling VP, you get the raw hardware format. After enabling VP, the format changes, and any previously configured taps or connections using the old format will break.
 
+Voice Processing is not the only AEC path in speech-swift. For applications
+that capture an explicit playback/system-audio reference, use
+`LocalVQEEchoCanceller` to keep microphone and reference streams separate and
+cancel the measured playback leak in the model runtime. See
+[Acoustic Echo Cancellation — LocalVQE](../inference/echo-cancellation.md).
+Do not enable both paths without testing: cascading independent adaptive
+cancellers can suppress or distort near-end speech.
+
 ### AVAudioPlayerNode vs AVAudioSourceNode
 
 Apple provides two ways to inject audio into the engine graph:
