@@ -40,6 +40,7 @@ Speech Swift パッケージへの参照を公開ソースで確認できる 15 
 
 - **[Qwen3-ASR](https://soniqo.audio/ja/guides/transcribe)** — 音声認識（自動音声認識、52言語、MLX + CoreML）
 - **[WhisperASR](docs/models/whisper-asr.md)** — Whisper Large-v3 Turbo speech-to-text via native CoreML runtime (ANE, multilingual)
+- **[MOSS Transcribe Diarize](https://soniqo.audio/ja/guides/moss)** — ネイティブ CoreML のバッチ文字起こし。モデル生成の話者ラベルとタイムスタンプ（INT8 が既定、FP16 は参照用）
 - **[Parakeet TDT](https://soniqo.audio/ja/guides/parakeet)** — CoreMLによる音声認識（Neural Engine、NVIDIA FastConformer + TDTデコーダー、25言語）
 - **[Omnilingual ASR](https://soniqo.audio/ja/guides/omnilingual)** — 音声認識（Meta wav2vec2 + CTC、**1,672言語**、32文字体系、CoreML 300M + MLX 300M/1B/3B/7B）
 - **[ストリーミングディクテーション](https://soniqo.audio/ja/guides/dictate)** — 部分結果と発話終端検出付きのリアルタイムディクテーション（Parakeet-EOU-120M）
@@ -162,7 +163,7 @@ struct DictateView: View {
 
 `SpeechUI` には `TranscriptionView`（確定 + 部分）と `TranscriptionStore`（ストリーミングASRアダプター）のみが含まれます。音声の可視化や再生には AVFoundation をお使いください。
 
-利用可能なSPMプロダクト：`Qwen3ASR`, `WhisperASR`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `KokoroTTS`, `SupertonicTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `IndexTTS2TTS`, `F5TTS`, `HiggsTTS`, `ChatterboxTTS`, `OmniVoiceTTS`, `IndicMioTTS`, `FishAudioTTS`, `MagpieTTS`, `MagpieTTSCoreML`, `MAGNeTMusicGen`, `StableAudio3MusicGen`, `FlashSR`, `PersonaPlex`, `Audio2Face3D`, `HibikiTranslate`, `MADLADTranslation`, `SpeechVAD`, `SpeechWakeWord`, `SpeechEnhancement`, `SpeechRestoration`, `SourceSeparation`, `Qwen3Chat`, `FunctionGemma`, `SpeechCore`, `SpeechUI`, `AudioCommon`。
+利用可能なSPMプロダクト：`Qwen3ASR`, `WhisperASR`, `MossTranscribe`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `KokoroTTS`, `SupertonicTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `IndexTTS2TTS`, `F5TTS`, `HiggsTTS`, `ChatterboxTTS`, `OmniVoiceTTS`, `IndicMioTTS`, `FishAudioTTS`, `MagpieTTS`, `MagpieTTSCoreML`, `MAGNeTMusicGen`, `StableAudio3MusicGen`, `FlashSR`, `PersonaPlex`, `Audio2Face3D`, `HibikiTranslate`, `MADLADTranslation`, `SpeechVAD`, `SpeechWakeWord`, `SpeechEnhancement`, `SpeechRestoration`, `SourceSeparation`, `Qwen3Chat`, `FunctionGemma`, `SpeechCore`, `SpeechUI`, `AudioCommon`。
 
 ## モデル
 
@@ -172,6 +173,7 @@ struct DictateView: View {
 |-------|------|----------|-------|-----------|
 | [Qwen3-ASR](https://soniqo.audio/ja/guides/transcribe) | 音声 → テキスト | MLX、CoreML（ハイブリッド） | 0.6B、1.7B | 52 |
 | [WhisperASR](docs/models/whisper-asr.md) | Speech → Text | CoreML (ANE) | Large-v3 Turbo | Multi |
+| [MOSS Transcribe Diarize](https://soniqo.audio/ja/guides/moss) | 音声 → テキスト + 話者タイムスタンプ | CoreML | 0.9B (INT8 / FP16) | 多言語 |
 | [Parakeet TDT](https://soniqo.audio/ja/guides/parakeet) | 音声 → テキスト | CoreML (ANE) | 0.6B | 25欧州言語 |
 | [Parakeet EOU](https://soniqo.audio/ja/guides/dictate) | 音声 → テキスト（ストリーミング） | CoreML (ANE) | 120M | 25欧州言語 |
 | [Nemotron Streaming (多言語)](https://soniqo.audio/ja/guides/nemotron) | 音声 → テキスト（ストリーミング、句読点付き） | CoreML (ANE), MLX | 0.6B | **40** |
@@ -231,6 +233,7 @@ brew install speech
 
 ```bash
 speech transcribe recording.wav
+speech transcribe recording.wav --engine moss
 speech speak "Hello world"
 speech translate "Hello, how are you?" --to es
 speech respond --input question.wav --transcript
@@ -252,6 +255,7 @@ dependencies: [
 ```swift
 import Qwen3ASR             // 音声認識 (MLX)
 import WhisperASR           // Whisper Large-v3 Turbo (CoreML)
+import MossTranscribe       // MOSS transcription with timestamps + speaker labels (CoreML)
 import ParakeetASR          // 音声認識 (CoreML、バッチ)
 import ParakeetStreamingASR // 部分結果 + EOU付きストリーミングディクテーション
 import NemotronStreamingASR // 多言語ストリーミングASR、ネイティブ句読点付き（0.6B、40言語）
@@ -495,8 +499,8 @@ speech-swift はモデルごとに1つのSPMターゲットに分割されてお
 **[バックエンド、メモリ表、モジュールマップ付きの完全なアーキテクチャ図 → soniqo.audio/architecture](https://soniqo.audio/ja/architecture)** · **[APIリファレンス → soniqo.audio/api](https://soniqo.audio/ja/api)** · **[ベンチマーク → soniqo.audio/benchmarks](https://soniqo.audio/ja/benchmarks)**
 
 ローカルドキュメント（リポジトリ内）：
-- **モデル：** [Qwen3-ASR](docs/models/asr-model.md) · [WhisperASR](docs/models/whisper-asr.md) · [Qwen3-TTS](docs/models/tts-model.md) · [CosyVoice](docs/models/cosyvoice-tts.md) · [Kokoro](docs/models/kokoro-tts.md) · [VoxCPM2](docs/models/voxcpm2-tts.md) · [IndexTTS2](docs/models/indextts2.md) · [F5-TTS](docs/models/f5-tts.md) · [Higgs TTS 3](docs/models/higgs-tts.md) · [VibeVoice](docs/models/vibevoice.md) · [Supertonic](docs/models/supertonic-tts.md) · [Chatterbox](docs/models/chatterbox-tts.md) · [Indic-Mio](docs/models/indic-mio-tts.md) · [Fish Audio S2 Pro](docs/models/fish-audio-s2-pro.md) · [Magpie TTS](docs/models/magpie-tts.md) · [Parakeet TDT](docs/models/parakeet-asr.md) · [Parakeet Streaming](docs/models/parakeet-streaming-asr.md) · [Nemotron Streaming](docs/models/nemotron-asr-streaming.md) · [Omnilingual ASR](docs/models/omnilingual-asr.md) · [PersonaPlex](docs/models/personaplex.md) · [Hibiki](docs/models/hibiki.md) · [MADLAD-400](docs/models/madlad-translation.md) · [FunctionGemma](docs/models/function-gemma.md) · [Qwen3.5 Chat](docs/models/qwen35-chat.md) · [Gemma 4 Chat](docs/models/gemma4-chat.md) · [Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md) · [FireRedVAD](docs/models/fireredvad.md) · [KWS Zipformer](docs/models/kws-zipformer.md) · [Sidon](docs/models/sidon.md) · [Source Separation](docs/models/source-separation.md) · [HTDemucs](docs/models/htdemucs.md) · [MAGNeT](docs/models/magnet-music-gen.md) · [Stable Audio 3](docs/models/stable-audio-3.md) · [FlashSR](docs/models/flashsr.md) · [Audio2Face-3D](docs/models/audio2face3d.md)
-- **推論：** [Qwen3-ASR](docs/inference/qwen3-asr-inference.md) · [WhisperASR](docs/inference/whisper-asr-inference.md) · [Parakeet TDT](docs/inference/parakeet-asr-inference.md) · [Parakeet Streaming](docs/inference/parakeet-streaming-asr-inference.md) · [Nemotron Streaming](docs/inference/nemotron-asr-streaming.md) · [Omnilingual ASR](docs/inference/omnilingual-asr-inference.md) · [TTS](docs/inference/qwen3-tts-inference.md) · [VoxCPM2](docs/inference/voxcpm2-inference.md) · [IndexTTS2](docs/inference/indextts2.md) · [F5-TTS](docs/inference/f5-tts.md) · [Higgs TTS 3](docs/inference/higgs-tts.md) · [VibeVoice](docs/inference/vibevoice-inference.md) · [Fish Audio S2 Pro](docs/inference/fish-audio-s2-pro.md) · [Magpie TTS](docs/inference/magpie-tts.md) · [Hibiki](docs/inference/hibiki-inference.md) · [MADLAD-400](docs/inference/madlad-translation.md) · [MAGNeT](docs/inference/magnet-music-gen.md) · [Stable Audio 3](docs/inference/stable-audio-3.md) · [FlashSR](docs/inference/flashsr.md) · [Forced Aligner](docs/inference/forced-aligner.md) · [Silero VAD](docs/inference/silero-vad.md) · [FireRedVAD](docs/inference/fireredvad.md) · [Wake-word](docs/inference/wake-word.md) · [Speaker Diarization](docs/inference/speaker-diarization.md) · [Speech Enhancement](docs/inference/speech-enhancement.md) · [Sidon](docs/inference/sidon.md) · [Cache/offline](docs/inference/cache-and-offline.md)
+- **モデル：** [Qwen3-ASR](docs/models/asr-model.md) · [WhisperASR](docs/models/whisper-asr.md) · [MOSS Transcribe Diarize](docs/models/moss-transcribe-diarize.md) · [Qwen3-TTS](docs/models/tts-model.md) · [CosyVoice](docs/models/cosyvoice-tts.md) · [Kokoro](docs/models/kokoro-tts.md) · [VoxCPM2](docs/models/voxcpm2-tts.md) · [IndexTTS2](docs/models/indextts2.md) · [F5-TTS](docs/models/f5-tts.md) · [Higgs TTS 3](docs/models/higgs-tts.md) · [VibeVoice](docs/models/vibevoice.md) · [Supertonic](docs/models/supertonic-tts.md) · [Chatterbox](docs/models/chatterbox-tts.md) · [Indic-Mio](docs/models/indic-mio-tts.md) · [Fish Audio S2 Pro](docs/models/fish-audio-s2-pro.md) · [Magpie TTS](docs/models/magpie-tts.md) · [Parakeet TDT](docs/models/parakeet-asr.md) · [Parakeet Streaming](docs/models/parakeet-streaming-asr.md) · [Nemotron Streaming](docs/models/nemotron-asr-streaming.md) · [Omnilingual ASR](docs/models/omnilingual-asr.md) · [PersonaPlex](docs/models/personaplex.md) · [Hibiki](docs/models/hibiki.md) · [MADLAD-400](docs/models/madlad-translation.md) · [FunctionGemma](docs/models/function-gemma.md) · [Qwen3.5 Chat](docs/models/qwen35-chat.md) · [Gemma 4 Chat](docs/models/gemma4-chat.md) · [Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md) · [FireRedVAD](docs/models/fireredvad.md) · [KWS Zipformer](docs/models/kws-zipformer.md) · [Sidon](docs/models/sidon.md) · [Source Separation](docs/models/source-separation.md) · [HTDemucs](docs/models/htdemucs.md) · [MAGNeT](docs/models/magnet-music-gen.md) · [Stable Audio 3](docs/models/stable-audio-3.md) · [FlashSR](docs/models/flashsr.md) · [Audio2Face-3D](docs/models/audio2face3d.md)
+- **推論：** [Qwen3-ASR](docs/inference/qwen3-asr-inference.md) · [WhisperASR](docs/inference/whisper-asr-inference.md) · [MOSS Transcribe Diarize](docs/inference/moss-transcribe-diarize.md) · [Parakeet TDT](docs/inference/parakeet-asr-inference.md) · [Parakeet Streaming](docs/inference/parakeet-streaming-asr-inference.md) · [Nemotron Streaming](docs/inference/nemotron-asr-streaming.md) · [Omnilingual ASR](docs/inference/omnilingual-asr-inference.md) · [TTS](docs/inference/qwen3-tts-inference.md) · [VoxCPM2](docs/inference/voxcpm2-inference.md) · [IndexTTS2](docs/inference/indextts2.md) · [F5-TTS](docs/inference/f5-tts.md) · [Higgs TTS 3](docs/inference/higgs-tts.md) · [VibeVoice](docs/inference/vibevoice-inference.md) · [Fish Audio S2 Pro](docs/inference/fish-audio-s2-pro.md) · [Magpie TTS](docs/inference/magpie-tts.md) · [Hibiki](docs/inference/hibiki-inference.md) · [MADLAD-400](docs/inference/madlad-translation.md) · [MAGNeT](docs/inference/magnet-music-gen.md) · [Stable Audio 3](docs/inference/stable-audio-3.md) · [FlashSR](docs/inference/flashsr.md) · [Forced Aligner](docs/inference/forced-aligner.md) · [Silero VAD](docs/inference/silero-vad.md) · [FireRedVAD](docs/inference/fireredvad.md) · [Wake-word](docs/inference/wake-word.md) · [Speaker Diarization](docs/inference/speaker-diarization.md) · [Speech Enhancement](docs/inference/speech-enhancement.md) · [Sidon](docs/inference/sidon.md) · [Cache/offline](docs/inference/cache-and-offline.md)
 - **エコーキャンセル：** [LocalVQE AEC](docs/inference/echo-cancellation.md)
 - **リファレンス：** [共有プロトコル](docs/shared-protocols.md)
 
