@@ -43,6 +43,9 @@ let cleanMicrophone = try aec.processFrame(
 
 Create one instance per recording and serialize calls. Call `reset()` when a
 recording ends, when either input drops samples, or when capture is restarted.
+Each `processFrame` call drains its temporary Core ML objects before returning,
+so a dedicated capture thread does not need to provide its own autorelease
+pool for long-running streams.
 Resetting clears:
 
 - online delay estimation;
