@@ -108,6 +108,7 @@ struct DiarizationBench: AsyncParsableCommand {
         var rtfValues: [Double] = []
         var elapsedTotal = 0.0
         var speakerCountCorrect = 0
+        var speakerCountBreakdown = DiarizationSpeakerCountAccumulator()
         var failures: [String] = []
 
         for (idx, input) in inputs.enumerated() {
@@ -140,6 +141,10 @@ struct DiarizationBench: AsyncParsableCommand {
                 if referenceSpeakers == result.numSpeakers {
                     speakerCountCorrect += 1
                 }
+                speakerCountBreakdown.add(
+                    referenceSpeakerCount: referenceSpeakers,
+                    predictedSpeakerCount: result.numSpeakers,
+                    score: der)
 
                 if (idx + 1) % 5 == 0 || idx == inputs.count - 1 {
                     peakRSS = max(peakRSS, benchmarkRSSBytes())
@@ -190,7 +195,8 @@ struct DiarizationBench: AsyncParsableCommand {
             audioSecondsTotal: audioTotal,
             elapsedSecondsTotal: elapsedTotal,
             peakRSSBytes: peakRSS,
-            rssDeltaBytes: Int64(peakRSS) - Int64(preLoadRSS)
+            rssDeltaBytes: Int64(peakRSS) - Int64(preLoadRSS),
+            byReferenceSpeakerCount: speakerCountBreakdown.results
         )
     }
 }
@@ -486,6 +492,7 @@ public struct DiarizationEngineResult: Codable, Sendable {
     public let elapsedSecondsTotal: Double
     public let peakRSSBytes: UInt64
     public let rssDeltaBytes: Int64
+    public let byReferenceSpeakerCount: [DiarizationSpeakerCountResult]
 }
 
 public struct DiarizationReport: Codable, Sendable {
@@ -519,6 +526,30 @@ public enum DiarizationReportPrinter {
                 String(format: "%8.1f", r.throughputOverallXRT) + "  " +
                 String(format: "%7.1f", r.loadElapsedSeconds) + "  " +
                 String(format: "%8.0f", Double(r.peakRSSBytes) / (1024 * 1024)) + "\n"
+        }
+
+        let hasSpeakerCountBreakdown = report.results.contains {
+            !$0.byReferenceSpeakerCount.isEmpty
+        }
+        if hasSpeakerCountBreakdown {
+            s += "\nDER by reference speaker count (pooled scored speech)\n"
+            s += pad("Engine", 22) + "  " + pad("RefSpk", 6) + "  " +
+                pad("Files", 5) + "  " + pad("DER%", 7) + "  " +
+                pad("Miss%", 7) + "  " + pad("FA%", 7) + "  " +
+                pad("SE%", 7) + "  " + pad("SpkAcc", 7) + "\n"
+            s += String(repeating: "-", count: 82) + "\n"
+            for result in report.results {
+                for group in result.byReferenceSpeakerCount {
+                    s += pad(result.engine, 22) + "  " +
+                        String(format: "%6d", group.referenceSpeakerCount) + "  " +
+                        String(format: "%5d", group.files) + "  " +
+                        String(format: "%7.2f", group.derPercent) + "  " +
+                        String(format: "%7.2f", group.missPercent) + "  " +
+                        String(format: "%7.2f", group.falseAlarmPercent) + "  " +
+                        String(format: "%7.2f", group.speakerErrorPercent) + "  " +
+                        String(format: "%7.1f", group.speakerCountAccuracyPercent) + "\n"
+                }
+            }
         }
         return s
     }
