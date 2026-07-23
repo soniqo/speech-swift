@@ -43,6 +43,8 @@
 - **[MOSS Transcribe Diarize](https://soniqo.audio/th/guides/moss)** — การถอดเสียงแบบแบตช์ด้วย CoreML แบบเนทีฟ พร้อมป้ายผู้พูดและเวลาโดยโมเดล (ค่าเริ่มต้น INT8, FP16 สำหรับอ้างอิง)
 - **[Parakeet TDT](https://soniqo.audio/guides/parakeet)** — แปลงเสียงพูดเป็นข้อความผ่าน CoreML (Neural Engine, NVIDIA FastConformer + ตัวถอดรหัส TDT รองรับ 25 ภาษา)
 - **[Omnilingual ASR](https://soniqo.audio/guides/omnilingual)** — แปลงเสียงพูดเป็นข้อความ (Meta wav2vec2 + CTC รองรับ **1,672 ภาษา** ครอบคลุม 32 ระบบอักษร, CoreML 300M + MLX 300M/1B/3B/7B)
+- **[Cohere Transcribe 2B](https://soniqo.audio/th/guides/cohere-transcribe)** — แปลงเสียงพูดเป็นข้อความด้วย MLX แบบเนทีฟ (14 ภาษา, FP16/INT5/INT8)
+- **[Voxtral Mini 3B](https://soniqo.audio/th/guides/voxtral)** — แปลงเสียงพูดเป็นข้อความด้วย MLX แบบเนทีฟ (8 ภาษา, FP16/INT5/INT8) — RTF 0.074 บน M5 Pro
 - **[Streaming Dictation](https://soniqo.audio/guides/dictate)** — การเขียนตามคำบอกแบบเรียลไทม์พร้อมผลลัพธ์บางส่วนและการตรวจจับจุดจบของประโยค (Parakeet-EOU-120M)
 - **[Nemotron Streaming (หลายภาษา)](https://soniqo.audio/guides/nemotron)** — ASR แบบสตรีมมิ่งที่มีความหน่วงต่ำ พร้อมเครื่องหมายวรรคตอนและตัวพิมพ์ใหญ่ในตัว (NVIDIA Nemotron-3.5-ASR-Streaming-0.6B, CoreML + MLX, **40 ภาษา-ตำแหน่ง**)
 - **[Nemotron Streaming (อังกฤษ)](https://soniqo.audio/guides/nemotron)** — ASR แบบสตรีมมิ่งที่มีความหน่วงต่ำ พร้อมเครื่องหมายวรรคตอนและตัวพิมพ์ใหญ่ในตัว (NVIDIA Nemotron-Speech-Streaming-0.6B, CoreML, ภาษาอังกฤษเท่านั้น เล็กและเร็วกว่ารุ่นหลายภาษา)
@@ -163,7 +165,7 @@ struct DictateView: View {
 
 `SpeechUI` มาพร้อมเพียง `TranscriptionView` (ผลลัพธ์สุดท้าย + บางส่วน) และ `TranscriptionStore` (อะแดปเตอร์สำหรับ ASR แบบสตรีมมิ่ง) ใช้ AVFoundation สำหรับการแสดงผลภาพเสียงและการเล่นเสียง
 
-ผลิตภัณฑ์ SPM ที่มีให้: `Qwen3ASR`, `WhisperASR`, `MossTranscribe`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `KokoroTTS`, `SupertonicTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `IndexTTS2TTS`, `F5TTS`, `HiggsTTS`, `ChatterboxTTS`, `OmniVoiceTTS`, `IndicMioTTS`, `FishAudioTTS`, `MagpieTTS`, `MagpieTTSCoreML`, `MAGNeTMusicGen`, `StableAudio3MusicGen`, `FlashSR`, `PersonaPlex`, `Audio2Face3D`, `HibikiTranslate`, `MADLADTranslation`, `SpeechVAD`, `SpeechWakeWord`, `SpeechEnhancement`, `SpeechRestoration`, `SourceSeparation`, `Qwen3Chat`, `FunctionGemma`, `SpeechCore`, `SpeechUI`, `AudioCommon`
+ผลิตภัณฑ์ SPM ที่มีให้: `Qwen3ASR`, `WhisperASR`, `MossTranscribe`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `CohereTranscribeASR`, `VoxtralASR`, `KokoroTTS`, `SupertonicTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `IndexTTS2TTS`, `F5TTS`, `HiggsTTS`, `ChatterboxTTS`, `OmniVoiceTTS`, `IndicMioTTS`, `FishAudioTTS`, `MagpieTTS`, `MagpieTTSCoreML`, `MAGNeTMusicGen`, `StableAudio3MusicGen`, `FlashSR`, `PersonaPlex`, `Audio2Face3D`, `HibikiTranslate`, `MADLADTranslation`, `SpeechVAD`, `SpeechWakeWord`, `SpeechEnhancement`, `SpeechRestoration`, `SourceSeparation`, `Qwen3Chat`, `FunctionGemma`, `SpeechCore`, `SpeechUI`, `AudioCommon`
 
 ## โมเดล
 
@@ -179,6 +181,8 @@ struct DictateView: View {
 | [Nemotron Streaming (หลายภาษา)](https://soniqo.audio/guides/nemotron) | เสียงพูด → ข้อความ (สตรีมมิ่ง มีเครื่องหมายวรรคตอน) | CoreML (ANE), MLX | 0.6B | **40** |
 | [Nemotron Streaming (อังกฤษ)](https://soniqo.audio/guides/nemotron) | เสียงพูด → ข้อความ (สตรีมมิ่ง มีเครื่องหมายวรรคตอน) | CoreML (ANE) | 0.6B | EN |
 | [Omnilingual ASR](https://soniqo.audio/guides/omnilingual) | เสียงพูด → ข้อความ | CoreML (ANE), MLX | 300M / 1B / 3B / 7B | **[1,672](https://github.com/facebookresearch/omnilingual-asr/blob/main/src/omnilingual_asr/models/wav2vec2_llama/lang_ids.py)** |
+| [Cohere Transcribe 2B](https://soniqo.audio/th/guides/cohere-transcribe) | เสียงพูด → ข้อความ | MLX | 2B (FP16 / INT5 / INT8) | 14 |
+| [Voxtral Mini 3B](https://soniqo.audio/th/guides/voxtral) | เสียงพูด → ข้อความ | MLX | 3B (FP16 / INT5 / INT8) | 8 |
 | [Qwen3-ForcedAligner](https://soniqo.audio/guides/align) | เสียง + ข้อความ → เครื่องหมายเวลา | MLX, CoreML | 0.6B | หลายภาษา |
 | [Qwen3-TTS](https://soniqo.audio/guides/speak) | ข้อความ → เสียงพูด | MLX, CoreML | 0.6B, 1.7B | 10 |
 | [CosyVoice3](https://soniqo.audio/guides/cosyvoice) | ข้อความ → เสียงพูด | MLX | 0.5B | 9 |
@@ -233,6 +237,8 @@ brew install speech
 
 ```bash
 speech transcribe recording.wav
+speech transcribe recording.wav --engine cohere
+speech transcribe recording.wav --engine voxtral
 speech transcribe recording.wav --engine moss
 speech speak "Hello world"
 speech translate "Hello, how are you?" --to es
@@ -260,6 +266,8 @@ import ParakeetASR          // การรู้จำเสียงพูด 
 import ParakeetStreamingASR // การเขียนตามคำบอกแบบสตรีมมิ่งพร้อม partials + EOU
 import NemotronStreamingASR // ASR สตรีมมิ่งหลายภาษาพร้อมเครื่องหมายวรรคตอนในตัว (0.6B, 40 ภาษา)
 import OmnilingualASR       // 1,672 ภาษา (CoreML + MLX)
+import CohereTranscribeASR  // Cohere Transcribe 2B (MLX, 14 ภาษา)
+import VoxtralASR           // Voxtral Mini 3B (MLX, 8 ภาษา)
 import Qwen3TTS             // การสังเคราะห์เสียงพูด
 import CosyVoiceTTS         // การสังเคราะห์เสียงพูดพร้อมการโคลนเสียง
 import VoxCPM2TTS           // TTS 48 kHz พร้อมการโคลนเสียง + การออกแบบเสียง (2B)

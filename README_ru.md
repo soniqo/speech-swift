@@ -43,6 +43,8 @@
 - **[MOSS Transcribe Diarize](https://soniqo.audio/ru/guides/moss)** — Нативная пакетная транскрипция CoreML с генерируемыми моделью метками спикеров и временными метками (INT8 по умолчанию, FP16 для сравнения)
 - **[Parakeet TDT](https://soniqo.audio/ru/guides/parakeet)** — Распознавание речи через CoreML (Neural Engine, NVIDIA FastConformer + TDT-декодер, 25 языков)
 - **[Omnilingual ASR](https://soniqo.audio/ru/guides/omnilingual)** — Распознавание речи (Meta wav2vec2 + CTC, **1 672 языка** в 32 письменностях, CoreML 300M + MLX 300M/1B/3B/7B)
+- **[Cohere Transcribe 2B](https://soniqo.audio/ru/guides/cohere-transcribe)** — Нативное распознавание речи на MLX (14 языков, FP16/INT5/INT8)
+- **[Voxtral Mini 3B](https://soniqo.audio/ru/guides/voxtral)** — Нативное распознавание речи на MLX (8 языков, FP16/INT5/INT8) — RTF 0,074 на M5 Pro
 - **[Streaming Dictation](https://soniqo.audio/ru/guides/dictate)** — Диктовка в реальном времени с частичными результатами и детекцией окончания реплики (Parakeet-EOU-120M)
 - **[Nemotron Streaming (Многоязычный)](https://soniqo.audio/ru/guides/nemotron)** — Потоковое ASR с низкой задержкой, нативной пунктуацией и капитализацией (NVIDIA Nemotron-3.5-ASR-Streaming-0.6B, CoreML + MLX, **40 языковых локалей**)
 - **[Nemotron Streaming (Английский)](https://soniqo.audio/guides/nemotron)** — Потоковое ASR с низкой задержкой, нативной пунктуацией и капитализацией (NVIDIA Nemotron-Speech-Streaming-0.6B, CoreML, только английский, меньше и быстрее многоязычного варианта)
@@ -163,7 +165,7 @@ struct DictateView: View {
 
 `SpeechUI` предоставляет только `TranscriptionView` (финальные + частичные результаты) и `TranscriptionStore` (адаптер для потокового ASR). Для визуализации и воспроизведения аудио используйте AVFoundation.
 
-Доступные SPM-продукты: `Qwen3ASR`, `WhisperASR`, `MossTranscribe`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `KokoroTTS`, `SupertonicTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `IndexTTS2TTS`, `F5TTS`, `HiggsTTS`, `ChatterboxTTS`, `OmniVoiceTTS`, `IndicMioTTS`, `FishAudioTTS`, `MagpieTTS`, `MagpieTTSCoreML`, `MAGNeTMusicGen`, `StableAudio3MusicGen`, `FlashSR`, `PersonaPlex`, `Audio2Face3D`, `HibikiTranslate`, `MADLADTranslation`, `SpeechVAD`, `SpeechWakeWord`, `SpeechEnhancement`, `SpeechRestoration`, `SourceSeparation`, `Qwen3Chat`, `FunctionGemma`, `SpeechCore`, `SpeechUI`, `AudioCommon`.
+Доступные SPM-продукты: `Qwen3ASR`, `WhisperASR`, `MossTranscribe`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `CohereTranscribeASR`, `VoxtralASR`, `KokoroTTS`, `SupertonicTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `IndexTTS2TTS`, `F5TTS`, `HiggsTTS`, `ChatterboxTTS`, `OmniVoiceTTS`, `IndicMioTTS`, `FishAudioTTS`, `MagpieTTS`, `MagpieTTSCoreML`, `MAGNeTMusicGen`, `StableAudio3MusicGen`, `FlashSR`, `PersonaPlex`, `Audio2Face3D`, `HibikiTranslate`, `MADLADTranslation`, `SpeechVAD`, `SpeechWakeWord`, `SpeechEnhancement`, `SpeechRestoration`, `SourceSeparation`, `Qwen3Chat`, `FunctionGemma`, `SpeechCore`, `SpeechUI`, `AudioCommon`.
 
 ## Модели
 
@@ -179,6 +181,8 @@ struct DictateView: View {
 | [Nemotron Streaming (Многоязычный)](https://soniqo.audio/ru/guides/nemotron) | Речь → Текст (потоковый, с пунктуацией) | CoreML (ANE), MLX | 0.6B | **40** |
 | [Nemotron Streaming (Английский)](https://soniqo.audio/guides/nemotron) | Речь → Текст (потоковый, с пунктуацией) | CoreML (ANE) | 0.6B | EN |
 | [Omnilingual ASR](https://soniqo.audio/ru/guides/omnilingual) | Речь → Текст | CoreML (ANE), MLX | 300M / 1B / 3B / 7B | **[1 672](https://github.com/facebookresearch/omnilingual-asr/blob/main/src/omnilingual_asr/models/wav2vec2_llama/lang_ids.py)** |
+| [Cohere Transcribe 2B](https://soniqo.audio/ru/guides/cohere-transcribe) | Речь → Текст | MLX | 2B (FP16 / INT5 / INT8) | 14 |
+| [Voxtral Mini 3B](https://soniqo.audio/ru/guides/voxtral) | Речь → Текст | MLX | 3B (FP16 / INT5 / INT8) | 8 |
 | [Qwen3-ForcedAligner](https://soniqo.audio/ru/guides/align) | Аудио + Текст → Метки | MLX, CoreML | 0.6B | Многоязычный |
 | [Qwen3-TTS](https://soniqo.audio/ru/guides/speak) | Текст → Речь | MLX, CoreML | 0.6B, 1.7B | 10 |
 | [CosyVoice3](https://soniqo.audio/ru/guides/cosyvoice) | Текст → Речь | MLX | 0.5B | 9 |
@@ -233,6 +237,8 @@ brew install speech
 
 ```bash
 speech transcribe recording.wav
+speech transcribe recording.wav --engine cohere
+speech transcribe recording.wav --engine voxtral
 speech transcribe recording.wav --engine moss
 speech speak "Hello world"
 speech translate "Hello, how are you?" --to es
@@ -260,6 +266,8 @@ import ParakeetASR          // Распознавание речи (CoreML, па
 import ParakeetStreamingASR // Потоковая диктовка с частичными результатами + EOU
 import NemotronStreamingASR // Многоязычное потоковое ASR с нативной пунктуацией (0.6B, 40 языков)
 import OmnilingualASR       // 1 672 языка (CoreML + MLX)
+import CohereTranscribeASR  // Cohere Transcribe 2B (MLX, 14 языков)
+import VoxtralASR           // Voxtral Mini 3B (MLX, 8 языков)
 import Qwen3TTS             // Синтез речи
 import CosyVoiceTTS         // Синтез речи с клонированием голоса
 import VoxCPM2TTS           // TTS 48 кГц, клонирование голоса + описание голоса (2B)

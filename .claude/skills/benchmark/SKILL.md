@@ -1,6 +1,6 @@
 ---
 name: benchmark
-description: Run performance + quality benchmarks. ASR reports WER, RTF, peak RSS, and throughput across engines/variants. Arguments include asr, tts, vad, diarize, asr-quick.
+description: Run performance + quality benchmarks. ASR reports WER, RTF, process memory, and throughput across engines/variants. Arguments include asr, tts, vad, diarize, asr-quick.
 disable-model-invocation: false
 argument-hint: [asr|asr-quick|tts|vad|diarize] [extra args]
 allowed-tools: Bash
@@ -90,13 +90,15 @@ Per engine, in the printed table and the JSON output:
 | `WER%` | substitutions + insertions + deletions over normalized reference words (`AsrBenchmark/WER.swift`) |
 | `RTF` | mean transcribe-elapsed / audio-duration per utterance |
 | `xRT` | throughput = 1 / RTF |
-| `peakRSS` | high-water resident-set size via `mach_task_basic_info` |
-| `RSSΔ` | RSS gained from pre-load to peak (engine cost vs. baseline) |
+| `peakRSS` | high-water resident-set size via `mach_task_basic_info` (historical compatibility metric) |
+| `RSSΔ` | RSS gained from pre-load to peak |
+| `Phys` | high-water physical footprint via `TASK_VM_INFO`; use this for unified-memory sizing |
+| `PhysΔ` | physical footprint gained from pre-load to peak (engine cost vs. baseline) |
 | `loadSec` | model load + warmup wall time |
 
-Use `--isolated` to run each engine in a child process — peakRSS then
-reflects each engine's true memory cost instead of the cumulative
-high-water mark of a single sequential run.
+Use `--isolated` to run each engine in a child process. RSS and physical-
+footprint high-water marks then reflect one engine instead of the cumulative
+state of a sequential multi-engine run.
 
 ## Available engines
 

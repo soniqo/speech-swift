@@ -1,10 +1,12 @@
 import Foundation
 import ArgumentParser
+import CohereTranscribeASR
 import Qwen3ASR
 import ParakeetASR
 import NemotronStreamingASR
 import OmnilingualASR
 import WhisperASR
+import VoxtralASR
 import MossTranscribe
 import SpeechVAD
 import AudioCommon
@@ -12,13 +14,13 @@ import AudioCommon
 public struct TranscribeCommand: ParsableCommand {
     public static let configuration = CommandConfiguration(
         commandName: "transcribe",
-        abstract: "Transcribe speech to text (Qwen3-ASR, MOSS, Parakeet-TDT, Whisper, and other ASR backends)"
+        abstract: "Transcribe speech to text (Qwen3-ASR, Cohere, Voxtral, MOSS, and other ASR backends)"
     )
 
     @Argument(help: "Audio file to transcribe (WAV, any sample rate)")
     public var audioFile: String
 
-    @Option(name: .long, help: "ASR engine: qwen3 (default), moss, parakeet, nemotron, omnilingual, whisper, qwen3-coreml, or qwen3-coreml-full")
+    @Option(name: .long, help: "ASR engine: qwen3 (default), cohere, voxtral, moss, parakeet, nemotron, omnilingual, whisper, qwen3-coreml, or qwen3-coreml-full")
     public var engine: String = "qwen3"
 
     @Option(name: .long, help: "[omnilingual] Window size in seconds: 5 or 10 (default 10) — CoreML backend only")
@@ -33,7 +35,7 @@ public struct TranscribeCommand: ParsableCommand {
     @Option(name: .long, help: "[omnilingual mlx] Quantization bits: 4 (default) or 8")
     public var bits: Int = 4
 
-    @Option(name: .shortAndLong, help: "[qwen3] Model: 0.6B (default), 0.6B-8bit, 1.7B, 1.7B-4bit, or full HuggingFace model ID; [moss] int8 (default), fp16, or full CoreML HuggingFace model ID; [whisper] default/turbo or full CoreML HuggingFace model ID")
+    @Option(name: .shortAndLong, help: "[qwen3] 0.6B (default), 0.6B-8bit, 1.7B, or 1.7B-4bit; [cohere/voxtral] int5 (default), int8, or fp16; [moss] int8 (default) or fp16; [whisper] default or turbo; alternatively a model ID or local directory")
     public var model: String = "0.6B"
 
     @Option(name: .long, help: "[moss] Maximum generated transcript tokens (default 512)")
@@ -58,8 +60,16 @@ public struct TranscribeCommand: ParsableCommand {
 
     public func validate() throws {
         let eng = engine.lowercased()
-        guard eng == "qwen3" || eng == "moss" || eng == "parakeet" || eng == "nemotron" || eng == "omnilingual" || eng == "whisper" || eng == "qwen3-coreml" || eng == "qwen3-coreml-full" else {
-            throw ValidationError("--engine must be 'qwen3', 'moss', 'parakeet', 'nemotron', 'omnilingual', 'whisper', 'qwen3-coreml', or 'qwen3-coreml-full'")
+        let supportedEngines = [
+            "qwen3", "cohere", "voxtral", "moss", "parakeet", "nemotron",
+            "omnilingual", "whisper", "qwen3-coreml", "qwen3-coreml-full",
+        ]
+        guard supportedEngines.contains(eng) else {
+            throw ValidationError(
+                "--engine must be one of: \(supportedEngines.joined(separator: ", "))")
+        }
+        if ["cohere", "voxtral"].contains(eng), stream {
+            throw ValidationError("--stream is not supported by the \(eng) engine")
         }
         if eng == "moss" {
             guard !stream else {
@@ -91,6 +101,10 @@ public struct TranscribeCommand: ParsableCommand {
 
     public func run() throws {
         switch engine.lowercased() {
+        case "cohere":
+            try runCohereTranscription()
+        case "voxtral":
+            try runVoxtralTranscription()
         case "parakeet":
             try runParakeetTranscription()
         case "nemotron":
@@ -111,6 +125,58 @@ public struct TranscribeCommand: ParsableCommand {
             } else {
                 try runBatchTranscription()
             }
+        }
+    }
+
+    private func runCohereTranscription() throws {
+        try runAsync {
+            let modelId = try resolveCohereModelId(model)
+            print("Loading audio: \(audioFile)")
+            let audio = try AudioFileLoader.load(
+                url: URL(fileURLWithPath: audioFile), targetSampleRate: 16000)
+            let duration = Float(audio.count) / 16000.0
+            print("  Loaded \(audio.count) samples (\(String(format: "%.2f", duration))s)")
+
+            print("Loading Cohere Transcribe model: \(modelId)")
+            let asrModel = try await CohereTranscribeModel.load(
+                modelId,
+                progressHandler: { reportProgress($0, "Downloading") })
+
+            print("Transcribing...")
+            let startTime = CFAbsoluteTimeGetCurrent()
+            let result = asrModel.transcribe(
+                audio: audio, sampleRate: 16000, language: language)
+            let elapsed = CFAbsoluteTimeGetCurrent() - startTime
+            let rtf = elapsed / Double(duration)
+
+            print("Result: \(result)")
+            print(String(format: "  Time: %.2fs, RTF: %.3f", elapsed, rtf))
+        }
+    }
+
+    private func runVoxtralTranscription() throws {
+        try runAsync {
+            let modelId = try resolveVoxtralModelId(model)
+            print("Loading audio: \(audioFile)")
+            let audio = try AudioFileLoader.load(
+                url: URL(fileURLWithPath: audioFile), targetSampleRate: 16000)
+            let duration = Float(audio.count) / 16000.0
+            print("  Loaded \(audio.count) samples (\(String(format: "%.2f", duration))s)")
+
+            print("Loading Voxtral model: \(modelId)")
+            let asrModel = try await VoxtralModel.load(
+                modelId,
+                progressHandler: { reportProgress($0, "Downloading") })
+
+            print("Transcribing...")
+            let startTime = CFAbsoluteTimeGetCurrent()
+            let result = asrModel.transcribe(
+                audio: audio, sampleRate: 16000, language: language)
+            let elapsed = CFAbsoluteTimeGetCurrent() - startTime
+            let rtf = elapsed / Double(duration)
+
+            print("Result: \(result)")
+            print(String(format: "  Time: %.2fs, RTF: %.3f", elapsed, rtf))
         }
     }
 
@@ -509,6 +575,52 @@ public func resolveWhisperModelId(_ specifier: String) throws -> String {
             return specifier
         }
         throw ValidationError("[whisper] --model must be 'default', 'turbo', or a full CoreML HuggingFace repo ID")
+    }
+}
+
+/// Resolve Cohere Transcribe aliases to published MLX bundles.
+public func resolveCohereModelId(_ specifier: String) throws -> String {
+    try resolveNewASRModelId(
+        specifier,
+        engine: "cohere",
+        fp16: CohereTranscribeVariant.fp16.modelId,
+        int5: CohereTranscribeVariant.int5.modelId,
+        int8: CohereTranscribeVariant.int8.modelId)
+}
+
+/// Resolve Voxtral aliases to published MLX bundles.
+public func resolveVoxtralModelId(_ specifier: String) throws -> String {
+    try resolveNewASRModelId(
+        specifier,
+        engine: "voxtral",
+        fp16: VoxtralVariant.fp16.modelId,
+        int5: VoxtralVariant.int5.modelId,
+        int8: VoxtralVariant.int8.modelId)
+}
+
+private func resolveNewASRModelId(
+    _ specifier: String,
+    engine: String,
+    fp16: String,
+    int5: String,
+    int8: String
+) throws -> String {
+    switch specifier.lowercased() {
+    case "0.6b", "default", "int5", "5bit":
+        return int5
+    case "int8", "8bit":
+        return int8
+    case "fp16", "16bit":
+        return fp16
+    case "int7", "7bit":
+        throw ValidationError(
+            "[\(engine)] INT7 is not supported by MLX affine quantization; use int8")
+    default:
+        if specifier.contains("/") {
+            return specifier
+        }
+        throw ValidationError(
+            "[\(engine)] --model must be int5, int8, fp16, a Hugging Face model ID, or a local directory")
     }
 }
 
