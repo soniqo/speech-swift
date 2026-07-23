@@ -633,6 +633,7 @@ let package = Package(
                 "CosyVoiceTTS",
                 "Qwen3TTSCoreML",
                 "PersonaPlex",
+                "CSM",
                 "HibikiTranslate",
                 "SpeechVAD",
                 "SpeechEnhancement",
