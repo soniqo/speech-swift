@@ -1,6 +1,6 @@
 # Cohere Transcribe inference
 
-Import `CohereTranscribeASR` and load either a local export directory or a
+Import `CohereTranscribeASR` and load either a local model directory or a
 published Hugging Face bundle:
 
 ```swift
@@ -28,18 +28,17 @@ the standard MLX `quantization` or `quantization_config` object with `bits`,
 ```bash
 speech transcribe recording.wav --engine cohere
 speech transcribe recording.wav --engine cohere --model int8 --language de
-speech transcribe recording.wav --engine cohere --model /path/to/local/export
+speech transcribe recording.wav --engine cohere --model /path/to/local/model
 ```
 
 The default is INT5. `--model` also accepts `int8`, `fp16`, a Hugging Face
-repository ID, or a local export directory. Cohere Transcribe is currently a
+repository ID, or a local model directory. Cohere Transcribe is currently a
 non-streaming engine.
 
 ## Variants
 
-`CohereTranscribeVariant` defines `.fp16`, `.int5`, and `.int8`. INT5 passed
-the cross-precision gate and is the default candidate once the bundles are
-published. INT8 is the closest supported MLX format to INT7; it prioritizes
+`CohereTranscribeVariant` defines `.fp16`, `.int5`, and `.int8`. INT5 is the
+default. INT8 is the closest supported MLX format to INT7; it prioritizes
 quality over the smaller INT5 footprint.
 
 ## Decoding

@@ -36,6 +36,7 @@ public enum CohereTranscribeError: Error, LocalizedError {
 public final class CohereTranscribeModel: Module, SpeechRecognitionModel, @unchecked Sendable {
     public static let defaultModelId = CohereTranscribeVariant.int5.modelId
     static let supportedQuantizationBits = Set([2, 3, 4, 5, 6, 8])
+    static let downloadAdditionalFiles = ["tokenizer.model", "tokenizer_config.json"]
     public let config: CohereTranscribeConfig
     public let inputSampleRate: Int
 
@@ -286,7 +287,7 @@ public extension CohereTranscribeModel {
         try await HuggingFaceDownloader.downloadWeights(
             modelId: modelId,
             to: directory,
-            additionalFiles: ["tokenizer.model", "tokenizer_config.json", "speech_models_export.json"],
+            additionalFiles: downloadAdditionalFiles,
             offlineMode: offlineMode,
             progressHandler: progressHandler)
         return try fromDirectory(directory)

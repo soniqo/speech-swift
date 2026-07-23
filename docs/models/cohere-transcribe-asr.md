@@ -8,7 +8,6 @@ model intended for multilingual transcription on Apple Silicon.
 
 | Property | Value |
 |---|---|
-| Source revision | `b1eacc2686a3d08ceaae5f24a88b1d519620bc09` |
 | License | Apache 2.0 |
 | Input | mono Float32 PCM, resampled internally to 16 kHz |
 | Vocabulary | 16,384 SentencePiece and control tokens |
@@ -17,7 +16,7 @@ model intended for multilingual transcription on Apple Silicon.
 
 MLX has affine kernels for 2, 3, 4, 5, 6, and 8-bit weights. There is no
 INT7 kernel, so INT8 is the high-quality replacement for the requested INT7
-variant. The exporter and Swift loader both reject INT7 explicitly.
+variant. The Swift loader rejects INT7 explicitly.
 
 ## Architecture
 
@@ -42,13 +41,5 @@ compression, and per-feature mean/variance normalization. It emits
 Normalization uses only complete hop frames, applies sample variance, and
 zeros the trailing centered frame, matching the pinned Python reference.
 
-## Export policy
-
-The pinned exporter lives in the separate `speech-models` repository under
-`models/cohere-transcribe/export`. FP16 converts every floating checkpoint
-tensor to Float16. INT5 and INT8 use affine group-size-64 quantization for
-compatible MLX `Linear` and `Embedding` modules. Each bundle records its exact
-source, converter, and quantization policy in `speech_models_export.json`.
-
-Publishing is gated on the isolated WER, RTF, throughput, and peak-RSS run in
+FP16, INT5, and INT8 performance and memory measurements are documented in
 [`cohere-voxtral-asr.md`](../benchmarks/cohere-voxtral-asr.md).

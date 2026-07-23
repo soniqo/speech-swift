@@ -1,6 +1,6 @@
 # Voxtral ASR inference
 
-Load a local export or a published bundle through `VoxtralModel.load`:
+Load a local model directory or a published bundle through `VoxtralModel.load`:
 
 ```swift
 import VoxtralASR
@@ -18,41 +18,31 @@ let text = model.transcribe(
 ```
 
 The directory must contain `config.json`, one or more `.safetensors` files,
-and `tekken.json`. `preprocessor_config.json` and
-`speech_models_export.json` are retained for provenance and parity auditing.
+and `tekken.json`. `preprocessor_config.json` supplies the audio frontend
+configuration.
 
 ## CLI
 
 ```bash
 speech transcribe recording.wav --engine voxtral
 speech transcribe recording.wav --engine voxtral --model int8 --language fr
-speech transcribe recording.wav --engine voxtral --model /path/to/local/export
+speech transcribe recording.wav --engine voxtral --model /path/to/local/model
 ```
 
 The default is INT5. `--model` also accepts `int8`, `fp16`, a Hugging Face
-repository ID, or a local export directory. Voxtral is currently a
+repository ID, or a local model directory. Voxtral is currently a
 non-streaming engine.
 
 ## Variants
 
-`VoxtralVariant` exposes `.fp16`, `.int5`, and `.int8`. INT5 passed the
-cross-precision artifact gate and is the default candidate once the bundles
-are published. MLX does not support INT7; INT8 is the supported high-quality
-substitute.
+`VoxtralVariant` exposes `.fp16`, `.int5`, and `.int8`. INT5 is the default.
+MLX does not support INT7; INT8 is the supported high-quality substitute.
 
 The decoder projects only the final prompt state through the 131,072-token
 language-model head. Earlier builds projected every prompt/audio state even
 though greedy decoding consumes only the final row. Removing that work
 preserved every transcript in the pinned acceptance run and materially lowers
 quantized-model RTF.
-
-The exporter also has a separately named `int5-audio-ffn` candidate. It is not
-part of `VoxtralVariant`; load its directory explicitly when evaluating it.
-On the pinned English FLEURS acceptance set it reduced standard-INT5 peak RSS
-from 4,035 to 3,517 MiB and physical footprint from 6,012 to 5,671 MiB while
-preserving observed quality, at 0.0757 mean RTF in the clean isolated run.
-Keep it separate from the standard INT5 artifact until broader multilingual
-and conversational validation is complete.
 
 ## Language handling
 

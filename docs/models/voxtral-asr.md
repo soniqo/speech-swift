@@ -8,7 +8,6 @@ with a Llama text decoder for multilingual offline transcription.
 
 | Property | Value |
 |---|---|
-| Source revision | `3060fe34b35ba5d44202ce9ff3c097642914f8f3` |
 | License | Apache 2.0 |
 | Input | mono Float32 PCM, resampled internally to 16 kHz |
 | Languages | en, fr, de, es, it, pt, nl, hi |
@@ -45,25 +44,5 @@ The prompt follows Mistral's transcription request format:
 Omitting the language hint omits the `lang:<code>` tokens. The decoder stops
 on any of the three checkpoint EOS-equivalent IDs: 2, 4, or 32,000.
 
-## Export policy
-
-The pinned exporter in `speech-models/models/voxtral-asr/export` downloads
-only the two indexed Hugging Face `model-*` shards, avoiding the duplicate
-Mistral-native consolidated checkpoint. A schema preflight verifies the
-`audio_tower`, `language_model`, and `multi_modal_projector` prefixes before
-allocating the model.
-
-For unquantized output, the wrapper atomically rewrites tensors to the requested
-dtype and verifies the safetensor header codes. This compensates for a pinned
-`mlx-audio` path that otherwise retains source BF16 tensors in an artifact
-named FP16.
-
-The audio tower remains FP16 for quantized variants. Compatible language-model
-and multimodal-projector modules use affine group-size-64 INT5 or INT8. Each
-bundle includes `speech_models_export.json` and must pass the benchmark gate
-before publication.
-
-An opt-in `int5-audio-ffn` export additionally quantizes the audio encoder's
-feed-forward linear layers. Audio attention, convolutions, position embeddings,
-and norms remain floating point. This policy is recorded in the manifest and
-uses a separate output directory so it cannot overwrite standard INT5.
+FP16, INT5, and INT8 performance and memory measurements are documented in
+[`cohere-voxtral-asr.md`](../benchmarks/cohere-voxtral-asr.md).

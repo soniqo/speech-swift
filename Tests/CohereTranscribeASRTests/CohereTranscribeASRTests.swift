@@ -133,6 +133,12 @@ final class CohereTranscribeASRTests: XCTestCase {
         XCTAssertTrue(CohereTranscribeVariant.int8.modelId.hasSuffix("8bit"))
     }
 
+    func testPublishedDownloadFilesContainOnlyRuntimeInputs() {
+        XCTAssertEqual(
+            CohereTranscribeModel.downloadAdditionalFiles,
+            ["tokenizer.model", "tokenizer_config.json"])
+    }
+
     func testTinyModelParameterTreeMatchesCheckpointAliases() throws {
         let json = """
         {

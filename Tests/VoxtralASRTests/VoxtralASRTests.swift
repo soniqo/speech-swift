@@ -109,6 +109,12 @@ final class VoxtralASRTests: XCTestCase {
         XCTAssertTrue(VoxtralVariant.int8.modelId.hasSuffix("8bit"))
     }
 
+    func testPublishedDownloadFilesContainOnlyRuntimeInputs() {
+        XCTAssertEqual(
+            VoxtralModel.downloadAdditionalFiles,
+            ["tekken.json", "preprocessor_config.json"])
+    }
+
     func testLastStateProjectionMatchesFullSequenceLastRow() throws {
         let json = """
         {

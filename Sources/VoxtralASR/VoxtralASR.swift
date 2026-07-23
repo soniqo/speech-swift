@@ -26,6 +26,7 @@ public enum VoxtralError: Error, LocalizedError {
 public final class VoxtralModel: Module, SpeechRecognitionModel, @unchecked Sendable {
     public static let defaultModelId = VoxtralVariant.int5.modelId
     static let supportedQuantizationBits = Set([2, 3, 4, 5, 6, 8])
+    static let downloadAdditionalFiles = ["tekken.json", "preprocessor_config.json"]
     public let config: VoxtralConfig
     public let inputSampleRate = VoxtralAudioFrontend.sampleRate
 
@@ -202,7 +203,7 @@ public extension VoxtralModel {
         try await HuggingFaceDownloader.downloadWeights(
             modelId: modelId,
             to: directory,
-            additionalFiles: ["tekken.json", "preprocessor_config.json", "speech_models_export.json"],
+            additionalFiles: downloadAdditionalFiles,
             offlineMode: offlineMode,
             progressHandler: progressHandler)
         return try fromDirectory(directory)
