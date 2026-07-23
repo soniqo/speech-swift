@@ -765,6 +765,14 @@ let package = Package(
             ]
         ),
         .testTarget(
+            name: "BenchmarkSupportTests",
+            dependencies: ["BenchmarkSupport", "AudioCommon", "SpeechVAD"]
+        ),
+        .testTarget(
+            name: "DiarizationBenchmarkTests",
+            dependencies: ["DiarizationBenchmark", "BenchmarkSupport"]
+        ),
+        .testTarget(
             name: "PersonaPlexTests",
             dependencies: ["PersonaPlex", "AudioCommon", "Qwen3ASR"],
             resources: [
