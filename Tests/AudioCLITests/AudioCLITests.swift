@@ -158,6 +158,70 @@ final class TranscribeCommandTests: XCTestCase {
         }())
     }
 
+    // MARK: --engine cohere / voxtral
+
+    func testParsesCohereAndVoxtralEngines() throws {
+        for engine in ["cohere", "voxtral"] {
+            let cmd = try AudioCLI.parseAsRoot([
+                "transcribe", "audio.wav", "--engine", engine,
+            ])
+            let transcribe = try XCTUnwrap(cmd as? TranscribeCommand)
+            XCTAssertEqual(transcribe.engine, engine)
+            XCTAssertNoThrow(try transcribe.validate())
+        }
+    }
+
+    func testCohereModelAliases() throws {
+        XCTAssertEqual(
+            try resolveCohereModelId("int5"),
+            "aufklarer/Cohere-Transcribe-2B-MLX-5bit")
+        XCTAssertEqual(
+            try resolveCohereModelId("8bit"),
+            "aufklarer/Cohere-Transcribe-2B-MLX-8bit")
+        XCTAssertEqual(
+            try resolveCohereModelId("fp16"),
+            "aufklarer/Cohere-Transcribe-2B-MLX-FP16")
+    }
+
+    func testVoxtralModelAliases() throws {
+        XCTAssertEqual(
+            try resolveVoxtralModelId("default"),
+            "aufklarer/Voxtral-Mini-3B-2507-MLX-5bit")
+        XCTAssertEqual(
+            try resolveVoxtralModelId("int8"),
+            "aufklarer/Voxtral-Mini-3B-2507-MLX-8bit")
+        XCTAssertEqual(
+            try resolveVoxtralModelId("16bit"),
+            "aufklarer/Voxtral-Mini-3B-2507-MLX-FP16")
+    }
+
+    func testCohereAndVoxtralAcceptModelIDsAndLocalPaths() throws {
+        for resolver in [resolveCohereModelId, resolveVoxtralModelId] {
+            XCTAssertEqual(
+                try resolver("org/custom-model"),
+                "org/custom-model")
+            XCTAssertEqual(
+                try resolver("./local-model"),
+                "./local-model")
+        }
+    }
+
+    func testCohereAndVoxtralRejectINT7() {
+        XCTAssertThrowsError(try resolveCohereModelId("int7"))
+        XCTAssertThrowsError(try resolveVoxtralModelId("7bit"))
+    }
+
+    func testCohereAndVoxtralRejectStreaming() {
+        for engine in ["cohere", "voxtral"] {
+            XCTAssertThrowsError(try {
+                let cmd = try AudioCLI.parseAsRoot([
+                    "transcribe", "audio.wav", "--engine", engine, "--stream",
+                ])
+                try (cmd as? TranscribeCommand)?.validate()
+            }())
+        }
+    }
+
     // MARK: --engine whisper
 
     func testParsesWhisperEngine() throws {

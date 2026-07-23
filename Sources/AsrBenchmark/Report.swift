@@ -25,6 +25,8 @@ public struct EngineResult: Codable, Sendable {
     public var elapsedSecondsTotal: Double
     public var peakRSSBytes: UInt64     // peak resident memory observed during run
     public var rssDeltaBytes: Int64     // peak RSS minus pre-load RSS
+    public var peakPhysicalFootprintBytes: UInt64 // peak unified-memory pressure
+    public var physicalFootprintDeltaBytes: Int64 // peak footprint minus pre-load
     public var throughputXRT: Double    // kept for older dashboards (= 1 / mean rtf)
     public var throughputMeanXRT: Double
     public var throughputMedianXRT: Double
@@ -49,8 +51,9 @@ public enum ReportPrinter {
         // pad/truncate manually for strings to keep the table clean.
         s += pad("Engine", 32) + "  " + pad("AggWER", 6) + "  " + pad("AvgWER", 6) + "  " +
              pad("CER", 6) + "  " + pad("xRT", 7) + "  " + pad("MedxRT", 7) + "  " +
-             pad("Load(s)", 7) + "  " + pad("Peak(MB)", 8) + "  " + pad("Δ(MB)", 7) + "\n"
-        s += String(repeating: "-", count: 111) + "\n"
+             pad("Load(s)", 7) + "  " + pad("RSS(MB)", 8) + "  " + pad("RSSΔ", 7) + "  " +
+             pad("Phys(MB)", 8) + "  " + pad("PhysΔ", 7) + "\n"
+        s += String(repeating: "-", count: 130) + "\n"
         for r in report.results {
             s += pad(r.engine, 32) + "  " +
                  String(format: "%6.2f", r.werAggregatePercent) + "  " +
@@ -60,7 +63,9 @@ public enum ReportPrinter {
                  String(format: "%7.1f", r.throughputMedianXRT) + "  " +
                  String(format: "%7.1f", r.loadElapsedSeconds) + "  " +
                  String(format: "%8.0f", Double(r.peakRSSBytes) / (1024 * 1024)) + "  " +
-                 String(format: "%+7.0f", Double(r.rssDeltaBytes) / (1024 * 1024)) + "\n"
+                 String(format: "%+7.0f", Double(r.rssDeltaBytes) / (1024 * 1024)) + "  " +
+                 String(format: "%8.0f", Double(r.peakPhysicalFootprintBytes) / (1024 * 1024)) + "  " +
+                 String(format: "%+7.0f", Double(r.physicalFootprintDeltaBytes) / (1024 * 1024)) + "\n"
         }
         return s
     }
