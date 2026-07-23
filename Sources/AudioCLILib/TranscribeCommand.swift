@@ -5,19 +5,20 @@ import ParakeetASR
 import NemotronStreamingASR
 import OmnilingualASR
 import WhisperASR
+import MossTranscribe
 import SpeechVAD
 import AudioCommon
 
 public struct TranscribeCommand: ParsableCommand {
     public static let configuration = CommandConfiguration(
         commandName: "transcribe",
-        abstract: "Transcribe speech to text (Qwen3-ASR, Parakeet-TDT, Whisper, and other ASR backends)"
+        abstract: "Transcribe speech to text (Qwen3-ASR, MOSS, Parakeet-TDT, Whisper, and other ASR backends)"
     )
 
     @Argument(help: "Audio file to transcribe (WAV, any sample rate)")
     public var audioFile: String
 
-    @Option(name: .long, help: "ASR engine: qwen3 (default), parakeet, nemotron, omnilingual, whisper, qwen3-coreml, or qwen3-coreml-full")
+    @Option(name: .long, help: "ASR engine: qwen3 (default), moss, parakeet, nemotron, omnilingual, whisper, qwen3-coreml, or qwen3-coreml-full")
     public var engine: String = "qwen3"
 
     @Option(name: .long, help: "[omnilingual] Window size in seconds: 5 or 10 (default 10) — CoreML backend only")
@@ -32,8 +33,11 @@ public struct TranscribeCommand: ParsableCommand {
     @Option(name: .long, help: "[omnilingual mlx] Quantization bits: 4 (default) or 8")
     public var bits: Int = 4
 
-    @Option(name: .shortAndLong, help: "[qwen3] Model: 0.6B (default), 0.6B-8bit, 1.7B, 1.7B-4bit, or full HuggingFace model ID; [whisper] default/turbo or full CoreML HuggingFace model ID")
+    @Option(name: .shortAndLong, help: "[qwen3] Model: 0.6B (default), 0.6B-8bit, 1.7B, 1.7B-4bit, or full HuggingFace model ID; [moss] int8 (default), fp16, or full CoreML HuggingFace model ID; [whisper] default/turbo or full CoreML HuggingFace model ID")
     public var model: String = "0.6B"
+
+    @Option(name: .long, help: "[moss] Maximum generated transcript tokens (default 512)")
+    public var maxTokens: Int = 512
 
     @Option(name: .long, help: "Language hint (optional)")
     public var language: String?
@@ -54,8 +58,17 @@ public struct TranscribeCommand: ParsableCommand {
 
     public func validate() throws {
         let eng = engine.lowercased()
-        guard eng == "qwen3" || eng == "parakeet" || eng == "nemotron" || eng == "omnilingual" || eng == "whisper" || eng == "qwen3-coreml" || eng == "qwen3-coreml-full" else {
-            throw ValidationError("--engine must be 'qwen3', 'parakeet', 'nemotron', 'omnilingual', 'whisper', 'qwen3-coreml', or 'qwen3-coreml-full'")
+        guard eng == "qwen3" || eng == "moss" || eng == "parakeet" || eng == "nemotron" || eng == "omnilingual" || eng == "whisper" || eng == "qwen3-coreml" || eng == "qwen3-coreml-full" else {
+            throw ValidationError("--engine must be 'qwen3', 'moss', 'parakeet', 'nemotron', 'omnilingual', 'whisper', 'qwen3-coreml', or 'qwen3-coreml-full'")
+        }
+        if eng == "moss" {
+            guard !stream else {
+                throw ValidationError("--stream is not supported by the MOSS batch runtime")
+            }
+            guard maxTokens > 0 else {
+                throw ValidationError("--max-tokens must be positive")
+            }
+            _ = try resolveMossModelId(model)
         }
         if eng == "omnilingual" {
             if window != 5 && window != 10 {
@@ -86,6 +99,8 @@ public struct TranscribeCommand: ParsableCommand {
             try runOmnilingualTranscription()
         case "whisper":
             try runWhisperTranscription()
+        case "moss":
+            try runMossTranscription()
         case "qwen3-coreml":
             try runCoreMLTranscription()
         case "qwen3-coreml-full":
@@ -95,6 +110,71 @@ public struct TranscribeCommand: ParsableCommand {
                 try runStreamingTranscription()
             } else {
                 try runBatchTranscription()
+            }
+        }
+    }
+
+    private func runMossTranscription() throws {
+        try runAsync {
+            print("Loading audio: \(audioFile)")
+            let audio = try AudioFileLoader.load(
+                url: URL(fileURLWithPath: audioFile),
+                targetSampleRate: MossTranscribeModel.inputSampleRate
+            )
+            let duration =
+                Double(audio.count)
+                / Double(MossTranscribeModel.inputSampleRate)
+            print(
+                "  Loaded \(audio.count) samples "
+                    + "(\(String(format: "%.2f", duration))s)"
+            )
+
+            let modelId = try resolveMossModelId(model)
+
+            print("Loading MOSS Core ML model: \(modelId)")
+            let moss = try await MossTranscribeModel.fromPretrained(
+                modelId: modelId,
+                progressHandler: reportProgress
+            )
+            print("Warming up Core ML...")
+            try moss.warmUp()
+
+            print("Transcribing with timestamps and speakers...")
+            let result = try moss.transcribeDetailed(
+                audio: audio,
+                sampleRate: MossTranscribeModel.inputSampleRate,
+                maxNewTokens: maxTokens
+            )
+            print("Result: \(result.text)")
+            if !result.segments.isEmpty {
+                print("Segments:")
+                for segment in result.segments {
+                    print(
+                        String(
+                            format: "  [%.2fs-%.2fs][%@] %@",
+                            segment.startTime,
+                            segment.endTime,
+                            segment.speaker,
+                            segment.text
+                        )
+                    )
+                }
+            }
+            let metrics = result.metrics
+            print(
+                String(
+                    format:
+                        "  Time: %.2fs, RTF: %.3f, throughput: %.1fx realtime",
+                    metrics.totalSeconds,
+                    metrics.realTimeFactor,
+                    metrics.realtimeThroughput
+                )
+            )
+            if metrics.stopReason != .endOfSequence {
+                print(
+                    "  Warning: generation stopped at "
+                        + metrics.stopReason.rawValue
+                )
             }
         }
     }
@@ -429,5 +509,22 @@ public func resolveWhisperModelId(_ specifier: String) throws -> String {
             return specifier
         }
         throw ValidationError("[whisper] --model must be 'default', 'turbo', or a full CoreML HuggingFace repo ID")
+    }
+}
+
+/// Resolve MOSS model aliases to the published CoreML bundles.
+public func resolveMossModelId(_ specifier: String) throws -> String {
+    switch specifier.lowercased() {
+    case "0.6b", "default", "int8":
+        return MossModelVariant.int8.modelId
+    case "fp16":
+        return MossModelVariant.fp16.modelId
+    default:
+        if specifier.contains("/") {
+            return specifier
+        }
+        throw ValidationError(
+            "[moss] --model must be 'int8', 'fp16', or a full CoreML HuggingFace repo ID"
+        )
     }
 }
