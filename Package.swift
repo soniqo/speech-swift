@@ -13,6 +13,14 @@ let package = Package(
             targets: ["Qwen3ASR"]
         ),
         .library(
+            name: "CohereTranscribeASR",
+            targets: ["CohereTranscribeASR"]
+        ),
+        .library(
+            name: "VoxtralASR",
+            targets: ["VoxtralASR"]
+        ),
+        .library(
             name: "Qwen3TTS",
             targets: ["Qwen3TTS"]
         ),
@@ -237,6 +245,27 @@ let package = Package(
                 .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "MLXNN", package: "mlx-swift"),
                 .product(name: "MLXFast", package: "mlx-swift")
+            ]
+        ),
+        .target(
+            name: "CohereTranscribeASR",
+            dependencies: [
+                "AudioCommon",
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXNN", package: "mlx-swift"),
+                .product(name: "MLXFast", package: "mlx-swift"),
+                .product(name: "MLXFFT", package: "mlx-swift"),
+            ]
+        ),
+        .target(
+            name: "VoxtralASR",
+            dependencies: [
+                "AudioCommon",
+                "MLXCommon",
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXNN", package: "mlx-swift"),
+                .product(name: "MLXFast", package: "mlx-swift"),
+                .product(name: "MLXFFT", package: "mlx-swift"),
             ]
         ),
         .target(
@@ -590,6 +619,7 @@ let package = Package(
         .target(
             name: "AudioCLILib",
             dependencies: [
+                "CohereTranscribeASR",
                 "Qwen3ASR",
                 "Qwen3TTS",
                 "CosyVoiceTTS",
@@ -605,6 +635,7 @@ let package = Package(
                 "NemotronStreamingASR",
                 "WhisperASR",
                 "OmnilingualASR",
+                "VoxtralASR",
                 "KokoroTTS",
                 "VibeVoiceTTS",
                 "VoxCPM2TTS",
@@ -634,11 +665,13 @@ let package = Package(
             name: "AsrBenchmark",
             dependencies: [
                 "AudioCommon",
+                "CohereTranscribeASR",
                 "Qwen3ASR",
                 "ParakeetASR",
                 "NemotronStreamingASR",
                 "OmnilingualASR",
                 "WhisperASR",
+                "VoxtralASR",
                 .product(name: "WhisperKit", package: "WhisperKit"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser")
             ]
@@ -733,6 +766,14 @@ let package = Package(
                 .copy("Resources/test_audio.wav"),
                 .copy("Resources/kokoro_continuous_stitched.wav"),
             ]
+        ),
+        .testTarget(
+            name: "CohereTranscribeASRTests",
+            dependencies: ["CohereTranscribeASR", "AudioCommon"]
+        ),
+        .testTarget(
+            name: "VoxtralASRTests",
+            dependencies: ["VoxtralASR", "AudioCommon"]
         ),
         .testTarget(
             name: "WhisperASRTests",

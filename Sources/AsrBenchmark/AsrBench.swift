@@ -21,11 +21,11 @@ struct AsrBench: AsyncParsableCommand {
     @Option(name: .shortAndLong, help: "Optional path to write the JSON report.")
     var output: String?
 
-    @Option(name: .long, help: "ISO language hint passed to engines that accept one (Qwen3/Parakeet).")
+    @Option(name: .long, help: "ISO language hint passed to engines that accept one.")
     var language: String?
 
     @Flag(name: .long,
-          help: "Run each engine in a separate process. The peak RSS column then reflects each engine's true cost instead of the sequential high-water mark.")
+          help: "Run each engine in a separate process so RSS and physical-footprint high-water marks reflect one engine.")
     var isolated: Bool = false
 
     @Flag(name: .long, help: "Print reference/hypothesis pairs for utterances with WER errors.")
@@ -79,15 +79,21 @@ struct AsrBench: AsyncParsableCommand {
         var results: [EngineResult] = []
         for engine in engineImpls {
             print("=== \(engine.name) ===")
-            let preLoadRSS = currentRSSBytes()
-            var peakRSS: UInt64 = preLoadRSS
+            let preLoadMemory = currentProcessMemoryUsage()
+            var peakRSS = preLoadMemory.residentBytes
+            var peakPhysicalFootprint = preLoadMemory.peakPhysicalFootprintBytes
             do {
                 try await engine.load(warmupAudio: warmup, sampleRate: 16000)
-                peakRSS = max(peakRSS, currentRSSBytes())
-                print(String(format: "  loaded + warmed in %.1fs (RSS %.0f MB → %.0f MB)",
+                let loadedMemory = currentProcessMemoryUsage()
+                peakRSS = max(peakRSS, loadedMemory.residentBytes)
+                peakPhysicalFootprint = max(
+                    peakPhysicalFootprint,
+                    loadedMemory.peakPhysicalFootprintBytes)
+                print(String(format: "  loaded + warmed in %.1fs (RSS %.0f MB → %.0f MB, footprint %.0f MB)",
                              engine.loadElapsed,
-                             Double(preLoadRSS) / (1024 * 1024),
-                             Double(peakRSS) / (1024 * 1024)))
+                             Double(preLoadMemory.residentBytes) / (1024 * 1024),
+                             Double(peakRSS) / (1024 * 1024),
+                             Double(peakPhysicalFootprint) / (1024 * 1024)))
             } catch {
                 fputs("  load failed: \(error)\n", stderr)
                 continue
@@ -128,15 +134,22 @@ struct AsrBench: AsyncParsableCommand {
                     rtfs.append(t.rtf)
                     totalElapsed += t.elapsed
                     processedAudioSec += t.audioDuration
-                    // RSS sampling is cheap (one mach call) but only useful
-                    // periodically — peak tends to settle after a few utts.
+                    // Sample outside the timed transcription interval. Physical
+                    // footprint catches file-backed MLX allocations that RSS can
+                    // miss, and sampling every utterance avoids missing a short
+                    // peak between progress updates.
+                    let memory = currentProcessMemoryUsage()
+                    peakRSS = max(peakRSS, memory.residentBytes)
+                    peakPhysicalFootprint = max(
+                        peakPhysicalFootprint,
+                        memory.peakPhysicalFootprintBytes)
                     if (idx + 1) % 25 == 0 || idx == decoded.count - 1 {
-                        peakRSS = max(peakRSS, currentRSSBytes())
-                        print(String(format: "  [%4d/%4d] rolling WER=%.2f%% RTF=%.3f peakRSS=%.0fMB",
+                        print(String(format: "  [%4d/%4d] rolling WER=%.2f%% RTF=%.3f peakRSS=%.0fMB footprint=%.0fMB",
                                      idx + 1, decoded.count,
                                      Double(subs + ins + dels) / Double(max(refWords, 1)) * 100,
                                      rtfs.reduce(0, +) / Double(rtfs.count),
-                                     Double(peakRSS) / (1024 * 1024)))
+                                     Double(peakRSS) / (1024 * 1024),
+                                     Double(peakPhysicalFootprint) / (1024 * 1024)))
                     }
                 } catch {
                     fputs("  utterance \(item.utt.id) failed: \(error)\n", stderr)
@@ -174,7 +187,10 @@ struct AsrBench: AsyncParsableCommand {
                 audioSecondsTotal: processedAudioSec,
                 elapsedSecondsTotal: totalElapsed,
                 peakRSSBytes: peakRSS,
-                rssDeltaBytes: Int64(peakRSS) - Int64(preLoadRSS),
+                rssDeltaBytes: Int64(peakRSS) - Int64(preLoadMemory.residentBytes),
+                peakPhysicalFootprintBytes: peakPhysicalFootprint,
+                physicalFootprintDeltaBytes: Int64(peakPhysicalFootprint)
+                    - Int64(preLoadMemory.physicalFootprintBytes),
                 throughputXRT: throughputMeanXRT,
                 throughputMeanXRT: throughputMeanXRT,
                 throughputMedianXRT: throughputMedianXRT,
@@ -198,8 +214,8 @@ struct AsrBench: AsyncParsableCommand {
     }
 
     /// Re-executes the bench once per engine in a child process. Each child
-    /// gets a fresh MLX/CoreML state, so its peak RSS reflects only its own
-    /// allocations — not residual cache from the previous engine.
+    /// gets a fresh MLX/CoreML state, so its process-memory high-water marks
+    /// reflect only its own allocations, not a previous engine's cache.
     private func runIsolated() async throws {
         let selfPath = CommandLine.arguments[0]
         let runID = UUID().uuidString.prefix(8)
