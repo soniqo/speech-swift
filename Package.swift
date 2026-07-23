@@ -57,6 +57,10 @@ let package = Package(
             targets: ["PersonaPlex"]
         ),
         .library(
+            name: "CSM",
+            targets: ["CSM"]
+        ),
+        .library(
             name: "HibikiTranslate",
             targets: ["HibikiTranslate"]
         ),
@@ -360,6 +364,20 @@ let package = Package(
                 .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "MLXNN", package: "mlx-swift"),
                 .product(name: "MLXFast", package: "mlx-swift")
+            ]
+        ),
+        .target(
+            name: "CSM",
+            dependencies: [
+                "AudioCommon",
+                "MLXCommon",
+                "PersonaPlex",
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXNN", package: "mlx-swift"),
+                .product(name: "MLXFast", package: "mlx-swift"),
+                .product(name: "MLXRandom", package: "mlx-swift"),
+                .product(name: "Tokenizers", package: "swift-transformers"),
+                .product(name: "Hub", package: "swift-transformers")
             ]
         ),
         .target(
@@ -730,6 +748,10 @@ let package = Package(
                 "AudioServer",
                 .product(name: "ArgumentParser", package: "swift-argument-parser")
             ]
+        ),
+        .testTarget(
+            name: "CSMTests",
+            dependencies: ["CSM", "PersonaPlex"]
         ),
         .testTarget(
             name: "PersonaPlexTests",
