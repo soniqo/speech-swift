@@ -165,6 +165,30 @@ final class E2ELocalVQEAECTests: XCTestCase {
             enhancedError, mixtureError, "Echo error did not improve")
     }
 
+    /// Regression for long-lived capture workers, which do not have a run
+    /// loop that periodically drains Foundation's autorelease pool. Core ML
+    /// predictions used to retain one or more IOSurface-backed temporary
+    /// buffers per 16 ms frame until the process hit macOS's per-client
+    /// IOSurface limit and aborted after roughly five minutes of audio.
+    func testTwentyThousandStreamingFramesDoNotExhaustCoreMLBuffers() async throws {
+        let canceller = try await canceller()
+        let microphone = [Float](
+            repeating: 0, count: LocalVQEEchoCanceller.frameSize)
+        let reference = [Float](
+            repeating: 0, count: LocalVQEEchoCanceller.frameSize)
+        let frameCount = 20_000
+        var lastOutput = [Float]()
+
+        for _ in 0..<frameCount {
+            lastOutput = try canceller.processFrame(
+                microphone: microphone,
+                reference: reference)
+        }
+
+        XCTAssertEqual(lastOutput.count, LocalVQEEchoCanceller.frameSize)
+        XCTAssertTrue(lastOutput.allSatisfy(\.isFinite))
+    }
+
     private func rms(_ values: [Float]) -> Float {
         sqrt(values.reduce(0) { $0 + $1 * $1 } / Float(values.count))
     }
