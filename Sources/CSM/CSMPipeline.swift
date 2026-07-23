@@ -4,6 +4,7 @@ import MLXRandom
 import MLXNN
 import Tokenizers
 import Hub
+import AudioCommon
 import PersonaPlex
 
 // MARK: - CSM text→audio pipeline
@@ -18,6 +19,19 @@ public final class CSMPipeline {
     let model: CSMModel
     let mimi: Mimi
     let tokenizer: Tokenizer
+
+    /// Download a published CSM MLX model (e.g. `aufklarer/CSM-1B-MLX-8bit`) and load it.
+    public static func fromPretrained(
+        _ repoId: String = "aufklarer/CSM-1B-MLX-8bit", offlineMode: Bool = false
+    ) async throws -> CSMPipeline {
+        let dir = try HuggingFaceDownloader.getCacheDirectory(for: repoId)
+        try await HuggingFaceDownloader.downloadFiles(
+            modelId: repoId, to: dir,
+            files: ["model.safetensors", "config.json", "mimi.safetensors",
+                    "tokenizer.json", "tokenizer_config.json", "special_tokens_map.json"],
+            offlineMode: offlineMode)
+        return try await CSMPipeline(directory: dir)
+    }
 
     public init(directory: URL) async throws {
         cfg = try CSMConfig.load(from: directory)
