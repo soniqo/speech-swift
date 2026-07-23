@@ -63,6 +63,20 @@ Native WhisperASR is the faster Whisper implementation here: mean RTF is 9.4% lo
 
 The reverse-order replication reproduced the speed result: native mean RTF was 0.077 versus WhisperKit's 0.085, with 17.6x versus 16.0x overall throughput. Native cached load remained 1.3s; WhisperKit took 13.2s in that run, so the 7.2s value in the displayed comparison is the more conservative loading baseline. Peak RSS remained 18 MB apart (442 MB native versus 424 MB WhisperKit).
 
+### MOSS native CoreML runtime
+
+The `moss-coreml-int8` and `moss-coreml-fp16` engines load the published MOSS
+Transcribe Diarize 0.9B bundles through speech-swift's native
+`MossTranscribe` runtime. The matched 80-clip English HF/FLEURS fixture was run
+twice in isolated, reversed model order on the same M5 Pro. Both variants
+produced 8.16% aggregate WER and 5.90% CER. Pooled across both runs, INT8
+recorded 0.070 RTF (14.3x realtime) versus FP16's 0.079 (12.6x), with
+2,382–2,399 MB versus 3,689–3,735 MB sampled peak RSS.
+
+The full methodology, per-run variance, exact round-trip assertion, and
+reproduction commands are recorded in
+[MOSS CoreML Native Runtime Benchmark](moss-coreml.md).
+
 ## Comparison with published models
 
 | Model | Params | Size | Precision | WER% (test-clean) | Source |
@@ -165,6 +179,8 @@ Available engine IDs (see `Sources/AsrBenchmark/Engine.swift::EngineID`):
 - `omnilingual` — Omnilingual CTC 300M CoreML INT8
 - `omnilingual-mlx-{300m,1b,3b,7b}-4bit` — Omnilingual CTC MLX variants
 - `whisper-asr-turbo` — speech-swift native WhisperASR CoreML runtime over `aufklarer/Whisper-Large-v3-Turbo-CoreML`
+- `moss-coreml-int8` — native MOSS CoreML runtime with an FP16 audio encoder and block-32 INT8 decoder
+- `moss-coreml-fp16` — native MOSS CoreML FP16 reference
 - `whisperkit-large-v3-turbo` / `whisperkit-large-v3` / `whisperkit-distil-large-v3` — Argmax WhisperKit
 
 Without `--isolated`, peak RSS reflects the sequential high-water mark across the whole run (MLX/CoreML caches don't release between engines). With `--isolated`, each engine runs in a child process and its peak RSS is its own.

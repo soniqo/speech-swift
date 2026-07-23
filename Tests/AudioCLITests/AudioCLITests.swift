@@ -250,6 +250,63 @@ final class TranscribeCommandTests: XCTestCase {
         XCTAssertThrowsError(try resolveWhisperModelId("medium"))
     }
 
+    // MARK: --engine moss
+
+    func testParsesMossOptions() throws {
+        let cmd = try AudioCLI.parseAsRoot([
+            "transcribe", "audio.wav", "--engine", "moss",
+            "--model", "fp16", "--max-tokens", "128"
+        ])
+        let transcribe = try XCTUnwrap(cmd as? TranscribeCommand)
+        XCTAssertEqual(transcribe.engine, "moss")
+        XCTAssertEqual(transcribe.model, "fp16")
+        XCTAssertEqual(transcribe.maxTokens, 128)
+    }
+
+    func testMossModelAliasesResolvePublishedBundles() throws {
+        for alias in ["0.6B", "default", "int8"] {
+            XCTAssertEqual(
+                try resolveMossModelId(alias),
+                "aufklarer/MOSS-Transcribe-Diarize-0.9B-CoreML-INT8",
+                "\(alias) should resolve to the INT8 CoreML bundle"
+            )
+        }
+        XCTAssertEqual(
+            try resolveMossModelId("fp16"),
+            "aufklarer/MOSS-Transcribe-Diarize-0.9B-CoreML-FP16"
+        )
+    }
+
+    func testMossAcceptsFullModelId() throws {
+        XCTAssertEqual(
+            try resolveMossModelId("org/custom-moss-coreml"),
+            "org/custom-moss-coreml"
+        )
+    }
+
+    func testMossRejectsUnknownShortModelName() {
+        XCTAssertThrowsError(
+            try AudioCLI.parseAsRoot([
+                "transcribe", "audio.wav", "--engine", "moss",
+                "--model", "int4"
+            ])
+        )
+    }
+
+    func testMossRejectsStreamingAndNonPositiveTokenLimit() {
+        XCTAssertThrowsError(
+            try AudioCLI.parseAsRoot([
+                "transcribe", "audio.wav", "--engine", "moss", "--stream"
+            ])
+        )
+        XCTAssertThrowsError(
+            try AudioCLI.parseAsRoot([
+                "transcribe", "audio.wav", "--engine", "moss",
+                "--max-tokens", "0"
+            ])
+        )
+    }
+
     // MARK: --engine omnilingual --backend mlx
 
     func testOmnilingualDefaultBackendIsCoreML() throws {

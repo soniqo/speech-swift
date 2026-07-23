@@ -101,6 +101,10 @@ let package = Package(
             targets: ["WhisperASR"]
         ),
         .library(
+            name: "MossTranscribe",
+            targets: ["MossTranscribe"]
+        ),
+        .library(
             name: "VibeVoiceTTS",
             targets: ["VibeVoiceTTS"]
         ),
@@ -619,6 +623,13 @@ let package = Package(
             ]
         ),
         .target(
+            name: "MossTranscribe",
+            dependencies: [
+                "AudioCommon",
+                .product(name: "Tokenizers", package: "swift-transformers")
+            ]
+        ),
+        .target(
             name: "Audio2Face3D",
             dependencies: [
                 "AudioCommon",
@@ -643,6 +654,7 @@ let package = Package(
                 "ParakeetStreamingASR",
                 "NemotronStreamingASR",
                 "WhisperASR",
+                "MossTranscribe",
                 "OmnilingualASR",
                 "VoxtralASR",
                 "KokoroTTS",
@@ -681,6 +693,7 @@ let package = Package(
                 "OmnilingualASR",
                 "WhisperASR",
                 "VoxtralASR",
+                "MossTranscribe",
                 .product(name: "WhisperKit", package: "WhisperKit"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser")
             ]
@@ -787,6 +800,14 @@ let package = Package(
         .testTarget(
             name: "WhisperASRTests",
             dependencies: ["WhisperASR"]
+        ),
+        .testTarget(
+            name: "MossTranscribeTests",
+            dependencies: [
+                "MossTranscribe",
+                "AudioCommon",
+                .product(name: "Tokenizers", package: "swift-transformers")
+            ]
         ),
         .testTarget(
             name: "Qwen3TTSTests",
