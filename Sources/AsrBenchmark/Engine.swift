@@ -45,6 +45,8 @@ public enum EngineID: String, CaseIterable, Sendable {
     case qwen3MLX17b8bit = "qwen3-mlx-1.7b-8bit"
     case parakeet = "parakeet"
     case nemotron = "nemotron"
+    case nemotronMLXInt5 = "nemotron-mlx-int5"
+    case nemotronMLXInt8 = "nemotron-mlx-int8"
     case omnilingual = "omnilingual"
     case omnilingualMLX300m4bit = "omnilingual-mlx-300m-4bit"
     case omnilingualMLX1b4bit = "omnilingual-mlx-1b-4bit"
@@ -76,6 +78,10 @@ public enum EngineID: String, CaseIterable, Sendable {
         case .qwen3MLX17b8bit: return Qwen3MLXEngine(size: "1.7B", bits: 8)
         case .parakeet: return ParakeetEngine()
         case .nemotron: return NemotronEngine()
+        case .nemotronMLXInt5:
+            return NemotronMLXEngine(variant: .int5)
+        case .nemotronMLXInt8:
+            return NemotronMLXEngine(variant: .int8)
         case .omnilingual: return OmnilingualEngine()
         case .omnilingualMLX300m4bit: return OmnilingualMLXEngine(variant: .m300, bits: 4)
         case .omnilingualMLX1b4bit: return OmnilingualMLXEngine(variant: .b1, bits: 4)

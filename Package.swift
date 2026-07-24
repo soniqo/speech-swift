@@ -477,6 +477,10 @@ let package = Package(
             name: "NemotronStreamingASR",
             dependencies: [
                 "AudioCommon",
+                "MLXCommon",
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXNN", package: "mlx-swift"),
+                .product(name: "MLXFast", package: "mlx-swift"),
             ]
         ),
         .target(

@@ -36,10 +36,23 @@ public struct NemotronVocabulary: Sendable {
         self.tokenToId = reverse
     }
 
-    /// Load vocabulary from vocab.json (format: `{"0": "▁the", "1": "▁a", ...}`).
+    /// Load vocabulary from either the Core ML dictionary form
+    /// (`{"0": "▁the"}`) or the MLX ordered-array form (`["▁the", ...]`).
     public static func load(from url: URL) throws -> NemotronVocabulary {
         let data = try Data(contentsOf: url)
-        let raw = try JSONDecoder().decode([String: String].self, from: data)
+        if let ordered = try? JSONDecoder().decode([String].self, from: data) {
+            return NemotronVocabulary(
+                idToToken: Dictionary(
+                    uniqueKeysWithValues: ordered.enumerated().map {
+                        ($0.offset, $0.element)
+                    }
+                )
+            )
+        }
+        let raw = try JSONDecoder().decode(
+            [String: String].self,
+            from: data
+        )
         var mapping: [Int: String] = [:]
         for (key, value) in raw {
             if let id = Int(key) {
