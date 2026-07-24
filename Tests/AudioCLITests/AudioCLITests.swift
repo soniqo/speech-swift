@@ -255,7 +255,7 @@ final class TranscribeCommandTests: XCTestCase {
     func testParsesMossOptions() throws {
         let cmd = try AudioCLI.parseAsRoot([
             "transcribe", "audio.wav", "--engine", "moss",
-            "--model", "fp16", "--max-tokens", "128"
+            "--model", "fp16", "--max-tokens", "128",
         ])
         let transcribe = try XCTUnwrap(cmd as? TranscribeCommand)
         XCTAssertEqual(transcribe.engine, "moss")
@@ -264,7 +264,7 @@ final class TranscribeCommandTests: XCTestCase {
     }
 
     func testMossModelAliasesResolvePublishedBundles() throws {
-        for alias in ["0.6B", "default", "int8"] {
+        for alias in ["0.6B", "0.9B", "default", "int8"] {
             XCTAssertEqual(
                 try resolveMossModelId(alias),
                 "aufklarer/MOSS-Transcribe-Diarize-0.9B-CoreML-INT8",
@@ -282,6 +282,57 @@ final class TranscribeCommandTests: XCTestCase {
             try resolveMossModelId("org/custom-moss-coreml"),
             "org/custom-moss-coreml"
         )
+    }
+
+    func testMossMLXOptionsAndAliases() throws {
+        let cmd = try AudioCLI.parseAsRoot([
+            "transcribe", "audio.wav", "--engine", "moss",
+            "--backend", "mlx", "--model", "int5",
+            "--kv-cache", "int8",
+        ])
+        let transcribe = try XCTUnwrap(cmd as? TranscribeCommand)
+        XCTAssertEqual(transcribe.backend, "mlx")
+        XCTAssertEqual(transcribe.kvCache, "int8")
+        XCTAssertNoThrow(try transcribe.validate())
+
+        for alias in ["0.6B", "0.9B", "default", "int5", "5bit"] {
+            XCTAssertEqual(
+                try resolveMossModelId(alias, backend: "mlx"),
+                "aufklarer/MOSS-Transcribe-Diarize-0.9B-MLX-5bit"
+            )
+        }
+        XCTAssertEqual(
+            try resolveMossModelId("int8", backend: "mlx"),
+            "aufklarer/MOSS-Transcribe-Diarize-0.9B-MLX-INT8"
+        )
+        XCTAssertEqual(
+            try resolveMossModelId("./local-moss-mlx", backend: "mlx"),
+            "./local-moss-mlx"
+        )
+    }
+
+    func testMossMLXRejectsUnsupportedModelAndCache() {
+        XCTAssertThrowsError(try {
+            let cmd = try AudioCLI.parseAsRoot([
+                "transcribe", "audio.wav", "--engine", "moss",
+                "--backend", "mlx", "--model", "fp16",
+            ])
+            try (cmd as? TranscribeCommand)?.validate()
+        }())
+        XCTAssertThrowsError(try {
+            let cmd = try AudioCLI.parseAsRoot([
+                "transcribe", "audio.wav", "--engine", "moss",
+                "--backend", "mlx", "--kv-cache", "int6",
+            ])
+            try (cmd as? TranscribeCommand)?.validate()
+        }())
+        XCTAssertThrowsError(try {
+            let cmd = try AudioCLI.parseAsRoot([
+                "transcribe", "audio.wav", "--engine", "moss",
+                "--backend", "mlx", "--kv-cache", "int4",
+            ])
+            try (cmd as? TranscribeCommand)?.validate()
+        }())
     }
 
     func testMossRejectsUnknownShortModelName() {

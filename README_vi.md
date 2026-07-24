@@ -40,7 +40,7 @@ Nhận dạng, tổng hợp và hiểu giọng nói trên thiết bị cho Mac v
 
 - **[Qwen3-ASR](https://soniqo.audio/guides/transcribe)** — Chuyển giọng nói thành văn bản (nhận dạng giọng nói tự động, 52 ngôn ngữ, MLX + CoreML)
 - **[WhisperASR](docs/models/whisper-asr.md)** — Whisper Large-v3 Turbo speech-to-text via native CoreML runtime (ANE, multilingual)
-- **[MOSS Transcribe Diarize](https://soniqo.audio/vi/guides/moss)** — Phiên âm theo lô CoreML gốc với nhãn người nói và mốc thời gian do mô hình tạo (INT8 mặc định, FP16 tham chiếu)
+- **[MOSS Transcribe Diarize](https://soniqo.audio/vi/guides/moss)** — Phiên âm ngoại tuyến CoreML/MLX gốc với nhãn người nói và mốc thời gian do mô hình tạo (ngữ cảnh MLX 128K; INT5/INT8)
 - **[Parakeet TDT](https://soniqo.audio/guides/parakeet)** — Chuyển giọng nói thành văn bản qua CoreML (Neural Engine, NVIDIA FastConformer + bộ giải mã TDT, 25 ngôn ngữ)
 - **[Omnilingual ASR](https://soniqo.audio/guides/omnilingual)** — Chuyển giọng nói thành văn bản (Meta wav2vec2 + CTC, **1.672 ngôn ngữ** trên 32 hệ chữ viết, CoreML 300M + MLX 300M/1B/3B/7B)
 - **[Cohere Transcribe 2B](https://soniqo.audio/vi/guides/cohere-transcribe)** — Chuyển giọng nói thành văn bản bằng MLX gốc (14 ngôn ngữ, FP16/INT5/INT8)
@@ -176,7 +176,7 @@ Xem tổng quan gọn bên dưới. **[Danh mục mô hình đầy đủ với k
 |-------|------|----------|-------|-----------|
 | [Qwen3-ASR](https://soniqo.audio/guides/transcribe) | Giọng nói → Văn bản | MLX, CoreML (hybrid) | 0.6B, 1.7B | 52 |
 | [WhisperASR](docs/models/whisper-asr.md) | Speech → Text | CoreML (ANE) | Large-v3 Turbo | Multi |
-| [MOSS Transcribe Diarize](https://soniqo.audio/vi/guides/moss) | Giọng nói → Văn bản + mốc thời gian người nói | CoreML | 0.9B (INT8 / FP16) | Đa ngôn ngữ |
+| [MOSS Transcribe Diarize](https://soniqo.audio/vi/guides/moss) | Giọng nói → Văn bản + mốc thời gian người nói | CoreML / MLX | 0.9B (MLX INT5/INT8; CoreML INT8/FP16) | Đa ngôn ngữ |
 | [Parakeet TDT](https://soniqo.audio/guides/parakeet) | Giọng nói → Văn bản | CoreML (ANE) | 0.6B | 25 ngôn ngữ châu Âu |
 | [Parakeet EOU](https://soniqo.audio/guides/dictate) | Giọng nói → Văn bản (streaming) | CoreML (ANE) | 120M | 25 ngôn ngữ châu Âu |
 | [Nemotron Streaming (Đa ngôn ngữ)](https://soniqo.audio/guides/nemotron) | Giọng nói → Văn bản (streaming, có dấu câu) | CoreML (ANE), MLX | 0.6B | **40** |
@@ -242,6 +242,7 @@ speech transcribe recording.wav
 speech transcribe recording.wav --engine cohere
 speech transcribe recording.wav --engine voxtral
 speech transcribe recording.wav --engine moss
+speech transcribe meeting.wav --engine moss --backend mlx
 speech speak "Hello world"
 speech csm "Nice to meet you" --ref-audio voice.wav --ref-text "reference transcript"
 speech translate "Hello, how are you?" --to es
@@ -264,7 +265,7 @@ Chỉ import những gì bạn cần — mỗi mô hình là target SPM riêng:
 ```swift
 import Qwen3ASR             // Nhận dạng giọng nói (MLX)
 import WhisperASR           // Whisper Large-v3 Turbo (CoreML)
-import MossTranscribe       // MOSS transcription with timestamps + speaker labels (CoreML)
+import MossTranscribe       // MOSS transcription with timestamps + speaker labels (CoreML + MLX)
 import ParakeetASR          // Nhận dạng giọng nói (CoreML, batch)
 import ParakeetStreamingASR // Đọc chính tả streaming với kết quả tạm thời + EOU
 import NemotronStreamingASR // ASR streaming đa ngôn ngữ với dấu câu tự nhiên (0.6B, 40 ngôn ngữ)

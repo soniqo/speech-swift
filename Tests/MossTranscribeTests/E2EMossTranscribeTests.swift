@@ -64,6 +64,72 @@ final class E2EMossTranscribeTests: XCTestCase {
         )
     }
 
+    func testMLXINT5RoundTripProducesStructuredTranscript() async throws {
+        try await assertMLXRoundTrip(
+            variant: .int5,
+            localEnvironment: "MOSS_E2E_MLX_INT5_MODEL_DIR"
+        )
+    }
+
+    func testMLXINT8RoundTripProducesStructuredTranscript() async throws {
+        try await assertMLXRoundTrip(
+            variant: .int8,
+            localEnvironment: "MOSS_E2E_MLX_INT8_MODEL_DIR"
+        )
+    }
+
+    func testMLXINT5WeightsWithINT8KVCacheProduceStructuredTranscript()
+        async throws
+    {
+        try await assertMLXINT8KVCache(
+            variant: .int5,
+            localEnvironment: "MOSS_E2E_MLX_INT5_MODEL_DIR"
+        )
+    }
+
+    func testMLXINT8WeightsWithINT8KVCacheProduceStructuredTranscript()
+        async throws
+    {
+        try await assertMLXINT8KVCache(
+            variant: .int8,
+            localEnvironment: "MOSS_E2E_MLX_INT8_MODEL_DIR"
+        )
+    }
+
+    private func assertMLXINT8KVCache(
+        variant: MossMLXVariant,
+        localEnvironment: String
+    ) async throws {
+        let (audio, model) = try await loadMLXFixture(
+            variant: variant,
+            localEnvironment: localEnvironment
+        )
+        let reference =
+            "Can you guarantee that the replacement part will be shipped tomorrow?"
+
+        let result = try model.transcribeDetailed(
+            audio: audio,
+            sampleRate: MossMLXModel.inputSampleRate,
+            options: MossMLXDecodingOptions(
+                kvCachePrecision: .int8
+            )
+        )
+
+        XCTAssertEqual(result.text, reference)
+        XCTAssertEqual(
+            result.segments,
+            [
+                MossTranscriptSegment(
+                    startTime: 5,
+                    endTime: 8.4,
+                    speaker: "S01",
+                    text: reference
+                )
+            ]
+        )
+        XCTAssertEqual(result.metrics.stopReason, .endOfSequence)
+    }
+
     private func assertRoundTrip(
         variant: MossModelVariant,
         localEnvironment: String
@@ -151,5 +217,86 @@ final class E2EMossTranscribeTests: XCTestCase {
                 result.metrics.generatedTokens
             )
         )
+    }
+
+    private func assertMLXRoundTrip(
+        variant: MossMLXVariant,
+        localEnvironment: String
+    ) async throws {
+        let (audio, model) = try await loadMLXFixture(
+            variant: variant,
+            localEnvironment: localEnvironment
+        )
+        let result = try model.transcribeDetailed(
+            audio: audio,
+            sampleRate: MossMLXModel.inputSampleRate
+        )
+        let reference =
+            "Can you guarantee that the replacement part will be shipped tomorrow?"
+        XCTAssertEqual(result.text, reference)
+        XCTAssertEqual(
+            result.segments,
+            [
+                MossTranscriptSegment(
+                    startTime: 5,
+                    endTime: 8.4,
+                    speaker: "S01",
+                    text: reference
+                )
+            ]
+        )
+        XCTAssertEqual(result.metrics.stopReason, .endOfSequence)
+        XCTAssertGreaterThan(result.metrics.promptTokens, 0)
+        XCTAssertGreaterThan(result.metrics.generatedTokens, 0)
+
+        print(
+            String(
+                format:
+                    "[MOSS-MLX-\(variant.rawValue.uppercased())] RTF=%.4f throughput=%.2fx preprocessing=%.3fs encoder=%.3fs prefill=%.3fs decode=%.3fs prompt=%d generated=%d",
+                result.metrics.realTimeFactor,
+                result.metrics.realtimeThroughput,
+                result.metrics.preprocessingSeconds,
+                result.metrics.audioEncoderSeconds,
+                result.metrics.decoderPrefillSeconds,
+                result.metrics.tokenDecodeSeconds,
+                result.metrics.promptTokens,
+                result.metrics.generatedTokens
+            )
+        )
+    }
+
+    private func loadMLXFixture(
+        variant: MossMLXVariant,
+        localEnvironment: String
+    ) async throws -> (audio: [Float], model: MossMLXModel) {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let audioURL = repositoryRoot.appendingPathComponent(
+            "Tests/Qwen3ASRTests/Resources/test_audio.wav"
+        )
+        guard FileManager.default.fileExists(atPath: audioURL.path) else {
+            throw XCTSkip("shared ASR test_audio.wav is unavailable")
+        }
+        let audio = try AudioFileLoader.load(
+            url: audioURL,
+            targetSampleRate: MossMLXModel.inputSampleRate
+        )
+
+        let model: MossMLXModel
+        if let local = ProcessInfo.processInfo.environment[
+            localEnvironment
+        ] {
+            model = try await MossMLXModel.fromDirectory(
+                URL(fileURLWithPath: local),
+                modelId: "local/MOSS-MLX-\(variant.rawValue.uppercased())"
+            )
+        } else {
+            model = try await MossMLXModel.fromPretrained(
+                variant: variant
+            )
+        }
+        return (audio, model)
     }
 }

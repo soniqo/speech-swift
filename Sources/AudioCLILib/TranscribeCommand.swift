@@ -26,7 +26,7 @@ public struct TranscribeCommand: ParsableCommand {
     @Option(name: .long, help: "[omnilingual] Window size in seconds: 5 or 10 (default 10) — CoreML backend only")
     public var window: Int = 10
 
-    @Option(name: .long, help: "[omnilingual] Backend: coreml (default) or mlx")
+    @Option(name: .long, help: "[omnilingual/moss] Backend: coreml (default) or mlx")
     public var backend: String = "coreml"
 
     @Option(name: .long, help: "[omnilingual mlx] Variant: 300M (default), 1B, 3B, or 7B")
@@ -35,11 +35,14 @@ public struct TranscribeCommand: ParsableCommand {
     @Option(name: .long, help: "[omnilingual mlx] Quantization bits: 4 (default) or 8")
     public var bits: Int = 4
 
-    @Option(name: .shortAndLong, help: "[qwen3] 0.6B (default), 0.6B-8bit, 1.7B, or 1.7B-4bit; [cohere/voxtral] int5 (default), int8, or fp16; [moss] int8 (default) or fp16; [whisper] default or turbo; alternatively a model ID or local directory")
+    @Option(name: .shortAndLong, help: "[qwen3] 0.6B (default), 0.6B-8bit, 1.7B, or 1.7B-4bit; [cohere/voxtral] int5 (default), int8, or fp16; [moss coreml] int8 (default) or fp16; [moss mlx] int5 (default) or int8; [whisper] default or turbo; alternatively a model ID or local directory")
     public var model: String = "0.6B"
 
-    @Option(name: .long, help: "[moss] Maximum generated transcript tokens (default 512)")
-    public var maxTokens: Int = 512
+    @Option(name: .long, help: "[moss] Maximum generated transcript tokens (default: Core ML 512, MLX 5120)")
+    public var maxTokens: Int?
+
+    @Option(name: .long, help: "[moss mlx] KV-cache precision: fp16 (default) or int8")
+    public var kvCache: String = "fp16"
 
     @Option(name: .long, help: "Language hint (optional)")
     public var language: String?
@@ -75,10 +78,21 @@ public struct TranscribeCommand: ParsableCommand {
             guard !stream else {
                 throw ValidationError("--stream is not supported by the MOSS batch runtime")
             }
-            guard maxTokens > 0 else {
+            if let maxTokens, maxTokens <= 0 {
                 throw ValidationError("--max-tokens must be positive")
             }
-            _ = try resolveMossModelId(model)
+            let backendNorm = backend.lowercased()
+            guard backendNorm == "coreml" || backendNorm == "mlx" else {
+                throw ValidationError("--backend must be 'coreml' or 'mlx' for moss")
+            }
+            _ = try resolveMossModelId(model, backend: backendNorm)
+            if backendNorm == "mlx" {
+                guard MossMLXKVCachePrecision(rawValue: kvCache.lowercased()) != nil else {
+                    throw ValidationError(
+                        "--kv-cache must be 'fp16' or 'int8' for moss mlx"
+                    )
+                }
+            }
         }
         if eng == "omnilingual" {
             if window != 5 && window != 10 {
@@ -182,35 +196,77 @@ public struct TranscribeCommand: ParsableCommand {
 
     private func runMossTranscription() throws {
         try runAsync {
+            let backend = backend.lowercased()
             print("Loading audio: \(audioFile)")
             let audio = try AudioFileLoader.load(
                 url: URL(fileURLWithPath: audioFile),
-                targetSampleRate: MossTranscribeModel.inputSampleRate
+                targetSampleRate: MossMLXModel.inputSampleRate
             )
             let duration =
                 Double(audio.count)
-                / Double(MossTranscribeModel.inputSampleRate)
+                / Double(MossMLXModel.inputSampleRate)
             print(
                 "  Loaded \(audio.count) samples "
                     + "(\(String(format: "%.2f", duration))s)"
             )
 
-            let modelId = try resolveMossModelId(model)
-
-            print("Loading MOSS Core ML model: \(modelId)")
-            let moss = try await MossTranscribeModel.fromPretrained(
-                modelId: modelId,
-                progressHandler: reportProgress
-            )
-            print("Warming up Core ML...")
-            try moss.warmUp()
-
-            print("Transcribing with timestamps and speakers...")
-            let result = try moss.transcribeDetailed(
-                audio: audio,
-                sampleRate: MossTranscribeModel.inputSampleRate,
-                maxNewTokens: maxTokens
-            )
+            let modelId = try resolveMossModelId(model, backend: backend)
+            let result: MossTranscription
+            if backend == "mlx" {
+                print("Loading MOSS MLX model: \(modelId)")
+                let moss: MossMLXModel
+                if FileManager.default.fileExists(atPath: modelId) {
+                    moss = try await MossMLXModel.fromDirectory(
+                        URL(fileURLWithPath: modelId),
+                        progressHandler: reportProgress
+                    )
+                } else {
+                    moss = try await MossMLXModel.fromPretrained(
+                        modelId: modelId,
+                        progressHandler: reportProgress
+                    )
+                }
+                print("Warming up MLX...")
+                try moss.warmUp()
+                let cachePrecision = MossMLXKVCachePrecision(
+                    rawValue: kvCache.lowercased()
+                ) ?? .float16
+                let options = MossMLXDecodingOptions(
+                    maxTokens: maxTokens ?? 5_120,
+                    kvCachePrecision: cachePrecision
+                )
+                print(
+                    "Transcribing offline with global context "
+                        + "(\(cachePrecision.rawValue) KV cache)..."
+                )
+                result = try moss.transcribeDetailed(
+                    audio: audio,
+                    sampleRate: MossMLXModel.inputSampleRate,
+                    options: options
+                )
+            } else {
+                print("Loading MOSS Core ML model: \(modelId)")
+                let moss: MossTranscribeModel
+                if FileManager.default.fileExists(atPath: modelId) {
+                    moss = try await MossTranscribeModel.fromDirectory(
+                        URL(fileURLWithPath: modelId),
+                        progressHandler: reportProgress
+                    )
+                } else {
+                    moss = try await MossTranscribeModel.fromPretrained(
+                        modelId: modelId,
+                        progressHandler: reportProgress
+                    )
+                }
+                print("Warming up Core ML...")
+                try moss.warmUp()
+                print("Transcribing with timestamps and speakers...")
+                result = try moss.transcribeDetailed(
+                    audio: audio,
+                    sampleRate: MossTranscribeModel.inputSampleRate,
+                    maxNewTokens: maxTokens ?? 512
+                )
+            }
             print("Result: \(result.text)")
             if !result.segments.isEmpty {
                 print("Segments:")
@@ -624,19 +680,43 @@ private func resolveNewASRModelId(
     }
 }
 
-/// Resolve MOSS model aliases to the published CoreML bundles.
-public func resolveMossModelId(_ specifier: String) throws -> String {
-    switch specifier.lowercased() {
-    case "0.6b", "default", "int8":
-        return MossModelVariant.int8.modelId
-    case "fp16":
-        return MossModelVariant.fp16.modelId
-    default:
-        if specifier.contains("/") {
-            return specifier
+/// Resolve MOSS model aliases for either the Core ML or MLX runtime.
+public func resolveMossModelId(
+    _ specifier: String,
+    backend: String = "coreml"
+) throws -> String {
+    switch backend.lowercased() {
+    case "coreml":
+        switch specifier.lowercased() {
+        case "0.6b", "0.9b", "default", "int8", "8bit":
+            return MossModelVariant.int8.modelId
+        case "fp16", "16bit":
+            return MossModelVariant.fp16.modelId
+        default:
+            if specifier.contains("/") {
+                return specifier
+            }
+            throw ValidationError(
+                "[moss coreml] --model must be 'int8', 'fp16', "
+                    + "a Hugging Face model ID, or a local directory"
+            )
         }
-        throw ValidationError(
-            "[moss] --model must be 'int8', 'fp16', or a full CoreML HuggingFace repo ID"
-        )
+    case "mlx":
+        switch specifier.lowercased() {
+        case "0.6b", "0.9b", "default", "int5", "5bit":
+            return MossMLXVariant.int5.modelId
+        case "int8", "8bit":
+            return MossMLXVariant.int8.modelId
+        default:
+            if specifier.contains("/") {
+                return specifier
+            }
+            throw ValidationError(
+                "[moss mlx] --model must be 'int5', 'int8', "
+                    + "a Hugging Face model ID, or a local directory"
+            )
+        }
+    default:
+        throw ValidationError("[moss] --backend must be 'coreml' or 'mlx'")
     }
 }

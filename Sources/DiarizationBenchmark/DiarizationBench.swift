@@ -2,6 +2,7 @@ import ArgumentParser
 import AudioCommon
 import BenchmarkSupport
 import Foundation
+import MossTranscribe
 import SpeechVAD
 
 #if canImport(CoreML)
@@ -19,7 +20,7 @@ struct DiarizationBench: AsyncParsableCommand {
     var manifest: String
 
     @Option(name: .shortAndLong, parsing: .upToNextOption,
-            help: "Engines: community1-coreml, sortformer-default, sortformer-balanced, sortformer-streaming, sortformer-session, sortformer-streaming-ultra8, sortformer-session-ultra8, pyannote-mlx, pyannote-coreml.")
+            help: "Engines: community1-coreml, sortformer-default, sortformer-balanced, sortformer-streaming, sortformer-session, sortformer-streaming-ultra8, sortformer-session-ultra8, pyannote-mlx, pyannote-coreml, moss-coreml-int8, moss-mlx-int5, moss-mlx-int8.")
     var engines: [String] = ["sortformer-default", "pyannote-mlx"]
 
     @Option(name: .shortAndLong, help: "Max files to process.")
@@ -301,9 +302,114 @@ private func makeDiarizationEngine(
         return PyannoteDiarizationBenchEngine(name: "pyannote-mlx", embeddingEngine: .mlx)
     case "pyannote-coreml":
         return PyannoteDiarizationBenchEngine(name: "pyannote-coreml", embeddingEngine: .coreml)
+    case "moss-coreml-int8":
+        return MossCoreMLDiarizationBenchEngine()
+    case "moss-mlx-int5":
+        return MossMLXDiarizationBenchEngine(variant: .int5)
+    case "moss-mlx-int8":
+        return MossMLXDiarizationBenchEngine(variant: .int8)
     default:
         return nil
     }
+}
+
+private final class MossCoreMLDiarizationBenchEngine:
+    DiarizationBenchEngine
+{
+    let name = "moss-coreml-int8"
+    private var model: MossTranscribeModel?
+
+    func load() async throws {
+        model = try await MossTranscribeModel.fromPretrained(
+            variant: .int8
+        )
+    }
+
+    func diarize(
+        audio: [Float],
+        sampleRate: Int
+    ) throws -> DiarizationResult {
+        guard let model else {
+            return DiarizationResult(
+                segments: [],
+                numSpeakers: 0,
+                speakerEmbeddings: []
+            )
+        }
+        let transcription = try model.transcribeDetailed(
+            audio: audio,
+            sampleRate: sampleRate
+        )
+        return makeMossDiarizationResult(
+            transcription,
+            audioDuration: Double(audio.count) / Double(sampleRate)
+        )
+    }
+}
+
+private final class MossMLXDiarizationBenchEngine:
+    DiarizationBenchEngine
+{
+    let name: String
+    private let variant: MossMLXVariant
+    private var model: MossMLXModel?
+
+    init(variant: MossMLXVariant) {
+        self.variant = variant
+        name = "moss-mlx-\(variant.rawValue)"
+    }
+
+    func load() async throws {
+        let environmentKey =
+            variant == .int5
+            ? "MOSS_MLX_INT5_MODEL_DIR"
+            : "MOSS_MLX_INT8_MODEL_DIR"
+        if let local = ProcessInfo.processInfo.environment[environmentKey] {
+            model = try await MossMLXModel.fromDirectory(
+                URL(fileURLWithPath: local),
+                modelId: "local/MOSS-MLX-\(variant.rawValue.uppercased())"
+            )
+        } else {
+            model = try await MossMLXModel.fromPretrained(
+                variant: variant
+            )
+        }
+    }
+
+    func diarize(
+        audio: [Float],
+        sampleRate: Int
+    ) throws -> DiarizationResult {
+        guard let model else {
+            return DiarizationResult(
+                segments: [],
+                numSpeakers: 0,
+                speakerEmbeddings: []
+            )
+        }
+        let transcription = try model.transcribeDetailed(
+            audio: audio,
+            sampleRate: sampleRate
+        )
+        return makeMossDiarizationResult(
+            transcription,
+            audioDuration: Double(audio.count) / Double(sampleRate)
+        )
+    }
+}
+
+private func makeMossDiarizationResult(
+    _ transcription: MossTranscription,
+    audioDuration: Double
+) -> DiarizationResult {
+    let segments = transcription.diarizedSegments(
+        audioDuration: audioDuration
+    )
+    return DiarizationResult(
+        segments: segments,
+        numSpeakers: Set(segments.map(\.speakerId)).count,
+        speakerEmbeddings: []
+    )
 }
 
 #if canImport(CoreML)

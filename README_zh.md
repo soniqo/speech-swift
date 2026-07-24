@@ -40,7 +40,7 @@
 
 - **[Qwen3-ASR](https://soniqo.audio/zh/guides/transcribe)** — 语音转文字（自动语音识别，52 种语言，MLX + CoreML）
 - **[WhisperASR](docs/models/whisper-asr.md)** — Whisper Large-v3 Turbo speech-to-text via native CoreML runtime (ANE, multilingual)
-- **[MOSS Transcribe Diarize](https://soniqo.audio/zh/guides/moss)** — 原生 CoreML 批量转写，模型生成说话人标签与时间戳（默认 INT8，FP16 参考）
+- **[MOSS Transcribe Diarize](https://soniqo.audio/zh/guides/moss)** — 原生 CoreML/MLX 离线转写，模型生成说话人标签与时间戳（MLX 128K 上下文；INT5/INT8）
 - **[Parakeet TDT](https://soniqo.audio/zh/guides/parakeet)** — 通过 CoreML 进行语音转文字（神经引擎，NVIDIA FastConformer + TDT 解码器，25 种语言）
 - **[Omnilingual ASR](https://soniqo.audio/zh/guides/omnilingual)** — 语音转文字（Meta wav2vec2 + CTC，**1,672 种语言**，覆盖 32 种文字系统，CoreML 300M + MLX 300M/1B/3B/7B）
 - **[Cohere Transcribe 2B](https://soniqo.audio/zh/guides/cohere-transcribe)** — 原生 MLX 语音转文字（14 种语言，FP16/INT5/INT8）
@@ -176,7 +176,7 @@ struct DictateView: View {
 |-------|------|----------|-------|-----------|
 | [Qwen3-ASR](https://soniqo.audio/zh/guides/transcribe) | 语音 → 文字 | MLX、CoreML（混合） | 0.6B、1.7B | 52 |
 | [WhisperASR](docs/models/whisper-asr.md) | Speech → Text | CoreML (ANE) | Large-v3 Turbo | Multi |
-| [MOSS Transcribe Diarize](https://soniqo.audio/zh/guides/moss) | 语音 → 文字 + 说话人时间戳 | CoreML | 0.9B (INT8 / FP16) | 多语言 |
+| [MOSS Transcribe Diarize](https://soniqo.audio/zh/guides/moss) | 语音 → 文字 + 说话人时间戳 | CoreML / MLX | 0.9B (MLX INT5/INT8；CoreML INT8/FP16) | 多语言 |
 | [Parakeet TDT](https://soniqo.audio/zh/guides/parakeet) | 语音 → 文字 | CoreML (ANE) | 0.6B | 25 种欧洲语言 |
 | [Parakeet EOU](https://soniqo.audio/zh/guides/dictate) | 语音 → 文字（流式） | CoreML (ANE) | 120M | 25 种欧洲语言 |
 | [Nemotron Streaming (多语言)](https://soniqo.audio/zh/guides/nemotron) | 语音 → 文本（流式、带标点） | CoreML (ANE), MLX | 0.6B | **40** |
@@ -242,6 +242,7 @@ speech transcribe recording.wav
 speech transcribe recording.wav --engine cohere
 speech transcribe recording.wav --engine voxtral
 speech transcribe recording.wav --engine moss
+speech transcribe meeting.wav --engine moss --backend mlx
 speech speak "Hello world"
 speech csm "Nice to meet you" --ref-audio voice.wav --ref-text "reference transcript"
 speech translate "Hello, how are you?" --to es
@@ -264,7 +265,7 @@ dependencies: [
 ```swift
 import Qwen3ASR             // 语音识别 (MLX)
 import WhisperASR           // Whisper Large-v3 Turbo (CoreML)
-import MossTranscribe       // MOSS transcription with timestamps + speaker labels (CoreML)
+import MossTranscribe       // MOSS transcription with timestamps + speaker labels (CoreML + MLX)
 import ParakeetASR          // 语音识别 (CoreML，批量)
 import ParakeetStreamingASR // 带部分结果和 EOU 的流式听写
 import NemotronStreamingASR // 多语言流式 ASR，原生标点（0.6B，40 种语言）

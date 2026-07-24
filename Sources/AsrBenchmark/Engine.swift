@@ -53,6 +53,8 @@ public enum EngineID: String, CaseIterable, Sendable {
     case whisperASRTurbo = "whisper-asr-turbo"
     case mossCoreMLInt8 = "moss-coreml-int8"
     case mossCoreMLFP16 = "moss-coreml-fp16"
+    case mossMLXInt5 = "moss-mlx-int5"
+    case mossMLXInt8 = "moss-mlx-int8"
     case whisperKitLargeV3Turbo = "whisperkit-large-v3-turbo"
     case whisperKitLargeV3 = "whisperkit-large-v3"
     case whisperKitDistilLargeV3 = "whisperkit-distil-large-v3"
@@ -82,6 +84,8 @@ public enum EngineID: String, CaseIterable, Sendable {
         case .whisperASRTurbo: return WhisperASREngine()
         case .mossCoreMLInt8: return MossCoreMLEngine(variant: .int8)
         case .mossCoreMLFP16: return MossCoreMLEngine(variant: .fp16)
+        case .mossMLXInt5: return MossMLXEngine(variant: .int5)
+        case .mossMLXInt8: return MossMLXEngine(variant: .int8)
         case .whisperKitLargeV3Turbo: return WhisperKitEngine(model: "openai_whisper-large-v3-v20240930_turbo")
         case .whisperKitLargeV3: return WhisperKitEngine(model: "openai_whisper-large-v3")
         case .whisperKitDistilLargeV3: return WhisperKitEngine(model: "distil-whisper_distil-large-v3")

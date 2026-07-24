@@ -297,3 +297,289 @@ final class MossWhisperFeatureExtractorTests: XCTestCase {
         }
     }
 }
+
+final class MossMLXConfigurationTests: XCTestCase {
+    func testPublishedINT5GeometryValidates() throws {
+        let configuration = try JSONDecoder().decode(
+            MossMLXConfiguration.self,
+            from: Data(
+                """
+                {
+                  "audio_config": {
+                    "hidden_size": 1024,
+                    "intermediate_size": 4096,
+                    "layer_norm_eps": 0.00001,
+                    "max_source_positions": 1500,
+                    "merge_size": 4,
+                    "num_heads": 16,
+                    "num_layers": 24,
+                    "num_mel_bins": 80
+                  },
+                  "audio_token_id": 151671,
+                  "backend": "mlx",
+                  "decoder_config": {
+                    "head_dim": 128,
+                    "hidden_size": 1024,
+                    "intermediate_size": 3072,
+                    "num_heads": 16,
+                    "num_kv_heads": 8,
+                    "num_layers": 28,
+                    "rms_norm_eps": 0.000001,
+                    "rope_theta": 1000000,
+                    "vocab_size": 151936
+                  },
+                  "files": {
+                    "audio_encoder": "audio_encoder.safetensors",
+                    "decoder": "decoder.safetensors"
+                  },
+                  "max_context_tokens": 131072,
+                  "model_type": "moss-transcribe-diarize-mlx",
+                  "precision": "fp16-audio-int5-decoder",
+                  "quantization_config": {
+                    "bits": 5,
+                    "group_size": 64,
+                    "mode": "affine"
+                  }
+                }
+                """.utf8
+            )
+        )
+
+        XCTAssertNoThrow(try configuration.validate())
+        XCTAssertEqual(configuration.quantization.bits, 5)
+        XCTAssertEqual(configuration.decoder.layers, 28)
+        XCTAssertEqual(configuration.audio.layers, 24)
+    }
+
+    func testPrecisionMustMatchQuantizationBits() throws {
+        let configuration = try JSONDecoder().decode(
+            MossMLXConfiguration.self,
+            from: Data(
+                """
+                {
+                  "audio_config": {
+                    "hidden_size": 1024,
+                    "intermediate_size": 4096,
+                    "layer_norm_eps": 0.00001,
+                    "max_source_positions": 1500,
+                    "merge_size": 4,
+                    "num_heads": 16,
+                    "num_layers": 24,
+                    "num_mel_bins": 80
+                  },
+                  "audio_token_id": 151671,
+                  "backend": "mlx",
+                  "decoder_config": {
+                    "head_dim": 128,
+                    "hidden_size": 1024,
+                    "intermediate_size": 3072,
+                    "num_heads": 16,
+                    "num_kv_heads": 8,
+                    "num_layers": 28,
+                    "rms_norm_eps": 0.000001,
+                    "rope_theta": 1000000,
+                    "vocab_size": 151936
+                  },
+                  "files": {
+                    "audio_encoder": "audio_encoder.safetensors",
+                    "decoder": "decoder.safetensors"
+                  },
+                  "max_context_tokens": 131072,
+                  "model_type": "moss-transcribe-diarize-mlx",
+                  "precision": "fp16-audio-int8-decoder",
+                  "quantization_config": {
+                    "bits": 5,
+                    "group_size": 64,
+                    "mode": "affine"
+                  }
+                }
+                """.utf8
+            )
+        )
+
+        XCTAssertThrowsError(try configuration.validate())
+    }
+
+    func testUnsupportedQuantizationIsRejected() throws {
+        let configuration = try JSONDecoder().decode(
+            MossMLXConfiguration.self,
+            from: Data(
+                """
+                {
+                  "audio_config": {
+                    "hidden_size": 1024,
+                    "intermediate_size": 4096,
+                    "layer_norm_eps": 0.00001,
+                    "max_source_positions": 1500,
+                    "merge_size": 4,
+                    "num_heads": 16,
+                    "num_layers": 24,
+                    "num_mel_bins": 80
+                  },
+                  "audio_token_id": 151671,
+                  "backend": "mlx",
+                  "decoder_config": {
+                    "head_dim": 128,
+                    "hidden_size": 1024,
+                    "intermediate_size": 3072,
+                    "num_heads": 16,
+                    "num_kv_heads": 8,
+                    "num_layers": 28,
+                    "rms_norm_eps": 0.000001,
+                    "rope_theta": 1000000,
+                    "vocab_size": 151936
+                  },
+                  "files": {
+                    "audio_encoder": "audio_encoder.safetensors",
+                    "decoder": "decoder.safetensors"
+                  },
+                  "model_type": "moss-transcribe-diarize-mlx",
+                  "precision": "invalid",
+                  "quantization_config": {
+                    "bits": 7,
+                    "group_size": 64,
+                    "mode": "affine"
+                  }
+                }
+                """.utf8
+            )
+        )
+
+        XCTAssertThrowsError(try configuration.validate())
+    }
+
+    func testUnexpectedWeightPathIsRejected() throws {
+        let configuration = try JSONDecoder().decode(
+            MossMLXConfiguration.self,
+            from: Data(
+                """
+                {
+                  "audio_config": {
+                    "hidden_size": 1024,
+                    "intermediate_size": 4096,
+                    "layer_norm_eps": 0.00001,
+                    "max_source_positions": 1500,
+                    "merge_size": 4,
+                    "num_heads": 16,
+                    "num_layers": 24,
+                    "num_mel_bins": 80
+                  },
+                  "audio_token_id": 151671,
+                  "backend": "mlx",
+                  "decoder_config": {
+                    "head_dim": 128,
+                    "hidden_size": 1024,
+                    "intermediate_size": 3072,
+                    "num_heads": 16,
+                    "num_kv_heads": 8,
+                    "num_layers": 28,
+                    "rms_norm_eps": 0.000001,
+                    "rope_theta": 1000000,
+                    "vocab_size": 151936
+                  },
+                  "files": {
+                    "audio_encoder": "/tmp/audio_encoder.safetensors",
+                    "decoder": "decoder.safetensors"
+                  },
+                  "max_context_tokens": 131072,
+                  "model_type": "moss-transcribe-diarize-mlx",
+                  "precision": "fp16-audio-int5-decoder",
+                  "quantization_config": {
+                    "bits": 5,
+                    "group_size": 64,
+                    "mode": "affine"
+                  }
+                }
+                """.utf8
+            )
+        )
+
+        XCTAssertThrowsError(try configuration.validate())
+    }
+}
+
+final class MossMLXMemoryTests: XCTestCase {
+    func testNinetyMinuteCacheEstimatesSeparateCachePrecision() {
+        let tokens = 67_500
+
+        XCTAssertEqual(
+            MossMLXCacheMemory.estimatedBytes(
+                tokenCount: tokens,
+                precision: .float16
+            ),
+            7_741_440_000
+        )
+        XCTAssertEqual(
+            MossMLXCacheMemory.estimatedBytes(
+                tokenCount: tokens,
+                precision: .int8
+            ),
+            4_112_640_000
+        )
+    }
+
+    func testMLXVariantRepositoriesAndDefaults() {
+        XCTAssertEqual(MossMLXVariant.int5.quantizationBits, 5)
+        XCTAssertEqual(MossMLXVariant.int8.quantizationBits, 8)
+        XCTAssertTrue(
+            MossMLXVariant.int5.modelId.hasSuffix("MLX-5bit")
+        )
+        XCTAssertTrue(
+            MossMLXVariant.int8.modelId.hasSuffix("MLX-INT8")
+        )
+
+        let options = MossMLXDecodingOptions()
+        XCTAssertEqual(options.maxTokens, 5_120)
+        XCTAssertEqual(options.encoderBatchSize, 4)
+        XCTAssertEqual(options.prefillChunkSize, 512)
+        XCTAssertEqual(options.kvCachePrecision, .float16)
+    }
+}
+
+final class MossDiarizationBridgeTests: XCTestCase {
+    func testAnonymousLabelsBecomeContiguousAndClampToAudio() {
+        let transcription = MossTranscription(
+            rawText: "",
+            text: "",
+            segments: [
+                MossTranscriptSegment(
+                    startTime: 0.5,
+                    endTime: 2,
+                    speaker: "S03",
+                    text: "one"
+                ),
+                MossTranscriptSegment(
+                    startTime: 1.5,
+                    endTime: 4,
+                    speaker: "S01",
+                    text: "two"
+                ),
+                MossTranscriptSegment(
+                    startTime: 3,
+                    endTime: 6,
+                    speaker: "S03",
+                    text: "three"
+                ),
+            ],
+            metrics: MossTranscriptionMetrics(
+                preprocessingSeconds: 0,
+                audioEncoderSeconds: 0,
+                decoderPrefillSeconds: 0,
+                tokenDecodeSeconds: 0,
+                totalSeconds: 0,
+                audioDurationSeconds: 5,
+                promptTokens: 0,
+                generatedTokens: 0,
+                stopReason: .endOfSequence
+            )
+        )
+
+        let segments = transcription.diarizedSegments(
+            audioDuration: 5
+        )
+
+        XCTAssertEqual(segments.count, 3)
+        XCTAssertEqual(segments.map(\.speakerId), [0, 1, 0])
+        XCTAssertEqual(segments[2].endTime, 5)
+    }
+}

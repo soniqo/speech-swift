@@ -1,3 +1,4 @@
+import AudioCommon
 import Foundation
 
 /// Published Core ML variants supported by the native MOSS runtime.
@@ -11,6 +12,108 @@ public enum MossModelVariant: String, CaseIterable, Sendable {
             return "aufklarer/MOSS-Transcribe-Diarize-0.9B-CoreML-INT8"
         case .fp16:
             return "aufklarer/MOSS-Transcribe-Diarize-0.9B-CoreML-FP16"
+        }
+    }
+}
+
+/// Quantized decoder variants for the long-context MLX runtime.
+///
+/// Both bundles keep the Whisper encoder and VQ adaptor in FP16. Only the
+/// Qwen3 decoder weights differ, so quality comparisons isolate decoder
+/// quantization.
+public enum MossMLXVariant: String, CaseIterable, Sendable {
+    case int5
+    case int8
+
+    public var modelId: String {
+        switch self {
+        case .int5:
+            return "aufklarer/MOSS-Transcribe-Diarize-0.9B-MLX-5bit"
+        case .int8:
+            return "aufklarer/MOSS-Transcribe-Diarize-0.9B-MLX-INT8"
+        }
+    }
+
+    public var quantizationBits: Int {
+        switch self {
+        case .int5: return 5
+        case .int8: return 8
+        }
+    }
+}
+
+/// Precision used for the dynamically growing MLX key/value cache.
+///
+/// Decoder weight precision and cache precision are intentionally separate.
+/// Use `.float16` when comparing INT5 and INT8 model quality. Quantized cache
+/// can affect quality while reducing long-context memory.
+public enum MossMLXKVCachePrecision: String, CaseIterable, Sendable {
+    case float16 = "fp16"
+    case int8
+
+    public var bitsPerElement: Int {
+        switch self {
+        case .float16: return 16
+        case .int8: return 8
+        }
+    }
+}
+
+/// Greedy decoding and memory controls for the MOSS MLX runtime.
+public struct MossMLXDecodingOptions: Sendable, Equatable {
+    public var maxTokens: Int
+    public var encoderBatchSize: Int
+    public var prefillChunkSize: Int
+    public var kvCachePrecision: MossMLXKVCachePrecision
+
+    public init(
+        maxTokens: Int = 5_120,
+        encoderBatchSize: Int = 4,
+        prefillChunkSize: Int = 512,
+        kvCachePrecision: MossMLXKVCachePrecision = .float16
+    ) {
+        self.maxTokens = maxTokens
+        self.encoderBatchSize = encoderBatchSize
+        self.prefillChunkSize = prefillChunkSize
+        self.kvCachePrecision = kvCachePrecision
+    }
+}
+
+/// Analytical MOSS key/value-cache sizing.
+public enum MossMLXCacheMemory {
+    /// Estimated bytes occupied by all decoder-layer K/V tensors.
+    ///
+    /// Affine quantized estimates include FP16 scale and bias tensors for
+    /// each group. Runtime allocator padding is not included.
+    public static func estimatedBytes(
+        tokenCount: Int,
+        precision: MossMLXKVCachePrecision,
+        layers: Int = 28,
+        keyValueHeads: Int = 8,
+        headDimension: Int = 128,
+        groupSize: Int = 64
+    ) -> Int {
+        guard
+            tokenCount > 0,
+            layers > 0,
+            keyValueHeads > 0,
+            headDimension > 0
+        else {
+            return 0
+        }
+        let elementCount =
+            tokenCount * layers * 2 * keyValueHeads * headDimension
+        switch precision {
+        case .float16:
+            return elementCount * MemoryLayout<Float16>.stride
+        case .int8:
+            let packedBits = elementCount * precision.bitsPerElement
+            let packedBytes = (packedBits + 7) / 8
+            let groups = (elementCount + max(groupSize, 1) - 1)
+                / max(groupSize, 1)
+            let affineMetadataBytes =
+                groups * 2 * MemoryLayout<Float16>.stride
+            return packedBytes + affineMetadataBytes
         }
     }
 }
@@ -120,6 +223,41 @@ public struct MossTranscription: Sendable, Equatable {
     }
 }
 
+public extension MossTranscription {
+    /// Convert model speaker labels into contiguous integer identities for
+    /// diarization scoring and shared `AudioCommon` consumers.
+    ///
+    /// Speaker names are assigned in first-appearance order because MOSS
+    /// labels are anonymous within each recording.
+    func diarizedSegments(
+        audioDuration: Double? = nil
+    ) -> [DiarizedSegment] {
+        var speakerIDs: [String: Int] = [:]
+        var nextSpeakerID = 0
+        return segments.compactMap { segment in
+            let start = max(0, segment.startTime)
+            let end = min(
+                max(start, segment.endTime),
+                audioDuration ?? segment.endTime
+            )
+            guard end > start else { return nil }
+            let speakerID: Int
+            if let existing = speakerIDs[segment.speaker] {
+                speakerID = existing
+            } else {
+                speakerID = nextSpeakerID
+                speakerIDs[segment.speaker] = speakerID
+                nextSpeakerID += 1
+            }
+            return DiarizedSegment(
+                startTime: Float(start),
+                endTime: Float(end),
+                speakerId: speakerID
+            )
+        }
+    }
+}
+
 public enum MossTranscribeError: Error, LocalizedError {
     case invalidAudio(String)
     case missingModelFile(String)
@@ -142,7 +280,7 @@ public enum MossTranscribeError: Error, LocalizedError {
         case .missingTokenizerToken(let token):
             return "MOSS tokenizer is missing required token \(token)"
         case .promptTooLong(let actual, let maximum):
-            return "MOSS prompt has \(actual) tokens, exceeding the Core ML cache limit of \(maximum)"
+            return "MOSS prompt has \(actual) tokens, exceeding the model context limit of \(maximum)"
         case .audioEmbeddingMismatch(let placeholders, let embeddings):
             return "MOSS audio placeholder/embedding mismatch: \(placeholders) placeholders, \(embeddings) embeddings"
         case .missingModelOutput(let name):

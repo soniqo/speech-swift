@@ -50,7 +50,7 @@
 
 - **[Qwen3-ASR](https://soniqo.audio/ar/guides/transcribe)** — تحويل الكلام إلى نص (تعرف تلقائي على الكلام، 52 لغة، MLX + CoreML)
 - **[WhisperASR](docs/models/whisper-asr.md)** — Whisper Large-v3 Turbo speech-to-text via native CoreML runtime (ANE, multilingual)
-- **[MOSS Transcribe Diarize](https://soniqo.audio/ar/guides/moss)** — نسخ دفعي أصلي عبر CoreML مع تسميات المتحدثين والطوابع الزمنية التي يولدها النموذج (INT8 افتراضي، وFP16 مرجعي)
+- **[MOSS Transcribe Diarize](https://soniqo.audio/ar/guides/moss)** — نسخ أصلي دون اتصال عبر CoreML/MLX مع تسميات المتحدثين والطوابع الزمنية التي يولدها النموذج (سياق MLX بحجم 128K؛ INT5/INT8)
 - **[Parakeet TDT](https://soniqo.audio/ar/guides/parakeet)** — تحويل الكلام إلى نص عبر CoreML (Neural Engine، NVIDIA FastConformer + مفكك ترميز TDT، 25 لغة)
 - **[Omnilingual ASR](https://soniqo.audio/ar/guides/omnilingual)** — تحويل الكلام إلى نص (Meta wav2vec2 + CTC، **1,672 لغة** عبر 32 نظام كتابة، CoreML 300M + MLX 300M/1B/3B/7B)
 - **[Cohere Transcribe 2B](https://soniqo.audio/ar/guides/cohere-transcribe)** — تحويل الكلام إلى نص محليًا عبر MLX (14 لغة، FP16/INT5/INT8)
@@ -220,7 +220,7 @@ struct DictateView: View {
 |-------|------|----------|-------|-----------|
 | [Qwen3-ASR](https://soniqo.audio/ar/guides/transcribe) | كلام → نص | MLX, CoreML (هجين) | 0.6B, 1.7B | 52 |
 | [WhisperASR](docs/models/whisper-asr.md) | Speech → Text | CoreML (ANE) | Large-v3 Turbo | Multi |
-| [MOSS Transcribe Diarize](https://soniqo.audio/ar/guides/moss) | الصوت → النص + طوابع زمنية للمتحدثين | CoreML | 0.9B (INT8 / FP16) | متعدد اللغات |
+| [MOSS Transcribe Diarize](https://soniqo.audio/ar/guides/moss) | الصوت → النص + طوابع زمنية للمتحدثين | CoreML / MLX | 0.9B (MLX INT5/INT8؛ CoreML INT8/FP16) | متعدد اللغات |
 | [Parakeet TDT](https://soniqo.audio/ar/guides/parakeet) | كلام → نص | CoreML (ANE) | 0.6B | 25 أوروبية |
 | [Parakeet EOU](https://soniqo.audio/ar/guides/dictate) | كلام → نص (تدفقي) | CoreML (ANE) | 120M | 25 أوروبية |
 | [Nemotron Streaming (متعدد اللغات)](https://soniqo.audio/ar/guides/nemotron) | كلام → نص (تدفقي، مع علامات ترقيم) | CoreML (ANE), MLX | 0.6B | **40** |
@@ -294,6 +294,7 @@ speech transcribe recording.wav
 speech transcribe recording.wav --engine cohere
 speech transcribe recording.wav --engine voxtral
 speech transcribe recording.wav --engine moss
+speech transcribe meeting.wav --engine moss --backend mlx
 speech speak "Hello world"
 speech csm "Nice to meet you" --ref-audio voice.wav --ref-text "reference transcript"
 speech translate "Hello, how are you?" --to es
@@ -324,7 +325,7 @@ dependencies: [
 ```swift
 import Qwen3ASR             // التعرف على الكلام (MLX)
 import WhisperASR           // Whisper Large-v3 Turbo (CoreML)
-import MossTranscribe       // MOSS transcription with timestamps + speaker labels (CoreML)
+import MossTranscribe       // MOSS transcription with timestamps + speaker labels (CoreML + MLX)
 import ParakeetASR          // التعرف على الكلام (CoreML، دفعة)
 import ParakeetStreamingASR // إملاء تدفقي مع جزئيات + EOU
 import NemotronStreamingASR // ASR تدفقي متعدد اللغات مع علامات ترقيم أصلية (0.6B، 40 لغة)

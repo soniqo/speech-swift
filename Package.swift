@@ -644,6 +644,11 @@ let package = Package(
             name: "MossTranscribe",
             dependencies: [
                 "AudioCommon",
+                "MLXCommon",
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXNN", package: "mlx-swift"),
+                .product(name: "MLXFast", package: "mlx-swift"),
+                .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
                 .product(name: "Tokenizers", package: "swift-transformers")
             ]
         ),
@@ -737,6 +742,7 @@ let package = Package(
             name: "DiarizationBenchmark",
             dependencies: [
                 "AudioCommon",
+                "MossTranscribe",
                 "SpeechVAD",
                 "BenchmarkSupport",
                 .product(name: "ArgumentParser", package: "swift-argument-parser")
@@ -991,6 +997,7 @@ let package = Package(
                 "SourceSeparation",
                 "AudioCommon",
                 .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXRandom", package: "mlx-swift"),
             ]
         ),
         .testTarget(
