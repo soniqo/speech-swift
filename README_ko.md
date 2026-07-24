@@ -40,7 +40,7 @@ Speech Swift 패키지 참조를 공개 소스에서 확인할 수 있는 저장
 
 - **[Qwen3-ASR](https://soniqo.audio/ko/guides/transcribe)** — 음성-텍스트 변환 (자동 음성 인식, 52개 언어, MLX + CoreML)
 - **[WhisperASR](docs/models/whisper-asr.md)** — Whisper Large-v3 Turbo speech-to-text via native CoreML runtime (ANE, multilingual)
-- **[MOSS Transcribe Diarize](https://soniqo.audio/ko/guides/moss)** — 네이티브 CoreML 배치 전사와 모델 생성 화자 라벨 및 타임스탬프(INT8 기본, FP16 참조)
+- **[MOSS Transcribe Diarize](https://soniqo.audio/ko/guides/moss)** — 네이티브 CoreML/MLX 오프라인 전사와 모델 생성 화자 라벨 및 타임스탬프(MLX 128K 컨텍스트, INT5/INT8)
 - **[Parakeet TDT](https://soniqo.audio/ko/guides/parakeet)** — CoreML을 통한 음성-텍스트 변환 (Neural Engine, NVIDIA FastConformer + TDT 디코더, 25개 언어)
 - **[Omnilingual ASR](https://soniqo.audio/ko/guides/omnilingual)** — 음성-텍스트 변환 (Meta wav2vec2 + CTC, **1,672개 언어**, 32개 문자 체계, CoreML 300M + MLX 300M/1B/3B/7B)
 - **[Cohere Transcribe 2B](https://soniqo.audio/ko/guides/cohere-transcribe)** — 네이티브 MLX 음성-텍스트 변환 (14개 언어, FP16/INT5/INT8)
@@ -176,7 +176,7 @@ struct DictateView: View {
 |-------|------|----------|-------|-----------|
 | [Qwen3-ASR](https://soniqo.audio/ko/guides/transcribe) | 음성 → 텍스트 | MLX, CoreML (하이브리드) | 0.6B, 1.7B | 52 |
 | [WhisperASR](docs/models/whisper-asr.md) | Speech → Text | CoreML (ANE) | Large-v3 Turbo | Multi |
-| [MOSS Transcribe Diarize](https://soniqo.audio/ko/guides/moss) | 음성 → 텍스트 + 화자 타임스탬프 | CoreML | 0.9B (INT8 / FP16) | 다국어 |
+| [MOSS Transcribe Diarize](https://soniqo.audio/ko/guides/moss) | 음성 → 텍스트 + 화자 타임스탬프 | CoreML / MLX | 0.9B (MLX INT5/INT8, CoreML INT8/FP16) | 다국어 |
 | [Parakeet TDT](https://soniqo.audio/ko/guides/parakeet) | 음성 → 텍스트 | CoreML (ANE) | 0.6B | 25개 유럽어 |
 | [Parakeet EOU](https://soniqo.audio/ko/guides/dictate) | 음성 → 텍스트 (스트리밍) | CoreML (ANE) | 120M | 25개 유럽어 |
 | [Nemotron Streaming (다국어)](https://soniqo.audio/ko/guides/nemotron) | 음성 → 텍스트 (스트리밍, 구두점 포함) | CoreML (ANE), MLX | 0.6B | **40** |
@@ -242,6 +242,7 @@ speech transcribe recording.wav
 speech transcribe recording.wav --engine cohere
 speech transcribe recording.wav --engine voxtral
 speech transcribe recording.wav --engine moss
+speech transcribe meeting.wav --engine moss --backend mlx
 speech speak "Hello world"
 speech csm "Nice to meet you" --ref-audio voice.wav --ref-text "reference transcript"
 speech translate "Hello, how are you?" --to es
@@ -264,7 +265,7 @@ dependencies: [
 ```swift
 import Qwen3ASR             // 음성 인식 (MLX)
 import WhisperASR           // Whisper Large-v3 Turbo (CoreML)
-import MossTranscribe       // MOSS transcription with timestamps + speaker labels (CoreML)
+import MossTranscribe       // MOSS transcription with timestamps + speaker labels (CoreML + MLX)
 import ParakeetASR          // 음성 인식 (CoreML, 배치)
 import ParakeetStreamingASR // 부분 결과 + EOU 포함 스트리밍 받아쓰기
 import NemotronStreamingASR // 다국어 스트리밍 ASR, 네이티브 구두점 (0.6B, 40개 언어)

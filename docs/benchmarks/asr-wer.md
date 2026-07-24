@@ -77,6 +77,20 @@ The full methodology, per-run variance, exact round-trip assertion, and
 reproduction commands are recorded in
 [MOSS CoreML Native Runtime Benchmark](moss-coreml.md).
 
+### MOSS long-context MLX runtime
+
+The matched self-exported `moss-mlx-int5` and `moss-mlx-int8` bundles use the
+same FP16 audio/VQ weights and FP16 KV cache; only decoder weight precision
+changes. On the same 80-clip, 759.56-second English FLEURS fixture, INT5
+recorded 8.55% aggregate WER, 6.36% CER, and 0.028 overall RTF. INT8 recorded
+8.27% WER, 5.98% CER, and 0.032 RTF. Peak RSS was 1,196 MiB for INT5 and
+1,407 MiB for INT8.
+
+The separate five-file VoxConverse comparison measured 28.05% DER for INT5
+and 28.02% for INT8. See
+[MOSS MLX INT5 vs INT8 Benchmark](moss-mlx.md) for the long-context
+diarization results, weight sizes, caveats, and reproduction commands.
+
 ## Comparison with published models
 
 | Model | Params | Size | Precision | WER% (test-clean) | Source |
@@ -181,6 +195,8 @@ Available engine IDs (see `Sources/AsrBenchmark/Engine.swift::EngineID`):
 - `whisper-asr-turbo` — speech-swift native WhisperASR CoreML runtime over `aufklarer/Whisper-Large-v3-Turbo-CoreML`
 - `moss-coreml-int8` — native MOSS CoreML runtime with an FP16 audio encoder and block-32 INT8 decoder
 - `moss-coreml-fp16` — native MOSS CoreML FP16 reference
+- `moss-mlx-int5` — long-context MOSS MLX runtime with FP16 audio/VQ weights and an affine group-64 INT5 decoder
+- `moss-mlx-int8` — long-context MOSS MLX quality reference with an affine group-64 INT8 decoder
 - `whisperkit-large-v3-turbo` / `whisperkit-large-v3` / `whisperkit-distil-large-v3` — Argmax WhisperKit
 
 Without `--isolated`, peak RSS reflects the sequential high-water mark across the whole run (MLX/CoreML caches don't release between engines). With `--isolated`, each engine runs in a child process and its peak RSS is its own.

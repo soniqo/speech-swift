@@ -40,7 +40,7 @@ Reconhecimento, sintese e compreensao de fala no dispositivo para Mac e iOS. Exe
 
 - **[Qwen3-ASR](https://soniqo.audio/pt/guides/transcribe)** — Fala para texto (reconhecimento automatico de fala, 52 idiomas, MLX + CoreML)
 - **[WhisperASR](docs/models/whisper-asr.md)** — Whisper Large-v3 Turbo speech-to-text via native CoreML runtime (ANE, multilingual)
-- **[MOSS Transcribe Diarize](https://soniqo.audio/pt/guides/moss)** — Transcrição CoreML nativa em lote com rótulos de locutor e timestamps gerados pelo modelo (INT8 padrão, FP16 de referência)
+- **[MOSS Transcribe Diarize](https://soniqo.audio/pt/guides/moss)** — Transcrição offline nativa com CoreML/MLX, rótulos de locutor e timestamps gerados pelo modelo (contexto MLX de 128K; INT5/INT8)
 - **[Parakeet TDT](https://soniqo.audio/pt/guides/parakeet)** — Fala para texto via CoreML (Neural Engine, NVIDIA FastConformer + decodificador TDT, 25 idiomas)
 - **[Omnilingual ASR](https://soniqo.audio/pt/guides/omnilingual)** — Fala para texto (Meta wav2vec2 + CTC, **1.672 idiomas** em 32 escritas, CoreML 300M + MLX 300M/1B/3B/7B)
 - **[Cohere Transcribe 2B](https://soniqo.audio/pt/guides/cohere-transcribe)** — Fala para texto MLX nativa (14 idiomas, FP16/INT5/INT8)
@@ -176,7 +176,7 @@ Vista compacta abaixo. **[Catalogo completo de modelos com tamanhos, quantizacoe
 |-------|------|----------|-------|-----------|
 | [Qwen3-ASR](https://soniqo.audio/pt/guides/transcribe) | Fala → Texto | MLX, CoreML (hibrido) | 0.6B, 1.7B | 52 |
 | [WhisperASR](docs/models/whisper-asr.md) | Speech → Text | CoreML (ANE) | Large-v3 Turbo | Multi |
-| [MOSS Transcribe Diarize](https://soniqo.audio/pt/guides/moss) | Fala → Texto + timestamps de locutor | CoreML | 0.9B (INT8 / FP16) | Multilíngue |
+| [MOSS Transcribe Diarize](https://soniqo.audio/pt/guides/moss) | Fala → Texto + timestamps de locutor | CoreML / MLX | 0.9B (MLX INT5/INT8; CoreML INT8/FP16) | Multilíngue |
 | [Parakeet TDT](https://soniqo.audio/pt/guides/parakeet) | Fala → Texto | CoreML (ANE) | 0.6B | 25 europeus |
 | [Parakeet EOU](https://soniqo.audio/pt/guides/dictate) | Fala → Texto (streaming) | CoreML (ANE) | 120M | 25 europeus |
 | [Nemotron Streaming (Multilíngue)](https://soniqo.audio/pt/guides/nemotron) | Fala → Texto (streaming, com pontuação) | CoreML (ANE), MLX | 0.6B | **40** |
@@ -242,6 +242,7 @@ speech transcribe recording.wav
 speech transcribe recording.wav --engine cohere
 speech transcribe recording.wav --engine voxtral
 speech transcribe recording.wav --engine moss
+speech transcribe meeting.wav --engine moss --backend mlx
 speech speak "Hello world"
 speech csm "Nice to meet you" --ref-audio voice.wav --ref-text "reference transcript"
 speech translate "Hello, how are you?" --to es
@@ -264,7 +265,7 @@ Importe apenas o que voce precisa — cada modelo e o seu proprio target SPM:
 ```swift
 import Qwen3ASR             // Reconhecimento de fala (MLX)
 import WhisperASR           // Whisper Large-v3 Turbo (CoreML)
-import MossTranscribe       // MOSS transcription with timestamps + speaker labels (CoreML)
+import MossTranscribe       // MOSS transcription with timestamps + speaker labels (CoreML + MLX)
 import ParakeetASR          // Reconhecimento de fala (CoreML, batch)
 import ParakeetStreamingASR // Ditado em streaming com parciais + EOU
 import NemotronStreamingASR // ASR streaming multilíngue com pontuação nativa (0.6B, 40 idiomas)

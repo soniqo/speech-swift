@@ -40,7 +40,7 @@
 
 - **[Qwen3-ASR](https://soniqo.audio/ru/guides/transcribe)** — Распознавание речи (автоматическое распознавание речи, 52 языка, MLX + CoreML)
 - **[WhisperASR](docs/models/whisper-asr.md)** — Whisper Large-v3 Turbo speech-to-text via native CoreML runtime (ANE, multilingual)
-- **[MOSS Transcribe Diarize](https://soniqo.audio/ru/guides/moss)** — Нативная пакетная транскрипция CoreML с генерируемыми моделью метками спикеров и временными метками (INT8 по умолчанию, FP16 для сравнения)
+- **[MOSS Transcribe Diarize](https://soniqo.audio/ru/guides/moss)** — Нативная офлайн-транскрипция CoreML/MLX с генерируемыми моделью метками спикеров и временными метками (контекст MLX 128K; INT5/INT8)
 - **[Parakeet TDT](https://soniqo.audio/ru/guides/parakeet)** — Распознавание речи через CoreML (Neural Engine, NVIDIA FastConformer + TDT-декодер, 25 языков)
 - **[Omnilingual ASR](https://soniqo.audio/ru/guides/omnilingual)** — Распознавание речи (Meta wav2vec2 + CTC, **1 672 языка** в 32 письменностях, CoreML 300M + MLX 300M/1B/3B/7B)
 - **[Cohere Transcribe 2B](https://soniqo.audio/ru/guides/cohere-transcribe)** — Нативное распознавание речи на MLX (14 языков, FP16/INT5/INT8)
@@ -176,7 +176,7 @@ struct DictateView: View {
 |--------|--------|---------|---------|-------|
 | [Qwen3-ASR](https://soniqo.audio/ru/guides/transcribe) | Речь → Текст | MLX, CoreML (гибрид) | 0.6B, 1.7B | 52 |
 | [WhisperASR](docs/models/whisper-asr.md) | Speech → Text | CoreML (ANE) | Large-v3 Turbo | Multi |
-| [MOSS Transcribe Diarize](https://soniqo.audio/ru/guides/moss) | Речь → Текст + временные метки спикеров | CoreML | 0.9B (INT8 / FP16) | Многоязычная |
+| [MOSS Transcribe Diarize](https://soniqo.audio/ru/guides/moss) | Речь → Текст + временные метки спикеров | CoreML / MLX | 0.9B (MLX INT5/INT8; CoreML INT8/FP16) | Многоязычная |
 | [Parakeet TDT](https://soniqo.audio/ru/guides/parakeet) | Речь → Текст | CoreML (ANE) | 0.6B | 25 европейских |
 | [Parakeet EOU](https://soniqo.audio/ru/guides/dictate) | Речь → Текст (потоковый) | CoreML (ANE) | 120M | 25 европейских |
 | [Nemotron Streaming (Многоязычный)](https://soniqo.audio/ru/guides/nemotron) | Речь → Текст (потоковый, с пунктуацией) | CoreML (ANE), MLX | 0.6B | **40** |
@@ -242,6 +242,7 @@ speech transcribe recording.wav
 speech transcribe recording.wav --engine cohere
 speech transcribe recording.wav --engine voxtral
 speech transcribe recording.wav --engine moss
+speech transcribe meeting.wav --engine moss --backend mlx
 speech speak "Hello world"
 speech csm "Nice to meet you" --ref-audio voice.wav --ref-text "reference transcript"
 speech translate "Hello, how are you?" --to es
@@ -264,7 +265,7 @@ dependencies: [
 ```swift
 import Qwen3ASR             // Распознавание речи (MLX)
 import WhisperASR           // Whisper Large-v3 Turbo (CoreML)
-import MossTranscribe       // MOSS transcription with timestamps + speaker labels (CoreML)
+import MossTranscribe       // MOSS transcription with timestamps + speaker labels (CoreML + MLX)
 import ParakeetASR          // Распознавание речи (CoreML, пакетный режим)
 import ParakeetStreamingASR // Потоковая диктовка с частичными результатами + EOU
 import NemotronStreamingASR // Многоязычное потоковое ASR с нативной пунктуацией (0.6B, 40 языков)

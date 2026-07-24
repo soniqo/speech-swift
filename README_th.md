@@ -40,7 +40,7 @@
 
 - **[Qwen3-ASR](https://soniqo.audio/guides/transcribe)** — แปลงเสียงพูดเป็นข้อความ (การรู้จำเสียงพูดอัตโนมัติ รองรับ 52 ภาษา MLX + CoreML)
 - **[WhisperASR](docs/models/whisper-asr.md)** — Whisper Large-v3 Turbo speech-to-text via native CoreML runtime (ANE, multilingual)
-- **[MOSS Transcribe Diarize](https://soniqo.audio/th/guides/moss)** — การถอดเสียงแบบแบตช์ด้วย CoreML แบบเนทีฟ พร้อมป้ายผู้พูดและเวลาโดยโมเดล (ค่าเริ่มต้น INT8, FP16 สำหรับอ้างอิง)
+- **[MOSS Transcribe Diarize](https://soniqo.audio/th/guides/moss)** — การถอดเสียงออฟไลน์ด้วย CoreML/MLX แบบเนทีฟ พร้อมป้ายผู้พูดและเวลาโดยโมเดล (บริบท MLX 128K; INT5/INT8)
 - **[Parakeet TDT](https://soniqo.audio/guides/parakeet)** — แปลงเสียงพูดเป็นข้อความผ่าน CoreML (Neural Engine, NVIDIA FastConformer + ตัวถอดรหัส TDT รองรับ 25 ภาษา)
 - **[Omnilingual ASR](https://soniqo.audio/guides/omnilingual)** — แปลงเสียงพูดเป็นข้อความ (Meta wav2vec2 + CTC รองรับ **1,672 ภาษา** ครอบคลุม 32 ระบบอักษร, CoreML 300M + MLX 300M/1B/3B/7B)
 - **[Cohere Transcribe 2B](https://soniqo.audio/th/guides/cohere-transcribe)** — แปลงเสียงพูดเป็นข้อความด้วย MLX แบบเนทีฟ (14 ภาษา, FP16/INT5/INT8)
@@ -176,7 +176,7 @@ struct DictateView: View {
 |-------|------|----------|-------|-----------|
 | [Qwen3-ASR](https://soniqo.audio/guides/transcribe) | เสียงพูด → ข้อความ | MLX, CoreML (ไฮบริด) | 0.6B, 1.7B | 52 |
 | [WhisperASR](docs/models/whisper-asr.md) | Speech → Text | CoreML (ANE) | Large-v3 Turbo | Multi |
-| [MOSS Transcribe Diarize](https://soniqo.audio/th/guides/moss) | เสียง → ข้อความ + เวลาผู้พูด | CoreML | 0.9B (INT8 / FP16) | หลายภาษา |
+| [MOSS Transcribe Diarize](https://soniqo.audio/th/guides/moss) | เสียง → ข้อความ + เวลาผู้พูด | CoreML / MLX | 0.9B (MLX INT5/INT8; CoreML INT8/FP16) | หลายภาษา |
 | [Parakeet TDT](https://soniqo.audio/guides/parakeet) | เสียงพูด → ข้อความ | CoreML (ANE) | 0.6B | 25 ยุโรป |
 | [Parakeet EOU](https://soniqo.audio/guides/dictate) | เสียงพูด → ข้อความ (สตรีมมิ่ง) | CoreML (ANE) | 120M | 25 ยุโรป |
 | [Nemotron Streaming (หลายภาษา)](https://soniqo.audio/guides/nemotron) | เสียงพูด → ข้อความ (สตรีมมิ่ง มีเครื่องหมายวรรคตอน) | CoreML (ANE), MLX | 0.6B | **40** |
@@ -242,6 +242,7 @@ speech transcribe recording.wav
 speech transcribe recording.wav --engine cohere
 speech transcribe recording.wav --engine voxtral
 speech transcribe recording.wav --engine moss
+speech transcribe meeting.wav --engine moss --backend mlx
 speech speak "Hello world"
 speech csm "Nice to meet you" --ref-audio voice.wav --ref-text "reference transcript"
 speech translate "Hello, how are you?" --to es
@@ -264,7 +265,7 @@ dependencies: [
 ```swift
 import Qwen3ASR             // การรู้จำเสียงพูด (MLX)
 import WhisperASR           // Whisper Large-v3 Turbo (CoreML)
-import MossTranscribe       // MOSS transcription with timestamps + speaker labels (CoreML)
+import MossTranscribe       // MOSS transcription with timestamps + speaker labels (CoreML + MLX)
 import ParakeetASR          // การรู้จำเสียงพูด (CoreML, batch)
 import ParakeetStreamingASR // การเขียนตามคำบอกแบบสตรีมมิ่งพร้อม partials + EOU
 import NemotronStreamingASR // ASR สตรีมมิ่งหลายภาษาพร้อมเครื่องหมายวรรคตอนในตัว (0.6B, 40 ภาษา)

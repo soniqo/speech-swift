@@ -40,7 +40,7 @@ Speech Swift paketine doğrulanabilir biçimde başvuran 15 açık depo.
 
 - **[Qwen3-ASR](https://soniqo.audio/guides/transcribe)** — Konuşmadan metne (otomatik konuşma tanıma, 52 dil, MLX + CoreML)
 - **[WhisperASR](docs/models/whisper-asr.md)** — Whisper Large-v3 Turbo speech-to-text via native CoreML runtime (ANE, multilingual)
-- **[MOSS Transcribe Diarize](https://soniqo.audio/tr/guides/moss)** — Model tarafından üretilen konuşmacı etiketleri ve zaman damgalarıyla yerel CoreML toplu transkripsiyonu (varsayılan INT8, referans FP16)
+- **[MOSS Transcribe Diarize](https://soniqo.audio/tr/guides/moss)** — Model tarafından üretilen konuşmacı etiketleri ve zaman damgalarıyla yerel CoreML/MLX çevrimdışı transkripsiyonu (128K MLX bağlamı; INT5/INT8)
 - **[Parakeet TDT](https://soniqo.audio/guides/parakeet)** — CoreML üzerinden konuşmadan metne (Neural Engine, NVIDIA FastConformer + TDT kod çözücü, 25 dil)
 - **[Omnilingual ASR](https://soniqo.audio/guides/omnilingual)** — Konuşmadan metne (Meta wav2vec2 + CTC, 32 yazı sistemi üzerinde **1.672 dil**, CoreML 300M + MLX 300M/1B/3B/7B)
 - **[Cohere Transcribe 2B](https://soniqo.audio/tr/guides/cohere-transcribe)** — Yerel MLX konuşmadan metne (14 dil, FP16/INT5/INT8)
@@ -176,7 +176,7 @@ Aşağıda kompakt bir görünüm. **[Boyutlar, kuantizasyonlar, indirme URL'ler
 |-------|------|----------|-------|-----------|
 | [Qwen3-ASR](https://soniqo.audio/guides/transcribe) | Konuşma → Metin | MLX, CoreML (hibrit) | 0.6B, 1.7B | 52 |
 | [WhisperASR](docs/models/whisper-asr.md) | Speech → Text | CoreML (ANE) | Large-v3 Turbo | Multi |
-| [MOSS Transcribe Diarize](https://soniqo.audio/tr/guides/moss) | Konuşma → Metin + konuşmacı zaman damgaları | CoreML | 0.9B (INT8 / FP16) | Çok dilli |
+| [MOSS Transcribe Diarize](https://soniqo.audio/tr/guides/moss) | Konuşma → Metin + konuşmacı zaman damgaları | CoreML / MLX | 0.9B (MLX INT5/INT8; CoreML INT8/FP16) | Çok dilli |
 | [Parakeet TDT](https://soniqo.audio/guides/parakeet) | Konuşma → Metin | CoreML (ANE) | 0.6B | 25 Avrupa dili |
 | [Parakeet EOU](https://soniqo.audio/guides/dictate) | Konuşma → Metin (akış) | CoreML (ANE) | 120M | 25 Avrupa dili |
 | [Nemotron Streaming (Çok dilli)](https://soniqo.audio/guides/nemotron) | Konuşma → Metin (akış, noktalamalı) | CoreML (ANE), MLX | 0.6B | **40** |
@@ -242,6 +242,7 @@ speech transcribe recording.wav
 speech transcribe recording.wav --engine cohere
 speech transcribe recording.wav --engine voxtral
 speech transcribe recording.wav --engine moss
+speech transcribe meeting.wav --engine moss --backend mlx
 speech speak "Hello world"
 speech csm "Nice to meet you" --ref-audio voice.wav --ref-text "reference transcript"
 speech translate "Hello, how are you?" --to es
@@ -264,7 +265,7 @@ Yalnızca ihtiyacınız olanı içe aktarın — her model kendi SPM hedefidir:
 ```swift
 import Qwen3ASR             // Konuşma tanıma (MLX)
 import WhisperASR           // Whisper Large-v3 Turbo (CoreML)
-import MossTranscribe       // MOSS transcription with timestamps + speaker labels (CoreML)
+import MossTranscribe       // MOSS transcription with timestamps + speaker labels (CoreML + MLX)
 import ParakeetASR          // Konuşma tanıma (CoreML, batch)
 import ParakeetStreamingASR // Kısmi sonuçlar + EOU ile akış dikte
 import NemotronStreamingASR // Yerel noktalama ile çok dilli akış ASR (0.6B, 40 dil)

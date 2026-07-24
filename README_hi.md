@@ -40,7 +40,7 @@ Speech Swift पैकेज के सत्यापन योग्य सं
 
 - **[Qwen3-ASR](https://soniqo.audio/hi/guides/transcribe)** — स्पीच-टू-टेक्स्ट (ऑटोमैटिक स्पीच रिकग्निशन, 52 भाषाएँ, MLX + CoreML)
 - **[WhisperASR](docs/models/whisper-asr.md)** — Whisper Large-v3 Turbo speech-to-text via native CoreML runtime (ANE, multilingual)
-- **[MOSS Transcribe Diarize](https://soniqo.audio/hi/guides/moss)** — मॉडल द्वारा बनाए गए speaker labels और timestamps के साथ native CoreML batch transcription (INT8 default, FP16 reference)
+- **[MOSS Transcribe Diarize](https://soniqo.audio/hi/guides/moss)** — मॉडल द्वारा बनाए गए speaker labels और timestamps के साथ native CoreML/MLX offline transcription (MLX 128K context; INT5/INT8)
 - **[Parakeet TDT](https://soniqo.audio/hi/guides/parakeet)** — CoreML के माध्यम से स्पीच-टू-टेक्स्ट (Neural Engine, NVIDIA FastConformer + TDT decoder, 25 भाषाएँ)
 - **[Omnilingual ASR](https://soniqo.audio/hi/guides/omnilingual)** — स्पीच-टू-टेक्स्ट (Meta wav2vec2 + CTC, **1,672 भाषाएँ** 32 लिपियों में, CoreML 300M + MLX 300M/1B/3B/7B)
 - **[Cohere Transcribe 2B](https://soniqo.audio/hi/guides/cohere-transcribe)** — नेटिव MLX स्पीच-टू-टेक्स्ट (14 भाषाएँ, FP16/INT5/INT8)
@@ -176,7 +176,7 @@ struct DictateView: View {
 |------|------|--------|------|--------|
 | [Qwen3-ASR](https://soniqo.audio/hi/guides/transcribe) | स्पीच → टेक्स्ट | MLX, CoreML (हाइब्रिड) | 0.6B, 1.7B | 52 |
 | [WhisperASR](docs/models/whisper-asr.md) | Speech → Text | CoreML (ANE) | Large-v3 Turbo | Multi |
-| [MOSS Transcribe Diarize](https://soniqo.audio/hi/guides/moss) | ऑडियो → टेक्स्ट + speaker timestamps | CoreML | 0.9B (INT8 / FP16) | बहुभाषी |
+| [MOSS Transcribe Diarize](https://soniqo.audio/hi/guides/moss) | ऑडियो → टेक्स्ट + speaker timestamps | CoreML / MLX | 0.9B (MLX INT5/INT8; CoreML INT8/FP16) | बहुभाषी |
 | [Parakeet TDT](https://soniqo.audio/hi/guides/parakeet) | स्पीच → टेक्स्ट | CoreML (ANE) | 0.6B | 25 यूरोपीय |
 | [Parakeet EOU](https://soniqo.audio/hi/guides/dictate) | स्पीच → टेक्स्ट (स्ट्रीमिंग) | CoreML (ANE) | 120M | 25 यूरोपीय |
 | [Nemotron Streaming (बहुभाषी)](https://soniqo.audio/hi/guides/nemotron) | भाषण → टेक्स्ट (स्ट्रीमिंग, विराम चिह्नों के साथ) | CoreML (ANE), MLX | 0.6B | **40** |
@@ -242,6 +242,7 @@ speech transcribe recording.wav
 speech transcribe recording.wav --engine cohere
 speech transcribe recording.wav --engine voxtral
 speech transcribe recording.wav --engine moss
+speech transcribe meeting.wav --engine moss --backend mlx
 speech speak "Hello world"
 speech csm "Nice to meet you" --ref-audio voice.wav --ref-text "reference transcript"
 speech translate "Hello, how are you?" --to es
@@ -264,7 +265,7 @@ dependencies: [
 ```swift
 import Qwen3ASR             // स्पीच रिकग्निशन (MLX)
 import WhisperASR           // Whisper Large-v3 Turbo (CoreML)
-import MossTranscribe       // MOSS transcription with timestamps + speaker labels (CoreML)
+import MossTranscribe       // MOSS transcription with timestamps + speaker labels (CoreML + MLX)
 import ParakeetASR          // स्पीच रिकग्निशन (CoreML, बैच)
 import ParakeetStreamingASR // पार्शियल्स + EOU के साथ स्ट्रीमिंग डिक्टेशन
 import NemotronStreamingASR // बहुभाषी स्ट्रीमिंग ASR नेटिव विराम चिह्न के साथ (0.6B, 40 भाषाएँ)
