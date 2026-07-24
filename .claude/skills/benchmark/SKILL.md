@@ -103,7 +103,8 @@ state of a sequential multi-engine run.
 ## Available engines
 
 `qwen3-coreml`, `qwen3-mlx-{0.6b,1.7b}-{4bit,8bit}`, `parakeet`,
-`nemotron`, `omnilingual`, `omnilingual-mlx-{300m,1b,3b,7b}-4bit`,
+`nemotron`, `nemotron-mlx-{int5,int8}`, `omnilingual`,
+`omnilingual-mlx-{300m,1b,3b,7b}-4bit`,
 `whisperkit-{large-v3-turbo,large-v3,distil-large-v3}`.
 
 ## Performance targets (M2 Max)

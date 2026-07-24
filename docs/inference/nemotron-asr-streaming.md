@@ -1,8 +1,10 @@
 # Nemotron-3.5 ASR Streaming — inference
 
-Swift bindings for the Nemotron-3.5 multilingual streaming ASR bundle (CoreML, 600 M params, 40 language-locales). Lives in `Sources/NemotronStreamingASR/`.
+Swift bindings for the Nemotron-3.5 multilingual streaming ASR bundle
+(Core ML or native MLX, 600 M parameters, 40 language-locales). Lives in
+`Sources/NemotronStreamingASR/`.
 
-## Two ways to consume
+## Core ML API
 
 ```swift
 import NemotronStreamingASR
@@ -25,7 +27,53 @@ for chunk in audioChunks {
 let finals = try session.finalize()
 ```
 
-## Word boosting
+## Native MLX INT5 and INT8
+
+`NemotronStreamingASRMLXModel` runs the quantized encoder, prompt kernel,
+RNN-T predictor, and joint network directly with MLX. INT5 is the default
+because it saves about 193 MB on disk and 192 MB of peak RSS versus INT8,
+while the six-language streaming benchmark costs 0.52 percentage points of
+mean WER. Select INT8 when the small accuracy gain matters more than memory.
+
+```swift
+import NemotronStreamingASR
+
+// Downloads the 538.6 MB INT5 bundle by default.
+let model = try await NemotronStreamingASRMLXModel.fromPretrained(
+    variant: .int5
+)
+
+let session = try model.createSession(language: "en-US")
+for chunk in microphoneChunks16kHz {
+    for partial in try session.pushAudio(chunk) {
+        print(partial.text)
+    }
+}
+let final = try session.finalize().last?.text
+```
+
+Use `.int8` for the 732.6 MB release, or load an already downloaded bundle:
+
+```swift
+let int8 = try await NemotronStreamingASRMLXModel.fromPretrained(
+    variant: .int8
+)
+
+let local = try await NemotronStreamingASRMLXModel.fromDirectory(
+    URL(fileURLWithPath: "/path/to/Nemotron-MLX-5bit")
+)
+```
+
+Both variants require the bundle-declared 320 ms geometry. The model may
+serve multiple source-local sessions, but it serializes model creation,
+`pushAudio`, and `finalize` inference because the sessions share one set of
+resident MLX weights. Each session keeps independent mel, attention,
+convolution, language, and RNN-T state.
+
+The MLX API currently uses greedy decoding only. Word boosting remains a
+Core ML API feature.
+
+## Word boosting (Core ML)
 
 Nemotron word boosting biases RNN-T decoding toward caller-provided words or phrases. It is not transcript post-processing: the decoder adjusts token scores after the joint network produces logits and before greedy token selection.
 
@@ -177,7 +225,7 @@ Bad:
 
 The full list of 121 aliases is in the `languages` property of the loaded model.
 
-## Loading
+## Core ML loading
 
 ```swift
 // From the HF cache (default repo aufklarer/Nemotron-3.5-ASR-Streaming-0.6B-CoreML-INT8)
@@ -193,7 +241,10 @@ let bundleURL = URL(fileURLWithPath: "/tmp/Nemotron-3.5-CoreML-320ms")
 let model = try await NemotronStreamingASRModel.fromLocal(bundleDir: bundleURL)
 ```
 
-The loader expects the standard bundle layout described in `docs/models/nemotron-asr-streaming.md`. Compute units default to `.all` (encoder on ANE + GPU + CPU, decoder/joint on CPU) — measured ~40% faster RTF than `.cpuAndGPU` on M-series.
+The Core ML loader expects the standard bundle layout described in
+`docs/models/nemotron-asr-streaming.md`. Compute units default to `.all`
+(encoder on ANE + GPU + CPU, decoder/joint on CPU) — measured about 40%
+faster RTF than `.cpuAndGPU` on M-series.
 
 ## Streaming geometry
 
@@ -206,10 +257,18 @@ The loader expects the standard bundle layout described in `docs/models/nemotron
 | Sample rate | 16 kHz mono Float32 |
 
 `transcribeStream` slices audio at the configured chunk size; `pushAudio` accepts any chunk size and buffers internally until enough samples accumulate.
+Published MLX bundles accept only the validated 320 ms row. Alternate chunk
+geometries are research/export options, not a runtime override for those
+weights.
 
 ## TTS round-trip and short-audio padding
 
-`transcribeAudio` adds 100 ms of silence at both ends by default to prime the all-zero streaming cache (otherwise short TTS clips with sharp onsets can drop the first word). For natural recorded speech (FLEURS-style microphone capture), pass `padSilence: false` to skip the pad — measured ~0–5 pp WER drop on the harder languages.
+Core ML `transcribeAudio` adds 100 ms of silence at both ends by default to
+prime the all-zero streaming cache (otherwise short TTS clips with sharp
+onsets can drop the first word). For natural recorded speech (FLEURS-style
+microphone capture), pass `padSilence: false` to skip the pad — measured
+about 0–5 pp WER drop on the harder languages. The MLX API does not add this
+Core ML compatibility padding.
 
 ```swift
 // TTS-style (short clip, padding helps): default true
@@ -224,18 +283,22 @@ let recText = try model.transcribeAudio(micAudio, sampleRate: 16000,
 
 60 s synthetic FLEURS en_us long-form streamed in 320 ms chunks (compute units `.all`):
 
-| metric | value |
-|--------|------:|
-| RSS pre-load | 56 MB |
-| RSS post-load | 652 MB |
-| RSS peak (mid-stream) | 1.2 GB |
-| RTF (encode + decode) | 0.06 |
-| p50 chunk latency | 18.6 ms |
-| p99 chunk latency | 23.4 ms |
+| runtime | bundle | RSS peak | streaming RTF | p50 / p95 / p99 chunk |
+|---------|-------:|---------:|--------------:|----------------------:|
+| MLX INT5 | 538.6 MB | 800 MB | 0.0467 | 13.8 / 15.9 / 16.8 ms |
+| MLX INT8 | 732.6 MB | 992 MB | 0.0485 | 14.3 / 16.2 / 18.9 ms |
+| Core ML INT8 | 612 MB | 1.2 GB | 0.068 | 18.6 / — / 23.4 ms |
+
+The native Swift release regression gate uses `asr-bench --isolated` and a
+20-second English fixture. Across three fresh-process runs per variant, INT5
+had median RTF 0.0360 and 611 MB peak RSS; INT8 had median RTF 0.0375 and
+805 MB peak RSS. Both reproduced the 11-word reference exactly. See
+`docs/benchmarks/nemotron-asr-streaming.md` for methodology and the
+reproduction command.
 
 ## Memory management
 
-Conforms to `ModelMemoryManageable`:
+The Core ML model conforms to `ModelMemoryManageable`:
 
 ```swift
 if memoryPressure { model.unload() }
@@ -263,11 +326,34 @@ Methodology: Whisper `EnglishTextNormalizer` for English; `BasicTextNormalizer` 
 
 Remaining gaps are scoring methodology (NVIDIA's exact normalizer + full FLEURS test split — 600 samples per lang — would close most), not model quality. Quantization is essentially lossless: CoreML INT8 is within ±1 pp of fp32 on every language.
 
+The release MLX benchmark exercises the actual cache-aware 320 ms path
+(50 samples per language):
+
+| lang | MLX INT5 WER / CER | MLX INT8 WER / CER |
+|------|-------------------:|-------------------:|
+| en-US | 8.64 / 3.77 | 8.98 / 3.96 |
+| de-DE | 11.15 / 6.25 | 10.59 / 5.73 |
+| fr-FR | 13.10 / 5.18 | 11.83 / 4.66 |
+| ar | 13.66 / 3.94 | 13.37 / 3.77 |
+| hi-IN | 4.77 / 3.85 | 4.28 / 3.50 |
+| ja-JP | 17.86 / 12.11 | 17.01 / 11.42 |
+| **Mean** | **11.53 / 5.85** | **11.01 / 5.51** |
+
 ## Tests
 
 ```bash
 make test                                          # unit + E2E (downloads HF model first time)
 swift test --filter WordBoosting                  # word boosting unit tests + E2E A/B smoke test
+swift test --filter NemotronMLXTests              # model-free MLX loader/config tests
+NEMOTRON_MLX_LOCAL_BUNDLE=/path/to/int5 \
+NEMOTRON_MLX_INT8_LOCAL_BUNDLE=/path/to/int8 \
+  swift test --filter E2ENemotronMLXTests         # native MLX streaming E2E
+NEMOTRON_MLX_LOCAL_BUNDLE=/path/to/int5 \
+NEMOTRON_MLX_INT8_LOCAL_BUNDLE=/path/to/int8 \
+  .build/release/asr-bench \
+    --dataset /path/to/benchmark.tsv \
+    --engines nemotron-mlx-int5 nemotron-mlx-int8 \
+    --language en-US --isolated                   # WER + RTF + peak RSS
 swift test --filter E2ENemotronMultilingualBench   # 6-lang FLEURS bench, writes /tmp/nem35-logs/wer_swift.json
 swift test --filter E2EHiBisect                    # Hindi divergence diagnostic (Python diff)
 ```

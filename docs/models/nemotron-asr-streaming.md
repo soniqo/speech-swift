@@ -1,6 +1,9 @@
 # Nemotron-3.5 ASR Streaming — architecture
 
-Multilingual streaming ASR from NVIDIA, ported to CoreML for Apple Silicon via the `NemotronStreamingASR` target. 600 M parameters, 40 language-locales, native punctuation and capitalization. Cache-aware FastConformer encoder with a prompt-conditioned RNN-T decoder.
+Multilingual streaming ASR from NVIDIA, available through Core ML and native
+MLX backends on Apple Silicon via the `NemotronStreamingASR` target. 600 M
+parameters, 40 language-locales, native punctuation and capitalization.
+Cache-aware FastConformer encoder with a prompt-conditioned RNN-T decoder.
 
 ## Source
 
@@ -16,11 +19,14 @@ raw 16 kHz audio
   → cache-aware Conformer encoder (24 layers, d_model=1024, 580 M params)
   → prompt-kernel language conditioning (one-hot 128-slot → concat → 2-layer MLP)
   → RNN-T greedy decoder (2-layer LSTM, pred_hidden=640, blank id=13087)
-  → optional word boosting over joint logits
-  → text tokens (vocab 13087, with `<lang-XX>` markers)
+  → optional word boosting over joint logits (Core ML backend)
+  → user text (vocab 13087; emitted `<lang-XX>` markers are filtered)
 ```
 
-The encoder produces one frame every 80 ms (8× subsampling from 10 ms mel hop). All four chunk modes share the same encoder and decoder weights; only the attention right-context changes.
+The encoder produces one frame every 80 ms (8× subsampling from a 10 ms mel
+hop). The Core ML exporter can generate four chunk modes from the same source
+weights. Published MLX INT5 and INT8 bundles intentionally expose only the
+quality-tested 320 ms geometry.
 
 ## Cache-aware streaming
 
@@ -37,7 +43,16 @@ The decoder LSTM state (`h`, `c`) is also persisted between chunks; the joint ne
 
 ## Word boosting
 
-`NemotronStreamingASR` implements word boosting decoder-side, between `joint.prediction(...)` and greedy token selection in `RNNTGreedyDecoder`. Boosted phrases are tokenized with the Nemotron SentencePiece tokenizer when `tokenizer.model` is present, stored in a phrase-prefix trie, and applied as token-level logit bias during decoding. This is RNN-T shallow fusion, not the full NVIDIA CTC-WS algorithm: CTC-WS needs an auxiliary CTC head, and the public `nvidia/nemotron-3.5-asr-streaming-0.6b` checkpoint (inspected June 10, 2026) is RNNT-only — its `model_config.yaml` target is `EncDecRNNTBPEModelWithPrompt`, it has no `aux_ctc` section, and its weights contain no CTC tensors.
+The Core ML runtime implements word boosting decoder-side, between
+`joint.prediction(...)` and greedy token selection in `RNNTGreedyDecoder`.
+Boosted phrases are tokenized with the Nemotron SentencePiece tokenizer when
+`tokenizer.model` is present, stored in a phrase-prefix trie, and applied as
+token-level logit bias during decoding. This is RNN-T shallow fusion, not the
+full NVIDIA CTC-WS algorithm: CTC-WS needs an auxiliary CTC head, and the
+public `nvidia/nemotron-3.5-asr-streaming-0.6b` checkpoint (inspected June 10,
+2026) is RNNT-only — its `model_config.yaml` target is
+`EncDecRNNTBPEModelWithPrompt`, it has no `aux_ctc` section, and its weights
+contain no CTC tensors. Native MLX currently uses unboosted greedy decoding.
 
 The implementation does not allow word boosting to replace the RNN-T blank token. Blank advances decoding to the next encoder frame; letting a boosted phrase beat blank can pin the decoder on one frame and produce repeated-token garbage. Boosting is only applied when the unboosted greedy token is non-blank.
 
@@ -50,7 +65,9 @@ The implementation does not allow word boosting to replace the RNN-T blank token
 | 560  | 7  | 6  | balanced |
 | 1120 | 14 | 13 | near-offline |
 
-Bundles published as `aufklarer/Nemotron-3.5-ASR-Streaming-0.6B-CoreML-INT8` use chunk_ms = 320.
+The published Core ML INT8, MLX INT5, and MLX INT8 bundles use
+`chunk_ms = 320`. MLX rejects any caller-selected geometry that differs from
+the bundle declaration.
 
 ## Prompt-kernel language conditioning
 
@@ -68,7 +85,9 @@ Slot mapping ships in `languages.json` (e.g. `"en-US": 0`, `"de-DE": 9`, `"ja-JP
 
 - 13 087 SentencePiece pieces + 1 blank id (13087)
 - Native punctuation tokens (`.`, `,`, `?`, `!`, etc.) as regular vocab entries
-- Per-language tag tokens (`<en-US>`, `<de-DE>`, ...) emitted as suffix on each utterance; the Swift wrapper strips these via a regex in WER-style normalization
+- Per-language tag tokens (`<en-US>`, `<de-DE>`, ...) may be emitted in the
+  token stream; `NemotronVocabulary.decode` filters angle-bracket special
+  tokens before returning user-facing text
 
 ## CoreML bundle layout
 
@@ -86,6 +105,27 @@ languages.json        promptDictionary: lang tag → slot
 
 `.mlmodelc` (compiled) ships rather than `.mlpackage` per the speech-models policy — on-device `MLModel.compileModel()` produces non-deterministic output across simulator vs device runtimes, breaking parity.
 
+## MLX bundle layout
+
+The deterministic MLX exporter produces one self-describing directory:
+
+```
+model.safetensors          quantized MLX parameter tree
+config.json                exact network, quantization, and 320 ms cache geometry
+vocab.json                 ordered token array
+tokenizer.model            SentencePiece source tokenizer
+languages.json             wrapped promptDictionary language map
+lang2slot.json             flat language map for non-Swift runtimes
+speech_models_export.json  pinned source revision plus artifact hashes
+```
+
+The native loader instantiates `QuantizedLinear` layers directly with the
+declared affine group-64 INT5 or INT8 precision, loads with strict parameter
+verification, and rejects unsupported network/cache geometry. Encoder and
+decoder recurrent state remains BF16 for both variants. Multiple sessions can
+share one loaded model; their caches remain separate while inference calls are
+serialized.
+
 ## Differences vs older `nemotron-speech-streaming-en-0.6b`
 
 | | English 0.6b (older) | Multilingual 3.5 0.6b |
@@ -99,7 +139,7 @@ languages.json        promptDictionary: lang tag → slot
 
 The Swift `NemotronStreamingConfig` decoder accepts both layouts — older English bundles missing `numPrompts` default to 128, and `attentionContext` accepts either the new `attentionLeftContext` field name or the old `attentionContext` name.
 
-## Conversion equivalence
+## Conversion quality
 
 Round-trip verified Δ-CER vs the fp32 NeMo source on 6 languages × 50 FLEURS samples each (50 + 60 chunks per sample):
 
@@ -111,6 +151,26 @@ Round-trip verified Δ-CER vs the fp32 NeMo source on 6 languages × 50 FLEURS s
 | MLX int4    | +2.32 pp |
 
 CoreML INT8 / MLX bf16 / MLX int8 are essentially lossless; int4 is meaningfully lossier especially on Hindi and Japanese.
+
+Those figures are the original whole-utterance conversion diagnostic. The
+release gate also scores the actual cache-aware 320 ms runtime on the same six
+languages:
+
+| variant | mean WER | mean CER | bundle | streaming peak |
+|---------|---------:|---------:|-------:|---------------:|
+| MLX INT5 | 11.53 | 5.85 | 538.6 MB | 800 MB |
+| MLX INT8 | 11.01 | 5.51 | 732.6 MB | 992 MB |
+
+INT5 is the native runtime default: it saves about 193 MB of storage and
+192 MB of peak RSS for +0.52 percentage points mean WER versus INT8. INT4
+remains an export/research artifact and is not accepted by the native Swift
+runtime because its measured quality loss is substantially larger.
+
+An additional three-run, fresh-process Swift regression gate on a 20-second
+English fixture measured 0.0360 median RTF / 611 MB peak RSS for INT5 and
+0.0375 / 805 MB for INT8, with exact reference text from both variants. That
+short gate checks native runtime performance and output stability; the
+six-language table remains the quality comparison.
 
 ## References
 
