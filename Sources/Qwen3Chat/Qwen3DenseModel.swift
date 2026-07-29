@@ -41,7 +41,7 @@ public struct Qwen3DenseConfig: Sendable {
         if let n = obj["eos_token_id"] as? NSNumber { eos = n.intValue }
         else if let a = obj["eos_token_id"] as? [NSNumber], let f = a.first { eos = f.intValue }
         else { eos = 151645 }  // <|im_end|>
-        let quant = obj["quantization"] as? [String: Any]
+        let quant = ChatQuantization.resolve(searching: [obj])
         return Qwen3DenseConfig(
             hiddenSize: hidden,
             numHiddenLayers: int("num_hidden_layers", 36),
@@ -54,8 +54,8 @@ public struct Qwen3DenseConfig: Sendable {
             rmsNormEps: Float(dbl("rms_norm_eps", 1e-6)),
             tieWordEmbeddings: (obj["tie_word_embeddings"] as? Bool) ?? true,
             eosTokenId: eos,
-            quantGroupSize: (quant?["group_size"] as? NSNumber)?.intValue ?? 64,
-            quantBits: (quant?["bits"] as? NSNumber)?.intValue ?? 4
+            quantGroupSize: quant.groupSize,
+            quantBits: quant.bits
         )
     }
 }

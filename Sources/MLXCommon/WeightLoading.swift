@@ -85,6 +85,98 @@ public enum CommonWeightLoader {
         }
     }
 
+    // MARK: - Checked quantized weight application
+
+    /// Apply quantized embedding weights, failing closed when the checkpoint's packed
+    /// layout disagrees with the bit width / group size the layer was built with.
+    ///
+    /// See ``QuantizedWeightMismatch`` for why this check has to be done here.
+    public static func applyCheckedQuantizedEmbeddingWeights(
+        to embedding: PreQuantizedEmbedding,
+        prefix: String,
+        from weights: [String: MLXArray]
+    ) throws {
+        try verifyQuantizedLayout(
+            tensor: prefix,
+            rows: embedding.embeddingCount,
+            columns: embedding.dimensions,
+            bits: embedding.bits,
+            groupSize: embedding.groupSize,
+            weight: weights["\(prefix).weight"],
+            scales: weights["\(prefix).scales"])
+        applyQuantizedEmbeddingWeights(to: embedding, prefix: prefix, from: weights)
+    }
+
+    /// Apply quantized linear weights, failing closed when the checkpoint's packed
+    /// layout disagrees with the bit width / group size the layer was built with.
+    ///
+    /// See ``QuantizedWeightMismatch`` for why this check has to be done here.
+    public static func applyCheckedQuantizedLinearWeights(
+        to linear: QuantizedLinear,
+        prefix: String,
+        from weights: [String: MLXArray]
+    ) throws {
+        // `weight` is packed: [outputDimensions, inputDimensions * bits / 32].
+        let packed = linear.weight.shape2
+        try verifyQuantizedLayout(
+            tensor: prefix,
+            rows: packed.0,
+            columns: packed.1 * 32 / linear.bits,
+            bits: linear.bits,
+            groupSize: linear.groupSize,
+            weight: weights["\(prefix).weight"],
+            scales: weights["\(prefix).scales"])
+        applyQuantizedLinearWeights(to: linear, prefix: prefix, from: weights)
+    }
+
+    /// Compare a checkpoint's `weight`/`scales` pair against the layout implied by
+    /// `rows`/`columns`/`bits`/`groupSize` — i.e. a packed weight of
+    /// `[rows, columns * bits / 32]` and scales of `[rows, columns / groupSize]`.
+    static func verifyQuantizedLayout(
+        tensor: String,
+        rows: Int,
+        columns: Int,
+        bits: Int,
+        groupSize: Int,
+        weight: MLXArray?,
+        scales: MLXArray?
+    ) throws {
+        guard let weight else {
+            throw QuantizedWeightMismatch.missingWeight(tensor: tensor)
+        }
+        guard let scales else {
+            // A packed weight cannot be dequantized without its scales; loading it
+            // alone leaves the layer multiplying by zeros.
+            throw QuantizedWeightMismatch.missingScales(tensor: tensor)
+        }
+
+        let expectedWeight = [rows, columns * bits / 32]
+        if weight.shape != expectedWeight {
+            // A row of the wrong width almost always means the checkpoint was packed
+            // at a different bit width than the config declared.
+            if weight.ndim == 2, weight.dim(0) == rows, columns > 0 {
+                let packedBitsTotal = weight.dim(1) * 32
+                if packedBitsTotal % columns == 0 {
+                    throw QuantizedWeightMismatch.bits(
+                        tensor: tensor, declared: bits, implied: packedBitsTotal / columns)
+                }
+            }
+            throw QuantizedWeightMismatch.shape(
+                tensor: "\(tensor).weight", expected: expectedWeight, actual: weight.shape)
+        }
+
+        let expectedScales = [rows, columns / groupSize]
+        if scales.shape != expectedScales {
+            if scales.ndim == 2, scales.dim(0) == rows, scales.dim(1) > 0,
+               columns % scales.dim(1) == 0 {
+                throw QuantizedWeightMismatch.groupSize(
+                    tensor: tensor, declared: groupSize, implied: columns / scales.dim(1))
+            }
+            throw QuantizedWeightMismatch.shape(
+                tensor: "\(tensor).scales", expected: expectedScales, actual: scales.shape)
+        }
+    }
+
     /// Apply weights to a Linear (or QuantizedLinear, since the latter inherits from
     /// the former). When the layer is a QuantizedLinear, `.scales`/`.biases` are wired
     /// in addition to `.weight`. For plain Linear those keys are absent in the
@@ -269,6 +361,44 @@ public enum CommonWeightLoader {
             applyQuantizedLinearWeights(to: q, prefix: prefix, from: weights)
         } else {
             applyLinearWeights(to: linear, prefix: prefix, from: weights)
+        }
+    }
+}
+
+/// A checkpoint's quantized tensors disagreeing with the layer receiving them.
+///
+/// Nothing below this raises on its own: `Module.update(parameters:)` calls
+/// `update(parameters:verify:)` with `verify: .none`, so mlx-swift installs a packed
+/// row of the wrong width without complaint and the layer then dequantizes garbage —
+/// a wrong answer instead of an error. An INT8 checkpoint read as INT4 is exactly
+/// that case: same tensor names, same row count, twice the packed width.
+public enum QuantizedWeightMismatch: Error, LocalizedError {
+    case missingWeight(tensor: String)
+    case missingScales(tensor: String)
+    case bits(tensor: String, declared: Int, implied: Int)
+    case groupSize(tensor: String, declared: Int, implied: Int)
+    case shape(tensor: String, expected: [Int], actual: [Int])
+
+    public var errorDescription: String? {
+        switch self {
+        case .missingWeight(let tensor):
+            return "Quantized weight missing from checkpoint: \(tensor).weight"
+        case .missingScales(let tensor):
+            return "Quantized weight \(tensor).weight has no matching \(tensor).scales"
+        case .bits(let tensor, let declared, let implied):
+            return """
+                Quantization mismatch at \(tensor): config declares \(declared)-bit weights \
+                but the checkpoint is packed \(implied)-bit. Fix the model config's \
+                quantization_bits rather than loading it as \(declared)-bit.
+                """
+        case .groupSize(let tensor, let declared, let implied):
+            return """
+                Quantization mismatch at \(tensor): config declares group size \(declared) \
+                but the checkpoint's scales imply \(implied). Fix the model config's \
+                quantization_group_size.
+                """
+        case .shape(let tensor, let expected, let actual):
+            return "Weight shape mismatch at \(tensor): expected \(expected), got \(actual)"
         }
     }
 }

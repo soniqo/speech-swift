@@ -29,6 +29,8 @@ Gemma 4 text differs from Qwen-style dense chat models in several important ways
 
 The config parser reads the nested `text_config` block used by Gemma 4 exports and falls back to root-level fields for standalone text configs.
 
+Quantization is resolved by `ChatQuantization`, searching the root and then `text_config`: the flat `quantization_bits` / `quantization_group_size` fields first, then the nested `"quantization": {"bits", "group_size"}` object, then a `"quantization": "int8"` label (which names no group size), then INT4 / 64 for checkpoints that state nothing. Every quantized layer is built from that answer, so a config stating only the flat fields no longer falls back to INT4 and loads a wider checkpoint into narrow layers.
+
 ## Chat Template
 
 Gemma 4 does not use ChatML and does not use the older Gemma `<start_of_turn>` format. The runtime renders:

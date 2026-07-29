@@ -90,8 +90,9 @@ public struct Gemma4DenseConfig: Sendable {
         else if let a = root["eos_token_id"] as? [NSNumber], let f = a.first { eos = f.intValue }
         else { eos = 1 }
 
-        // quantization lives at the root of the MLX config.
-        let quant = (root["quantization"] as? [String: Any]) ?? (tc["quantization"] as? [String: Any])
+        // Quantization lives at the root of the MLX config; older exports put it beside
+        // the text fields instead, so both are searched.
+        let quant = ChatQuantization.resolve(searching: [root, tc])
 
         return Gemma4DenseConfig(
             hiddenSize: int(tc, "hidden_size", 1536),
@@ -116,8 +117,8 @@ public struct Gemma4DenseConfig: Sendable {
             tieWordEmbeddings: (tc["tie_word_embeddings"] as? Bool) ?? true,
             layerTypes: layerTypes,
             eosTokenId: eos,
-            quantGroupSize: (quant?["group_size"] as? NSNumber)?.intValue ?? 64,
-            quantBits: (quant?["bits"] as? NSNumber)?.intValue ?? 4
+            quantGroupSize: quant.groupSize,
+            quantBits: quant.bits
         )
     }
 

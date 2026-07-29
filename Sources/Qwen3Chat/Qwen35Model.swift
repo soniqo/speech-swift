@@ -56,8 +56,8 @@ public final class DeltaNetLayer: Module {
         self.convKernel = config.linearConvKernelDim ?? 4
         self.qkvDim = 3 * numHeads * headDim
 
-        let groupSize = 64
-        let bits = 4
+        let groupSize = config.quantGroupSize
+        let bits = config.quantBits
         self._inProjQKV = ModuleInfo(wrappedValue: QuantizedLinear(hiddenSize, qkvDim, bias: false, groupSize: groupSize, bits: bits))
         self._inProjZ = ModuleInfo(wrappedValue: QuantizedLinear(hiddenSize, 2 * hiddenSize, bias: false, groupSize: groupSize, bits: bits))
         self._inProjB = ModuleInfo(wrappedValue: QuantizedLinear(hiddenSize, numHeads, bias: false, groupSize: groupSize, bits: bits))
@@ -304,8 +304,8 @@ public final class GatedAttentionLayer: Module {
         let factor = config.partialRotaryFactor ?? 0.25
         self.ropeDims = Int(Double(headDim) * factor)  // 64
 
-        let groupSize = 64
-        let bits = 4
+        let groupSize = config.quantGroupSize
+        let bits = config.quantBits
         let qDim = numQHeads * headDim  // 2048
 
         // q_proj outputs 2 * qDim (Q + gate)
@@ -499,7 +499,7 @@ public final class Qwen35TransformerLayer: Module {
 
 // MARK: - SwiGLU MLP
 
-/// SwiGLU MLP for Qwen3.5 (quantized INT4).
+/// SwiGLU MLP for Qwen3.5 (quantized at the checkpoint's declared bit width).
 public final class Qwen35MLP: Module {
     @ModuleInfo(key: "gate_proj") var gateProj: QuantizedLinear
     @ModuleInfo(key: "up_proj") var upProj: QuantizedLinear
@@ -508,7 +508,7 @@ public final class Qwen35MLP: Module {
     public init(config: Qwen3ChatConfig) {
         let hs = config.hiddenSize
         let is_ = config.intermediateSize
-        let gs = 64, bits = 4
+        let gs = config.quantGroupSize, bits = config.quantBits
 
         self._gateProj = ModuleInfo(
             wrappedValue: QuantizedLinear(hs, is_, bias: false, groupSize: gs, bits: bits),
@@ -562,7 +562,7 @@ public final class Qwen35MLXModel: Module {
         self._embedTokens = ModuleInfo(wrappedValue:  PreQuantizedEmbedding(
                 embeddingCount: config.vocabSize,
                 dimensions: config.hiddenSize,
-                groupSize: 64, bits: 4))
+                groupSize: config.quantGroupSize, bits: config.quantBits))
 
         self._layers = ModuleInfo(
             wrappedValue: types.map { Qwen35TransformerLayer(config: config, layerType: $0) })

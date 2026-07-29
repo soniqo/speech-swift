@@ -205,6 +205,8 @@ extension Gemma4Chat: Qwen35ChatBackend {
             eosTokenId: denseConfig.eosTokenId,
             padTokenId: 0,
             quantization: "int\(denseConfig.quantBits)",
+            quantizationBits: denseConfig.quantBits,
+            quantizationGroupSize: denseConfig.quantGroupSize,
             modelType: nil,
             layerTypes: denseConfig.layerTypes,
             fullAttentionInterval: nil,

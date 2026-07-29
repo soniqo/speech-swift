@@ -54,6 +54,13 @@ Weights are safetensors with quantized linears (`weight` uint32, `scales`/`biase
 embedding is read directly as a pre-quantized table (`PreQuantizedEmbedding`), whose packed last
 dimension is `dimensions * bits / 32` — correct for 3/5/6-bit as well as 4/8-bit.
 
+Bit width and group size come from the checkpoint's `config.json` via `ChatQuantization`, which
+accepts every form the exports state them in: the flat `quantization_bits` /
+`quantization_group_size` fields first, then the nested `"quantization": {"bits", "group_size"}`
+object, then a `"quantization": "int5"` label (which names no group size), then INT4 / 64 for
+checkpoints that state nothing. Reading only one of those forms is what silently builds INT4
+layers for an int5 export.
+
 Key naming (HF `model.` prefix stripped on load):
 - Attention: `layers.{i}.self_attn.{q_proj, k_proj, v_proj, o_proj, q_norm, k_norm}`
 - MLP: `layers.{i}.mlp.{gate_proj, up_proj, down_proj}`

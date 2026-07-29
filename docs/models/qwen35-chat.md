@@ -95,6 +95,24 @@ Repo: `aufklarer/Qwen3.5-0.8B-Chat-MLX` with `int4/` and `int8/` subdirectories.
 
 Weights are in safetensors format with quantized linear layers (`weight` uint32, `scales` bfloat16, `biases` bfloat16).
 
+**Bit width comes from the checkpoint, not from the code.** `Qwen35MLXModel` builds every
+`QuantizedLinear` and the `PreQuantizedEmbedding` from `Qwen3ChatConfig.quantBits` /
+`quantGroupSize`, resolved in this order:
+
+1. `quantization_bits` / `quantization_group_size` — the explicit numeric fields
+2. `"quantization"` — either the label form (`"int8"`, which names a width but no group size)
+   or the mlx-community object form (`{"bits": 8, "group_size": 32}`)
+3. INT4 / group size 64, for checkpoints that state nothing
+
+`ChatQuantization` owns that rule; `Qwen3DenseConfig` and `Gemma4DenseConfig` resolve through the
+same helper, so all three chat configs read a given `config.json` the same way.
+
+The loader then compares each checkpoint tensor against that declaration — a packed weight is
+`[rows, columns · bits / 32]` and its scales are `[rows, columns / group_size]` — and throws
+`QuantizedWeightMismatch` when they disagree. This check has to be explicit: mlx-swift's
+`Module.update(parameters:)` verifies nothing, so a tensor of the wrong packed width is
+installed silently and the layer dequantizes garbage instead of failing.
+
 Key naming:
 - DeltaNet: `layers.{i}.linear_attn.{in_proj_qkv, in_proj_z, in_proj_a, in_proj_b, conv1d, out_proj, norm, dt_bias, A_log}`
 - GatedAttention: `layers.{i}.self_attn.{q_proj, k_proj, v_proj, o_proj, q_norm, k_norm}`

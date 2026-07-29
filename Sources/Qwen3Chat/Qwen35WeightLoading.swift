@@ -81,7 +81,7 @@ public enum Qwen35WeightLoader {
         progressHandler?(0.4, "Applying embedding weights...")
 
         // Load embed_tokens (PreQuantizedEmbedding)
-        CommonWeightLoader.applyQuantizedEmbeddingWeights(
+        try CommonWeightLoader.applyCheckedQuantizedEmbeddingWeights(
             to: model.embedTokens,
             prefix: "embed_tokens",
             from: modelWeights)
@@ -109,7 +109,7 @@ public enum Qwen35WeightLoader {
                 from: modelWeights)
 
             // MLP
-            applyQuantizedMLPWeights(
+            try applyQuantizedMLPWeights(
                 to: layer.mlp,
                 prefix: "\(prefix).mlp",
                 from: modelWeights)
@@ -121,7 +121,7 @@ public enum Qwen35WeightLoader {
                     prefix: "\(prefix).linear_attn",
                     from: modelWeights)
             } else {
-                applyGatedAttentionWeights(
+                try applyGatedAttentionWeights(
                     to: layer.gatedAttn!,
                     prefix: "\(prefix).self_attn",
                     from: modelWeights)
@@ -140,21 +140,22 @@ public enum Qwen35WeightLoader {
 
     /// Apply weights to a DeltaNet (linear attention) layer.
     ///
-    /// All DeltaNet projections are quantized INT4 (matching mlx-community format).
-    /// The conv1d weight and scalar parameters (dt_bias, A_log) are loaded directly.
+    /// All DeltaNet projections are quantized at the config's declared bit width
+    /// (matching mlx-community format). The conv1d weight and scalar parameters
+    /// (dt_bias, A_log) are loaded directly.
     private static func applyDeltaNetWeights(
         to layer: DeltaNetLayer,
         prefix: String,
         from weights: [String: MLXArray]
     ) throws {
         // Quantized projections
-        CommonWeightLoader.applyQuantizedLinearWeights(
+        try CommonWeightLoader.applyCheckedQuantizedLinearWeights(
             to: layer.inProjQKV, prefix: "\(prefix).in_proj_qkv", from: weights)
-        CommonWeightLoader.applyQuantizedLinearWeights(
+        try CommonWeightLoader.applyCheckedQuantizedLinearWeights(
             to: layer.inProjZ, prefix: "\(prefix).in_proj_z", from: weights)
-        CommonWeightLoader.applyQuantizedLinearWeights(
+        try CommonWeightLoader.applyCheckedQuantizedLinearWeights(
             to: layer.inProjB, prefix: "\(prefix).in_proj_b", from: weights)
-        CommonWeightLoader.applyQuantizedLinearWeights(
+        try CommonWeightLoader.applyCheckedQuantizedLinearWeights(
             to: layer.inProjA, prefix: "\(prefix).in_proj_a", from: weights)
 
         // Raw parameters: conv1d weight, dt_bias, A_log
@@ -179,7 +180,7 @@ public enum Qwen35WeightLoader {
             to: layer.norm, prefix: "\(prefix).norm", from: weights)
 
         // Output projection (quantized)
-        CommonWeightLoader.applyQuantizedLinearWeights(
+        try CommonWeightLoader.applyCheckedQuantizedLinearWeights(
             to: layer.outProj, prefix: "\(prefix).out_proj", from: weights)
     }
 
@@ -187,19 +188,19 @@ public enum Qwen35WeightLoader {
 
     /// Apply weights to a GatedAttention (full attention) layer.
     ///
-    /// All projections are quantized (INT4 with group_size=64).
+    /// All projections are quantized at the config's declared bit width and group size.
     private static func applyGatedAttentionWeights(
         to layer: GatedAttentionLayer,
         prefix: String,
         from weights: [String: MLXArray]
-    ) {
-        CommonWeightLoader.applyQuantizedLinearWeights(
+    ) throws {
+        try CommonWeightLoader.applyCheckedQuantizedLinearWeights(
             to: layer.qProj, prefix: "\(prefix).q_proj", from: weights)
-        CommonWeightLoader.applyQuantizedLinearWeights(
+        try CommonWeightLoader.applyCheckedQuantizedLinearWeights(
             to: layer.kProj, prefix: "\(prefix).k_proj", from: weights)
-        CommonWeightLoader.applyQuantizedLinearWeights(
+        try CommonWeightLoader.applyCheckedQuantizedLinearWeights(
             to: layer.vProj, prefix: "\(prefix).v_proj", from: weights)
-        CommonWeightLoader.applyQuantizedLinearWeights(
+        try CommonWeightLoader.applyCheckedQuantizedLinearWeights(
             to: layer.oProj, prefix: "\(prefix).o_proj", from: weights)
 
         CommonWeightLoader.applyRMSNormWeights(
@@ -215,12 +216,12 @@ public enum Qwen35WeightLoader {
         to mlp: Qwen35MLP,
         prefix: String,
         from weights: [String: MLXArray]
-    ) {
-        CommonWeightLoader.applyQuantizedLinearWeights(
+    ) throws {
+        try CommonWeightLoader.applyCheckedQuantizedLinearWeights(
             to: mlp.gateProj, prefix: "\(prefix).gate_proj", from: weights)
-        CommonWeightLoader.applyQuantizedLinearWeights(
+        try CommonWeightLoader.applyCheckedQuantizedLinearWeights(
             to: mlp.upProj, prefix: "\(prefix).up_proj", from: weights)
-        CommonWeightLoader.applyQuantizedLinearWeights(
+        try CommonWeightLoader.applyCheckedQuantizedLinearWeights(
             to: mlp.downProj, prefix: "\(prefix).down_proj", from: weights)
     }
 }
