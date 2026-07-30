@@ -100,9 +100,11 @@ public final class Gemma4Chat: @unchecked Sendable {
                 let promptTokens = Gemma4ChatTemplate.encode(
                     messages: messages, tokenizer: self.gemmaTokenizer)
 
-                // Prefill.
+                // Prefill. Only the final position is sampled, so the lm_head runs on that row
+                // alone — over a long prompt the discarded rows are gigabytes of 262k-wide logits.
                 let promptArray = MLXArray(promptTokens.map { Int32($0) }).expandedDimensions(axis: 0)
-                let prefillLogits = self.model.forward(inputIds: promptArray, state: &self.state)
+                let prefillLogits = self.model.lastTokenLogits(
+                    inputIds: promptArray, state: &self.state)
                 eval(prefillLogits)
                 var logits = self.lastLogits(prefillLogits)
 

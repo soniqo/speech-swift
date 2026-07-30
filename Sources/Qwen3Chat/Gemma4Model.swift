@@ -195,6 +195,24 @@ public final class Gemma4ProportionalRoPE {
     }
 }
 
+// MARK: - Blocked attention geometry
+
+/// One query block of a blocked attention pass: which of this call's queries it covers, which
+/// slice of the key axis those queries can reach, and how that block is masked.
+///
+/// A sliding layer's query only reaches `sliding_window` keys back, so a block of `Q` consecutive
+/// queries reaches at most `Q + sliding_window - 1` of them. Scoring the block against that slice
+/// is what makes prefill near-linear in prompt length. The single `[1,1,Tq,Tk]` mask this replaced
+/// let the window decide which scores *survived*, never how many were *computed*: all 42 layers
+/// built the complete Tq×Tk matrix and then threw ~97% of it away.
+struct Gemma4AttentionBlock {
+    let queryStart: Int   // half-open range into this call's query axis
+    let queryEnd: Int
+    let keyStart: Int     // half-open range into the (cache-concatenated) key axis
+    let keyEnd: Int
+    let mask: MLXFast.ScaledDotProductAttentionMaskMode
+}
+
 // MARK: - Attention
 
 public final class Gemma4Attention: Module {
@@ -270,13 +288,11 @@ public final class Gemma4Attention: Module {
     ///     When non-nil this is the FULL cache to attend over (no past is concatenated).
     ///   - pastKV: previously cached post-RoPE (keys, values) for a *producing* layer in incremental
     ///     decode; this step's new K/V are concatenated onto it. Ignored when `sharedKV` is set.
-    ///   - mask: additive float mask [1,1,Tq,Tk] (already causal / windowed).
     ///   - offset: RoPE position offset for the *new* tokens (== number of cached positions).
-    /// - Returns: (output [B,T,hidden], full (keys,values) attended over [B,Hkv,Tk,D]).
-    public func callAsFunction(
-        _ x: MLXArray, mask: MLXArray, sharedKV: (MLXArray, MLXArray)?,
-        pastKV: (MLXArray, MLXArray)? = nil, offset: Int
-    ) -> (MLXArray, (MLXArray, MLXArray)) {
+    /// - Returns: (q [B,Hq,T,D], full keys, full values [B,Hkv,Tk,D]).
+    private func projectQKV(
+        _ x: MLXArray, sharedKV: (MLXArray, MLXArray)?, pastKV: (MLXArray, MLXArray)?, offset: Int
+    ) -> (MLXArray, MLXArray, MLXArray) {
         let b = x.dim(0), t = x.dim(1)
 
         var q = qNorm(qProj(x).reshaped(b, t, nHeads, headDim))   // q_norm before transpose
@@ -306,10 +322,63 @@ public final class Gemma4Attention: Module {
 
         q = q.transposed(0, 2, 1, 3)
         q = applyRope(q, offset: offset)
+        return (q, keys, values)
+    }
 
+    /// Reference path: one SDPA call against the whole key axis with a precomputed additive
+    /// `[1,1,Tq,Tk]` mask. Superseded by the blocked overload below and retained because it is the
+    /// implementation the blocked one is measured against.
+    ///
+    /// - Returns: (output [B,T,hidden], full (keys,values) attended over [B,Hkv,Tk,D]).
+    public func callAsFunction(
+        _ x: MLXArray, mask: MLXArray, sharedKV: (MLXArray, MLXArray)?,
+        pastKV: (MLXArray, MLXArray)? = nil, offset: Int
+    ) -> (MLXArray, (MLXArray, MLXArray)) {
+        let (q, keys, values) = projectQKV(x, sharedKV: sharedKV, pastKV: pastKV, offset: offset)
         let attnOut = SDPA.attendAndMerge(
             qHeads: q, kHeads: keys, vHeads: values, scale: scale, mask: mask)
         return (oProj(attnOut), (keys, values))
+    }
+
+    /// Blocked path: each block scores its queries against only the keys they can reach, so a
+    /// sliding layer never materialises a score matrix wider than its window. Q/K/V projections and
+    /// RoPE still run once over the whole call — they are linear in length and cheap to share — and
+    /// the full (keys, values) are returned unsliced so they can still be cached and shared.
+    ///
+    /// The per-block outputs are concatenated along the token axis before `o_proj`, so the output
+    /// projection stays one matmul rather than one per block.
+    func callAsFunction(
+        _ x: MLXArray, blocks: [Gemma4AttentionBlock], sharedKV: (MLXArray, MLXArray)?,
+        pastKV: (MLXArray, MLXArray)? = nil, offset: Int
+    ) -> (MLXArray, (MLXArray, MLXArray)) {
+        let (q, keys, values) = projectQKV(x, sharedKV: sharedKV, pastKV: pastKV, offset: offset)
+
+        let attnOut: MLXArray
+        if blocks.count == 1 {
+            let block = blocks[0]
+            attnOut = SDPA.attendAndMerge(
+                qHeads: q, kHeads: keySlice(keys, block), vHeads: keySlice(values, block),
+                scale: scale, mask: block.mask)
+        } else {
+            var parts: [MLXArray] = []
+            parts.reserveCapacity(blocks.count)
+            for block in blocks {
+                parts.append(SDPA.attendAndMerge(
+                    qHeads: q[0..., 0..., block.queryStart ..< block.queryEnd, 0...],
+                    kHeads: keySlice(keys, block), vHeads: keySlice(values, block),
+                    scale: scale, mask: block.mask))
+            }
+            attnOut = concatenated(parts, axis: 1)
+        }
+        return (oProj(attnOut), (keys, values))
+    }
+
+    /// Key/value slice a block attends over, left alone when the block already spans everything
+    /// (short prompts and single-block passes) so nothing pays for a no-op view.
+    @inline(__always)
+    private func keySlice(_ kv: MLXArray, _ block: Gemma4AttentionBlock) -> MLXArray {
+        (block.keyStart == 0 && block.keyEnd == kv.dim(2))
+            ? kv : kv[0..., 0..., block.keyStart ..< block.keyEnd, 0...]
     }
 }
 
@@ -379,14 +448,31 @@ public final class Gemma4Layer: Module {
         _ x: MLXArray, mask: MLXArray, perLayerInput: MLXArray,
         sharedKV: (MLXArray, MLXArray)?, pastKV: (MLXArray, MLXArray)? = nil, offset: Int
     ) -> (MLXArray, (MLXArray, MLXArray)) {
-        var residual = x
+        let (attnOut, kv) = attn(inputLayerNorm(x), mask: mask, sharedKV: sharedKV,
+                                 pastKV: pastKV, offset: offset)
+        return (feedForward(residual: x, attnOut: attnOut, perLayerInput: perLayerInput), kv)
+    }
 
-        var h = inputLayerNorm(x)
-        let (attnOut, kv) = attn(h, mask: mask, sharedKV: sharedKV, pastKV: pastKV, offset: offset)
-        h = postAttentionLayerNorm(attnOut)   // post-attn norm applied BEFORE the residual add
-        h = residual + h
+    /// Blocked attention variant — identical outside the attention call itself.
+    func callAsFunction(
+        _ x: MLXArray, blocks: [Gemma4AttentionBlock], perLayerInput: MLXArray,
+        sharedKV: (MLXArray, MLXArray)?, pastKV: (MLXArray, MLXArray)? = nil, offset: Int
+    ) -> (MLXArray, (MLXArray, MLXArray)) {
+        let (attnOut, kv) = attn(inputLayerNorm(x), blocks: blocks, sharedKV: sharedKV,
+                                 pastKV: pastKV, offset: offset)
+        return (feedForward(residual: x, attnOut: attnOut, perLayerInput: perLayerInput), kv)
+    }
 
-        residual = h
+    /// Everything after the attention call: post-attn norm, the sandwiched FFN, per-layer input
+    /// gating, and the layer scalar. Shared by both attention paths so they can only differ in how
+    /// the scores were computed.
+    private func feedForward(
+        residual attnResidual: MLXArray, attnOut: MLXArray, perLayerInput: MLXArray
+    ) -> MLXArray {
+        var h = postAttentionLayerNorm(attnOut)   // post-attn norm applied BEFORE the residual add
+        h = attnResidual + h
+
+        var residual = h
         h = preFeedforwardLayerNorm(h)
         h = mlp(h)
         h = postFeedforwardLayerNorm(h)
@@ -401,8 +487,7 @@ public final class Gemma4Layer: Module {
         gate = postPerLayerInputNorm(gate)
         h = residual + gate
 
-        h = h * layerScalar
-        return (h, kv)
+        return h * layerScalar
     }
 }
 
@@ -465,16 +550,141 @@ public final class Gemma4Model: Module {
         return (proj + perLayerInputs) * perLayerInputScale
     }
 
-    /// Build an additive float mask [1,1,T,T]: causal, with an optional sliding window.
-    private func makeMask(seqLen t: Int, windowSize: Int?, dtype: DType) -> MLXArray {
-        makeMask(queryLen: t, keyLen: t, offset: 0, windowSize: windowSize, dtype: dtype)
+    // MARK: - Attention geometry
+
+    /// Queries per attention block.
+    ///
+    /// A sliding layer's per-block key span is `queryBlock + sliding_window - 1`, so its whole pass
+    /// costs `T · (queryBlock + window - 1)` key comparisons against the `T²` the full mask paid: at
+    /// the checkpoint's 512-token window and a 17k prompt that is a 17× reduction, and the ratio
+    /// keeps improving with length. Smaller blocks shave a little more arithmetic but launch more
+    /// kernels; 512 keeps each block's matmul large (8 heads × 512 queries × ~1023 keys) while the
+    /// cost is already within 2× of the `T · window` floor. The value is deliberately independent of
+    /// `sliding_window` — every interior block has the same relative geometry whatever it is, so one
+    /// mask array serves all of them and all 35 sliding layers.
+    ///
+    /// The seven global layers are blocked at the same size even though they have no band to
+    /// exploit, which looks pointless and is not. Handing MLX a single end-aligned causal call over
+    /// the whole prompt instead was measured at 17,408 tokens to raise peak memory from 7.03 GB to
+    /// 11.30 GB — a figure that is deterministic and repeated exactly run to run, unlike the wall
+    /// times beside it, which drifted further with the machine's thermal state than the two variants
+    /// differed. So MLX's SDPA reserves against the whole Tq×Tk score matrix rather than against the
+    /// half a causal mask keeps, and bounding Tk per block is what caps the reservation, exactly as
+    /// it does on the sliding layers. Do not special-case global layers back to one call without
+    /// re-measuring peak memory.
+    private static let queryBlock = 512
+
+    /// Geometry that decides a block's mask: how many queries, how many keys, and where the block's
+    /// first query sits inside its key slice. Interior blocks agree on all three.
+    struct BlockMaskKey: Hashable {
+        let queries: Int
+        let keys: Int
+        let queryOffset: Int
     }
 
-    /// Build an additive float mask [1,1,Tq,Tk] for incremental decode: the `Tq` new queries
-    /// live at absolute positions `offset ..< offset+Tq`; the `Tk` keys at `0 ..< Tk`
-    /// (`Tk == offset + Tq` for a contiguous cache). Causal, with an optional sliding window.
-    private func makeMask(queryLen tq: Int, keyLen tk: Int, offset: Int,
-                          windowSize: Int?, dtype: DType) -> MLXArray {
+    /// Plan one attention pass: `tq` new queries at absolute positions `offset ..< offset+tq`,
+    /// keys covering absolute `0 ..< tk`. `windowSize` nil means global attention.
+    ///
+    /// Two block shapes need no mask array at all. A one-query block (every decode step) reaches
+    /// every key in its own slice, and a block whose slice starts at position 0 with no query's
+    /// window biting is exactly the end-aligned causal case MLX derives itself — which is every
+    /// block of a full-attention layer, so those layers now allocate no mask whatever the length.
+    static func attentionBlocks(queryLen tq: Int, keyLen tk: Int, offset: Int,
+                                windowSize: Int?, dtype: DType) -> [Gemma4AttentionBlock] {
+        var blocks: [Gemma4AttentionBlock] = []
+        var masks: [BlockMaskKey: MLXArray] = [:]
+        var start = 0
+        while start < tq {
+            let end = min(start + queryBlock, tq)
+            let firstQuery = offset + start
+            let lastQuery = offset + end - 1
+            // Causal: nothing above the block's last query. Windowed: nothing below the first
+            // query's window floor, since a later query's floor is only ever higher.
+            let keyEnd = min(lastQuery + 1, tk)
+            let keyStart = windowSize.map { max(0, firstQuery - $0 + 1) } ?? 0
+
+            let mask: MLXFast.ScaledDotProductAttentionMaskMode
+            if end - start == 1 {
+                mask = .none
+            } else if keyStart == 0, windowSize.map({ lastQuery < $0 }) ?? true {
+                mask = .causal
+            } else {
+                let key = BlockMaskKey(queries: end - start, keys: keyEnd - keyStart,
+                                       queryOffset: firstQuery - keyStart)
+                let array = masks[key] ?? blockMask(key, windowSize: windowSize, dtype: dtype)
+                masks[key] = array
+                mask = .array(array)
+            }
+
+            blocks.append(Gemma4AttentionBlock(queryStart: start, queryEnd: end,
+                                               keyStart: keyStart, keyEnd: keyEnd, mask: mask))
+            start = end
+        }
+        return blocks
+    }
+
+    /// Additive mask for one block — `[1,1,queries,keys]`, in the block's own coordinates: query `i`
+    /// sits at key-slice position `queryOffset + i`, key `j` at position `j`.
+    static func blockMask(_ key: BlockMaskKey, windowSize: Int?, dtype: DType) -> MLXArray {
+        let qInds = (MLXArray(Int32(0)..<Int32(key.queries)) + Int32(key.queryOffset))
+            .reshaped(key.queries, 1)
+        let kInds = MLXArray(Int32(0)..<Int32(key.keys)).reshaped(1, key.keys)
+        var keep = qInds .>= kInds                       // causal
+        if let w = windowSize {
+            keep = logicalAnd(keep, qInds .< (kInds + w)) // sliding window
+        }
+        let zeros = MLXArray.zeros([key.queries, key.keys], dtype: dtype)
+        let neg = MLXArray(-Float.greatestFiniteMagnitude).asType(dtype)
+        return MLX.where(keep, zeros, neg).reshaped(1, 1, key.queries, key.keys)
+    }
+
+    /// How a pass drives its layers: the blocked geometry production uses, or the single full-size
+    /// mask it replaced. The reference stays reachable so the parity test can hold one against the
+    /// other on the same weights and the same prompt; nothing in production selects it.
+    private enum AttentionPlan {
+        case blocks(full: [Gemma4AttentionBlock], sliding: [Gemma4AttentionBlock])
+        case referenceMasks(full: MLXArray, sliding: MLXArray)
+    }
+
+    /// Test-only: fall back to the full `[1,1,Tq,Tk]` mask for every layer.
+    static var usesReferenceFullMask = false
+
+    private func attentionPlan(queryLen tq: Int, keyLen tk: Int, offset: Int,
+                               dtype: DType) -> AttentionPlan {
+        if Gemma4Model.usesReferenceFullMask {
+            return .referenceMasks(
+                full: Self.makeMask(queryLen: tq, keyLen: tk, offset: offset,
+                                    windowSize: nil, dtype: dtype),
+                sliding: Self.makeMask(queryLen: tq, keyLen: tk, offset: offset,
+                                       windowSize: config.slidingWindow, dtype: dtype))
+        }
+        return .blocks(
+            full: Self.attentionBlocks(queryLen: tq, keyLen: tk, offset: offset,
+                                       windowSize: nil, dtype: dtype),
+            sliding: Self.attentionBlocks(queryLen: tq, keyLen: tk, offset: offset,
+                                          windowSize: config.slidingWindow, dtype: dtype))
+    }
+
+    /// Run one layer under the pass's plan.
+    private func run(_ layer: Gemma4Layer, _ h: MLXArray, plan: AttentionPlan, isFull: Bool,
+                     perLayerInput: MLXArray, sharedKV: (MLXArray, MLXArray)?,
+                     pastKV: (MLXArray, MLXArray)?, offset: Int)
+        -> (MLXArray, (MLXArray, MLXArray)) {
+        switch plan {
+        case .blocks(let full, let sliding):
+            return layer(h, blocks: isFull ? full : sliding, perLayerInput: perLayerInput,
+                         sharedKV: sharedKV, pastKV: pastKV, offset: offset)
+        case .referenceMasks(let full, let sliding):
+            return layer(h, mask: isFull ? full : sliding, perLayerInput: perLayerInput,
+                         sharedKV: sharedKV, pastKV: pastKV, offset: offset)
+        }
+    }
+
+    /// Build an additive float mask [1,1,Tq,Tk]: the `Tq` new queries live at absolute positions
+    /// `offset ..< offset+Tq`; the `Tk` keys at `0 ..< Tk` (`Tk == offset + Tq` for a contiguous
+    /// cache). Causal, with an optional sliding window. Reference geometry only — see `AttentionPlan`.
+    static func makeMask(queryLen tq: Int, keyLen tk: Int, offset: Int,
+                         windowSize: Int?, dtype: DType) -> MLXArray {
         // query absolute pos qi = offset + i ; key absolute pos kj = j.
         let qInds = (MLXArray(Int32(0)..<Int32(tq)) + Int32(offset)).reshaped(tq, 1)
         let kInds = MLXArray(Int32(0)..<Int32(tk)).reshaped(1, tk)
@@ -519,20 +729,18 @@ public final class Gemma4Model: Module {
         let perLayer = projectPerLayerInputs(h, pleRaw)        // [B,T,L,256]
         stat("ple_proj", perLayer)
 
-        // Masks per layer type.
-        let fullMask = makeMask(seqLen: t, windowSize: nil, dtype: dtype)
-        let slidingMask = makeMask(seqLen: t, windowSize: config.slidingWindow, dtype: dtype)
+        // Attention geometry per layer type — planned once and shared by every layer of that type.
+        let plan = attentionPlan(queryLen: t, keyLen: t, offset: 0, dtype: dtype)
 
         let prevKVs = config.previousKVs
         var produced: [(MLXArray, MLXArray)?] = Array(repeating: nil, count: layers.count)
 
         for (i, layer) in layers.enumerated() {
             let isFull = config.layerTypes[i] == "full_attention"
-            let mask = isFull ? fullMask : slidingMask
             let perLayerInput = perLayer[0..., 0..., i, 0...]    // [B,T,256]
             let shared = (prevKVs[i] == i) ? nil : produced[prevKVs[i]]
-            let (nh, kv) = layer(h, mask: mask, perLayerInput: perLayerInput,
-                                 sharedKV: shared, offset: 0)
+            let (nh, kv) = run(layer, h, plan: plan, isFull: isFull, perLayerInput: perLayerInput,
+                               sharedKV: shared, pastKV: nil, offset: 0)
             h = nh
             produced[i] = kv
             if Gemma4Model.debugStats, i < 3 || i == 14 || i == 15 || i == 34 {
@@ -547,11 +755,13 @@ public final class Gemma4Model: Module {
 
     /// - Returns: logits `[B,T,vocab]` with the final logit softcap applied.
     public func forward(inputIds: MLXArray) -> MLXArray {
-        let h = hidden(inputIds: inputIds)
-        var logits = embedTokens.asLinear(h)   // tied lm_head
+        softcapped(embedTokens.asLinear(hidden(inputIds: inputIds)))   // tied lm_head
+    }
+
+    /// `tanh(logits / cap) * cap` — Gemma 4's final logit softcap.
+    private func softcapped(_ logits: MLXArray) -> MLXArray {
         let cap = config.finalLogitSoftcapping
-        logits = MLX.tanh(logits / cap) * cap
-        return logits
+        return MLX.tanh(logits / cap) * cap
     }
 
     // MARK: - Incremental generation (KV-cache + cross-layer KV sharing)
@@ -575,11 +785,30 @@ public final class Gemma4Model: Module {
     /// passes a single token (T = 1). Producing layers append their post-RoPE K/V to their cache;
     /// shared layers read the producing layer's (now-updated) cache read-only.
     ///
-    /// NOTE: sliding-window layers use a simple growing cache (no eviction). For the short voice
-    /// turns this backend targets, sequence length stays well under `slidingWindow`, so the
-    /// windowed mask alone already reproduces the reference attention; eviction would only matter
-    /// for very long contexts.
+    /// NOTE: sliding-window layers keep a simple growing cache (no eviction). Their attention only
+    /// ever *reads* the newest `slidingWindow` entries of it — see `attentionBlocks` — so eviction
+    /// would save cache memory at long contexts but change no result.
     public func forward(inputIds: MLXArray, state: inout InferenceState) -> MLXArray {
+        softcapped(embedTokens.asLinear(hidden(inputIds: inputIds, state: &state)))  // tied lm_head
+    }
+
+    /// Logits for the final position only — `[B,1,vocab]`, softcapped like `forward`'s.
+    ///
+    /// The lm_head projects onto a 262k vocabulary, so running it over every position turns a
+    /// 17k-token prompt into a `[1,17408,262144]` bfloat16 array — 9 GB, and again as much for the
+    /// softcap's intermediates — to produce the one row generation samples from. Prefill takes this
+    /// path instead. The token axis is kept so callers can index the last position either way.
+    ///
+    /// Internal: `forward` remains the whole public surface, so nothing outside the module has to
+    /// choose between two ways of prefilling.
+    func lastTokenLogits(inputIds: MLXArray, state: inout InferenceState) -> MLXArray {
+        let hn = hidden(inputIds: inputIds, state: &state)
+        let t = hn.dim(1)
+        return softcapped(embedTokens.asLinear(hn[0..., (t - 1) ..< t, 0...]))
+    }
+
+    /// Hidden states after the final norm for `T` new tokens, updating `state`'s caches in place.
+    private func hidden(inputIds: MLXArray, state: inout InferenceState) -> MLXArray {
         let t = inputIds.dim(1)
         let offset = state.position
 
@@ -590,33 +819,25 @@ public final class Gemma4Model: Module {
         let pleRaw = getPerLayerInputs(inputIds)
         let perLayer = projectPerLayerInputs(h, pleRaw)        // [B,T,L,256]
 
-        // Masks: keys span [0, offset+t) — a contiguous growing cache. Tq = t, Tk = offset+t.
+        // Keys span [0, offset+t) — a contiguous growing cache. Tq = t, Tk = offset+t.
         let tk = offset + t
-        let fullMask = makeMask(queryLen: t, keyLen: tk, offset: offset, windowSize: nil, dtype: dtype)
-        let slidingMask = makeMask(queryLen: t, keyLen: tk, offset: offset,
-                                   windowSize: config.slidingWindow, dtype: dtype)
+        let plan = attentionPlan(queryLen: t, keyLen: tk, offset: offset, dtype: dtype)
 
         let prevKVs = config.previousKVs
         for (i, layer) in layers.enumerated() {
             let isFull = config.layerTypes[i] == "full_attention"
-            let mask = isFull ? fullMask : slidingMask
             let perLayerInput = perLayer[0..., 0..., i, 0...]    // [B,T,256]
 
             let isProducing = (prevKVs[i] == i)
             let shared = isProducing ? nil : state.kvCaches[prevKVs[i]]
             let past = isProducing ? state.kvCaches[i] : nil
-            let (nh, kv) = layer(h, mask: mask, perLayerInput: perLayerInput,
-                                 sharedKV: shared, pastKV: past, offset: offset)
+            let (nh, kv) = run(layer, h, plan: plan, isFull: isFull, perLayerInput: perLayerInput,
+                               sharedKV: shared, pastKV: past, offset: offset)
             h = nh
             if isProducing { state.kvCaches[i] = kv }
         }
 
         state.position = tk
-
-        let hn = norm(h)
-        var logits = embedTokens.asLinear(hn)   // tied lm_head
-        let cap = config.finalLogitSoftcapping
-        logits = MLX.tanh(logits / cap) * cap
-        return logits
+        return norm(h)
     }
 }
