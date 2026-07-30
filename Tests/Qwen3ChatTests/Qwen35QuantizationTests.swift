@@ -103,6 +103,47 @@ final class Qwen35QuantizationConfigTests: XCTestCase {
     }
 }
 
+/// Which variant `Qwen35MLXChat.fromPretrained` downloads when the caller names none.
+///
+/// The default is not cosmetic: `fromPretrained` builds the download path from
+/// `Quantization.rawValue`, so this value decides which subdirectory of the model repo is
+/// fetched. INT4 was retired for measured quality loss (+19.90% wikitext perplexity, 78.3%
+/// top-1 agreement, 18-of-24 strict JSON against the bf16 reference) and the repo's `int4/`
+/// directory is being removed, so a default that drifted back to `.int4` would not merely load
+/// a worse model — it would 404.
+final class Qwen35MLXQuantizationDefaultTests: XCTestCase {
+
+    func testDefaultQuantizationIsInt5() {
+        XCTAssertEqual(Qwen35MLXChat.defaultQuantization, .int5)
+    }
+
+    /// The raw value is a path segment in the model repo, so the spelling is load-bearing.
+    func testDefaultVariantNamesThePublishedSubdirectory() {
+        XCTAssertEqual(Qwen35MLXChat.defaultQuantization.rawValue, "int5")
+    }
+
+    /// INT4 stays reachable for a local checkpoint exported before INT5 existed; the point of
+    /// the change is that nothing defaults to it, not that it became unloadable.
+    func testInt4RemainsSelectable() {
+        XCTAssertEqual(Qwen35MLXChat.Quantization.int4.rawValue, "int4")
+        XCTAssertEqual(Qwen35MLXChat.Quantization(rawValue: "int4"), .int4)
+    }
+
+    func testEveryVariantRoundTripsThroughItsRawValue() {
+        for variant: Qwen35MLXChat.Quantization in [.int4, .int5, .int8] {
+            XCTAssertEqual(Qwen35MLXChat.Quantization(rawValue: variant.rawValue), variant)
+        }
+    }
+
+    /// The download variant and the width the loader builds its layers at have to agree, or
+    /// the checkpoint fetched from `int5/` fails the load-time shape check. `int5/config.json`
+    /// carries the label, and `ChatQuantization` has to read 5 bits out of it.
+    func testDefaultVariantLabelResolvesToItsBitWidth() {
+        XCTAssertEqual(
+            ChatQuantization.bits(fromLabel: Qwen35MLXChat.defaultQuantization.rawValue), 5)
+    }
+}
+
 /// The layers a config actually builds, and the load-time check that refuses a
 /// checkpoint packed at some other width.
 final class Qwen35QuantizedLayerTests: XCTestCase {

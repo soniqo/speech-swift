@@ -86,12 +86,24 @@ Standard multi-head attention with these specifics:
 
 ### Qwen3.5 MLX (Mac GPU)
 
-Repo: `aufklarer/Qwen3.5-0.8B-Chat-MLX` with `int4/` and `int8/` subdirectories.
+Repo: `aufklarer/Qwen3.5-0.8B-Chat-MLX` with `int5/` and `int8/` subdirectories.
 
-| Variant | Size | Group size |
-|---------|------|-----------|
-| INT4 | 404 MB | 64 |
-| INT8 | 763 MB | 64 |
+| Variant | Size | Group size | Wikitext PPL | Top-1 agreement | Strict JSON |
+|---------|------|-----------|--------------|-----------------|-------------|
+| INT5 (default) | 494 MB | 64 | +2.19% | 89.6% | 23 / 24 |
+| INT8 | 763 MB | 64 | +0.19% | 97.9% | 24 / 24 |
+
+Quality columns are measured against the bf16 reference over 32,768 scored tokens per corpus.
+
+**INT5 is the floor, and INT4 is retired.** INT4 measured +19.90% perplexity, 78.3% top-1
+agreement, and 18-of-24 strict JSON at 404 MB; five of those six JSON failures were unbalanced
+braces, which a parser rejects outright rather than merely dislikes. INT5 buys all of that back
+for 90 MB. `Quantization.int4` still exists so a local pre-INT5 checkpoint loads, but nothing
+defaults to it and the repo's `int4/` directory is being removed.
+
+Prefer `.int8` when every reply has to parse. INT5's 23-of-24 is roughly a 4% per-pass failure
+rate, which compounds across a sequence — about a 56% chance of at least one unparseable reply
+over 20 structured-output passes.
 
 Weights are in safetensors format with quantized linear layers (`weight` uint32, `scales` bfloat16, `biases` bfloat16).
 
@@ -166,8 +178,8 @@ Gemma 4 uses a `<|turn>role\n...<turn|>` chat template, not ChatML. The streamin
 ```swift
 import Qwen3Chat
 
-// MLX (Mac)
-let model = try await Qwen35MLXChat.fromPretrained(quantization: .int4)
+// MLX (Mac) — defaults to .int5; pass .int8 when replies must parse as JSON
+let model = try await Qwen35MLXChat.fromPretrained()
 let response = try model.generate(
     messages: [
         ChatMessage(role: .system, content: "You are a helpful assistant."),

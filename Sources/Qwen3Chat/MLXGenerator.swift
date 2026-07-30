@@ -76,11 +76,32 @@ public final class Qwen35MLXChat: @unchecked Sendable {
 
     // MARK: - Factory
 
-    /// Quantization variant.
+    /// Quantization variant. The raw value names a subdirectory in the model repo.
+    ///
+    /// `int4` is retained for local checkpoints exported before INT5 existed. It is no longer
+    /// the default, and the repo's `int4/` directory is being retired — see
+    /// `defaultQuantization` for the measurement that decided it.
     public enum Quantization: String {
         case int4
+        case int5
         case int8
     }
+
+    /// The variant `fromPretrained` loads when the caller does not choose one.
+    ///
+    /// INT5, not INT4. Scored over 32,768 tokens per corpus against the bf16 reference, INT4
+    /// costs +19.90% wikitext perplexity, agrees with bf16 on 78.3% of top-1 tokens, and emits
+    /// valid strict JSON in 18 of 24 attempts — five of those six failures were unbalanced
+    /// braces, which a parser rejects outright rather than merely dislikes. INT5 costs
+    /// +2.19% / 89.6% / 23-of-24 for 90 MB more, so INT4's saving buys nothing this model can
+    /// afford to lose.
+    ///
+    /// INT8 (+0.19% / 97.9% / 24-of-24, 763 MB) is still worth asking for explicitly, because
+    /// INT5's 23-of-24 is roughly a 4% per-pass failure rate and that compounds over a
+    /// sequence of calls: about a 56% chance of at least one unparseable reply across 20
+    /// structured-output passes. Pass `.int8` when every reply has to parse; take the default
+    /// when replies are read rather than parsed.
+    public static let defaultQuantization: Quantization = .int5
 
     /// Load a pre-trained Qwen3.5 chat model from HuggingFace.
     ///
@@ -88,12 +109,13 @@ public final class Qwen35MLXChat: @unchecked Sendable {
     /// Model is loaded into MLX for GPU inference on Apple Silicon.
     ///
     /// - Parameters:
-    ///   - modelId: HuggingFace model ID (repo with int4/ and int8/ subdirs)
-    ///   - quantization: INT4 (404 MB) or INT8 (763 MB)
+    ///   - modelId: HuggingFace model ID (repo with int5/ and int8/ subdirs)
+    ///   - quantization: INT5 (494 MB, default) or INT8 (763 MB). INT4 (404 MB) resolves only
+    ///     against a local checkout — see `Quantization`.
     ///   - progressHandler: Optional callback for download/load progress
     public static func fromPretrained(
         modelId: String = defaultModelId,
-        quantization: Quantization = .int4,
+        quantization: Quantization = defaultQuantization,
         cacheDir: URL? = nil,
         offlineMode: Bool = false,
         progressHandler: ((Double, String) -> Void)? = nil
@@ -101,7 +123,7 @@ public final class Qwen35MLXChat: @unchecked Sendable {
         let cacheDir = try cacheDir ?? HuggingFaceDownloader.getCacheDirectory(for: modelId)
         let variant = quantization.rawValue
 
-        // Download model files from variant subdirectory (int4/ or int8/)
+        // Download model files from variant subdirectory (int5/ or int8/)
         progressHandler?(0.05, "Downloading \(variant) model...")
         try await HuggingFaceDownloader.downloadWeights(
             modelId: modelId,

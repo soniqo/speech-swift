@@ -138,7 +138,7 @@ The same skills are exposed to agents that scan `.codex/skills/` through relativ
 - `Sources/Audio2Face3D/` — Speech-driven avatar motion (NVIDIA Audio2Face-3D, timestamped coefficient frames, MLX; `speech avatar-motion` CLI command)
 
 **On-Device LLM**
-- `Sources/Qwen3Chat/` — On-device LLM chat (Qwen3.5-0.8B, MLX + CoreML, INT4/INT8)
+- `Sources/Qwen3Chat/` — On-device LLM chat (Qwen3.5-0.8B, MLX INT5/INT8 + CoreML INT8)
 - `Sources/FunctionGemma/` — On-device Gemma function-calling (swift-transformers)
 
 **Infrastructure**
