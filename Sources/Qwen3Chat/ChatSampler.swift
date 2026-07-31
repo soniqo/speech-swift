@@ -18,6 +18,22 @@ enum ChatSampler {
         config: ChatSamplingConfig,
         previousTokens: [Int] = []
     ) -> Int {
+        sample(logits: logits, config: config, previousTokens: previousTokens,
+               uniform: Float.random(in: 0 ..< 1))
+    }
+
+    /// The same sampler with the nucleus draw supplied instead of drawn.
+    ///
+    /// One uniform is the sampler's only non-determinism, so lifting it into a parameter makes
+    /// this a pure function of its inputs. That is what lets the MLX sampler in
+    /// `ChatSamplerMLX.swift` be checked against it token-for-token over a sweep of draws, rather
+    /// than only in distribution.
+    static func sample(
+        logits: [Float],
+        config: ChatSamplingConfig,
+        previousTokens: [Int] = [],
+        uniform: Float
+    ) -> Int {
         let vocab = logits.count
         if vocab == 0 { return 0 }
 
@@ -95,7 +111,7 @@ enum ChatSampler {
         // Sample within the kept nucleus (renormalized).
         var keptSum: Float = 0
         for r in 0..<cut { keptSum += probs[order[r]] }
-        let target = Float.random(in: 0..<1) * (keptSum > 0 ? keptSum : 1)
+        let target = uniform * (keptSum > 0 ? keptSum : 1)
         var c: Float = 0
         for r in 0..<cut {
             c += probs[order[r]]

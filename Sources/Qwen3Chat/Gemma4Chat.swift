@@ -95,47 +95,73 @@ public final class Gemma4Chat: @unchecked Sendable {
     ) -> AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in
             Task {
-                self.resetState()
-
                 let promptTokens = Gemma4ChatTemplate.encode(
                     messages: messages, tokenizer: self.gemmaTokenizer)
-
-                // Prefill. Only the final position is sampled, so the lm_head runs on that row
-                // alone — over a long prompt the discarded rows are gigabytes of 262k-wide logits.
-                let promptArray = MLXArray(promptTokens.map { Int32($0) }).expandedDimensions(axis: 0)
-                let prefillLogits = self.model.lastTokenLogits(
-                    inputIds: promptArray, state: &self.state)
-                eval(prefillLogits)
-                var logits = self.lastLogits(prefillLogits)
-
-                var history = promptTokens
-                var produced = false
-                var filter = Gemma4AnswerFilter(tokenizer: self.gemmaTokenizer)
-
-                for _ in 0..<sampling.maxTokens {
-                    // Don't let the model end the turn before emitting any visible answer.
-                    if !produced { self.suppressEndTokens(&logits) }
-
-                    let next = ChatSampler.sample(
-                        logits: logits, config: sampling, previousTokens: history)
-
-                    if self.gemmaTokenizer.eosTokenIds.contains(next) { break }
-                    history.append(next)
-
-                    let text = filter.consume(next)
-                    if !text.isEmpty { produced = true; continuation.yield(text) }
-
-                    // Decode one step.
-                    let arr = MLXArray([Int32(next)]).expandedDimensions(axis: 0)
-                    let step = self.model.forward(inputIds: arr, state: &self.state)
-                    eval(step)
-                    logits = self.lastLogits(step)
+                self.decode(promptTokens: promptTokens, sampling: sampling) { text in
+                    continuation.yield(text)
                 }
-
-                if let tail = filter.flush(), !tail.isEmpty { continuation.yield(tail) }
                 continuation.finish()
             }
         }
+    }
+
+    /// One decode pass: prefill, then a token per step until an end token or the budget runs out.
+    ///
+    /// `onText` receives answer text as the reasoning-channel filter completes it (often nothing —
+    /// one character can span several tokens); `onToken` receives every sampled id, which is what
+    /// the greedy-parity test compares against the host sampler.
+    ///
+    /// The step is one lazy MLX graph — model forward, suppression, penalty, top-K/top-P and the
+    /// draw — and reading the sampled id is the only point it is waited on. The previous shape
+    /// evaluated the logits, pulled all 262k of them to the host, and sampled there: two
+    /// synchronisations and a megabyte per token.
+    func decode(
+        promptTokens: [Int],
+        sampling: ChatSamplingConfig,
+        onToken: (Int) -> Void = { _ in },
+        onText: (String) -> Void
+    ) {
+        resetState()
+
+        // Prefill. Only the final position is sampled, so the lm_head runs on that row alone —
+        // over a long prompt the discarded rows are gigabytes of 262k-wide logits.
+        let promptArray = MLXArray(promptTokens.map { Int32($0) }).expandedDimensions(axis: 0)
+        var logits = model.lastTokenLogits(inputIds: promptArray, state: &state)
+
+        var history = promptTokens
+        var produced = false
+        var filter = Gemma4AnswerFilter(tokenizer: gemmaTokenizer)
+        let endTokens = Array(gemmaTokenizer.eosTokenIds)
+
+        var remaining = sampling.maxTokens
+        while remaining > 0 {
+            remaining -= 1
+
+            let next = ChatSampler.sampleOnDevice(
+                logits: logits,
+                config: sampling,
+                // Don't let the model end the turn before emitting any visible answer.
+                suppressing: produced ? [] : endTokens,
+                previousTokens: history,
+                vocabSize: denseConfig.vocabSize,
+                uniform: sampling.temperature > 0 ? Float.random(in: 0 ..< 1) : 0
+            ).item(Int.self)
+
+            if gemmaTokenizer.eosTokenIds.contains(next) { break }
+            history.append(next)
+            onToken(next)
+
+            let text = filter.consume(next)
+            if !text.isEmpty { produced = true; onText(text) }
+
+            // Decode one step — but not a step whose logits nothing will read. The budget's last
+            // token used to be followed by a full forward that was evaluated and thrown away.
+            guard remaining > 0 else { break }
+            let arr = MLXArray([Int32(next)]).expandedDimensions(axis: 0)
+            logits = model.forward(inputIds: arr, state: &state)
+        }
+
+        if let tail = filter.flush(), !tail.isEmpty { onText(tail) }
     }
 
     // MARK: - Parity harness (unchanged surface used by Gemma4ParityTests)
@@ -171,20 +197,6 @@ public final class Gemma4Chat: @unchecked Sendable {
         return best
     }
 
-    // MARK: - Helpers
-
-    private func suppressEndTokens(_ logits: inout [Float]) {
-        let ninf = -Float.greatestFiniteMagnitude
-        for id in gemmaTokenizer.eosTokenIds where id >= 0 && id < logits.count { logits[id] = ninf }
-    }
-
-    private func lastLogits(_ logits: MLXArray) -> [Float] {
-        let t = logits.dim(1)
-        let last = logits[0, t - 1].asType(.float32)
-        eval(last)
-        let all: [Float] = last.asArray(Float.self)
-        return Array(all.prefix(denseConfig.vocabSize))
-    }
 }
 
 // MARK: - Qwen35ChatBackend conformance
