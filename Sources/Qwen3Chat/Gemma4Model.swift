@@ -260,10 +260,11 @@ public final class Gemma4KVCache {
     private let retention: Int?
 
     /// Entries left spare at the end of the buffer when it is rebuilt — how many decode steps can
-    /// then be written in place before the next rebuild. One window's worth: it adds 1 MB to the
-    /// 21 MB a bounded sliding cache already takes, and it amortises a global layer's rebuild —
-    /// which copies the whole cache, since none of it may be dropped — over 512 steps, half a
-    /// megabyte a step at 17k tokens against the 975 MB a step this replaced.
+    /// then be written in place before the next rebuild. One window's worth, which costs a sliding
+    /// layer as much again as it keeps: 21 MB of spare across the twenty of them beside the 21 MB
+    /// they hold. That is bought against the global caches, which may drop nothing and so rebuild
+    /// the whole 285 MB they reach at 17k tokens — amortised over 512 steps, half a megabyte a step
+    /// against the 975 MB a step this replaced.
     private static let spareCapacity = 512
 
     init(retention: Int?, startingAt position: Int) {
@@ -1006,7 +1007,7 @@ public final class Gemma4Model: Module {
         for i in producingLayers where state.kvCaches[i] == nil {
             state.kvCaches[i] = Gemma4KVCache(
                 retention: config.layerTypes[i] == "full_attention"
-                    ? nil : config.slidingWindow - 1,
+                    ? nil : max(0, config.slidingWindow - 1),
                 startingAt: offset)
         }
 
