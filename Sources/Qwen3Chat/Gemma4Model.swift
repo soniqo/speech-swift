@@ -19,8 +19,10 @@ import MLXCommon
 //   • Per-layer input gating after the FFN block; per-layer layer_scalar.
 //   • Final: norm → tied lm_head → logit_softcap(30).
 //
-// This is a parity port — a single forward pass over the prompt (no incremental KV cache object);
-// shared layers reuse the (keys, values) computed by their producing layer in the same pass.
+// `hidden(inputIds:)` is the parity port: one forward pass over the prompt with nothing cached,
+// where shared layers reuse the (keys, values) their producing layer computed in the same pass.
+// Generation goes through `Gemma4KVCache` instead, and the two are held against each other by
+// `E2EGemma4KVCacheTests`.
 
 // MARK: - Config
 
@@ -213,6 +215,155 @@ struct Gemma4AttentionBlock {
     let mask: MLXFast.ScaledDotProductAttentionMaskMode
 }
 
+// MARK: - KV cache
+
+/// The key axis one attention pass runs over: `length` keys, the first of which holds absolute
+/// token position `base`.
+///
+/// `base` is 0 for a cache that still starts where the sequence does, and only moves once a sliding
+/// layer begins dropping what it can no longer read.
+struct Gemma4KeyAxis {
+    var base: Int
+    var length: Int
+}
+
+/// One producing layer's post-RoPE K/V cache.
+///
+/// The arrays attention reads *are* this buffer, so a decode step writes its one token into spare
+/// capacity instead of allocating a new array and copying every cached token into it to add one.
+/// What that replaces is `concatenated([past, new])`, once per producing layer per step: 57 KB per
+/// token of context across the 24 of them, so 975 MB copied on every step at 17k tokens and O(n²)
+/// over a generation. MLX donates a slice assignment's input buffer when nothing else holds it, so
+/// the write lands in place and the per-step cost stops depending on how much is cached.
+///
+/// `base` is the absolute token position of entry 0. A sliding layer's attention cannot read
+/// further back than `slidingWindow`, so entries that fall out of it are dropped and `base` moves;
+/// every key range in `attentionBlocks` is derived in absolute positions and translated through it.
+/// Global layers keep everything, so their `base` stays 0.
+///
+/// A reference type deliberately. The write above is visible through every reference to the cache,
+/// so a value type would promise a copy it does not make.
+public final class Gemma4KVCache {
+    /// `[B, Hkv, capacity, D]`, nil until the first append. Only `0 ..< count` along the token axis
+    /// holds real entries; the rest is the room the next decode steps write into.
+    private var storedKeys: MLXArray?
+    private var storedValues: MLXArray?
+
+    /// Live entries — the post-RoPE K/V for absolute positions `base ..< base + count`.
+    public private(set) var count = 0
+    /// Absolute token position of entry 0.
+    public private(set) var base = 0
+
+    /// How many of the newest entries a later query can still reach, or nil where none of them ever
+    /// expire. A sliding layer's next query reaches `slidingWindow - 1` tokens behind itself and no
+    /// further, so that is exactly what has to survive it; a global layer's reaches everything.
+    private let retention: Int?
+
+    /// Entries left spare at the end of the buffer when it is rebuilt — how many decode steps can
+    /// then be written in place before the next rebuild. One window's worth: it adds 1 MB to the
+    /// 21 MB a bounded sliding cache already takes, and it amortises a global layer's rebuild —
+    /// which copies the whole cache, since none of it may be dropped — over 512 steps, half a
+    /// megabyte a step at 17k tokens against the 975 MB a step this replaced.
+    private static let spareCapacity = 512
+
+    init(retention: Int?, startingAt position: Int) {
+        self.retention = retention
+        self.base = position
+    }
+
+    private var capacity: Int { storedKeys?.dim(2) ?? 0 }
+
+    /// How many of the oldest entries `append` will drop to fit `t` more.
+    ///
+    /// Only a rebuild can drop anything — while the buffer has room the write goes in place and
+    /// nothing moves — and a rebuild drops only what has expired. Everything else is kept, so this
+    /// is 0 far more often than not.
+    private func dropped(appending t: Int) -> Int {
+        guard storedKeys != nil, count + t > capacity, let retention else { return 0 }
+        return count - min(count, retention)
+    }
+
+    /// The key axis the pass appending `t` entries will attend over.
+    ///
+    /// The pass has to ask before it appends, because it plans one geometry for every layer of a
+    /// type and the append is what moves `base`. Asking the cache rather than re-deriving the rule
+    /// keeps the answer and the act the same decision.
+    func keyAxis(appending t: Int) -> Gemma4KeyAxis {
+        let expired = dropped(appending: t)
+        return Gemma4KeyAxis(base: base + expired, length: count - expired + t)
+    }
+
+    /// The keys and values attention reads: entries `0 ..< count`, with the spare room excluded.
+    /// Valid only once this pass's tokens have been appended, which for a KV-shared layer its
+    /// producing layer has always already done.
+    func window() -> (MLXArray, MLXArray) {
+        guard let storedKeys, let storedValues else {
+            preconditionFailure("Gemma4KVCache read before anything was appended to it")
+        }
+        guard count < capacity else { return (storedKeys, storedValues) }
+        return (storedKeys[0..., 0..., 0 ..< count, 0...],
+                storedValues[0..., 0..., 0 ..< count, 0...])
+    }
+
+    /// Append this pass's post-RoPE K/V, in place wherever the buffer still has room for them.
+    func append(keys k: MLXArray, values v: MLXArray) {
+        let t = k.dim(2)
+        guard let storedKeys, let storedValues else {
+            // Nothing cached yet, so there is nothing to copy these onto: the projection's own
+            // arrays become the buffer, and a prompt prefill costs no copy at all. `trim` hands a
+            // sliding layer its spare room back immediately afterwards; a global layer, which may
+            // drop nothing, grows on its first decode step instead.
+            self.storedKeys = k
+            self.storedValues = v
+            count = t
+            return
+        }
+        guard count + t <= capacity else {
+            rebuild(keeping: count - dropped(appending: t), appending: (k, v))
+            return
+        }
+        storedKeys[0..., 0..., count ..< (count + t), 0...] = k
+        storedValues[0..., 0..., count ..< (count + t), 0...] = v
+        count += t
+    }
+
+    /// Drop whatever no later query can reach, between passes.
+    ///
+    /// `append` already drops what has expired whenever it has to rebuild, so in steady decode this
+    /// changes nothing. It is for the pass that stored a whole prompt into a window-bounded cache —
+    /// its own early queries needed all of it — which would otherwise hold the entire prompt in
+    /// twenty sliding layers until the next token asked for room.
+    func trim() {
+        guard let retention, count > retention + Self.spareCapacity else { return }
+        rebuild(keeping: retention, appending: nil)
+    }
+
+    /// Move the newest `keep` entries, plus any new ones, into a buffer sized for them and the
+    /// spare room, and advance `base` past what was left behind.
+    private func rebuild(keeping keep: Int, appending new: (MLXArray, MLXArray)?) {
+        guard let oldKeys = storedKeys, let oldValues = storedValues else { return }
+        let dropped = count - keep
+        let added = new?.0.dim(2) ?? 0
+        let live = keep + added
+        let capacity = live + Self.spareCapacity
+
+        func rebuilt(_ old: MLXArray, _ appended: MLXArray?) -> MLXArray {
+            let grown = MLXArray.zeros([old.dim(0), old.dim(1), capacity, old.dim(3)],
+                                       dtype: old.dtype)
+            if keep > 0 {
+                grown[0..., 0..., 0 ..< keep, 0...] = old[0..., 0..., dropped ..< count, 0...]
+            }
+            if let appended { grown[0..., 0..., keep ..< live, 0...] = appended }
+            return grown
+        }
+
+        storedKeys = rebuilt(oldKeys, new?.0)
+        storedValues = rebuilt(oldValues, new?.1)
+        base += dropped
+        count = live
+    }
+}
+
 // MARK: - Attention
 
 public final class Gemma4Attention: Module {
@@ -285,13 +436,14 @@ public final class Gemma4Attention: Module {
 
     /// - Parameters:
     ///   - sharedKV: post-RoPE (keys, values) from the producing layer (KV-shared layers only).
-    ///     When non-nil this is the FULL cache to attend over (no past is concatenated).
-    ///   - pastKV: previously cached post-RoPE (keys, values) for a *producing* layer in incremental
-    ///     decode; this step's new K/V are concatenated onto it. Ignored when `sharedKV` is set.
-    ///   - offset: RoPE position offset for the *new* tokens (== number of cached positions).
+    ///     When non-nil this is the FULL cache to attend over (nothing of this call's is added).
+    ///   - cache: a *producing* layer's running cache in incremental decode. This call's post-RoPE
+    ///     K/V are appended to it and the keys attended over are the window it then holds. Ignored
+    ///     when `sharedKV` is set, and nil for the whole-prompt forward, which caches nothing.
+    ///   - offset: RoPE position offset for the *new* tokens (== number of positions already seen).
     /// - Returns: (q [B,Hq,T,D], full keys, full values [B,Hkv,Tk,D]).
     private func projectQKV(
-        _ x: MLXArray, sharedKV: (MLXArray, MLXArray)?, pastKV: (MLXArray, MLXArray)?, offset: Int
+        _ x: MLXArray, sharedKV: (MLXArray, MLXArray)?, cache: Gemma4KVCache?, offset: Int
     ) -> (MLXArray, MLXArray, MLXArray) {
         let b = x.dim(0), t = x.dim(1)
 
@@ -300,7 +452,7 @@ public final class Gemma4Attention: Module {
         let keys: MLXArray
         let values: MLXArray
         if let (sk, sv) = sharedKV {
-            // KV-shared layer: attend over the producing layer's full cache, read-only.
+            // KV-shared layer: attend over the producing layer's window, read-only.
             keys = sk
             values = sv
         } else {
@@ -311,13 +463,17 @@ public final class Gemma4Attention: Module {
             var v = vNorm!(vProj!(x).reshaped(b, t, nKVHeads, headDim))
             v = v.transposed(0, 2, 1, 3)
 
-            // Producing layer: append this step's post-RoPE K/V to the running cache.
-            if let (pk, pv) = pastKV {
-                k = concatenated([pk, k], axis: 2)
-                v = concatenated([pv, v], axis: 2)
+            // Producing layer: hand this step's post-RoPE K/V to the cache, which writes them into
+            // spare capacity rather than rebuilding an array around them.
+            if let cache {
+                cache.append(keys: k, values: v)
+                let window = cache.window()
+                keys = window.0
+                values = window.1
+            } else {
+                keys = k
+                values = v
             }
-            keys = k
-            values = v
         }
 
         q = q.transposed(0, 2, 1, 3)
@@ -332,9 +488,9 @@ public final class Gemma4Attention: Module {
     /// - Returns: (output [B,T,hidden], full (keys,values) attended over [B,Hkv,Tk,D]).
     public func callAsFunction(
         _ x: MLXArray, mask: MLXArray, sharedKV: (MLXArray, MLXArray)?,
-        pastKV: (MLXArray, MLXArray)? = nil, offset: Int
+        cache: Gemma4KVCache? = nil, offset: Int
     ) -> (MLXArray, (MLXArray, MLXArray)) {
-        let (q, keys, values) = projectQKV(x, sharedKV: sharedKV, pastKV: pastKV, offset: offset)
+        let (q, keys, values) = projectQKV(x, sharedKV: sharedKV, cache: cache, offset: offset)
         let attnOut = SDPA.attendAndMerge(
             qHeads: q, kHeads: keys, vHeads: values, scale: scale, mask: mask)
         return (oProj(attnOut), (keys, values))
@@ -349,9 +505,9 @@ public final class Gemma4Attention: Module {
     /// projection stays one matmul rather than one per block.
     func callAsFunction(
         _ x: MLXArray, blocks: [Gemma4AttentionBlock], sharedKV: (MLXArray, MLXArray)?,
-        pastKV: (MLXArray, MLXArray)? = nil, offset: Int
+        cache: Gemma4KVCache? = nil, offset: Int
     ) -> (MLXArray, (MLXArray, MLXArray)) {
-        let (q, keys, values) = projectQKV(x, sharedKV: sharedKV, pastKV: pastKV, offset: offset)
+        let (q, keys, values) = projectQKV(x, sharedKV: sharedKV, cache: cache, offset: offset)
 
         let attnOut: MLXArray
         if blocks.count == 1 {
@@ -446,20 +602,20 @@ public final class Gemma4Layer: Module {
     /// - Returns: (hidden_out, (keys,values) this layer used) so producing layers' K/V can be shared.
     public func callAsFunction(
         _ x: MLXArray, mask: MLXArray, perLayerInput: MLXArray,
-        sharedKV: (MLXArray, MLXArray)?, pastKV: (MLXArray, MLXArray)? = nil, offset: Int
+        sharedKV: (MLXArray, MLXArray)?, cache: Gemma4KVCache? = nil, offset: Int
     ) -> (MLXArray, (MLXArray, MLXArray)) {
         let (attnOut, kv) = attn(inputLayerNorm(x), mask: mask, sharedKV: sharedKV,
-                                 pastKV: pastKV, offset: offset)
+                                 cache: cache, offset: offset)
         return (feedForward(residual: x, attnOut: attnOut, perLayerInput: perLayerInput), kv)
     }
 
     /// Blocked attention variant — identical outside the attention call itself.
     func callAsFunction(
         _ x: MLXArray, blocks: [Gemma4AttentionBlock], perLayerInput: MLXArray,
-        sharedKV: (MLXArray, MLXArray)?, pastKV: (MLXArray, MLXArray)? = nil, offset: Int
+        sharedKV: (MLXArray, MLXArray)?, cache: Gemma4KVCache? = nil, offset: Int
     ) -> (MLXArray, (MLXArray, MLXArray)) {
         let (attnOut, kv) = attn(inputLayerNorm(x), blocks: blocks, sharedKV: sharedKV,
-                                 pastKV: pastKV, offset: offset)
+                                 cache: cache, offset: offset)
         return (feedForward(residual: x, attnOut: attnOut, perLayerInput: perLayerInput), kv)
     }
 
@@ -507,8 +663,19 @@ public final class Gemma4Model: Module {
     @ModuleInfo var layers: [Gemma4Layer]
     @ModuleInfo var norm: RMSNorm
 
+    /// Layers that own a KV cache — the ones `previousKVs` maps to themselves.
+    private let producingLayers: [Int]
+    /// The first producing layer of each type. Its cache answers for every cache of that type,
+    /// since they are all appended to and trimmed together — see `hidden(inputIds:state:)`.
+    private let fullProducer: Int?
+    private let slidingProducer: Int?
+
     public init(config c: Gemma4DenseConfig) {
         self.config = c
+        let previous = c.previousKVs
+        self.producingLayers = (0..<c.numHiddenLayers).filter { previous[$0] == $0 }
+        self.fullProducer = producingLayers.first { c.layerTypes[$0] == "full_attention" }
+        self.slidingProducer = producingLayers.first { c.layerTypes[$0] != "full_attention" }
         self.embedScale = sqrt(Float(c.hiddenSize))
         self.perLayerInputScale = pow(2.0, -0.5)
         self.perLayerProjectionScale = pow(Float(c.hiddenSize), -0.5)
@@ -582,14 +749,19 @@ public final class Gemma4Model: Module {
         let queryOffset: Int
     }
 
-    /// Plan one attention pass: `tq` new queries at absolute positions `offset ..< offset+tq`,
-    /// keys covering absolute `0 ..< tk`. `windowSize` nil means global attention.
+    /// Plan one attention pass: `tq` new queries at absolute positions `offset ..< offset+tq`, over
+    /// `tk` keys whose first holds absolute position `keyBase`. `windowSize` nil means global.
+    ///
+    /// `keyBase` is what a window-bounded cache costs. A sliding layer drops the entries it can no
+    /// longer read, so key `j` is token `keyBase + j` rather than token `j`; every bound below is
+    /// derived in absolute positions and translated onto the key axis once, at the end. Leave it 0
+    /// for a cache that still starts where the sequence does.
     ///
     /// Two block shapes need no mask array at all. A one-query block (every decode step) reaches
-    /// every key in its own slice, and a block whose slice starts at position 0 with no query's
-    /// window biting is exactly the end-aligned causal case MLX derives itself — which is every
-    /// block of a full-attention layer, so those layers now allocate no mask whatever the length.
-    static func attentionBlocks(queryLen tq: Int, keyLen tk: Int, offset: Int,
+    /// every key in its own slice, and a block whose slice starts at the first cached key with no
+    /// query's window biting is exactly the end-aligned causal case MLX derives itself — which is
+    /// every block of a full-attention layer, so those allocate no mask whatever the length.
+    static func attentionBlocks(queryLen tq: Int, keyLen tk: Int, offset: Int, keyBase: Int = 0,
                                 windowSize: Int?, dtype: DType) -> [Gemma4AttentionBlock] {
         var blocks: [Gemma4AttentionBlock] = []
         var masks: [BlockMaskKey: MLXArray] = [:]
@@ -599,18 +771,19 @@ public final class Gemma4Model: Module {
             let firstQuery = offset + start
             let lastQuery = offset + end - 1
             // Causal: nothing above the block's last query. Windowed: nothing below the first
-            // query's window floor, since a later query's floor is only ever higher.
-            let keyEnd = min(lastQuery + 1, tk)
-            let keyStart = windowSize.map { max(0, firstQuery - $0 + 1) } ?? 0
+            // query's window floor, since a later query's floor is only ever higher. Both are
+            // absolute positions, so both shift down by the position the key axis starts at.
+            let keyEnd = min(lastQuery + 1 - keyBase, tk)
+            let keyStart = windowSize.map { max(0, firstQuery - $0 + 1 - keyBase) } ?? 0
 
             let mask: MLXFast.ScaledDotProductAttentionMaskMode
             if end - start == 1 {
                 mask = .none
-            } else if keyStart == 0, windowSize.map({ lastQuery < $0 }) ?? true {
+            } else if keyStart == 0, windowSize.map({ lastQuery < $0 + keyBase }) ?? true {
                 mask = .causal
             } else {
                 let key = BlockMaskKey(queries: end - start, keys: keyEnd - keyStart,
-                                       queryOffset: firstQuery - keyStart)
+                                       queryOffset: firstQuery - keyBase - keyStart)
                 let array = masks[key] ?? blockMask(key, windowSize: windowSize, dtype: dtype)
                 masks[key] = array
                 mask = .array(array)
@@ -649,45 +822,51 @@ public final class Gemma4Model: Module {
     /// Test-only: fall back to the full `[1,1,Tq,Tk]` mask for every layer.
     static var usesReferenceFullMask = false
 
-    private func attentionPlan(queryLen tq: Int, keyLen tk: Int, offset: Int,
-                               dtype: DType) -> AttentionPlan {
+    /// The two layer types no longer share a key axis: a sliding layer's cache is bounded to its
+    /// window and starts wherever eviction has left it, while a global layer's still holds the whole
+    /// sequence from position 0. So each is planned against the axis its own caches will present.
+    private func attentionPlan(queryLen tq: Int, offset: Int, dtype: DType,
+                               full: Gemma4KeyAxis, sliding: Gemma4KeyAxis) -> AttentionPlan {
         if Gemma4Model.usesReferenceFullMask {
             return .referenceMasks(
-                full: Self.makeMask(queryLen: tq, keyLen: tk, offset: offset,
-                                    windowSize: nil, dtype: dtype),
-                sliding: Self.makeMask(queryLen: tq, keyLen: tk, offset: offset,
-                                       windowSize: config.slidingWindow, dtype: dtype))
+                full: Self.makeMask(queryLen: tq, keyLen: full.length, offset: offset,
+                                    keyBase: full.base, windowSize: nil, dtype: dtype),
+                sliding: Self.makeMask(queryLen: tq, keyLen: sliding.length, offset: offset,
+                                       keyBase: sliding.base, windowSize: config.slidingWindow,
+                                       dtype: dtype))
         }
         return .blocks(
-            full: Self.attentionBlocks(queryLen: tq, keyLen: tk, offset: offset,
-                                       windowSize: nil, dtype: dtype),
-            sliding: Self.attentionBlocks(queryLen: tq, keyLen: tk, offset: offset,
-                                          windowSize: config.slidingWindow, dtype: dtype))
+            full: Self.attentionBlocks(queryLen: tq, keyLen: full.length, offset: offset,
+                                       keyBase: full.base, windowSize: nil, dtype: dtype),
+            sliding: Self.attentionBlocks(queryLen: tq, keyLen: sliding.length, offset: offset,
+                                          keyBase: sliding.base, windowSize: config.slidingWindow,
+                                          dtype: dtype))
     }
 
     /// Run one layer under the pass's plan.
     private func run(_ layer: Gemma4Layer, _ h: MLXArray, plan: AttentionPlan, isFull: Bool,
                      perLayerInput: MLXArray, sharedKV: (MLXArray, MLXArray)?,
-                     pastKV: (MLXArray, MLXArray)?, offset: Int)
+                     cache: Gemma4KVCache?, offset: Int)
         -> (MLXArray, (MLXArray, MLXArray)) {
         switch plan {
         case .blocks(let full, let sliding):
             return layer(h, blocks: isFull ? full : sliding, perLayerInput: perLayerInput,
-                         sharedKV: sharedKV, pastKV: pastKV, offset: offset)
+                         sharedKV: sharedKV, cache: cache, offset: offset)
         case .referenceMasks(let full, let sliding):
             return layer(h, mask: isFull ? full : sliding, perLayerInput: perLayerInput,
-                         sharedKV: sharedKV, pastKV: pastKV, offset: offset)
+                         sharedKV: sharedKV, cache: cache, offset: offset)
         }
     }
 
     /// Build an additive float mask [1,1,Tq,Tk]: the `Tq` new queries live at absolute positions
-    /// `offset ..< offset+Tq`; the `Tk` keys at `0 ..< Tk` (`Tk == offset + Tq` for a contiguous
-    /// cache). Causal, with an optional sliding window. Reference geometry only — see `AttentionPlan`.
-    static func makeMask(queryLen tq: Int, keyLen tk: Int, offset: Int,
+    /// `offset ..< offset+Tq`; the `Tk` keys at `keyBase ..< keyBase+Tk`, `keyBase` being where the
+    /// cache starts once a sliding layer has dropped what it cannot read. Causal, with an optional
+    /// sliding window. Reference geometry only — see `AttentionPlan`.
+    static func makeMask(queryLen tq: Int, keyLen tk: Int, offset: Int, keyBase: Int = 0,
                          windowSize: Int?, dtype: DType) -> MLXArray {
-        // query absolute pos qi = offset + i ; key absolute pos kj = j.
+        // query absolute pos qi = offset + i ; key absolute pos kj = keyBase + j.
         let qInds = (MLXArray(Int32(0)..<Int32(tq)) + Int32(offset)).reshaped(tq, 1)
-        let kInds = MLXArray(Int32(0)..<Int32(tk)).reshaped(1, tk)
+        let kInds = (MLXArray(Int32(0)..<Int32(tk)) + Int32(keyBase)).reshaped(1, tk)
         var keep = qInds .>= kInds                       // causal
         if let w = windowSize {
             keep = logicalAnd(keep, qInds .< (kInds + w))  // sliding window
@@ -730,7 +909,10 @@ public final class Gemma4Model: Module {
         stat("ple_proj", perLayer)
 
         // Attention geometry per layer type — planned once and shared by every layer of that type.
-        let plan = attentionPlan(queryLen: t, keyLen: t, offset: 0, dtype: dtype)
+        // Nothing is cached on this path, so both types' keys are this pass's own tokens.
+        let plan = attentionPlan(queryLen: t, offset: 0, dtype: dtype,
+                                 full: Gemma4KeyAxis(base: 0, length: t),
+                                 sliding: Gemma4KeyAxis(base: 0, length: t))
 
         let prevKVs = config.previousKVs
         var produced: [(MLXArray, MLXArray)?] = Array(repeating: nil, count: layers.count)
@@ -740,7 +922,7 @@ public final class Gemma4Model: Module {
             let perLayerInput = perLayer[0..., 0..., i, 0...]    // [B,T,256]
             let shared = (prevKVs[i] == i) ? nil : produced[prevKVs[i]]
             let (nh, kv) = run(layer, h, plan: plan, isFull: isFull, perLayerInput: perLayerInput,
-                               sharedKV: shared, pastKV: nil, offset: 0)
+                               sharedKV: shared, cache: nil, offset: 0)
             h = nh
             produced[i] = kv
             if Gemma4Model.debugStats, i < 3 || i == 14 || i == 15 || i == 34 {
@@ -769,9 +951,13 @@ public final class Gemma4Model: Module {
     /// Per-conversation decode state. We keep a KV cache only for the M = (num_layers −
     /// num_kv_shared_layers) *producing* layers (slots for shared layers stay nil); each
     /// shared layer attends over the cache of its mapped producing layer (`previousKVs`).
-    /// `position` is the number of cached token positions (== the RoPE offset for the next step).
+    /// `position` is the number of token positions seen (== the RoPE offset for the next step).
+    ///
+    /// The caches are reference types that a step writes into, so this is a handle to them rather
+    /// than a snapshot of them: copy it and both copies drive the same buffers. Start a second
+    /// conversation with `initial` instead.
     public struct InferenceState {
-        public var kvCaches: [(MLXArray, MLXArray)?]   // indexed by layer; nil on shared layers
+        public var kvCaches: [Gemma4KVCache?]   // indexed by layer; nil on shared layers
         public var position: Int
 
         public static func initial(config c: Gemma4DenseConfig) -> InferenceState {
@@ -784,10 +970,6 @@ public final class Gemma4Model: Module {
     /// Prompt prefill passes the whole prompt (T = prompt length, position 0); each decode step
     /// passes a single token (T = 1). Producing layers append their post-RoPE K/V to their cache;
     /// shared layers read the producing layer's (now-updated) cache read-only.
-    ///
-    /// NOTE: sliding-window layers keep a simple growing cache (no eviction). Their attention only
-    /// ever *reads* the newest `slidingWindow` entries of it — see `attentionBlocks` — so eviction
-    /// would save cache memory at long contexts but change no result.
     public func forward(inputIds: MLXArray, state: inout InferenceState) -> MLXArray {
         softcapped(embedTokens.asLinear(hidden(inputIds: inputIds, state: &state)))  // tied lm_head
     }
@@ -819,9 +1001,22 @@ public final class Gemma4Model: Module {
         let pleRaw = getPerLayerInputs(inputIds)
         let perLayer = projectPerLayerInputs(h, pleRaw)        // [B,T,L,256]
 
-        // Keys span [0, offset+t) — a contiguous growing cache. Tq = t, Tk = offset+t.
-        let tk = offset + t
-        let plan = attentionPlan(queryLen: t, keyLen: tk, offset: offset, dtype: dtype)
+        // A sliding layer's next query reaches `slidingWindow - 1` tokens behind itself, so that is
+        // all its cache has to keep; a global layer keeps everything.
+        for i in producingLayers where state.kvCaches[i] == nil {
+            state.kvCaches[i] = Gemma4KVCache(
+                retention: config.layerTypes[i] == "full_attention"
+                    ? nil : config.slidingWindow - 1,
+                startingAt: offset)
+        }
+
+        // Every producing layer of one type appends the same tokens and drops by the same rule, so
+        // one of them answers for all of them — and for the KV-shared layers reading their buffers.
+        // Asked before anything is appended, because one geometry has to serve the whole pass.
+        let plan = attentionPlan(
+            queryLen: t, offset: offset, dtype: dtype,
+            full: keyAxis(of: fullProducer, in: state, appending: t),
+            sliding: keyAxis(of: slidingProducer, in: state, appending: t))
 
         let prevKVs = config.previousKVs
         for (i, layer) in layers.enumerated() {
@@ -829,15 +1024,33 @@ public final class Gemma4Model: Module {
             let perLayerInput = perLayer[0..., 0..., i, 0...]    // [B,T,256]
 
             let isProducing = (prevKVs[i] == i)
-            let shared = isProducing ? nil : state.kvCaches[prevKVs[i]]
-            let past = isProducing ? state.kvCaches[i] : nil
-            let (nh, kv) = run(layer, h, plan: plan, isFull: isFull, perLayerInput: perLayerInput,
-                               sharedKV: shared, pastKV: past, offset: offset)
+            let shared = isProducing ? nil : state.kvCaches[prevKVs[i]]?.window()
+            let (nh, _) = run(layer, h, plan: plan, isFull: isFull, perLayerInput: perLayerInput,
+                              sharedKV: shared, cache: isProducing ? state.kvCaches[i] : nil,
+                              offset: offset)
             h = nh
-            if isProducing { state.kvCaches[i] = kv }
         }
 
-        state.position = tk
+        // Drop what the sliding layers can no longer read, now that every layer that could still
+        // read it has run — a KV-shared layer's queries are this pass's queries and reach exactly
+        // as far back, so nothing may be dropped before the last of them.
+        //
+        // Trimming each producing layer the moment its own layer finished, which needs the two
+        // whose cache is shared held back to the end anyway, was tried and measured at a 17k
+        // prefill to change peak memory by nothing at all (7.10 GB either way). The peak is set by
+        // the activations mid-stack, not by the caches at the end of it, so the extra state that
+        // variant needed bought a rounding error.
+        for i in producingLayers { state.kvCaches[i]?.trim() }
+
+        state.position = offset + t
         return norm(h)
+    }
+
+    /// The key axis a layer type's caches will all present. A config with no producing layer of a
+    /// type has no layer that would read the answer, so any axis will do.
+    private func keyAxis(of producer: Int?, in state: InferenceState,
+                         appending t: Int) -> Gemma4KeyAxis {
+        producer.flatMap { state.kvCaches[$0]?.keyAxis(appending: t) }
+            ?? Gemma4KeyAxis(base: 0, length: t)
     }
 }

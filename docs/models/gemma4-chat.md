@@ -24,6 +24,7 @@ Gemma 4 text differs from Qwen-style dense chat models in several important ways
 | Attention | Sliding-attention and full-attention layers with different head dimensions |
 | RoPE | Standard sliding RoPE plus proportional RoPE for full attention |
 | KV sharing | Later layers reuse K/V from earlier producer layers of the same attention type |
+| KV cache | Per-producer buffers appended to in place; sliding layers bounded to their window |
 | MLP | Double-wide MLP on KV-shared layers when configured |
 | Logits | Tied LM head followed by final logit softcap |
 
@@ -143,6 +144,11 @@ The backend has both deterministic and E2E coverage:
 - `E2EGemma4ParityTests` verifies next-token argmax against the `mlx_lm` reference.
 - `E2EGemma4GenTests` verifies streaming generation, thought-channel suppression, and cache-path first-token parity.
 - `E2EGemma4SamplingParityTests` runs the previous host-sampling loop and the current one against the real weights and requires identical greedy token sequences; `GEMMA4_BENCH=1` additionally reports ms/token for both at short and long contexts.
+- `E2EGemma4KVCacheTests` holds the incremental KV cache against implementations that cannot share
+  its mistakes: greedy decode against re-running the whole prompt through the no-cache forward, one
+  prefill against the same tokens fed singly, and a split prefill against a whole one. Sliding
+  layers evict what they can no longer read, so a cache index is no longer an absolute token
+  position, and a wrong translation between the two reads the wrong keys without failing.
 
 Reference parity prompt:
 
