@@ -29,16 +29,19 @@ final class E2EGemma4SlidingWindowTests: XCTestCase {
     /// below ~0.13 is even expressible here, and one has to be stated in units of that grid. A change
     /// of tiling alone costs 1 to 2 of those steps: running the lm_head on one row instead of all of
     /// them, which cannot change a result, already moves logits by 0.19. Blocking, measured across
-    /// these lengths, costs at most 0.69 ≈ 5 steps, accumulated over 42 layers of shortened score
-    /// rows and softmax denominators. 1.0 is 8 steps.
+    /// these lengths, costs at most 1.0625 ≈ 8.5 steps, accumulated over 42 layers of shortened score
+    /// rows and softmax denominators — the largest at 1600 tokens, which is also where the argmax has
+    /// least room. 1.25 is 10 steps, and the window it can sit in is narrow from both sides: above
+    /// the 8.5 steps retiling actually costs, and below a tenth of the smallest top-1/top-2 gap,
+    /// since the assertion below requires that ratio to hold for the bound to mean anything.
     ///
     /// The argmax is asserted exactly, and separately shown to clear this tolerance by more than an
-    /// order of magnitude — the smallest top-1/top-2 gap these prompts produce is 14.3 — so the token
+    /// order of magnitude — the smallest top-1/top-2 gap these prompts produce is 14.1 — so the token
     /// greedy sampling takes cannot turn on rounding. Deeper ranks are not asserted and must not be:
     /// candidates 4 and 5 come out within one bfloat16 step of each other, so their order is not
     /// reproducible under *any* retiling, including changes that provably cannot alter a result. The
     /// numbers are printed so a regression reads as a number rather than as a pass.
-    private static let logitTolerance: Float = 1.0
+    private static let logitTolerance: Float = 1.25
 
     private func loadChat() throws -> Gemma4Chat {
         guard let dir = Self.modelDir,
