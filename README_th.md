@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://formulae.brew.sh/formula/speech"><img src="https://img.shields.io/homebrew/installs/dm/speech.svg?logo=homebrew&amp;label=Homebrew%20installs&amp;color=FBB040" alt="Homebrew installs"></a>
-  <a href="https://github.com/soniqo/speech-swift#built-with-speech-swift"><img src="https://img.shields.io/badge/verified%20public%20repositories-15-2ea44f?logo=github" alt="Verified public repositories: 15"></a>
+  <a href="https://github.com/soniqo/speech-swift#built-with-speech-swift"><img src="https://img.shields.io/badge/verified%20public%20repositories-16-2ea44f?logo=github" alt="Verified public repositories: 15"></a>
 </p>
 
 <p align="center">
@@ -28,11 +28,9 @@
 
 ## สร้างด้วย Speech Swift
 
-รีโพสาธารณะ 15 แห่งที่ตรวจสอบการอ้างอิงแพ็กเกจ Speech Swift ได้
+รีโพสาธารณะ 16 แห่งที่ตรวจสอบการอ้างอิงแพ็กเกจ Speech Swift ได้
 
-[Palmier Pro](https://github.com/palmier-io/palmier-pro) · [Anarlog](https://github.com/fastrepl/anarlog) · [ClawdHome](https://github.com/ThinkInAIXYZ/clawdhome) · [Jabber](https://github.com/rselbach/jabber) · [Ora](https://github.com/wuwangzhang1216/ora) · [VoxFlow](https://github.com/xingbofeng/VoxFlow) · [LokalBot](https://github.com/stevyhacker/lokalbot) · [Voicey](https://github.com/jonathanKingston/voicey) · [HushType](https://github.com/felixfu824/HushType) · [DexDictate macOS](https://github.com/westkitty/DexDictate_MacOS) · [Watchtower](https://github.com/aiwatchtowers/watchtower) · [Wishper App](https://github.com/irangareddy/wishper-app) · [FriSpeak](https://github.com/KSubedi/FriSpeak) · [Scribe](https://github.com/itchat/Scribe) · [VoicePen](https://github.com/dot-sk/VoicePen)
-
-**แอปที่เข้ากันได้กับ OpenAI:** [AnythingLLM](https://github.com/Mintplex-Labs/anything-llm) ([รองรับ WAV ที่ผสานแล้ว](https://github.com/Mintplex-Labs/anything-llm/pull/6012))
+[AnythingLLM](https://github.com/Mintplex-Labs/anything-llm) · [Palmier Pro](https://github.com/palmier-io/palmier-pro) · [Anarlog](https://github.com/fastrepl/anarlog) · [ClawdHome](https://github.com/ThinkInAIXYZ/clawdhome) · [Jabber](https://github.com/rselbach/jabber) · [Ora](https://github.com/wuwangzhang1216/ora) · [VoxFlow](https://github.com/xingbofeng/VoxFlow) · [LokalBot](https://github.com/stevyhacker/lokalbot) · [Voicey](https://github.com/jonathanKingston/voicey) · [HushType](https://github.com/felixfu824/HushType) · [DexDictate macOS](https://github.com/westkitty/DexDictate_MacOS) · [Watchtower](https://github.com/aiwatchtowers/watchtower) · [Wishper App](https://github.com/irangareddy/wishper-app) · [FriSpeak](https://github.com/KSubedi/FriSpeak) · [Scribe](https://github.com/itchat/Scribe) · [VoicePen](https://github.com/dot-sk/VoicePen)
 
 **กลุ่มความสามารถ:** STT / ASR · การจัดแนว · TTS · LLM และการแปล · Speech-to-Speech · การปรับปรุง / การฟื้นฟู · การแยกแหล่งเสียง · การสร้างดนตรี / เสียง · Wake word, VAD, diarization และอัตลักษณ์ผู้พูด
 
