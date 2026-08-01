@@ -131,7 +131,8 @@ public class Qwen3TTSModel {
         let effectiveInstruct = instruct ?? (speakerConfig != nil ? Self.defaultInstruct : nil)
 
         guard let langId = CodecTokens.languageId(for: effectiveLanguage) else {
-            print("Warning: Unknown language '\(effectiveLanguage)', defaulting to English")
+            AudioLog.inference.warning(
+                "Unknown language '\(effectiveLanguage)', defaulting to English")
             return synthesize(text: text, language: "english", speaker: speaker, sampling: sampling)
         }
 
@@ -164,24 +165,28 @@ public class Qwen3TTSModel {
         let t2 = CFAbsoluteTimeGetCurrent()
 
         guard numFrames > 0 else {
-            print("Warning: Talker generated no tokens")
+            AudioLog.inference.warning("Talker generated no tokens")
             return []
         }
 
         // Stage 4: Codec decode to waveform
         let outputSamples = numFrames * 1920
-        print("  Decoding \(numFrames) frames -> \(outputSamples) samples (\(String(format: "%.1f", Double(outputSamples) / 24000.0))s)...")
+        AudioLog.inference.debug(
+            "Decoding \(numFrames) frames -> \(outputSamples) samples (\(String(format: "%.1f", Double(outputSamples) / 24000.0))s)")
         let waveform = codecDecoder.decode(codes: allCodebooks)
         let t3 = CFAbsoluteTimeGetCurrent()
 
         let audioDur = Double(waveform.count) / 24000.0
-        print("  Timing: embed=\(String(format: "%.3f", t1-t0))s | " +
-              "generate=\(String(format: "%.3f", t2-t1))s (\(numFrames) steps, " +
-              "\(String(format: "%.0f", (t2-t1)/Double(numFrames)*1000))ms/step) | " +
-              "decode=\(String(format: "%.3f", t3-t2))s | " +
-              "total=\(String(format: "%.3f", t3-t0))s | " +
-              "audio=\(String(format: "%.2f", audioDur))s | " +
-              "RTF=\(String(format: "%.2f", (t3-t0)/audioDur))")
+        let embedTime = String(format: "%.3f", t1-t0)
+        let generateTime = String(format: "%.3f", t2-t1)
+        let millisecondsPerStep = String(
+            format: "%.0f", (t2-t1)/Double(numFrames)*1000)
+        let decodeTime = String(format: "%.3f", t3-t2)
+        let totalTime = String(format: "%.3f", t3-t0)
+        let audioDuration = String(format: "%.2f", audioDur)
+        let realTimeFactor = String(format: "%.2f", (t3-t0)/audioDur)
+        AudioLog.inference.info(
+            "TTS timing: embed=\(embedTime)s | generate=\(generateTime)s (\(numFrames) steps, \(millisecondsPerStep)ms/step) | decode=\(decodeTime)s | total=\(totalTime)s | audio=\(audioDuration)s | RTF=\(realTimeFactor)")
 
         return waveform
     }
@@ -212,7 +217,8 @@ public class Qwen3TTSModel {
         }
 
         guard let langId = CodecTokens.languageId(for: language) else {
-            print("Warning: Unknown language '\(language)', defaulting to English")
+            AudioLog.inference.warning(
+                "Unknown language '\(language)', defaulting to English")
             return synthesizeWithVoiceClone(
                 text: text, referenceAudio: referenceAudio,
                 referenceSampleRate: referenceSampleRate, language: "english", sampling: sampling)
@@ -224,14 +230,14 @@ public class Qwen3TTSModel {
         let speakerEmbed: MLXArray
         if let cached = referenceAudioCache.speakerEmbed(for: referenceAudio, sampleRate: referenceSampleRate) {
             speakerEmbed = cached
-            print("  Speaker embedding: cache hit \(cached.shape)")
+            AudioLog.inference.debug("Speaker embedding: cache hit \(cached.shape)")
         } else {
             let mels = SpeakerMel.compute(audio: referenceAudio, sampleRate: referenceSampleRate)
             let embed = speakerEncoder(mels)  // [1, 1024]
             eval(embed)
             referenceAudioCache.storeSpeakerEmbed(embed, audio: referenceAudio, sampleRate: referenceSampleRate)
             speakerEmbed = embed
-            print("  Speaker embedding extracted: \(speakerEmbed.shape)")
+            AudioLog.inference.debug("Speaker embedding extracted: \(speakerEmbed.shape)")
         }
 
         // Stage 1: Prepare text tokens and codec prefix (no speaker token ID — using embedding)
@@ -263,24 +269,28 @@ public class Qwen3TTSModel {
         let t2 = CFAbsoluteTimeGetCurrent()
 
         guard numFrames > 0 else {
-            print("Warning: Talker generated no tokens")
+            AudioLog.inference.warning("Talker generated no tokens")
             return []
         }
 
         // Stage 4: Codec decode to waveform
         let outputSamples = numFrames * 1920
-        print("  Decoding \(numFrames) frames -> \(outputSamples) samples (\(String(format: "%.1f", Double(outputSamples) / 24000.0))s)...")
+        AudioLog.inference.debug(
+            "Decoding \(numFrames) frames -> \(outputSamples) samples (\(String(format: "%.1f", Double(outputSamples) / 24000.0))s)")
         let waveform = codecDecoder.decode(codes: allCodebooks)
         let t3 = CFAbsoluteTimeGetCurrent()
 
         let audioDur = Double(waveform.count) / 24000.0
-        print("  Voice clone timing: embed=\(String(format: "%.3f", t1-t0))s | " +
-              "generate=\(String(format: "%.3f", t2-t1))s (\(numFrames) steps, " +
-              "\(String(format: "%.0f", (t2-t1)/Double(numFrames)*1000))ms/step) | " +
-              "decode=\(String(format: "%.3f", t3-t2))s | " +
-              "total=\(String(format: "%.3f", t3-t0))s | " +
-              "audio=\(String(format: "%.2f", audioDur))s | " +
-              "RTF=\(String(format: "%.2f", (t3-t0)/audioDur))")
+        let embedTime = String(format: "%.3f", t1-t0)
+        let generateTime = String(format: "%.3f", t2-t1)
+        let millisecondsPerStep = String(
+            format: "%.0f", (t2-t1)/Double(numFrames)*1000)
+        let decodeTime = String(format: "%.3f", t3-t2)
+        let totalTime = String(format: "%.3f", t3-t0)
+        let audioDuration = String(format: "%.2f", audioDur)
+        let realTimeFactor = String(format: "%.2f", (t3-t0)/audioDur)
+        AudioLog.inference.info(
+            "Voice clone timing: embed=\(embedTime)s | generate=\(generateTime)s (\(numFrames) steps, \(millisecondsPerStep)ms/step) | decode=\(decodeTime)s | total=\(totalTime)s | audio=\(audioDuration)s | RTF=\(realTimeFactor)")
 
         return waveform
     }
@@ -519,14 +529,16 @@ public class Qwen3TTSModel {
 
             if iterIdx % 50 == 0 {
                 let estSec = Double(generatedFirstCodebook.count) / 12.5
-                print("  Streaming: \(generatedFirstCodebook.count) tokens (~\(String(format: "%.1f", estSec))s audio)...")
+                AudioLog.inference.debug(
+                    "Streaming: \(generatedFirstCodebook.count) tokens (~\(String(format: "%.1f", estSec))s audio)")
             }
         }
 
         let numFrames = generatedFirstCodebook.count
         if numFrames >= safeMaxTokens && nextToken != Int32(CodecTokens.codecEos) {
             let estSec = Double(numFrames) / 12.5
-            print("Warning: Hit safety limit of \(safeMaxTokens) tokens (~\(String(format: "%.1f", estSec))s audio).")
+            AudioLog.inference.warning(
+                "Hit safety limit of \(safeMaxTokens) tokens (~\(String(format: "%.1f", estSec))s audio)")
         }
 
         // Emit remaining frames if any
@@ -660,7 +672,8 @@ public class Qwen3TTSModel {
         let effectiveInstruct = instruct ?? (speakerConfig != nil ? Self.defaultInstruct : nil)
 
         guard let langId = CodecTokens.languageId(for: language) else {
-            print("Warning: Unknown language '\(language)', defaulting to English")
+            AudioLog.inference.warning(
+                "Unknown language '\(language)', defaulting to English")
             return synthesizeBatch(texts: texts, language: "english", instruct: instruct, sampling: sampling, maxBatchSize: maxBatchSize)
         }
 
@@ -761,9 +774,9 @@ public class Qwen3TTSModel {
             let totalWaste = wastedSteps.reduce(0, +)
             let wasteRatio = Double(totalWaste) / Double(maxFrames * batchSize)
             if wasteRatio > 0.3 {
-                print("  Warning: \(Int(wasteRatio * 100))% padding waste " +
-                      "(items finished at: \(frameCounts.map { String($0) }.joined(separator: ", ")) steps). " +
-                      "Batch similar-length texts for better efficiency.")
+                let finishedSteps = frameCounts.map { String($0) }.joined(separator: ", ")
+                AudioLog.inference.warning(
+                    "\(Int(wasteRatio * 100))% padding waste (items finished at: \(finishedSteps) steps). Batch similar-length texts for better efficiency")
             }
         }
 
@@ -772,13 +785,14 @@ public class Qwen3TTSModel {
         for i in 0..<batchSize {
             let numFrames = frameCounts[i]
             if numFrames == 0 {
-                print("  Item \(i): no tokens generated")
+                AudioLog.inference.warning("Batch item \(i): no tokens generated")
                 results.append([])
                 continue
             }
             let codes = allCodebooksList[i]  // [1, 16, Ti]
             let outputSamples = numFrames * 1920
-            print("  Item \(i): decoding \(numFrames) frames -> \(outputSamples) samples (\(String(format: "%.1f", Double(outputSamples) / 24000.0))s)...")
+            AudioLog.inference.debug(
+                "Batch item \(i): decoding \(numFrames) frames -> \(outputSamples) samples (\(String(format: "%.1f", Double(outputSamples) / 24000.0))s)")
             let waveform = codecDecoder.decode(codes: codes)
             results.append(waveform)
         }
@@ -786,13 +800,14 @@ public class Qwen3TTSModel {
 
         let totalAudio = results.reduce(0.0) { $0 + Double($1.count) / 24000.0 }
         let totalFrames = frameCounts.reduce(0, +)
-        print("  Batch timing: embed=\(String(format: "%.3f", t1-t0))s | " +
-              "generate=\(String(format: "%.3f", t2-t1))s (\(totalFrames) total steps, " +
-              "\(batchSize) items) | " +
-              "decode=\(String(format: "%.3f", t3-t2))s | " +
-              "total=\(String(format: "%.3f", t3-t0))s | " +
-              "audio=\(String(format: "%.2f", totalAudio))s | " +
-              "RTF=\(String(format: "%.2f", (t3-t0)/max(totalAudio, 0.001)))")
+        let embedTime = String(format: "%.3f", t1-t0)
+        let generateTime = String(format: "%.3f", t2-t1)
+        let decodeTime = String(format: "%.3f", t3-t2)
+        let totalTime = String(format: "%.3f", t3-t0)
+        let audioDuration = String(format: "%.2f", totalAudio)
+        let realTimeFactor = String(format: "%.2f", (t3-t0)/max(totalAudio, 0.001))
+        AudioLog.inference.info(
+            "Batch timing: embed=\(embedTime)s | generate=\(generateTime)s (\(totalFrames) total steps, \(batchSize) items) | decode=\(decodeTime)s | total=\(totalTime)s | audio=\(audioDuration)s | RTF=\(realTimeFactor)")
 
         return results
     }
@@ -911,12 +926,14 @@ public class Qwen3TTSModel {
             if iterIdx % 50 == 0 {
                 let estSec = Double(iterIdx) / 12.5
                 let doneCount = finishedArray.filter { $0 }.count
-                print("  Batch: \(iterIdx) steps (~\(String(format: "%.1f", estSec))s), \(doneCount)/\(batchSize) done...")
+                AudioLog.inference.debug(
+                    "Batch: \(iterIdx) steps (~\(String(format: "%.1f", estSec))s), \(doneCount)/\(batchSize) done")
             }
         }
 
         let totalSteps = allCBSteps.count
-        print("  Batch generation done: \(totalSteps) steps, \(batchSize) items")
+        AudioLog.inference.debug(
+            "Batch generation done: \(totalSteps) steps, \(batchSize) items")
 
         // Stack all timesteps: [B, 16, T]
         let stepsStacked = stacked(allCBSteps, axis: 0)  // [T, B, 16]
@@ -1220,15 +1237,16 @@ public class Qwen3TTSModel {
         }
 
         guard let config = speakerConfig else {
-            print("Warning: Speaker '\(speakerName)' requested but model has no speaker support. " +
-                  "Use the CustomVoice model variant for speaker selection.")
+            AudioLog.inference.warning(
+                "Speaker '\(speakerName)' requested but model has no speaker support. Use the CustomVoice model variant for speaker selection")
             return (nil, language)
         }
 
         let normalizedName = speakerName.lowercased()
         guard let tokenId = config.speakerIds[normalizedName] else {
             let available = config.availableSpeakers.joined(separator: ", ")
-            print("Warning: Unknown speaker '\(speakerName)'. Available speakers: \(available)")
+            AudioLog.inference.warning(
+                "Unknown speaker '\(speakerName)'. Available speakers: \(available)")
             return (nil, language)
         }
 
@@ -1527,7 +1545,8 @@ public class Qwen3TTSModel {
 
             if iterIdx % 50 == 0 {
                 let estSec = Double(generatedFirstCodebook.count) / 12.5
-                print("  Talker: \(generatedFirstCodebook.count) tokens (~\(String(format: "%.1f", estSec))s audio)...")
+                AudioLog.inference.debug(
+                    "Talker: \(generatedFirstCodebook.count) tokens (~\(String(format: "%.1f", estSec))s audio)")
             }
         }
 
@@ -1535,12 +1554,13 @@ public class Qwen3TTSModel {
 
         if numFrames >= safeMaxTokens && nextToken != Int32(CodecTokens.codecEos) {
             let estSec = Double(numFrames) / 12.5
-            print("Warning: Hit safety limit of \(safeMaxTokens) tokens (~\(String(format: "%.1f", estSec))s audio). "
-                + "Increase SamplingConfig.maxTokens if you need longer output.")
+            AudioLog.inference.warning(
+                "Hit safety limit of \(safeMaxTokens) tokens (~\(String(format: "%.1f", estSec))s audio). Increase SamplingConfig.maxTokens if you need longer output")
         }
 
         let estAudioSec = Double(numFrames) / 12.5
-        print("  Talker done: \(numFrames) codec tokens (~\(String(format: "%.1f", estAudioSec))s audio)")
+        AudioLog.inference.debug(
+            "Talker done: \(numFrames) codec tokens (~\(String(format: "%.1f", estAudioSec))s audio)")
 
         // Stack all codebooks: [1, 16, T]
         let codebookArrays = generatedAllCodebooks.map { tokens in
