@@ -1610,6 +1610,53 @@ public class Qwen3TTSModel {
 
 // MARK: - Model Loading
 
+/// Controls whether loading a Qwen3-TTS model changes the process-wide Metal wired-memory limit.
+public enum Qwen3TTSWiredMemoryPolicy: Equatable, Sendable {
+    /// Leave the process-wide wired-memory limit unchanged.
+    case none
+
+    /// Pin a fraction of Metal's recommended working set after the model is loaded.
+    case pin(fraction: Double)
+}
+
+/// Errors raised before a Qwen3-TTS model is loaded from caller-provided files.
+public enum Qwen3TTSLoadingError: Error, Equatable, LocalizedError, Sendable {
+    /// A local-loader URL did not use the `file` scheme.
+    case nonFileURL(URL)
+
+    /// A required local directory does not exist.
+    case directoryNotFound(URL)
+
+    /// A required local directory URL resolves to a non-directory item.
+    case pathIsNotDirectory(URL)
+
+    /// A required file is missing or does not resolve to a regular file.
+    case requiredFileUnavailable(URL)
+
+    /// A model directory has no complete safetensors checkpoint.
+    case weightsUnavailable(URL)
+
+    /// The requested Metal wired-memory fraction is not finite or is outside `(0, 1]`.
+    case invalidWiredMemoryFraction(Double)
+
+    public var errorDescription: String? {
+        switch self {
+        case .nonFileURL(let url):
+            return "Qwen3-TTS local loading requires a file URL, got: \(url.absoluteString)"
+        case .directoryNotFound(let url):
+            return "Required Qwen3-TTS directory does not exist: \(url.path)"
+        case .pathIsNotDirectory(let url):
+            return "Required Qwen3-TTS path is not a directory: \(url.path)"
+        case .requiredFileUnavailable(let url):
+            return "Required Qwen3-TTS file is missing or is not a regular file: \(url.path)"
+        case .weightsUnavailable(let url):
+            return "No complete Qwen3-TTS safetensors checkpoint found in: \(url.path)"
+        case .invalidWiredMemoryFraction(let fraction):
+            return "Qwen3-TTS wired-memory fraction must be finite and in (0, 1], got: \(fraction)"
+        }
+    }
+}
+
 public extension Qwen3TTSModel {
     /// Load model from HuggingFace hub.
     ///
@@ -1622,7 +1669,9 @@ public extension Qwen3TTSModel {
         modelId: String = Qwen3TTSModel.defaultModelId,
         tokenizerModelId: String = "Qwen/Qwen3-TTS-Tokenizer-12Hz",
         cacheDir: URL? = nil,
+        tokenizerCacheDir: URL? = nil,
         offlineMode: Bool = false,
+        wiredMemoryPolicy: Qwen3TTSWiredMemoryPolicy = .pin(fraction: 0.9),
         progressHandler: ((Double, String) -> Void)? = nil
     ) async throws -> Qwen3TTSModel {
         progressHandler?(0.05, "Preparing download...")
@@ -1633,7 +1682,13 @@ public extension Qwen3TTSModel {
 
         // Download main model weights
         let mainCacheDir = try cacheDir ?? HuggingFaceDownloader.getCacheDirectory(for: modelId)
-        if !HuggingFaceDownloader.weightsExist(in: mainCacheDir) {
+        let requiredMainFiles = ["config.json", "vocab.json"]
+        if !HuggingFaceDownloader.weightsExist(in: mainCacheDir)
+            || requiredMainFiles.contains(where: {
+                !FileManager.default.fileExists(
+                    atPath: mainCacheDir.appendingPathComponent($0).path)
+            })
+        {
             progressHandler?(0.1, "Resolving TTS model files...")
             try await HuggingFaceDownloader.downloadWeights(
                 modelId: modelId,
@@ -1646,12 +1701,13 @@ public extension Qwen3TTSModel {
         }
 
         // Download tokenizer/codec weights
-        let tokenizerCacheDir = try HuggingFaceDownloader.getCacheDirectory(for: tokenizerModelId)
-        if !HuggingFaceDownloader.weightsExist(in: tokenizerCacheDir) {
+        let resolvedTokenizerCacheDir = try tokenizerCacheDir
+            ?? HuggingFaceDownloader.getCacheDirectory(for: tokenizerModelId)
+        if !HuggingFaceDownloader.weightsExist(in: resolvedTokenizerCacheDir) {
             progressHandler?(0.4, "Downloading speech tokenizer...")
             try await HuggingFaceDownloader.downloadWeights(
                 modelId: tokenizerModelId,
-                to: tokenizerCacheDir,
+                to: resolvedTokenizerCacheDir,
                 offlineMode: offlineMode,
                 progressHandler: { progress in
                     progressHandler?(0.4 + progress * 0.2, "Downloading speech tokenizer...")
@@ -1669,43 +1725,146 @@ public extension Qwen3TTSModel {
             }
         }
 
-        // Create model with detected config
         let ttsConfig = Qwen3TTSConfig.config(for: detectedSize, bits: detectedBits)
-        let model = Qwen3TTSModel(config: ttsConfig)
+        return try fromLocal(
+            modelDirectory: mainCacheDir,
+            tokenizerDirectory: resolvedTokenizerCacheDir,
+            configuration: ttsConfig,
+            wiredMemoryPolicy: wiredMemoryPolicy,
+            progressHandler: { progress, message in
+                progressHandler?(0.6 + progress * 0.4, message)
+            })
+    }
 
-        // Parse speaker config
-        if FileManager.default.fileExists(atPath: configPath.path) {
-            model.speakerConfig = try? parseSpeakerConfig(from: configPath)
-        }
+    /// Load a Qwen3-TTS model from two explicit local directories without resolving a cache,
+    /// contacting a remote endpoint, or downloading files.
+    ///
+    /// The main model directory must contain `config.json`, `vocab.json`, and a complete
+    /// safetensors checkpoint. The tokenizer directory must contain its own complete
+    /// safetensors checkpoint.
+    ///
+    /// - Parameters:
+    ///   - modelDirectory: Directory containing the talker, code predictor, speaker encoder,
+    ///     text tokenizer, and model configuration.
+    ///   - tokenizerDirectory: Directory containing the speech-tokenizer codec weights.
+    ///   - configuration: Architecture and quantization configuration for the local checkpoint.
+    ///   - wiredMemoryPolicy: Whether loading may change the process-wide Metal wired limit.
+    ///   - progressHandler: Optional loading progress callback.
+    static func fromLocal(
+        modelDirectory: URL,
+        tokenizerDirectory: URL,
+        configuration: Qwen3TTSConfig,
+        wiredMemoryPolicy: Qwen3TTSWiredMemoryPolicy = .none,
+        progressHandler: ((Double, String) -> Void)? = nil
+    ) throws -> Qwen3TTSModel {
+        progressHandler?(0.05, "Validating local model bundles...")
+        try validateLocalBundle(
+            modelDirectory: modelDirectory,
+            tokenizerDirectory: tokenizerDirectory)
+        try validateWiredMemoryPolicy(wiredMemoryPolicy)
 
-        // Load tokenizer
-        progressHandler?(0.6, "Loading tokenizer...")
-        let vocabPath = mainCacheDir.appendingPathComponent("vocab.json")
-        if FileManager.default.fileExists(atPath: vocabPath.path) {
-            let tokenizer = Qwen3Tokenizer()
-            try tokenizer.load(from: vocabPath)
-            model.setTokenizer(tokenizer)
-        }
+        let configPath = modelDirectory.appendingPathComponent("config.json")
+        let vocabPath = modelDirectory.appendingPathComponent("vocab.json")
+        let model = Qwen3TTSModel(config: configuration)
+        model.speakerConfig = try? parseSpeakerConfig(from: configPath)
 
-        // Load Talker + Code Predictor + Speaker Encoder weights (single safetensors load)
-        progressHandler?(0.7, "Loading TTS model weights...")
+        progressHandler?(0.15, "Loading tokenizer...")
+        let tokenizer = Qwen3Tokenizer()
+        try tokenizer.load(from: vocabPath)
+        model.setTokenizer(tokenizer)
+
+        progressHandler?(0.35, "Loading TTS model weights...")
         try TTSWeightLoader.loadTalkerAndCodePredictorWeights(
-            talker: model.talker, codePredictor: model.codePredictor, from: mainCacheDir,
-            castFloat16ToBFloat16: detectedBits == 0)
+            talker: model.talker,
+            codePredictor: model.codePredictor,
+            from: modelDirectory,
+            castFloat16ToBFloat16: configuration.talker.bits == 0)
         try TTSWeightLoader.loadSpeakerEncoderWeights(
-            into: model.speakerEncoder, from: mainCacheDir)
+            into: model.speakerEncoder, from: modelDirectory)
 
-        // Load Speech Tokenizer Decoder weights
-        progressHandler?(0.85, "Loading speech tokenizer decoder...")
+        progressHandler?(0.7, "Loading speech tokenizer decoder...")
         try TTSWeightLoader.loadSpeechTokenizerDecoderWeights(
-            into: model.codecDecoder, from: tokenizerCacheDir)
+            into: model.codecDecoder, from: tokenizerDirectory)
 
-        progressHandler?(0.95, "Warming up model...")
+        progressHandler?(0.9, "Warming up model...")
         model.warmUp()
 
-        MetalBudget.pinMemory()
+        try applyWiredMemoryPolicy(wiredMemoryPolicy)
         progressHandler?(1.0, "Ready")
         return model
+    }
+
+    internal static func validateLocalBundle(
+        modelDirectory: URL,
+        tokenizerDirectory: URL
+    ) throws {
+        try validateDirectory(modelDirectory)
+        try validateDirectory(tokenizerDirectory)
+        try validateRegularFile(modelDirectory.appendingPathComponent("config.json"))
+        try validateRegularFile(modelDirectory.appendingPathComponent("vocab.json"))
+        try validateWeights(in: modelDirectory)
+        try validateWeights(in: tokenizerDirectory)
+    }
+
+    internal static func applyWiredMemoryPolicy(
+        _ policy: Qwen3TTSWiredMemoryPolicy,
+        pinMemory: (Double) -> Void = { fraction in
+            MetalBudget.pinMemory(fraction: fraction)
+        }
+    ) throws {
+        try validateWiredMemoryPolicy(policy)
+        if case .pin(let fraction) = policy {
+            pinMemory(fraction)
+        }
+    }
+
+    private static func validateWiredMemoryPolicy(
+        _ policy: Qwen3TTSWiredMemoryPolicy
+    ) throws {
+        guard case .pin(let fraction) = policy else { return }
+        guard fraction.isFinite, fraction > 0, fraction <= 1 else {
+            throw Qwen3TTSLoadingError.invalidWiredMemoryFraction(fraction)
+        }
+    }
+
+    private static func validateDirectory(_ directory: URL) throws {
+        guard directory.isFileURL else {
+            throw Qwen3TTSLoadingError.nonFileURL(directory)
+        }
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(
+            atPath: directory.path, isDirectory: &isDirectory)
+        else {
+            throw Qwen3TTSLoadingError.directoryNotFound(directory)
+        }
+        guard isDirectory.boolValue else {
+            throw Qwen3TTSLoadingError.pathIsNotDirectory(directory)
+        }
+    }
+
+    private static func validateRegularFile(_ file: URL) throws {
+        let values = try? file.resourceValues(forKeys: [.isRegularFileKey])
+        guard values?.isRegularFile == true else {
+            throw Qwen3TTSLoadingError.requiredFileUnavailable(file)
+        }
+    }
+
+    private static func validateWeights(in directory: URL) throws {
+        let contents: [URL]
+        do {
+            contents = try FileManager.default.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: [.isRegularFileKey])
+        } catch {
+            throw Qwen3TTSLoadingError.weightsUnavailable(directory)
+        }
+        let hasRegularSafetensors = contents.contains { file in
+            guard file.pathExtension == "safetensors" else { return false }
+            return (try? file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true
+        }
+        guard hasRegularSafetensors, HuggingFaceDownloader.weightsExist(in: directory) else {
+            throw Qwen3TTSLoadingError.weightsUnavailable(directory)
+        }
     }
 
     /// Parse speaker configuration from model config.json

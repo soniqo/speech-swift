@@ -163,6 +163,30 @@ Audio waveform [1, T*1920, 1] at 24kHz
 | On-device | Yes (MLX) | Yes (AVFoundation) |
 | Model size | ~1.7 GB | Built-in |
 
+## Loading Local Model Bundles
+
+Use `fromLocal` when model acquisition and storage are owned by the calling app. It accepts
+separate directories for the main TTS model and the speech-tokenizer codec, validates both
+before model allocation, and never resolves a cache, contacts an endpoint, or downloads files.
+
+```swift
+let model = try Qwen3TTSModel.fromLocal(
+    modelDirectory: ttsDirectory,
+    tokenizerDirectory: speechTokenizerDirectory,
+    configuration: .config(for: .large, bits: 0),
+    wiredMemoryPolicy: .none
+)
+```
+
+The main directory must contain `config.json`, `vocab.json`, and a complete safetensors
+checkpoint. The speech-tokenizer directory must contain its own complete safetensors
+checkpoint. Validation failures are reported as `Qwen3TTSLoadingError` values.
+
+`fromLocal` defaults to `.none`, leaving the process-wide Metal wired-memory limit unchanged.
+`fromPretrained` retains its existing `.pin(fraction: 0.9)` default for source compatibility.
+Apps with a shared resource governor should use `.none` and manage any Metal memory policy
+themselves.
+
 ### Implementation Notes
 
 - **Chunked codec decoding** — Codec frames processed in overlapping chunks (`chunkSize=25, leftContext=10`), reducing O(T²) attention to O(chunk²)

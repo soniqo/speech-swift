@@ -165,7 +165,7 @@ All models support both parameters:
 | `ParakeetASRModel` | `cacheDir`, `offlineMode` |
 | `CoreMLASRModel` | `cacheDir`, `offlineMode` |
 | `KokoroTTSModel` | `cacheDir`, `offlineMode` |
-| `Qwen3TTSModel` | `cacheDir`, `offlineMode` |
+| `Qwen3TTSModel` | `cacheDir`, `tokenizerCacheDir`, `offlineMode`; or explicit `fromLocal` directories |
 | `Qwen3TTSCoreMLModel` | `cacheDir`, `offlineMode` |
 | `CosyVoiceTTSModel` | `cacheDir`, `offlineMode` |
 | `PersonaPlexModel` | `cacheDir`, `offlineMode` |
