@@ -120,6 +120,48 @@ public class Qwen3TTSModel {
         sampling: SamplingConfig = .default,
         languageExplicit: Bool = false
     ) -> [Float] {
+        synthesize(
+            text: text,
+            language: language,
+            speaker: speaker,
+            instruct: instruct,
+            sampling: sampling,
+            languageExplicit: languageExplicit,
+            checkCancellation: {})
+    }
+
+    /// Cancellation-aware implementation used by the async generation
+    /// contract. The synchronous public API remains source-compatible and
+    /// deliberately supplies a no-op checkpoint.
+    func synthesizeCheckingCancellation(
+        text: String,
+        language: String = "english",
+        speaker: String? = nil,
+        instruct: String? = nil,
+        sampling: SamplingConfig = .default,
+        languageExplicit: Bool = false
+    ) throws -> [Float] {
+        try synthesize(
+            text: text,
+            language: language,
+            speaker: speaker,
+            instruct: instruct,
+            sampling: sampling,
+            languageExplicit: languageExplicit,
+            checkCancellation: { try Task.checkCancellation() })
+    }
+
+    private func synthesize(
+        text: String,
+        language: String,
+        speaker: String?,
+        instruct: String?,
+        sampling: SamplingConfig,
+        languageExplicit: Bool,
+        checkCancellation: () throws -> Void
+    ) rethrows -> [Float] {
+        try checkCancellation()
+
         guard let tokenizer = tokenizer else {
             fatalError("Tokenizer not loaded. Call setTokenizer() first.")
         }
@@ -132,7 +174,14 @@ public class Qwen3TTSModel {
 
         guard let langId = CodecTokens.languageId(for: effectiveLanguage) else {
             print("Warning: Unknown language '\(effectiveLanguage)', defaulting to English")
-            return synthesize(text: text, language: "english", speaker: speaker, sampling: sampling)
+            return try synthesize(
+                text: text,
+                language: "english",
+                speaker: speaker,
+                instruct: nil,
+                sampling: sampling,
+                languageExplicit: false,
+                checkCancellation: checkCancellation)
         }
 
         let t0 = CFAbsoluteTimeGetCurrent()
@@ -147,6 +196,7 @@ public class Qwen3TTSModel {
             textTokens: textTokens, codecPrefixTokens: codecPrefixTokens, instructTokens: instructTokens)
 
         eval(prefillEmbeds, trailingTextHidden, ttsPadEmbed)
+        try checkCancellation()
         let t1 = CFAbsoluteTimeGetCurrent()
 
         // Stage 3: Autoregressive generation with per-step code predictor
@@ -154,13 +204,15 @@ public class Qwen3TTSModel {
         var cappedSampling = sampling
         cappedSampling.maxTokens = maxTokenCap(for: [text], tokenizer: tokenizer, sampling: sampling)
 
-        let (allCodebooks, numFrames) = generateWithCodePredictor(
+        let (allCodebooks, numFrames) = try generateWithCodePredictor(
             prefillEmbeds: prefillEmbeds,
             trailingTextHidden: trailingTextHidden,
             ttsPadEmbed: ttsPadEmbed,
-            sampling: cappedSampling)
+            sampling: cappedSampling,
+            checkCancellation: checkCancellation)
 
         eval(allCodebooks)
+        try checkCancellation()
         let t2 = CFAbsoluteTimeGetCurrent()
 
         guard numFrames > 0 else {
@@ -172,6 +224,7 @@ public class Qwen3TTSModel {
         let outputSamples = numFrames * 1920
         print("  Decoding \(numFrames) frames -> \(outputSamples) samples (\(String(format: "%.1f", Double(outputSamples) / 24000.0))s)...")
         let waveform = codecDecoder.decode(codes: allCodebooks)
+        try checkCancellation()
         let t3 = CFAbsoluteTimeGetCurrent()
 
         let audioDur = Double(waveform.count) / 24000.0
@@ -342,6 +395,8 @@ public class Qwen3TTSModel {
         languageExplicit: Bool = false,
         continuation: AsyncThrowingStream<AudioChunk, Error>.Continuation
     ) throws {
+        try Task.checkCancellation()
+
         guard let tokenizer = tokenizer else {
             throw TTSError.tokenizerNotLoaded
         }
@@ -368,6 +423,7 @@ public class Qwen3TTSModel {
         let (prefillEmbeds, trailingTextHidden, ttsPadEmbed) = buildPrefillEmbeddings(
             textTokens: textTokens, codecPrefixTokens: codecPrefixTokens, instructTokens: instructTokens)
         eval(prefillEmbeds, trailingTextHidden, ttsPadEmbed)
+        try Task.checkCancellation()
 
         // Stage 2: Autoregressive generation with chunked decode + emit
         let cpSamplingConfig = SamplingConfig(temperature: sampling.temperature, topK: sampling.topK)
@@ -379,6 +435,7 @@ public class Qwen3TTSModel {
             offset: MLXArray(Int32(0)),
             cache: nil)
         var talkerCache = newCache
+        try Task.checkCancellation()
 
         // Sample first token
         let lastLogits = logits[0..., (prefillLen - 1)..<prefillLen, 0...]
@@ -388,6 +445,7 @@ public class Qwen3TTSModel {
             generatedTokens: [],
             suppressRange: (2048, 3072),
             eosTokenId: CodecTokens.codecEos)
+        try Task.checkCancellation()
 
         if nextToken == Int32(CodecTokens.codecEos) {
             let chunk = AudioChunk(
@@ -408,6 +466,7 @@ public class Qwen3TTSModel {
             hiddenState: lastHidden,
             firstCodebookToken: nextToken,
             cpSamplingConfig: cpSamplingConfig)
+        try Task.checkCancellation()
         for (i, token) in codeTokens.enumerated() {
             generatedAllCodebooks[i + 1].append(token)
         }
@@ -421,12 +480,14 @@ public class Qwen3TTSModel {
 
         // Emit immediately if prefill already produced enough frames (e.g., firstChunkFrames=1)
         if generatedFirstCodebook.count >= nextEmitThreshold {
+            try Task.checkCancellation()
             let chunk = decodeAndEmitChunk(
                 allCodebooks: generatedAllCodebooks,
                 chunkStart: 0,
                 chunkEnd: generatedFirstCodebook.count,
                 decoderLeftContext: streaming.decoderLeftContext,
                 samplesPerFrame: samplesPerFrame)
+            try Task.checkCancellation()
             let audioChunk = AudioChunk(
                 samples: chunk,
                 sampleRate: 24000,
@@ -439,7 +500,10 @@ public class Qwen3TTSModel {
         }
 
         // Autoregressive generation loop
-        for iterIdx in 1..<safeMaxTokens {
+        try runQwen3TTSGenerationLoop(
+            1..<safeMaxTokens,
+            checkCancellation: { try Task.checkCancellation() }
+        ) { iterIdx in
             // Text side
             let textEmbed: MLXArray
             let trailingLen = trailingTextHidden.dim(1)
@@ -479,6 +543,7 @@ public class Qwen3TTSModel {
                     hiddenState: stepHidden,
                     firstCodebookToken: nextToken,
                     cpSamplingConfig: cpSamplingConfig)
+                try Task.checkCancellation()
                 for (i, token) in codeTokens.enumerated() {
                     generatedAllCodebooks[i + 1].append(token)
                 }
@@ -493,12 +558,14 @@ public class Qwen3TTSModel {
                 let chunkFrameStart = emittedFrames
                 let chunkFrameEnd = totalFrames
 
+                try Task.checkCancellation()
                 let chunk = decodeAndEmitChunk(
                     allCodebooks: generatedAllCodebooks,
                     chunkStart: chunkFrameStart,
                     chunkEnd: chunkFrameEnd,
                     decoderLeftContext: streaming.decoderLeftContext,
                     samplesPerFrame: samplesPerFrame)
+                try Task.checkCancellation()
 
                 let isFinalChunk = isEos || iterIdx == safeMaxTokens - 1
                 let audioChunk = AudioChunk(
@@ -515,12 +582,14 @@ public class Qwen3TTSModel {
                 nextEmitThreshold = emittedFrames + streaming.chunkFrames
             }
 
-            if isEos { break }
+            if isEos { return false }
 
             if iterIdx % 50 == 0 {
                 let estSec = Double(generatedFirstCodebook.count) / 12.5
                 print("  Streaming: \(generatedFirstCodebook.count) tokens (~\(String(format: "%.1f", estSec))s audio)...")
             }
+
+            return true
         }
 
         let numFrames = generatedFirstCodebook.count
@@ -531,12 +600,14 @@ public class Qwen3TTSModel {
 
         // Emit remaining frames if any
         if emittedFrames < numFrames {
+            try Task.checkCancellation()
             let chunk = decodeAndEmitChunk(
                 allCodebooks: generatedAllCodebooks,
                 chunkStart: emittedFrames,
                 chunkEnd: numFrames,
                 decoderLeftContext: streaming.decoderLeftContext,
                 samplesPerFrame: samplesPerFrame)
+            try Task.checkCancellation()
             let audioChunk = AudioChunk(
                 samples: chunk,
                 sampleRate: 24000,
@@ -549,6 +620,7 @@ public class Qwen3TTSModel {
 
         // If EOS arrived with no new frames, emit a final sentinel
         if !emittedFinal {
+            try Task.checkCancellation()
             let audioChunk = AudioChunk(
                 samples: [],
                 sampleRate: 24000,
@@ -1426,6 +1498,23 @@ public class Qwen3TTSModel {
         ttsPadEmbed: MLXArray,
         sampling: SamplingConfig
     ) -> (allCodebooks: MLXArray, numFrames: Int) {
+        generateWithCodePredictor(
+            prefillEmbeds: prefillEmbeds,
+            trailingTextHidden: trailingTextHidden,
+            ttsPadEmbed: ttsPadEmbed,
+            sampling: sampling,
+            checkCancellation: {})
+    }
+
+    private func generateWithCodePredictor(
+        prefillEmbeds: MLXArray,
+        trailingTextHidden: MLXArray,
+        ttsPadEmbed: MLXArray,
+        sampling: SamplingConfig,
+        checkCancellation: () throws -> Void
+    ) rethrows -> (allCodebooks: MLXArray, numFrames: Int) {
+        try checkCancellation()
+
         // Reference (QwenLM + mlx-audio) uses 2048 here. Earlier 500 cap clipped
         // long lines mid-word and produced hard-cut endings.
         let safeMaxTokens = min(sampling.maxTokens, 2048)
@@ -1445,6 +1534,7 @@ public class Qwen3TTSModel {
             offset: MLXArray(Int32(0)),
             cache: talkerCache)
         talkerCache = newCache
+        try checkCancellation()
 
         // Sample first token from last position
         let lastLogits = logits[0..., (prefillLen - 1)..<prefillLen, 0...]
@@ -1454,6 +1544,7 @@ public class Qwen3TTSModel {
             generatedTokens: generatedFirstCodebook,
             suppressRange: (2048, 3072),
             eosTokenId: CodecTokens.codecEos)
+        try checkCancellation()
 
         if nextToken == Int32(CodecTokens.codecEos) {
             return (MLXArray.zeros([1, 16, 0]), 0)
@@ -1470,6 +1561,7 @@ public class Qwen3TTSModel {
             hiddenState: lastHidden,
             firstCodebookToken: nextToken,
             cpSamplingConfig: cpSamplingConfig)
+        try checkCancellation()
         for (i, token) in codeTokens.enumerated() {
             generatedAllCodebooks[i + 1].append(token)
         }
@@ -1478,7 +1570,10 @@ public class Qwen3TTSModel {
         var step = prefillLen
 
         // Autoregressive generation
-        for iterIdx in 1..<safeMaxTokens {
+        try runQwen3TTSGenerationLoop(
+            1..<safeMaxTokens,
+            checkCancellation: checkCancellation
+        ) { iterIdx in
             // Text side: next trailing text embed or tts_pad
             let textEmbed: MLXArray
             let trailingLen = trailingTextHidden.dim(1)
@@ -1508,7 +1603,7 @@ public class Qwen3TTSModel {
                 suppressRange: (2048, 3072),
                 eosTokenId: CodecTokens.codecEos)
 
-            if nextToken == Int32(CodecTokens.codecEos) { break }
+            if nextToken == Int32(CodecTokens.codecEos) { return false }
 
             generatedFirstCodebook.append(nextToken)
             generatedAllCodebooks[0].append(nextToken)
@@ -1519,6 +1614,7 @@ public class Qwen3TTSModel {
                 hiddenState: stepHidden,
                 firstCodebookToken: nextToken,
                 cpSamplingConfig: cpSamplingConfig)
+            try checkCancellation()
             for (i, token) in codeTokens.enumerated() {
                 generatedAllCodebooks[i + 1].append(token)
             }
@@ -1529,6 +1625,8 @@ public class Qwen3TTSModel {
                 let estSec = Double(generatedFirstCodebook.count) / 12.5
                 print("  Talker: \(generatedFirstCodebook.count) tokens (~\(String(format: "%.1f", estSec))s audio)...")
             }
+
+            return true
         }
 
         let numFrames = generatedFirstCodebook.count
