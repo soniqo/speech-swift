@@ -196,6 +196,18 @@ themselves.
 - **Lazy code predictor chain** — 15 sequential codebook predictions use lazy MLXArray (Gumbel-max trick) with a single `eval()` at the end, reducing 15 GPU sync barriers to 1 per timestep
 - **Compiled talker + code predictor** — `compile(shapeless: true)` for the 28-layer talker (growing KV cache); `compile(shapeless: false)` for the 5-layer code predictor (14 fixed cache sizes)
 
+## Diagnostics
+
+Qwen3-TTS routes model-loading and inference diagnostics through the package's
+`AudioLog.modelLoading` and `AudioLog.inference` unified-log categories. Its
+diagnostic paths do not write directly to stdout or stderr, leaving those
+streams under the control of the embedding application or command-line tool.
+
+Warnings report fallbacks, empty generations, safety limits, and inefficient
+batches. Per-generation timing summaries use the `info` level; periodic token,
+decode, cache, and weight-loading progress uses `debug` so normal operation is
+bounded to completion summaries and actionable conditions.
+
 ## Streaming Synthesis
 
 The Talker, Code Predictor, and Mimi decoder are all fully causal, enabling chunk-by-chunk audio emission during generation.
@@ -210,6 +222,20 @@ The Talker, Code Predictor, and Mimi decoder are all fully causal, enabling chun
 1. **First chunk** — emitted after `firstChunkFrames` tokens (default 3, or 1 for low-latency)
 2. **Subsequent chunks** — emitted every `chunkFrames` tokens (default 25 = 2s audio)
 3. **Codec decode** — each chunk runs the Mimi decoder with left-context overlap for quality
+
+### Cooperative Cancellation
+
+The async `SpeechGenerationModel.generate()` path and `synthesizeStream()`
+cooperate with Swift task cancellation. Autoregressive inference checks for
+cancellation before every codec-token step and again before and after codec
+decode. Once cancellation is observed at a checkpoint, generation throws
+`CancellationError` instead of yielding or returning a successful final
+result.
+
+Cancellation latency is bounded to the currently executing token step or
+codec decode; MLX and Metal kernels already in flight cannot be preempted.
+The synchronous `synthesize()` and `synthesizeBatch()` APIs retain their
+existing non-throwing behavior and are not task-cancellation entry points.
 
 ### Zero-Pad Decode
 
