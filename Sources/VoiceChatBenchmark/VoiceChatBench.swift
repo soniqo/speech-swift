@@ -1,4 +1,5 @@
 import ArgumentParser
+import Darwin
 import Foundation
 import MLX
 import MLXNN
@@ -47,6 +48,22 @@ struct VoiceChatBench: AsyncParsableCommand {
     @Flag(name: .long, help: "Parity-check the language backbone instead of the encoder. Input key `tokens`, output key `logits`.")
     var llm = false
 
+    /// Resident set size of this process, in bytes.
+    ///
+    /// Peak GPU memory alone understates what a duplex model costs: weights are
+    /// mapped into the process, so RSS is what actually decides whether a
+    /// bundle fits alongside everything else on the machine.
+    private func residentBytes() -> UInt64 {
+        var info = mach_task_basic_info()
+        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size / MemoryLayout<natural_t>.size)
+        let result = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
+            }
+        }
+        return result == KERN_SUCCESS ? info.resident_size : 0
+    }
+
     private func pad(_ text: String, _ width: Int) -> String {
         String(repeating: " ", count: max(0, width - text.count)) + text
     }
@@ -73,6 +90,7 @@ struct VoiceChatBench: AsyncParsableCommand {
         let dModel: Int
         let attContextSize: [Int]
         let peakMemoryGB: Double
+        let residentMemoryGB: Double
         let measurements: [Measurement]
     }
 
@@ -194,8 +212,27 @@ struct VoiceChatBench: AsyncParsableCommand {
         }
 
         let peakGB = Double(GPU.peakMemory) / 1e9
+        let rssGB = Double(residentBytes()) / 1e9
         print("")
         print(String(format: "peak GPU memory  %.2f GB", peakGB))
+        print(String(format: "resident memory  %.2f GB", rssGB))
+
+        // Where the time actually goes, at the longest length tested.
+        if let longest = durations.max() {
+            let mel = MLXRandom.normal([1, Int(longest / Self.melHopSeconds), config.encoder.featIn])
+            eval(mel)
+            _ = perception.profile(mel)                   // warm
+            let stages = perception.profile(mel)
+            print("")
+            print("stage breakdown at \(Int(longest))s:")
+            let total = stages.totalMs
+            for (name, ms) in [("subsampling", stages.subsamplingMs),
+                               ("conformer", stages.conformerMs),
+                               ("projection", stages.projectionMs)] {
+                print(String(format: "  %-12s %7.1f ms  %4.1f%%", (name as NSString).utf8String!,
+                             ms, ms / total * 100))
+            }
+        }
 
         let slowest = measurements.map(\.realTimeFactor).max() ?? 0
         if slowest >= 1.0 {
@@ -211,6 +248,7 @@ struct VoiceChatBench: AsyncParsableCommand {
                 dModel: config.encoder.dModel,
                 attContextSize: config.encoder.attContextSize,
                 peakMemoryGB: peakGB,
+                residentMemoryGB: rssGB,
                 measurements: measurements
             )
             let encoder = JSONEncoder()

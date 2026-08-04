@@ -28,6 +28,47 @@ public final class VoiceChatPerception: Module {
         modalityProj(encoder(logMel))
     }
 
+    /// Per-stage timings for one encode, in milliseconds.
+    ///
+    /// Split this way because the two halves scale differently: subsampling is
+    /// convolutional and roughly linear in mel frames, while the conformer
+    /// stack carries the attention term. Knowing which dominates at a given
+    /// utterance length is what tells you where optimisation is worth spending.
+    public struct StageTimings: Sendable {
+        public let subsamplingMs: Double
+        public let conformerMs: Double
+        public let projectionMs: Double
+        public var totalMs: Double { subsamplingMs + conformerMs + projectionMs }
+    }
+
+    /// Each stage is timed directly over `iterations` runs after a warmup, so
+    /// the numbers add up to the measured total instead of being inferred by
+    /// subtracting one noisy measurement from another.
+    public func profile(_ logMel: MLXArray, iterations: Int = 8, warmup: Int = 2) -> StageTimings {
+        func time(_ body: () -> MLXArray) -> Double {
+            for _ in 0 ..< warmup { eval(body()) }
+            var samples: [Double] = []
+            for _ in 0 ..< iterations {
+                let start = DispatchTime.now().uptimeNanoseconds
+                eval(body())
+                samples.append(Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000)
+            }
+            // Median, not mean: a single scheduling hiccup should not move the
+            // reported cost of a stage.
+            return samples.sorted()[samples.count / 2]
+        }
+
+        let subsampled = encoder.preEncode(logMel)
+        eval(subsampled)
+        let hidden = encoder(logMel)
+        eval(hidden)
+
+        return StageTimings(
+            subsamplingMs: time { self.encoder.preEncode(logMel) },
+            conformerMs: time { self.encoder.conformerStack(subsampled) },
+            projectionMs: time { self.modalityProj(hidden) })
+    }
+
     /// Frames the encoder emits for a given mel length. Nominally one per 80 ms,
     /// running one frame long because each causal stage is `floor(n/2) + 1`.
     public func outputFrames(melFrames: Int) -> Int {

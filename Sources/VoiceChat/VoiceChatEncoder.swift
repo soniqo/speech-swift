@@ -56,7 +56,7 @@ final class CausalConv2D: Module {
 /// The flat `conv` list mirrors NeMo's layout so weight keys line up:
 /// 0 CausalConv2D, 1 ReLU, 2 CausalConv2D(dw), 3 Conv2d(pw), 4 ReLU,
 /// 5 CausalConv2D(dw), 6 Conv2d(pw), 7 ReLU.
-final class CausalSubsampling: Module {
+public final class CausalSubsampling: Module {
     // The checkpoint stores these as a flat list (`conv.0`, `conv.2`, ...), but
     // a dotted @ModuleInfo key is treated as one literal name rather than a
     // path, so the indices are folded into the key here and the bundle's names
@@ -90,7 +90,7 @@ final class CausalSubsampling: Module {
 
     /// - Parameter x: log-mel of shape (B, T, nMel)
     /// - Returns: (B, T/8, dModel)
-    func callAsFunction(_ x: MLXArray) -> MLXArray {
+    public func callAsFunction(_ x: MLXArray) -> MLXArray {
         // Time stays on axis 1 and frequency on axis 2, matching NeMo's
         // (B, 1, T, F). Transposing here maps the 3x3 kernel to the wrong axis
         // and silently produces a transposed result.
@@ -108,7 +108,7 @@ final class CausalSubsampling: Module {
     /// Output frame count for a given number of mel frames. Each causal stage
     /// is `floor(n / 2) + 1`, so the result runs one frame longer than a plain
     /// stride-2 stack would give.
-    static func outputFrames(melFrames: Int) -> Int {
+    public static func outputFrames(melFrames: Int) -> Int {
         var n = melFrames
         for _ in 0 ..< 3 { n = n / 2 + 1 }
         return n
@@ -317,7 +317,7 @@ final class ConformerLayer: Module {
 // MARK: - Encoder
 
 public final class VoiceChatEncoder: Module {
-    @ModuleInfo(key: "pre_encode") var preEncode: CausalSubsampling
+    @ModuleInfo(key: "pre_encode") public var preEncode: CausalSubsampling
     // Not @ModuleInfo: carries no weights.
     private let posEnc: RelPositionalEncoding
     @ModuleInfo(key: "layers") var layers: [ConformerLayer]
@@ -352,7 +352,16 @@ public final class VoiceChatEncoder: Module {
     /// - Parameter logMel: (B, T, featIn)
     /// - Returns: (B, T/8, dModel)
     public func callAsFunction(_ logMel: MLXArray) -> MLXArray {
-        var h = preEncode(logMel)
+        conformerStack(preEncode(logMel))
+    }
+
+    /// The 24 conformer layers, given already-subsampled input.
+    ///
+    /// Exposed so profiling can time the stack directly rather than timing the
+    /// whole encoder and subtracting subsampling — subtraction turns two noisy
+    /// measurements into one noisier one, and hides it behind a plausible number.
+    public func conformerStack(_ subsampled: MLXArray) -> MLXArray {
+        var h = subsampled
         let posEmb = posEnc(h)
         let mask = Self.chunkedLimitedMask(
             length: h.shape[1],

@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import MLX
 import MLXLMCommon
@@ -147,7 +148,23 @@ final class VoiceChatTests: XCTestCase {
         // The tool-call channel is a separate head the stock model has no slot
         // for; it must survive the load rather than be dropped.
         let head = try XCTUnwrap(llm.functionHead, "function_head missing from the bundle")
-        XCTAssertEqual(head.shape, [llm.configuration.vocabSize, llm.configuration.hiddenSize])
+        XCTAssertEqual(head.shape.first, llm.configuration.vocabSize)
+
+        // In a quantized bundle the head is stored packed, so the second
+        // dimension is hiddenSize scaled by bits/32 rather than hiddenSize.
+        // The int5 build deliberately holds this head at 8 bits, so assert the
+        // packing is consistent with some supported width rather than
+        // hard-coding one — that catches a corrupt head without pinning the
+        // test to a single variant.
+        let hidden = llm.configuration.hiddenSize
+        let packed = try XCTUnwrap(head.shape.last)
+        if packed == hidden {
+            return  // dense (fp16 bundle)
+        }
+        let bits = packed * 32 / hidden
+        XCTAssertTrue([2, 3, 4, 5, 6, 8].contains(bits),
+                      "function_head packing implies \(bits) bits, which MLX does not support")
+        XCTAssertEqual(packed, hidden * bits / 32, "function_head packing is inconsistent")
     }
 
     /// Only 4 of 56 layers keep a growing KV cache; the 27 Mamba layers hold a
@@ -159,5 +176,67 @@ final class VoiceChatTests: XCTestCase {
         let cache = llm.newCache()
         XCTAssertEqual(cache.count, 31, "expected one cache per Mamba and attention layer")
         XCTAssertEqual(cache.filter { $0 is MambaCache }.count, 27)
+    }
+
+    // MARK: - End to end: audio in, transcript out
+
+    /// The only test that exercises the whole speech-understanding path at once.
+    ///
+    /// Shape and finiteness checks pass happily on a model with a transposed
+    /// filterbank, a mis-centred window or an off-by-one blank index. A
+    /// transcript is the first thing that does not.
+    func testTranscribesRealSpeech() throws {
+        let root = try requireBundle()
+        let encoderDir = root.appendingPathComponent("encoder")
+        let perception = try VoiceChatPerception.load(from: encoderDir)
+        let weights = try MLX.loadArrays(url: encoderDir.appendingPathComponent("model.safetensors"))
+
+        let vocabURL = try XCTUnwrap(Bundle.module.url(forResource: "rnnt_vocab", withExtension: "json"))
+        VoiceChatTranscriber.vocabulary = try JSONDecoder().decode(
+            [String].self, from: Data(contentsOf: vocabURL))
+
+        let audioURL = try XCTUnwrap(Bundle.module.url(forResource: "fleurs_en", withExtension: "wav"))
+        let samples = try loadMono16k(audioURL)
+        XCTAssertGreaterThan(samples.count, VoiceChatTranscriber.sampleRate, "need at least a second of audio")
+
+        let transcriber = try VoiceChatTranscriber(perception: perception, weights: weights)
+        let transcript = transcriber.transcribe(samples).lowercased()
+        print("transcript: \(transcript)")
+
+        XCTAssertFalse(transcript.isEmpty, "produced no transcript at all")
+        // Content words the Python reference produces on this clip across every
+        // quantization variant. Asserting on words rather than an exact string
+        // keeps the test meaningful without pinning it to one variant's output.
+        for expected in ["also", "paid", "tribute", "luna"] {
+            XCTAssertTrue(transcript.contains(expected),
+                          "transcript is missing \(expected): \(transcript)")
+        }
+    }
+
+    /// Read a wav as mono float at 16 kHz. Several fixtures are IEEE-float wavs.
+    private func loadMono16k(_ url: URL) throws -> [Float] {
+        let file = try AVAudioFile(forReading: url)
+        let format = AVAudioFormat(commonFormat: .pcmFormatFloat32,
+                                   sampleRate: Double(VoiceChatTranscriber.sampleRate),
+                                   channels: 1, interleaved: false)!
+        let converter = try XCTUnwrap(AVAudioConverter(from: file.processingFormat, to: format))
+        let source = AVAudioPCMBuffer(pcmFormat: file.processingFormat,
+                                      frameCapacity: AVAudioFrameCount(file.length))!
+        try file.read(into: source)
+
+        let ratio = format.sampleRate / file.processingFormat.sampleRate
+        let capacity = AVAudioFrameCount(Double(source.frameLength) * ratio) + 1024
+        let output = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: capacity)!
+        var supplied = false
+        var error: NSError?
+        converter.convert(to: output, error: &error) { _, status in
+            if supplied { status.pointee = .endOfStream; return nil }
+            supplied = true
+            status.pointee = .haveData
+            return source
+        }
+        if let error { throw error }
+        let pointer = try XCTUnwrap(output.floatChannelData?[0])
+        return Array(UnsafeBufferPointer(start: pointer, count: Int(output.frameLength)))
     }
 }
