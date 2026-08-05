@@ -163,6 +163,30 @@ Audio waveform [1, T*1920, 1] at 24kHz
 | On-device | Yes (MLX) | Yes (AVFoundation) |
 | Model size | ~1.7 GB | Built-in |
 
+## Loading Local Model Bundles
+
+Use `fromLocal` when model acquisition and storage are owned by the calling app. It accepts
+separate directories for the main TTS model and the speech-tokenizer codec, validates both
+before model allocation, and never resolves a cache, contacts an endpoint, or downloads files.
+
+```swift
+let model = try Qwen3TTSModel.fromLocal(
+    modelDirectory: ttsDirectory,
+    tokenizerDirectory: speechTokenizerDirectory,
+    configuration: .config(for: .large, bits: 0),
+    wiredMemoryPolicy: .none
+)
+```
+
+The main directory must contain `config.json`, `vocab.json`, and a complete safetensors
+checkpoint. The speech-tokenizer directory must contain its own complete safetensors
+checkpoint. Validation failures are reported as `Qwen3TTSLoadingError` values.
+
+`fromLocal` defaults to `.none`, leaving the process-wide Metal wired-memory limit unchanged.
+`fromPretrained` retains its existing `.pin(fraction: 0.9)` default for source compatibility.
+Apps with a shared resource governor should use `.none` and manage any Metal memory policy
+themselves.
+
 ### Implementation Notes
 
 - **Chunked codec decoding** — Codec frames processed in overlapping chunks (`chunkSize=25, leftContext=10`), reducing O(T²) attention to O(chunk²)
@@ -171,6 +195,18 @@ Audio waveform [1, T*1920, 1] at 24kHz
 - **Causal mask in decoder transformer** — Additive causal mask for pre-transformer attention (required for chunked decoding correctness)
 - **Lazy code predictor chain** — 15 sequential codebook predictions use lazy MLXArray (Gumbel-max trick) with a single `eval()` at the end, reducing 15 GPU sync barriers to 1 per timestep
 - **Compiled talker + code predictor** — `compile(shapeless: true)` for the 28-layer talker (growing KV cache); `compile(shapeless: false)` for the 5-layer code predictor (14 fixed cache sizes)
+
+## Diagnostics
+
+Qwen3-TTS routes model-loading and inference diagnostics through the package's
+`AudioLog.modelLoading` and `AudioLog.inference` unified-log categories. Its
+diagnostic paths do not write directly to stdout or stderr, leaving those
+streams under the control of the embedding application or command-line tool.
+
+Warnings report fallbacks, empty generations, safety limits, and inefficient
+batches. Per-generation timing summaries use the `info` level; periodic token,
+decode, cache, and weight-loading progress uses `debug` so normal operation is
+bounded to completion summaries and actionable conditions.
 
 ## Streaming Synthesis
 
@@ -186,6 +222,20 @@ The Talker, Code Predictor, and Mimi decoder are all fully causal, enabling chun
 1. **First chunk** — emitted after `firstChunkFrames` tokens (default 3, or 1 for low-latency)
 2. **Subsequent chunks** — emitted every `chunkFrames` tokens (default 25 = 2s audio)
 3. **Codec decode** — each chunk runs the Mimi decoder with left-context overlap for quality
+
+### Cooperative Cancellation
+
+The async `SpeechGenerationModel.generate()` path and `synthesizeStream()`
+cooperate with Swift task cancellation. Autoregressive inference checks for
+cancellation before every codec-token step and again before and after codec
+decode. Once cancellation is observed at a checkpoint, generation throws
+`CancellationError` instead of yielding or returning a successful final
+result.
+
+Cancellation latency is bounded to the currently executing token step or
+codec decode; MLX and Metal kernels already in flight cannot be preempted.
+The synchronous `synthesize()` and `synthesizeBatch()` APIs retain their
+existing non-throwing behavior and are not task-cancellation entry points.
 
 ### Zero-Pad Decode
 

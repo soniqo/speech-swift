@@ -8,7 +8,10 @@ extension Qwen3TTSModel: SpeechGenerationModel {
     public func generate(text: String, language: String?) async throws -> [Float] {
         let lang = language ?? "english"
         let speaker = speakerForLanguage(lang)
-        return synthesize(text: text, language: lang, speaker: speaker)
+        return try synthesizeCheckingCancellation(
+            text: text,
+            language: lang,
+            speaker: speaker)
     }
 
     public func generateStream(text: String, language: String?) -> AsyncThrowingStream<AudioChunk, Error> {

@@ -4,11 +4,10 @@ import MLX
 import MLXNN
 import AudioCommon
 
-/// Weight-loading progress logs go to stderr so they don't corrupt a stdout-based
-/// IPC channel (e.g. the speech-studio sidecar's NDJSON protocol).
+/// Route weight-loading progress through the package's model-loading category.
 @inline(__always)
 internal func logLoad(_ message: String) {
-    FileHandle.standardError.write(Data((message + "\n").utf8))
+    AudioLog.modelLoading.debug("\(message)")
 }
 
 /// Weight loading for TTS components
