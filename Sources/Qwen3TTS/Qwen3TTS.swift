@@ -130,6 +130,30 @@ public class Qwen3TTSModel {
             checkCancellation: {})
     }
 
+    /// Synthesize speech while cooperatively observing Swift task cancellation.
+    ///
+    /// This preserves the exact speaker, instruction, sampling, and
+    /// whole-waveform decode behavior of ``synthesize(text:language:speaker:instruct:sampling:languageExplicit:)``.
+    /// Cancellation is checked before generation, between codec-token steps,
+    /// and around the final codec decode. An already-running MLX or Metal kernel
+    /// completes before the next checkpoint can throw `CancellationError`.
+    public func synthesizeCancellable(
+        text: String,
+        language: String = "english",
+        speaker: String? = nil,
+        instruct: String? = nil,
+        sampling: SamplingConfig = .default,
+        languageExplicit: Bool = false
+    ) async throws -> [Float] {
+        try synthesizeCheckingCancellation(
+            text: text,
+            language: language,
+            speaker: speaker,
+            instruct: instruct,
+            sampling: sampling,
+            languageExplicit: languageExplicit)
+    }
+
     /// Cancellation-aware implementation used by the async generation
     /// contract. The synchronous public API remains source-compatible and
     /// deliberately supplies a no-op checkpoint.
