@@ -137,13 +137,16 @@ public class Qwen3TTSModel {
     /// Cancellation is checked before generation, between codec-token steps,
     /// and around the final codec decode. An already-running MLX or Metal kernel
     /// completes before the next checkpoint can throw `CancellationError`.
+    /// The operation inherits `isolation` so callers can keep a non-Sendable
+    /// model on their actor or serial executor for the complete generation.
     public func synthesizeCancellable(
         text: String,
         language: String = "english",
         speaker: String? = nil,
         instruct: String? = nil,
         sampling: SamplingConfig = .default,
-        languageExplicit: Bool = false
+        languageExplicit: Bool = false,
+        isolation _: isolated (any Actor) = #isolation
     ) async throws -> [Float] {
         try synthesizeCheckingCancellation(
             text: text,
