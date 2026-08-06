@@ -138,6 +138,149 @@ final class LocalModelLoadingTests: XCTestCase {
         }
     }
 
+    func testBundleConfigurationOverridesWrongCallerSizeAndQuantization() throws {
+        let fixture = try LocalBundleFixture()
+        defer { fixture.remove() }
+        try fixture.writeConfig(
+            """
+            {
+              "model_size": "0.6B",
+              "quantization_config": { "bits": 8, "group_size": 32 },
+              "talker_config": {
+                "hidden_size": 1024,
+                "intermediate_size": 3072,
+                "num_hidden_layers": 28
+              }
+            }
+            """)
+        var wrongFallback = Qwen3TTSConfig.config(for: .large, bits: 0)
+        wrongFallback.speechTokenizerDecoder.sampleRate = 16_000
+
+        let resolved = try Qwen3TTSModel.resolveLocalConfiguration(
+            from: fixture.configFile,
+            fallback: wrongFallback)
+
+        XCTAssertEqual(resolved.talker.hiddenSize, 1024)
+        XCTAssertEqual(resolved.talker.bits, 8)
+        XCTAssertEqual(resolved.talker.groupSize, 32)
+        XCTAssertEqual(resolved.codePredictor.embeddingDim, 1024)
+        XCTAssertEqual(resolved.codePredictor.bits, 8)
+        XCTAssertEqual(resolved.codePredictor.groupSize, 32)
+        XCTAssertEqual(resolved.speechTokenizerDecoder.sampleRate, 16_000)
+    }
+
+    func testMissingQuantizationMetadataMeansUnquantized() throws {
+        let fixture = try LocalBundleFixture()
+        defer { fixture.remove() }
+        try fixture.writeConfig(
+            """
+            {
+              "model_size": "1.7B",
+              "talker_config": { "hidden_size": 2048 }
+            }
+            """)
+
+        let resolved = try Qwen3TTSModel.resolveLocalConfiguration(
+            from: fixture.configFile,
+            fallback: .config(for: .small, bits: 8))
+
+        XCTAssertEqual(resolved.talker.hiddenSize, 2048)
+        XCTAssertEqual(resolved.talker.bits, 0)
+        XCTAssertEqual(resolved.codePredictor.embeddingDim, 2048)
+        XCTAssertEqual(resolved.codePredictor.bits, 0)
+    }
+
+    func testTalkerMetadataCanInferSizeAndConfigureCodePredictor() throws {
+        let fixture = try LocalBundleFixture()
+        defer { fixture.remove() }
+        try fixture.writeConfig(
+            """
+            {
+              "talker_config": {
+                "hidden_size": 1024,
+                "rope_scaling": { "mrope_section": [16, 16, 32] },
+                "code_predictor_config": {
+                  "hidden_size": 1024,
+                  "num_hidden_layers": 6,
+                  "num_code_groups": 12
+                }
+              }
+            }
+            """)
+
+        let resolved = try Qwen3TTSModel.resolveLocalConfiguration(
+            from: fixture.configFile)
+
+        XCTAssertEqual(resolved.talker.hiddenSize, 1024)
+        XCTAssertEqual(resolved.talker.bits, 0)
+        XCTAssertEqual(resolved.talker.mropeSections, [16, 16, 32])
+        XCTAssertEqual(resolved.codePredictor.numLayers, 6)
+        XCTAssertEqual(resolved.codePredictor.numCodeGroups, 12)
+    }
+
+    func testBundleConfigurationRejectsContradictoryModelSize() throws {
+        let fixture = try LocalBundleFixture()
+        defer { fixture.remove() }
+        try fixture.writeConfig(
+            """
+            {
+              "model_size": "0.6B",
+              "talker_config": { "hidden_size": 2048 }
+            }
+            """)
+
+        XCTAssertThrowsError(
+            try Qwen3TTSModel.resolveLocalConfiguration(from: fixture.configFile)
+        ) { error in
+            guard case .invalidConfiguration(let url, let reason) =
+                error as? Qwen3TTSLoadingError
+            else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+            XCTAssertEqual(url, fixture.configFile)
+            XCTAssertTrue(reason.contains("conflicts"))
+        }
+    }
+
+    func testBundleConfigurationRejectsUnsupportedQuantizationBeforeAllocation() throws {
+        let fixture = try LocalBundleFixture()
+        defer { fixture.remove() }
+        try fixture.writeConfig(
+            """
+            {
+              "model_size": "0.6B",
+              "quantization_config": { "bits": 3 }
+            }
+            """)
+
+        XCTAssertThrowsError(
+            try Qwen3TTSModel.resolveLocalConfiguration(from: fixture.configFile)
+        ) { error in
+            guard case .invalidConfiguration(let url, let reason) =
+                error as? Qwen3TTSLoadingError
+            else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+            XCTAssertEqual(url, fixture.configFile)
+            XCTAssertTrue(reason.contains("bits"))
+        }
+    }
+
+    func testBundleConfigurationWrapsMalformedJSONInTypedError() throws {
+        let fixture = try LocalBundleFixture()
+        defer { fixture.remove() }
+        try fixture.writeConfig("{not-json")
+
+        XCTAssertThrowsError(
+            try Qwen3TTSModel.resolveLocalConfiguration(from: fixture.configFile)
+        ) { error in
+            guard case .invalidConfiguration(let url, _) = error as? Qwen3TTSLoadingError else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+            XCTAssertEqual(url, fixture.configFile)
+        }
+    }
+
     func testNoneWiredMemoryPolicyLeavesProcessStateUntouched() throws {
         var requestedFractions: [Double] = []
 
@@ -189,6 +332,7 @@ private final class LocalBundleFixture {
     let tokenizerDirectory: URL
     let modelWeights: URL
     let tokenizerWeights: URL
+    let configFile: URL
 
     init() throws {
         root = FileManager.default.temporaryDirectory
@@ -197,13 +341,13 @@ private final class LocalBundleFixture {
         tokenizerDirectory = root.appendingPathComponent("tokenizer", isDirectory: true)
         modelWeights = modelDirectory.appendingPathComponent("model.safetensors")
         tokenizerWeights = tokenizerDirectory.appendingPathComponent("tokenizer.safetensors")
+        configFile = modelDirectory.appendingPathComponent("config.json")
 
         try FileManager.default.createDirectory(
             at: modelDirectory, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(
             at: tokenizerDirectory, withIntermediateDirectories: true)
-        try Data("{}".utf8).write(
-            to: modelDirectory.appendingPathComponent("config.json"))
+        try Data("{}".utf8).write(to: configFile)
         try Data("{}".utf8).write(
             to: modelDirectory.appendingPathComponent("vocab.json"))
         try Data().write(to: modelWeights)
@@ -212,5 +356,9 @@ private final class LocalBundleFixture {
 
     func remove() {
         try? FileManager.default.removeItem(at: root)
+    }
+
+    func writeConfig(_ json: String) throws {
+        try Data(json.utf8).write(to: configFile)
     }
 }

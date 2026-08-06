@@ -5,14 +5,13 @@ import XCTest
 final class PublicLocalModelLoadingAPITests: XCTestCase {
 
     func testPublicLocalAndPretrainedLoaderSignatures() {
-        let localLoader: (URL, URL, Qwen3TTSConfig) throws -> Qwen3TTSModel = {
-            modelDirectory, tokenizerDirectory, configuration in
+        let localLoader: (URL, URL) throws -> Qwen3TTSModel = {
+            modelDirectory, tokenizerDirectory in
             try Qwen3TTSModel.fromLocal(
                 modelDirectory: modelDirectory,
-                tokenizerDirectory: tokenizerDirectory,
-                configuration: configuration)
+                tokenizerDirectory: tokenizerDirectory)
         }
-        let governedLocalLoader: (URL, URL, Qwen3TTSConfig) throws -> Qwen3TTSModel = {
+        let fallbackLocalLoader: (URL, URL, Qwen3TTSConfig) throws -> Qwen3TTSModel = {
             modelDirectory, tokenizerDirectory, configuration in
             try Qwen3TTSModel.fromLocal(
                 modelDirectory: modelDirectory,
@@ -26,9 +25,17 @@ final class PublicLocalModelLoadingAPITests: XCTestCase {
                 cacheDir: modelDirectory,
                 tokenizerCacheDir: tokenizerDirectory)
         }
+        let pretrainedEncoderLoader:
+            (URL, URL) async throws -> (Qwen3TTSModel, SpeechTokenizerEncoder) = {
+                modelDirectory, tokenizerDirectory in
+                try await Qwen3TTSModel.fromPretrainedWithEncoder(
+                    cacheDir: modelDirectory,
+                    tokenizerCacheDir: tokenizerDirectory)
+            }
 
         _ = localLoader
-        _ = governedLocalLoader
+        _ = fallbackLocalLoader
         _ = pretrainedLoader
+        _ = pretrainedEncoderLoader
     }
 }

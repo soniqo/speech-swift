@@ -163,30 +163,6 @@ Audio waveform [1, T*1920, 1] at 24kHz
 | On-device | Yes (MLX) | Yes (AVFoundation) |
 | Model size | ~1.7 GB | Built-in |
 
-## Loading Local Model Bundles
-
-Use `fromLocal` when model acquisition and storage are owned by the calling app. It accepts
-separate directories for the main TTS model and the speech-tokenizer codec, validates both
-before model allocation, and never resolves a cache, contacts an endpoint, or downloads files.
-
-```swift
-let model = try Qwen3TTSModel.fromLocal(
-    modelDirectory: ttsDirectory,
-    tokenizerDirectory: speechTokenizerDirectory,
-    configuration: .config(for: .large, bits: 0),
-    wiredMemoryPolicy: .none
-)
-```
-
-The main directory must contain `config.json`, `vocab.json`, and a complete safetensors
-checkpoint. The speech-tokenizer directory must contain its own complete safetensors
-checkpoint. Validation failures are reported as `Qwen3TTSLoadingError` values.
-
-`fromLocal` defaults to `.none`, leaving the process-wide Metal wired-memory limit unchanged.
-`fromPretrained` retains its existing `.pin(fraction: 0.9)` default for source compatibility.
-Apps with a shared resource governor should use `.none` and manage any Metal memory policy
-themselves.
-
 ### Implementation Notes
 
 - **Chunked codec decoding** — Codec frames processed in overlapping chunks (`chunkSize=25, leftContext=10`), reducing O(T²) attention to O(chunk²)
@@ -195,6 +171,35 @@ themselves.
 - **Causal mask in decoder transformer** — Additive causal mask for pre-transformer attention (required for chunked decoding correctness)
 - **Lazy code predictor chain** — 15 sequential codebook predictions use lazy MLXArray (Gumbel-max trick) with a single `eval()` at the end, reducing 15 GPU sync barriers to 1 per timestep
 - **Compiled talker + code predictor** — `compile(shapeless: true)` for the 28-layer talker (growing KV cache); `compile(shapeless: false)` for the 5-layer code predictor (14 fixed cache sizes)
+
+## Loading Local Model Bundles
+
+Use `fromLocal` when model acquisition and storage are owned by the calling app. It accepts
+separate directories for the main TTS model and the speech-tokenizer codec, validates both,
+and resolves allocation-critical model settings from `config.json` before constructing MLX
+modules. It never resolves a cache, contacts an endpoint, or downloads files.
+
+```swift
+let model = try Qwen3TTSModel.fromLocal(
+    modelDirectory: ttsDirectory,
+    tokenizerDirectory: speechTokenizerDirectory,
+    wiredMemoryPolicy: .none
+)
+```
+
+The main directory must contain `config.json`, `vocab.json`, and a complete safetensors
+checkpoint. The speech-tokenizer directory must contain its own complete safetensors
+checkpoint. Model size, quantization bits, group size, and architecture fields present in
+`config.json` are authoritative. An optional `configuration` argument can supply custom
+speech-tokenizer decoder settings and a model-size fallback for legacy bundles. Malformed or
+contradictory metadata fails with a typed
+`Qwen3TTSLoadingError.invalidConfiguration` before model allocation.
+
+`fromLocal` defaults to `.none`, leaving the process-wide Metal wired-memory limit unchanged.
+`fromPretrained` retains its existing `.pin(fraction: 0.9)` default for source compatibility.
+Both `fromPretrained` and `fromPretrainedWithEncoder` accept a separate `tokenizerCacheDir`.
+Apps with a shared resource governor should use `.none` and manage any Metal memory policy
+themselves.
 
 ## Streaming Synthesis
 

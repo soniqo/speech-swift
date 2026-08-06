@@ -1734,6 +1734,9 @@ public enum Qwen3TTSLoadingError: Error, Equatable, LocalizedError, Sendable {
     /// A model directory has no complete safetensors checkpoint.
     case weightsUnavailable(URL)
 
+    /// A bundle's `config.json` is malformed, contradictory, or unsupported.
+    case invalidConfiguration(URL, reason: String)
+
     /// The requested Metal wired-memory fraction is not finite or is outside `(0, 1]`.
     case invalidWiredMemoryFraction(Double)
 
@@ -1749,6 +1752,8 @@ public enum Qwen3TTSLoadingError: Error, Equatable, LocalizedError, Sendable {
             return "Required Qwen3-TTS file is missing or is not a regular file: \(url.path)"
         case .weightsUnavailable(let url):
             return "No complete Qwen3-TTS safetensors checkpoint found in: \(url.path)"
+        case .invalidConfiguration(let url, let reason):
+            return "Invalid Qwen3-TTS configuration at \(url.path): \(reason)"
         case .invalidWiredMemoryFraction(let fraction):
             return "Qwen3-TTS wired-memory fraction must be finite and in (0, 1], got: \(fraction)"
         }
@@ -1774,9 +1779,9 @@ public extension Qwen3TTSModel {
     ) async throws -> Qwen3TTSModel {
         progressHandler?(0.05, "Preparing download...")
 
-        // Auto-detect model size and quantization from model ID
+        // The model ID is a size fallback for legacy bundles that omit architecture metadata.
+        // Quantization always comes from config.json; its absence means an unquantized bundle.
         let detectedSize = TTSModelSize.detect(from: modelId)
-        var detectedBits = TTSModelSize.detectBits(from: modelId)
 
         // Download main model weights
         let mainCacheDir = try cacheDir ?? HuggingFaceDownloader.getCacheDirectory(for: modelId)
@@ -1812,18 +1817,7 @@ public extension Qwen3TTSModel {
                 })
         }
 
-        // Parse config.json for speaker config and quantization fallback
-        let configPath = mainCacheDir.appendingPathComponent("config.json")
-        if FileManager.default.fileExists(atPath: configPath.path) {
-            if let data = try? Data(contentsOf: configPath),
-               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let quantConfig = json["quantization_config"] as? [String: Any],
-               let configBits = quantConfig["bits"] as? Int {
-                detectedBits = configBits
-            }
-        }
-
-        let ttsConfig = Qwen3TTSConfig.config(for: detectedSize, bits: detectedBits)
+        let ttsConfig = Qwen3TTSConfig.config(for: detectedSize, bits: 0)
         return try fromLocal(
             modelDirectory: mainCacheDir,
             tokenizerDirectory: resolvedTokenizerCacheDir,
@@ -1839,19 +1833,22 @@ public extension Qwen3TTSModel {
     ///
     /// The main model directory must contain `config.json`, `vocab.json`, and a complete
     /// safetensors checkpoint. The tokenizer directory must contain its own complete
-    /// safetensors checkpoint.
+    /// safetensors checkpoint. Model architecture and quantization are resolved from the
+    /// main bundle's `config.json` before any MLX modules are allocated.
     ///
     /// - Parameters:
     ///   - modelDirectory: Directory containing the talker, code predictor, speaker encoder,
     ///     text tokenizer, and model configuration.
     ///   - tokenizerDirectory: Directory containing the speech-tokenizer codec weights.
-    ///   - configuration: Architecture and quantization configuration for the local checkpoint.
+    ///   - configuration: Optional speech-tokenizer decoder configuration and model-size
+    ///     fallback for legacy bundles. Bundle architecture and quantization metadata take
+    ///     precedence.
     ///   - wiredMemoryPolicy: Whether loading may change the process-wide Metal wired limit.
     ///   - progressHandler: Optional loading progress callback.
     static func fromLocal(
         modelDirectory: URL,
         tokenizerDirectory: URL,
-        configuration: Qwen3TTSConfig,
+        configuration: Qwen3TTSConfig? = nil,
         wiredMemoryPolicy: Qwen3TTSWiredMemoryPolicy = .none,
         progressHandler: ((Double, String) -> Void)? = nil
     ) throws -> Qwen3TTSModel {
@@ -1863,8 +1860,11 @@ public extension Qwen3TTSModel {
 
         let configPath = modelDirectory.appendingPathComponent("config.json")
         let vocabPath = modelDirectory.appendingPathComponent("vocab.json")
-        let model = Qwen3TTSModel(config: configuration)
-        model.speakerConfig = try? parseSpeakerConfig(from: configPath)
+        let resolvedConfiguration = try resolveLocalConfiguration(
+            from: configPath,
+            fallback: configuration)
+        let model = Qwen3TTSModel(config: resolvedConfiguration)
+        model.speakerConfig = try parseSpeakerConfig(from: configPath)
 
         progressHandler?(0.15, "Loading tokenizer...")
         let tokenizer = Qwen3Tokenizer()
@@ -1876,7 +1876,7 @@ public extension Qwen3TTSModel {
             talker: model.talker,
             codePredictor: model.codePredictor,
             from: modelDirectory,
-            castFloat16ToBFloat16: configuration.talker.bits == 0)
+            castFloat16ToBFloat16: resolvedConfiguration.talker.bits == 0)
         try TTSWeightLoader.loadSpeakerEncoderWeights(
             into: model.speakerEncoder, from: modelDirectory)
 
