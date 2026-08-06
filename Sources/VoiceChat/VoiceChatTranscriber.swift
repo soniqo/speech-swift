@@ -29,6 +29,13 @@ public final class VoiceChatTranscriber {
     public init(perception: VoiceChatPerception, weights: [String: MLXArray]) throws {
         self.perception = perception
 
+        guard let vocabularyURL = Bundle.module.url(
+            forResource: "rnnt_vocab", withExtension: "json") else {
+            throw VoiceChatLoadError.unexpectedKeys(["bundled rnnt_vocab.json"])
+        }
+        let vocabulary = try JSONDecoder().decode(
+            [String].self, from: Data(contentsOf: vocabularyURL))
+
         guard let rawFilters = weights["preprocessor.featurizer.fb"],
               let rawWindow = weights["preprocessor.featurizer.window"]
         else { throw VoiceChatLoadError.unexpectedKeys(["preprocessor.featurizer.*"]) }
@@ -39,12 +46,12 @@ public final class VoiceChatTranscriber {
         self.filterbank = rawFilters.asType(.float32).squeezed(axis: 0).transposed(1, 0)
 
         // The stored window is 400 long against a 512-point FFT, so centre it.
-        var padded = MLXArray.zeros([Self.nFFT], dtype: .float32)
+        let padded = MLXArray.zeros([Self.nFFT], dtype: .float32)
         let start = (Self.nFFT - Self.winLength) / 2
         padded[start ..< (start + Self.winLength)] = rawWindow.asType(.float32)
         self.window = padded
 
-        self.rnnt = try RNNTHead(weights: weights)
+        self.rnnt = try RNNTHead(weights: weights, vocabulary: vocabulary)
     }
 
     /// Log-mel features matching NeMo's AudioToMelSpectrogramPreprocessor.
@@ -70,6 +77,7 @@ public final class VoiceChatTranscriber {
 
     /// Transcribe 16 kHz mono samples.
     public func transcribe(_ samples: [Float]) -> String {
+        guard !samples.isEmpty else { return "" }
         let mel = logMel(samples)
         let hidden = perception.encoder(mel)     // (1, T, 1024), pre-projection
         eval(hidden)
@@ -94,10 +102,11 @@ final class RNNTHead {
     private let encW: MLXArray, encB: MLXArray
     private let predW: MLXArray, predB: MLXArray
     private let outW: MLXArray, outB: MLXArray
+    private let vocabulary: [String]
     private let hidden = 640
     private let maxSymbolsPerFrame = 10
 
-    init(weights: [String: MLXArray]) throws {
+    init(weights: [String: MLXArray], vocabulary: [String]) throws {
         func need(_ key: String) throws -> MLXArray {
             guard let value = weights[key] else { throw VoiceChatLoadError.unexpectedKeys([key]) }
             return value.asType(.float32)
@@ -132,6 +141,7 @@ final class RNNTHead {
         encW = try dense("joint.enc.weight");  encB = try need("joint.enc.bias")
         predW = try dense("joint.pred.weight"); predB = try need("joint.pred.bias")
         outW = try dense("joint.joint_net.2.weight"); outB = try need("joint.joint_net.2.bias")
+        self.vocabulary = vocabulary
     }
 
     /// One LSTM step. PyTorch packs gates as [input, forget, cell, output].
@@ -180,21 +190,17 @@ final class RNNTHead {
                 emitted += 1
             }
         }
-        return VoiceChatTranscriber.detokenize(tokens)
+        return detokenize(tokens)
+    }
+
+    private func detokenize(_ tokens: [Int]) -> String {
+        tokens.compactMap { $0 < vocabulary.count ? vocabulary[$0] : nil }
+            .joined()
+            .replacingOccurrences(of: "\u{2581}", with: " ")
+            .trimmingCharacters(in: .whitespaces)
     }
 }
 
 public extension VoiceChatTranscriber {
     static var blankIndex: Int { blank }
-
-    /// Vocabulary loaded from the bundle, if present. Falls back to token ids.
-    nonisolated(unsafe) static var vocabulary: [String] = []
-
-    static func detokenize(_ tokens: [Int]) -> String {
-        guard !vocabulary.isEmpty else { return tokens.map(String.init).joined(separator: " ") }
-        return tokens.compactMap { $0 < vocabulary.count ? vocabulary[$0] : nil }
-            .joined()
-            .replacingOccurrences(of: "\u{2581}", with: " ")
-            .trimmingCharacters(in: .whitespaces)
-    }
 }

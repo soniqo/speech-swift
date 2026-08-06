@@ -1,17 +1,17 @@
 import ArgumentParser
+import AudioCommon
 import Darwin
 import Foundation
 import MLX
 import MLXNN
 import VoiceChat
 
-/// Benchmarks the VoiceChat perception front end: how long the streaming
+/// Benchmarks the VoiceChat perception front end or runs the complete
+/// duplex speech-to-speech pipeline over a real input file.
+///
+/// The default mode measures how long the streaming
 /// FastConformer plus modality projection take to turn audio into language-model
 /// embeddings, at a range of utterance lengths.
-///
-/// Measures the encode path only. The language backbone and the duplex loop are
-/// separate concerns with separate cost profiles, and mixing them into one
-/// number hides which half is slow.
 ///
 /// Real-time factor is the figure that matters for a duplex model: the encoder
 /// runs continuously while the user speaks, so anything at or above 1.0 means
@@ -20,7 +20,7 @@ import VoiceChat
 struct VoiceChatBench: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "voicechat-bench",
-        abstract: "Benchmark VoiceChat perception encode latency and real-time factor."
+        abstract: "Benchmark VoiceChat perception or run complete speech-to-speech inference."
     )
 
     @Option(name: .shortAndLong, help: "Path to an exported bundle directory containing encoder/.")
@@ -48,20 +48,58 @@ struct VoiceChatBench: AsyncParsableCommand {
     @Flag(name: .long, help: "Parity-check the language backbone instead of the encoder. Input key `tokens`, output key `logits`.")
     var llm = false
 
-    /// Resident set size of this process, in bytes.
+    @Option(name: .long, help: "Run complete speech-to-speech inference on this audio file.")
+    var e2eAudio: String?
+
+    @Option(name: .long, help: "Write the complete model response as a 22.05 kHz WAV.")
+    var responseOutput: String?
+
+    @Option(name: .long, help: "Silent tail after E2E input, in seconds.")
+    var tailSeconds: Double = 6
+
+    @Option(name: .long, help: "Input frames per E2E streaming push (one frame is 80 ms).")
+    var chunkFrames: Int = 1
+
+    @Flag(name: .long, help: "Force BOS at the end of E2E input for controlled tests.")
+    var forceTurnAtEnd = false
+
+    private struct ProcessMemory {
+        let residentBytes: UInt64
+        let peakResidentBytes: UInt64
+        let physicalFootprintBytes: UInt64
+        let peakPhysicalFootprintBytes: UInt64
+    }
+
+    /// Current and kernel-recorded peak process memory, in bytes.
     ///
-    /// Peak GPU memory alone understates what a duplex model costs: weights are
-    /// mapped into the process, so RSS is what actually decides whether a
-    /// bundle fits alongside everything else on the machine.
-    private func residentBytes() -> UInt64 {
-        var info = mach_task_basic_info()
-        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size / MemoryLayout<natural_t>.size)
+    /// RSS is retained because it is widely reported. Physical footprint is
+    /// also shown because macOS RSS can omit file-backed MLX mappings and thus
+    /// understate the unified-memory pressure that determines whether the
+    /// complete bundle fits on a machine.
+    private func processMemory() -> ProcessMemory {
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(
+            MemoryLayout<task_vm_info_data_t>.size
+                / MemoryLayout<integer_t>.size)
         let result = withUnsafeMutablePointer(to: &info) {
             $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
-                task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
+                task_info(
+                    mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
             }
         }
-        return result == KERN_SUCCESS ? info.resident_size : 0
+        guard result == KERN_SUCCESS else {
+            return ProcessMemory(
+                residentBytes: 0, peakResidentBytes: 0,
+                physicalFootprintBytes: 0, peakPhysicalFootprintBytes: 0)
+        }
+        let resident = UInt64(info.resident_size)
+        let footprint = UInt64(info.phys_footprint)
+        return ProcessMemory(
+            residentBytes: resident,
+            peakResidentBytes: max(resident, UInt64(info.resident_size_peak)),
+            physicalFootprintBytes: footprint,
+            peakPhysicalFootprintBytes: max(
+                footprint, UInt64(max(0, info.ledger_phys_footprint_peak))))
     }
 
     private func pad(_ text: String, _ width: Int) -> String {
@@ -99,6 +137,11 @@ struct VoiceChatBench: AsyncParsableCommand {
         // stdout loses every line if a later stage crashes.
         setvbuf(stdout, nil, _IONBF, 0)
         let root = URL(fileURLWithPath: model)
+        if let e2eAudio {
+            try await runCompletePipeline(
+                root: root, audioURL: URL(fileURLWithPath: e2eAudio))
+            return
+        }
         // The language backbone is only loaded when asked for: it is 10-19 GB
         // against the encoder's 1.25, so paying for it by default would make
         // every encoder run needlessly slow.
@@ -211,8 +254,8 @@ struct VoiceChatBench: AsyncParsableCommand {
                   + pad(String(format: "%.3f", measurement.msPerEncodedFrame), 12))
         }
 
-        let peakGB = Double(GPU.peakMemory) / 1e9
-        let rssGB = Double(residentBytes()) / 1e9
+        let peakGB = Double(Memory.peakMemory) / 1e9
+        let rssGB = Double(processMemory().residentBytes) / 1e9
         print("")
         print(String(format: "peak GPU memory  %.2f GB", peakGB))
         print(String(format: "resident memory  %.2f GB", rssGB))
@@ -255,6 +298,128 @@ struct VoiceChatBench: AsyncParsableCommand {
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             try encoder.encode(report).write(to: URL(fileURLWithPath: output))
             print("wrote \(output)")
+        }
+    }
+
+    private func runCompletePipeline(root: URL, audioURL: URL) async throws {
+        guard tailSeconds.isFinite,
+              tailSeconds >= 0,
+              tailSeconds <= VoiceChatSession.maximumSilenceSeconds else {
+            throw ValidationError(
+                "--tail-seconds must be between 0 and "
+                    + "\(Int(VoiceChatSession.maximumSilenceSeconds))")
+        }
+        guard chunkFrames > 0, chunkFrames <= 128 else {
+            throw ValidationError("--chunk-frames must be between 1 and 128")
+        }
+        let samples = try AudioFileLoader.load(
+            url: audioURL, targetSampleRate: VoiceChatSession.inputSampleRate)
+        let baselineMemory = processMemory()
+        print("loading complete VoiceChat bundle...")
+        let loadStarted = DispatchTime.now().uptimeNanoseconds
+        let fullModel = try await VoiceChatModel.load(from: root)
+        let session = try await fullModel.startSession()
+        let loadElapsed = Double(
+            DispatchTime.now().uptimeNanoseconds - loadStarted) / 1_000_000
+        let loadedMemory = processMemory()
+        if forceTurnAtEnd {
+            await session.forceTurn(
+                atFrame: samples.count / VoiceChatSession.inputSamplesPerFrame)
+        }
+
+        let chunk = VoiceChatSession.inputSamplesPerFrame * chunkFrames
+        var firstTextMilliseconds: Double?
+        var firstAudioMilliseconds: Double?
+
+        func recordFirstSpeaking(events: [VoiceChatFrameEvent]) {
+            guard firstAudioMilliseconds == nil,
+                  let first = events.first(where: \.speaking) else { return }
+            // Input preparation + encoder + language decision is the point at
+            // which the first spoken text token exists. Adding the EAR-TTS and
+            // codec stage gives the first playable output frame.
+            let textMilliseconds = first.perceptionLatencyMilliseconds
+                + first.decisionLatencyMilliseconds
+            firstTextMilliseconds = textMilliseconds
+            firstAudioMilliseconds = textMilliseconds
+                + first.synthesisLatencyMilliseconds
+        }
+
+        let started = DispatchTime.now().uptimeNanoseconds
+        for start in stride(from: 0, to: samples.count, by: chunk) {
+            let events = try await session.pushAudio(
+                Array(samples[start ..< min(samples.count, start + chunk)]))
+            recordFirstSpeaking(events: events)
+        }
+        let silenceSamples = Int(
+            (tailSeconds * Double(VoiceChatSession.inputSampleRate)).rounded())
+        let silence = [Float](repeating: 0, count: silenceSamples)
+        for start in stride(from: 0, to: silence.count, by: chunk) {
+            let events = try await session.pushAudio(
+                Array(silence[start ..< min(silence.count, start + chunk)]))
+            recordFirstSpeaking(events: events)
+        }
+        let elapsed = Double(
+            DispatchTime.now().uptimeNanoseconds - started) / 1_000_000
+
+        let reply = await session.reply()
+        let userTranscript = await session.userTranscript()
+        let summary = await session.summary()
+        let streamingMemory = processMemory()
+        let timelineMilliseconds = Double(summary.frames * VoiceChatSession.frameMilliseconds)
+
+        print(String(format: "load + warmup   %.0f ms", loadElapsed))
+        print("user transcript \(String(reflecting: userTranscript))")
+        print("model response  \(String(reflecting: reply))")
+        print("frames          \(summary.frames) (\(summary.speakingFrames) speaking)")
+        if let first = summary.firstSpeechMilliseconds {
+            print(String(format: "opened turn     %.0f ms", first))
+        }
+        if let firstTextMilliseconds, let firstAudioMilliseconds {
+            print(String(
+                format: "first response  text %.1f ms  audio %.1f ms",
+                firstTextMilliseconds, firstAudioMilliseconds))
+        }
+        print(String(
+            format: "perception      p50 %.1f ms  p95 %.1f ms",
+            summary.perceptionP50Milliseconds, summary.perceptionP95Milliseconds))
+        print(String(
+            format: "decision        p50 %.1f ms  p95 %.1f ms",
+            summary.decisionP50Milliseconds, summary.decisionP95Milliseconds))
+        print(String(
+            format: "synthesis       p50 %.1f ms  p95 %.1f ms",
+            summary.synthesisP50Milliseconds, summary.synthesisP95Milliseconds))
+        print(String(
+            format: "total/frame     p50 %.1f ms  p95 %.1f ms",
+            summary.totalP50Milliseconds, summary.totalP95Milliseconds))
+        print(String(
+            format: "wall / timeline %.0f / %.0f ms  RTF %.2f",
+            elapsed, timelineMilliseconds,
+            elapsed / max(1, timelineMilliseconds)))
+        print("real time       \(summary.realTime ? "yes" : "NO")")
+        print(String(
+            format: "streaming RSS   %.2f GB current  %.2f GB peak  (+%.2f GB)",
+            Double(streamingMemory.residentBytes) / 1e9,
+            Double(streamingMemory.peakResidentBytes) / 1e9,
+            Double(streamingMemory.peakResidentBytes - baselineMemory.residentBytes) / 1e9))
+        print(String(
+            format: "memory pressure %.2f GB current  %.2f GB peak  (+%.2f GB)",
+            Double(streamingMemory.physicalFootprintBytes) / 1e9,
+            Double(streamingMemory.peakPhysicalFootprintBytes) / 1e9,
+            Double(streamingMemory.peakPhysicalFootprintBytes
+                - baselineMemory.physicalFootprintBytes) / 1e9))
+        print(String(
+            format: "MLX GPU peak    %.2f GB  loaded RSS %.2f GB",
+            Double(Memory.peakMemory) / 1e9,
+            Double(loadedMemory.residentBytes) / 1e9))
+
+        if let responseOutput {
+            let waveform = await session.renderedAudio()
+            let url = URL(fileURLWithPath: responseOutput)
+            try WAVWriter.write(
+                samples: waveform,
+                sampleRate: VoiceChatSession.outputSampleRate,
+                to: url)
+            print("wrote \(url.path)")
         }
     }
 }

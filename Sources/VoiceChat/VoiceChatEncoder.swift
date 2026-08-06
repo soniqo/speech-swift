@@ -140,7 +140,7 @@ final class RelPositionalEncoding {
         let dim = MLXArray(stride(from: Float(0), to: Float(dModel), by: 2).map { $0 })
         let inv = MLX.exp(dim * MLXArray(-(Foundation.log(10000.0) / Double(dModel))).asType(.float32))
         let angles = positions * inv
-        var table = MLXArray.zeros([span, dModel])
+        let table = MLXArray.zeros([span, dModel])
         table[0..., .stride(by: 2)] = MLX.sin(angles)
         table[0..., .stride(from: 1, by: 2)] = MLX.cos(angles)
         return table.expandedDimensions(axis: 0).asType(dtype)

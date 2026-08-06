@@ -272,17 +272,22 @@ let package = Package(
             dependencies: [
                 "AudioCommon",
                 "MLXCommon",
+                .product(name: "Hub", package: "swift-transformers"),
                 .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "MLXNN", package: "mlx-swift"),
                 .product(name: "MLXFast", package: "mlx-swift"),
                 .product(name: "MLXFFT", package: "mlx-swift"),
+                .product(name: "MLXRandom", package: "mlx-swift"),
                 .product(name: "MLXLLM", package: "mlx-swift-lm"),
                 .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
-            ]
+                .product(name: "Tokenizers", package: "swift-transformers"),
+            ],
+            resources: [.process("Resources")]
         ),
         .executableTarget(
             name: "VoiceChatBenchmark",
             dependencies: [
+                "AudioCommon",
                 "VoiceChat",
                 .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "MLXNN", package: "mlx-swift"),

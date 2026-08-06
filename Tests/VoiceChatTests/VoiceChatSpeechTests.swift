@@ -54,6 +54,49 @@ final class VoiceChatSpeechTests: XCTestCase {
             0.08, accuracy: 1e-12)
     }
 
+    func testPublishedMaskGITScheduleUsesEightProgressiveIterations() {
+        XCTAssertEqual(
+            VoiceChatSpeechDecoder.maskGITAssignmentCounts(),
+            [0, 0, 0, 1, 1, 3, 4, 22])
+        XCTAssertEqual(
+            VoiceChatSpeechDecoder.maskGITAssignmentCounts().reduce(0, +),
+            31)
+    }
+
+    func testDefaultPromptDoesNotBiasTurnTimingWithGreetingInstruction() {
+        XCTAssertFalse(
+            VoiceChatSession.defaultSystemPrompt.localizedCaseInsensitiveContains("greet"))
+        XCTAssertTrue(
+            VoiceChatSession.greetingSystemPrompt.localizedCaseInsensitiveContains("greet"))
+    }
+
+    func testSessionRejectsInvalidSamplingParameters() {
+        XCTAssertNoThrow(try VoiceChatSession.validate(
+            sampling: .init(), speech: .init()))
+        XCTAssertThrowsError(try VoiceChatSession.validate(
+            sampling: .init(temperature: .nan), speech: .init()))
+        XCTAssertThrowsError(try VoiceChatSession.validate(
+            sampling: .init(topP: 0), speech: .init()))
+        XCTAssertThrowsError(try VoiceChatSession.validate(
+            sampling: .init(repetitionPenalty: 0), speech: .init()))
+        XCTAssertThrowsError(try VoiceChatSession.validate(
+            sampling: .init(), speech: .init(topP: 1.1)))
+        XCTAssertThrowsError(try VoiceChatSession.validate(
+            sampling: .init(), speech: .init(noise: -.infinity)))
+    }
+
+    func testSilenceDurationValidationCannotTrapOnNonFiniteInput() {
+        XCTAssertEqual(
+            try VoiceChatSession.silenceSampleCount(seconds: 0.08),
+            VoiceChatSession.inputSamplesPerFrame)
+        for invalid in [-1.0, Double.infinity, Double.nan] {
+            XCTAssertThrowsError(
+                try VoiceChatSession.silenceSampleCount(seconds: invalid))
+        }
+        XCTAssertThrowsError(try VoiceChatSession.silenceSampleCount(
+            seconds: VoiceChatSession.maximumSilenceSeconds + 0.01))
+    }
+
     func testPeriodicHannMatchesTorchConvention() {
         let window = VoiceChatCodec.periodicHann(16).asArray(Float.self)
         XCTAssertEqual(window.count, 16)

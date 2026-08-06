@@ -44,10 +44,39 @@ public final class VoiceChatCodec {
             guard let value = promoted["tts_model.audio_codec.prvq.mus_list.\(index)"] else {
                 throw VoiceChatLoadError.unexpectedKeys(["audio_codec.prvq.mus_list.\(index)"])
             }
+            guard value.shape == [Self.codebookSize, Self.latentSize] else {
+                throw VoiceChatLoadError.unexpectedKeys([
+                    "audio_codec.prvq.mus_list.\(index) shape \(value.shape)",
+                ])
+            }
             return value
         }
         guard let silence = weights["tts_model.codec_silence_tokens"] else {
             throw VoiceChatLoadError.unexpectedKeys(["tts_model.codec_silence_tokens"])
+        }
+        guard silence.shape == [Self.quantizers] else {
+            throw VoiceChatLoadError.unexpectedKeys([
+                "tts_model.codec_silence_tokens shape \(silence.shape)",
+            ])
+        }
+
+        let directLayers = Set([0, 4, 8, 12])
+        let residualSuffixes = [
+            "dwconv.weight", "dwconv.bias", "norm.weight", "norm.bias",
+            "pwconv1.weight", "pwconv1.bias", "pwconv2.weight", "pwconv2.bias",
+        ]
+        var missingDecoderWeights: [String] = []
+        for index in 0 ..< 13 {
+            let layer = "tts_model.audio_codec.decoder.layers.\(index)"
+            let required = directLayers.contains(index)
+                ? ["weight"]
+                : residualSuffixes
+            missingDecoderWeights += required.compactMap {
+                promoted["\(layer).\($0)"] == nil ? "\(layer).\($0)" : nil
+            }
+        }
+        guard missingDecoderWeights.isEmpty else {
+            throw VoiceChatLoadError.unexpectedKeys(missingDecoderWeights)
         }
 
         self.weights = promoted
@@ -72,7 +101,9 @@ public final class VoiceChatCodec {
     /// `(B, T, 31)` integer codes → `(B, T, 512)` codec latents.
     public func dequantize(_ codes: MLXArray) -> MLXArray {
         precondition(codes.shape.count == 3 && codes.dim(-1) == Self.quantizers)
-        let ids = MLX.minimum(codes.asType(.int32), MLXArray(Int32(Self.codebookSize - 1)))
+        let ids = MLX.minimum(
+            MLX.maximum(codes.asType(.int32), MLXArray(Int32(0))),
+            MLXArray(Int32(Self.codebookSize - 1)))
         var latent = MLXArray.zeros(
             [codes.dim(0), codes.dim(1), Self.latentSize], dtype: .float32)
         for index in 0 ..< Self.quantizers {
@@ -109,8 +140,8 @@ public final class VoiceChatCodec {
 
     private func decoderLayer(_ index: Int, _ x: MLXArray) -> MLXArray {
         let prefix = "tts_model.audio_codec.decoder.layers.\(index)"
-        if let weight = weights["\(prefix).weight"] {
-            let stride = [0: 9, 4: 7, 8: 7, 12: 1][index]!
+        if let stride = [0: 9, 4: 7, 8: 7, 12: 1][index],
+           let weight = weights["\(prefix).weight"] {
             if stride == 1 {
                 // NeMo Conv1d [out, in, kernel] → MLX [out, kernel, in].
                 return MLX.conv1d(

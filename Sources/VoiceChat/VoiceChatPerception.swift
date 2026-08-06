@@ -87,7 +87,7 @@ public enum VoiceChatLoadError: Error, CustomStringConvertible {
         case .missingWeights(let url):
             return "no model.safetensors at \(url.path)"
         case .unexpectedKeys(let keys):
-            return "bundle contains keys the module tree has no slot for: \(keys.prefix(5).joined(separator: ", "))"
+            return "bundle/model structure mismatch: \(keys.prefix(5).joined(separator: ", "))"
         }
     }
 }
@@ -127,9 +127,17 @@ public extension VoiceChatPerception {
         guard FileManager.default.fileExists(atPath: weightsURL.path) else {
             throw VoiceChatLoadError.missingWeights(weightsURL)
         }
+        return try load(
+            configuration: config,
+            weights: MLX.loadArrays(url: weightsURL))
+    }
 
+    static func load(
+        configuration config: VoiceChatPerceptionConfig,
+        weights incomingWeights: [String: MLXArray]
+    ) throws -> VoiceChatPerception {
         let model = VoiceChatPerception(config)
-        var weights = try MLX.loadArrays(url: weightsURL)
+        var weights = incomingWeights
         weights = weights.filter { key, _ in
             key.hasPrefix("encoder.") || key.hasPrefix("modality_proj.")
         }

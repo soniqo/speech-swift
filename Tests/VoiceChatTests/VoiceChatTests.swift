@@ -148,7 +148,7 @@ final class VoiceChatTests: XCTestCase {
         // The tool-call channel is a separate head the stock model has no slot
         // for; it must survive the load rather than be dropped.
         let head = try XCTUnwrap(llm.functionHead, "function_head missing from the bundle")
-        XCTAssertEqual(head.shape.first, llm.configuration.vocabSize)
+        XCTAssertEqual(head.weight.shape.first, llm.configuration.vocabSize)
 
         // In a quantized bundle the head is stored packed, so the second
         // dimension is hiddenSize scaled by bits/32 rather than hiddenSize.
@@ -157,7 +157,7 @@ final class VoiceChatTests: XCTestCase {
         // hard-coding one — that catches a corrupt head without pinning the
         // test to a single variant.
         let hidden = llm.configuration.hiddenSize
-        let packed = try XCTUnwrap(head.shape.last)
+        let packed = try XCTUnwrap(head.weight.shape.last)
         if packed == hidden {
             return  // dense (fp16 bundle)
         }
@@ -190,10 +190,6 @@ final class VoiceChatTests: XCTestCase {
         let encoderDir = root.appendingPathComponent("encoder")
         let perception = try VoiceChatPerception.load(from: encoderDir)
         let weights = try MLX.loadArrays(url: encoderDir.appendingPathComponent("model.safetensors"))
-
-        let vocabURL = try XCTUnwrap(Bundle.module.url(forResource: "rnnt_vocab", withExtension: "json"))
-        VoiceChatTranscriber.vocabulary = try JSONDecoder().decode(
-            [String].self, from: Data(contentsOf: vocabURL))
 
         let audioURL = try XCTUnwrap(Bundle.module.url(forResource: "fleurs_en", withExtension: "wav"))
         let samples = try loadMono16k(audioURL)

@@ -6,21 +6,23 @@ import MLXNN
 
 /// The Nemotron-H language backbone from the VoiceChat checkpoint.
 ///
-/// The architecture itself comes from `mlx-swift-lm`'s `NemotronHModel` — 56
-/// layers of 27 Mamba2, 25 MLP and 4 attention blocks — so this type only has
-/// to load the exported bundle into it: decode the config, rebuild the
-/// quantized layers with the right per-tensor bit widths, and drop the
-/// tool-call head that the stock model has no slot for.
+/// The architecture is the 56-layer Nemotron-H backbone from `mlx-swift-lm`,
+/// adapted locally so VoiceChat can drive it from fused audio/text embeddings
+/// as well as token ids.
 public final class VoiceChatLanguageModel {
-    public let model: NemotronHModel
+    public let model: VoiceChatNemotronHModel
     public let configuration: NemotronHConfiguration
 
     /// The separate tool-call output projection. It shares the LM head's shape
     /// but is a distinct channel, and `NemotronHModel` knows nothing about it,
     /// so it is kept aside for the duplex runtime to bind.
-    public let functionHead: MLXArray?
+    public let functionHead: VoiceChatMatrix?
 
-    init(model: NemotronHModel, configuration: NemotronHConfiguration, functionHead: MLXArray?) {
+    init(
+        model: VoiceChatNemotronHModel,
+        configuration: NemotronHConfiguration,
+        functionHead: VoiceChatMatrix?
+    ) {
         self.model = model
         self.configuration = configuration
         self.functionHead = functionHead
@@ -36,6 +38,19 @@ public final class VoiceChatLanguageModel {
     /// teacher-forced call, where it cost ~6% divergence from the reference.
     public func callAsFunction(_ tokens: MLXArray, cache: [KVCache]? = nil) -> MLXArray {
         model(tokens, cache: cache ?? newCache())
+    }
+
+    /// Advance one duplex frame from the already-fused input embedding.
+    public func call(
+        embeddings: MLXArray,
+        cache: [KVCache]
+    ) -> (logits: MLXArray, hidden: MLXArray) {
+        model.call(embeddings: embeddings, cache: cache)
+    }
+
+    /// Shared embedding table used by the text and function feedback channels.
+    public func embed(_ tokenIDs: MLXArray) -> MLXArray {
+        model.embed(tokenIDs)
     }
 
     /// A fresh cache: `MambaCache` for the recurrent layers, `KVCacheSimple`
@@ -62,11 +77,24 @@ public extension VoiceChatLanguageModel {
         let quantization = try Self.quantizationSpec(configURL:
             directory.appendingPathComponent("config.json"))
 
-        let model = NemotronHModel(configuration)
+        let model = VoiceChatNemotronHModel(configuration)
         var weights = try MLX.loadArrays(url: weightsURL)
 
-        // Carried in the bundle for the duplex runtime; not part of this tree.
-        let functionHead = weights["function_head.weight"]
+        // Carried outside the module tree because it is a second output channel
+        // over the same hidden state. Keep it packed: dense fp32 would exceed
+        // two gigabytes for this vocabulary.
+        let functionHead: VoiceChatMatrix?
+        if weights["function_head.weight"] != nil {
+            let tuple = quantization.flatMap {
+                $0.perTensor["function_head.weight"]
+                    ?? (groupSize: $0.groupSize, bits: $0.bits)
+            }
+            let spec = tuple.map { QuantizationConfig(groupSize: $0.groupSize, bits: $0.bits) }
+            functionHead = try VoiceChatMatrix(
+                weights: weights, name: "function_head.weight", quantization: spec)
+        } else {
+            functionHead = nil
+        }
         weights = weights.filter { !$0.key.hasPrefix("function_head") }
 
         // `sanitize` swaps conv1d axes only when the last dimension is not 1.
