@@ -51,6 +51,35 @@ final class DiagnosticsContractTests: XCTestCase {
         XCTAssertTrue(combinedSource.contains("AudioLog.modelLoading."))
     }
 
+    func testDiagnosticPrivacySeparatesOperationalAndCallerControlledValues() throws {
+        let modelSource = try source(named: "Qwen3TTS.swift")
+        let iclSource = try source(named: "Qwen3TTS+ICL.swift")
+        let weightSource = try source(named: "TTSWeightLoading.swift")
+
+        XCTAssertTrue(
+            weightSource.contains(#"\(message, privacy: .public)"#),
+            "Package-owned weight diagnostics must not collapse to <private>")
+        XCTAssertTrue(
+            modelSource.contains(#"\(embedTime, privacy: .public)"#),
+            "Package-owned timing values must remain visible")
+        XCTAssertTrue(
+            modelSource.contains(#"\(effectiveLanguage, privacy: .private)"#))
+        XCTAssertTrue(
+            modelSource.contains(#"\(speakerName, privacy: .private)"#))
+        XCTAssertTrue(
+            iclSource.contains(#"\(language, privacy: .private)"#))
+        XCTAssertFalse(modelSource.contains(#"\(text, privacy: .public)"#))
+        XCTAssertFalse(iclSource.contains(#"\(referenceText, privacy: .public)"#))
+    }
+
+    private func source(named name: String) throws -> String {
+        let url = packageRoot
+            .appendingPathComponent("Sources", isDirectory: true)
+            .appendingPathComponent("Qwen3TTS", isDirectory: true)
+            .appendingPathComponent(name)
+        return try String(contentsOf: url, encoding: .utf8)
+    }
+
     private var packageRoot: URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

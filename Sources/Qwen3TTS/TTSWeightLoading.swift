@@ -3,11 +3,14 @@ import MLXCommon
 import MLX
 import MLXNN
 import AudioCommon
+import os
 
-/// Route weight-loading progress through the package's model-loading category.
+/// Route package-owned, non-sensitive weight-loading progress through the
+/// model-loading category. The explicit public privacy keeps this helper's
+/// dynamic string payload from being rendered as `<private>`.
 @inline(__always)
 internal func logLoad(_ message: String) {
-    AudioLog.modelLoading.debug("\(message)")
+    AudioLog.modelLoading.debug("\(message, privacy: .public)")
 }
 
 /// Weight loading for TTS components

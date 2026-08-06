@@ -4,6 +4,7 @@ import MLXNN
 import MLXFast
 import MLXCommon
 import AudioCommon
+import os
 
 // MARK: - ICL Voice Cloning
 
@@ -95,7 +96,7 @@ extension Qwen3TTSModel {
             langId = id
         } else {
             AudioLog.inference.warning(
-                "Unknown language '\(language)', falling back to auto")
+                "Unknown language '\(language, privacy: .private)', falling back to auto")
             return synthesizeWithVoiceCloneICL(
                 text: text, referenceAudio: referenceAudio,
                 referenceSampleRate: referenceSampleRate,
@@ -111,7 +112,7 @@ extension Qwen3TTSModel {
         if let cached = referenceAudioCache.codecRefCodes(for: referenceAudio, sampleRate: referenceSampleRate) {
             refCodes = cached
             AudioLog.inference.debug(
-                "ICL: codec tokens cache hit (\(cached.dim(2)) frames)")
+                "ICL: codec tokens cache hit (\(cached.dim(2), privacy: .public) frames)")
         } else {
             let audio24k = referenceSampleRate == 24000
                 ? referenceAudio
@@ -121,7 +122,7 @@ extension Qwen3TTSModel {
             referenceAudioCache.storeCodecRefCodes(codes, audio: referenceAudio, sampleRate: referenceSampleRate)
             refCodes = codes
             AudioLog.inference.debug(
-                "ICL: encoded \(audio24k.count) samples → \(codes.dim(2)) codec frames")
+                "ICL: encoded \(audio24k.count, privacy: .public) samples → \(codes.dim(2), privacy: .public) codec frames")
         }
 
         // Step 3: Extract speaker embedding (ICL still uses x-vector for speaker conditioning; cached)
@@ -195,7 +196,7 @@ extension Qwen3TTSModel {
             : allCodebooks
         let totalFrames = codesForDecode.dim(2)
         AudioLog.inference.debug(
-            "ICL: decoding \(numFrames) target frames (+ \(trimReference ? refFrames : 0) ref ctx) → \(totalFrames) frames")
+            "ICL: decoding \(numFrames, privacy: .public) target frames (+ \(trimReference ? refFrames : 0, privacy: .public) ref ctx) → \(totalFrames, privacy: .public) frames")
         let fullWaveform = codecDecoder.decode(codes: codesForDecode)
         let t3 = CFAbsoluteTimeGetCurrent()
 
@@ -205,7 +206,7 @@ extension Qwen3TTSModel {
             trimmedWaveform = (cut > 0 && cut < fullWaveform.count)
                 ? Array(fullWaveform.dropFirst(cut)) : fullWaveform
             AudioLog.inference.debug(
-                "ICL: cut \(cut) reference samples (~\(String(format: "%.2f", Double(cut)/24000.0))s, \(refFrames)/\(totalFrames) frames) from output start")
+                "ICL: cut \(cut, privacy: .public) reference samples (~\(String(format: "%.2f", Double(cut)/24000.0), privacy: .public)s, \(refFrames, privacy: .public)/\(totalFrames, privacy: .public) frames) from output start")
         } else {
             trimmedWaveform = fullWaveform
         }
@@ -219,7 +220,7 @@ extension Qwen3TTSModel {
         let audDur = String(format: "%.2f", audioDur)
         let rtf = String(format: "%.2f", (t3-t0)/max(audioDur, 0.001))
         AudioLog.inference.info(
-            "ICL timing: encode=\(encTime)s | generate=\(genTime)s (\(numFrames) steps, \(msPerStep)ms/step) | decode=\(decTime)s | total=\(totTime)s | audio=\(audDur)s | RTF=\(rtf)")
+            "ICL timing: encode=\(encTime, privacy: .public)s | generate=\(genTime, privacy: .public)s (\(numFrames, privacy: .public) steps, \(msPerStep, privacy: .public)ms/step) | decode=\(decTime, privacy: .public)s | total=\(totTime, privacy: .public)s | audio=\(audDur, privacy: .public)s | RTF=\(rtf, privacy: .public)")
 
         return trimmedWaveform
     }

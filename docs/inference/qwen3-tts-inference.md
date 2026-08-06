@@ -211,7 +211,10 @@ streams under the control of the embedding application or command-line tool.
 Warnings report fallbacks, empty generations, safety limits, and inefficient
 batches. Per-generation timing summaries use the `info` level; periodic token,
 decode, cache, and weight-loading progress uses `debug` so normal operation is
-bounded to completion summaries and actionable conditions.
+bounded to completion summaries and actionable conditions. Package-owned
+operational values such as counts, shapes, and timings are marked public so they
+remain useful in unified logs. Caller-controlled language and speaker values
+remain private, and input or reference text is never logged.
 
 ## Streaming Synthesis
 

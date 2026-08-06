@@ -4,6 +4,7 @@ import MLX
 import MLXNN
 import MLXFast
 import AudioCommon
+import os
 
 /// Errors thrown by streaming TTS synthesis.
 public enum TTSError: Error, LocalizedError {
@@ -174,7 +175,7 @@ public class Qwen3TTSModel {
 
         guard let langId = CodecTokens.languageId(for: effectiveLanguage) else {
             AudioLog.inference.warning(
-                "Unknown language '\(effectiveLanguage)', defaulting to English")
+                "Unknown language '\(effectiveLanguage, privacy: .private)', defaulting to English")
             return try synthesize(
                 text: text,
                 language: "english",
@@ -224,7 +225,7 @@ public class Qwen3TTSModel {
         // Stage 4: Codec decode to waveform
         let outputSamples = numFrames * 1920
         AudioLog.inference.debug(
-            "Decoding \(numFrames) frames -> \(outputSamples) samples (\(String(format: "%.1f", Double(outputSamples) / 24000.0))s)")
+            "Decoding \(numFrames, privacy: .public) frames -> \(outputSamples, privacy: .public) samples (\(String(format: "%.1f", Double(outputSamples) / 24000.0), privacy: .public)s)")
         let waveform = codecDecoder.decode(codes: allCodebooks)
         try checkCancellation()
         let t3 = CFAbsoluteTimeGetCurrent()
@@ -239,7 +240,7 @@ public class Qwen3TTSModel {
         let audioDuration = String(format: "%.2f", audioDur)
         let realTimeFactor = String(format: "%.2f", (t3-t0)/audioDur)
         AudioLog.inference.info(
-            "TTS timing: embed=\(embedTime)s | generate=\(generateTime)s (\(numFrames) steps, \(millisecondsPerStep)ms/step) | decode=\(decodeTime)s | total=\(totalTime)s | audio=\(audioDuration)s | RTF=\(realTimeFactor)")
+            "TTS timing: embed=\(embedTime, privacy: .public)s | generate=\(generateTime, privacy: .public)s (\(numFrames, privacy: .public) steps, \(millisecondsPerStep, privacy: .public)ms/step) | decode=\(decodeTime, privacy: .public)s | total=\(totalTime, privacy: .public)s | audio=\(audioDuration, privacy: .public)s | RTF=\(realTimeFactor, privacy: .public)")
 
         return waveform
     }
@@ -271,7 +272,7 @@ public class Qwen3TTSModel {
 
         guard let langId = CodecTokens.languageId(for: language) else {
             AudioLog.inference.warning(
-                "Unknown language '\(language)', defaulting to English")
+                "Unknown language '\(language, privacy: .private)', defaulting to English")
             return synthesizeWithVoiceClone(
                 text: text, referenceAudio: referenceAudio,
                 referenceSampleRate: referenceSampleRate, language: "english", sampling: sampling)
@@ -283,14 +284,16 @@ public class Qwen3TTSModel {
         let speakerEmbed: MLXArray
         if let cached = referenceAudioCache.speakerEmbed(for: referenceAudio, sampleRate: referenceSampleRate) {
             speakerEmbed = cached
-            AudioLog.inference.debug("Speaker embedding: cache hit \(cached.shape)")
+            AudioLog.inference.debug(
+                "Speaker embedding: cache hit \(String(describing: cached.shape), privacy: .public)")
         } else {
             let mels = SpeakerMel.compute(audio: referenceAudio, sampleRate: referenceSampleRate)
             let embed = speakerEncoder(mels)  // [1, 1024]
             eval(embed)
             referenceAudioCache.storeSpeakerEmbed(embed, audio: referenceAudio, sampleRate: referenceSampleRate)
             speakerEmbed = embed
-            AudioLog.inference.debug("Speaker embedding extracted: \(speakerEmbed.shape)")
+            AudioLog.inference.debug(
+                "Speaker embedding extracted: \(String(describing: speakerEmbed.shape), privacy: .public)")
         }
 
         // Stage 1: Prepare text tokens and codec prefix (no speaker token ID — using embedding)
@@ -329,7 +332,7 @@ public class Qwen3TTSModel {
         // Stage 4: Codec decode to waveform
         let outputSamples = numFrames * 1920
         AudioLog.inference.debug(
-            "Decoding \(numFrames) frames -> \(outputSamples) samples (\(String(format: "%.1f", Double(outputSamples) / 24000.0))s)")
+            "Decoding \(numFrames, privacy: .public) frames -> \(outputSamples, privacy: .public) samples (\(String(format: "%.1f", Double(outputSamples) / 24000.0), privacy: .public)s)")
         let waveform = codecDecoder.decode(codes: allCodebooks)
         let t3 = CFAbsoluteTimeGetCurrent()
 
@@ -343,7 +346,7 @@ public class Qwen3TTSModel {
         let audioDuration = String(format: "%.2f", audioDur)
         let realTimeFactor = String(format: "%.2f", (t3-t0)/audioDur)
         AudioLog.inference.info(
-            "Voice clone timing: embed=\(embedTime)s | generate=\(generateTime)s (\(numFrames) steps, \(millisecondsPerStep)ms/step) | decode=\(decodeTime)s | total=\(totalTime)s | audio=\(audioDuration)s | RTF=\(realTimeFactor)")
+            "Voice clone timing: embed=\(embedTime, privacy: .public)s | generate=\(generateTime, privacy: .public)s (\(numFrames, privacy: .public) steps, \(millisecondsPerStep, privacy: .public)ms/step) | decode=\(decodeTime, privacy: .public)s | total=\(totalTime, privacy: .public)s | audio=\(audioDuration, privacy: .public)s | RTF=\(realTimeFactor, privacy: .public)")
 
         return waveform
     }
@@ -597,7 +600,7 @@ public class Qwen3TTSModel {
             if iterIdx % 50 == 0 {
                 let estSec = Double(generatedFirstCodebook.count) / 12.5
                 AudioLog.inference.debug(
-                    "Streaming: \(generatedFirstCodebook.count) tokens (~\(String(format: "%.1f", estSec))s audio)")
+                    "Streaming: \(generatedFirstCodebook.count, privacy: .public) tokens (~\(String(format: "%.1f", estSec), privacy: .public)s audio)")
             }
 
             return true
@@ -607,7 +610,7 @@ public class Qwen3TTSModel {
         if numFrames >= safeMaxTokens && nextToken != Int32(CodecTokens.codecEos) {
             let estSec = Double(numFrames) / 12.5
             AudioLog.inference.warning(
-                "Hit safety limit of \(safeMaxTokens) tokens (~\(String(format: "%.1f", estSec))s audio)")
+                "Hit safety limit of \(safeMaxTokens, privacy: .public) tokens (~\(String(format: "%.1f", estSec), privacy: .public)s audio)")
         }
 
         // Emit remaining frames if any
@@ -745,7 +748,7 @@ public class Qwen3TTSModel {
 
         guard let langId = CodecTokens.languageId(for: language) else {
             AudioLog.inference.warning(
-                "Unknown language '\(language)', defaulting to English")
+                "Unknown language '\(language, privacy: .private)', defaulting to English")
             return synthesizeBatch(texts: texts, language: "english", instruct: instruct, sampling: sampling, maxBatchSize: maxBatchSize)
         }
 
@@ -848,7 +851,7 @@ public class Qwen3TTSModel {
             if wasteRatio > 0.3 {
                 let finishedSteps = frameCounts.map { String($0) }.joined(separator: ", ")
                 AudioLog.inference.warning(
-                    "\(Int(wasteRatio * 100))% padding waste (items finished at: \(finishedSteps) steps). Batch similar-length texts for better efficiency")
+                    "\(Int(wasteRatio * 100), privacy: .public)% padding waste (items finished at: \(finishedSteps, privacy: .public) steps). Batch similar-length texts for better efficiency")
             }
         }
 
@@ -857,14 +860,15 @@ public class Qwen3TTSModel {
         for i in 0..<batchSize {
             let numFrames = frameCounts[i]
             if numFrames == 0 {
-                AudioLog.inference.warning("Batch item \(i): no tokens generated")
+                AudioLog.inference.warning(
+                    "Batch item \(i, privacy: .public): no tokens generated")
                 results.append([])
                 continue
             }
             let codes = allCodebooksList[i]  // [1, 16, Ti]
             let outputSamples = numFrames * 1920
             AudioLog.inference.debug(
-                "Batch item \(i): decoding \(numFrames) frames -> \(outputSamples) samples (\(String(format: "%.1f", Double(outputSamples) / 24000.0))s)")
+                "Batch item \(i, privacy: .public): decoding \(numFrames, privacy: .public) frames -> \(outputSamples, privacy: .public) samples (\(String(format: "%.1f", Double(outputSamples) / 24000.0), privacy: .public)s)")
             let waveform = codecDecoder.decode(codes: codes)
             results.append(waveform)
         }
@@ -879,7 +883,7 @@ public class Qwen3TTSModel {
         let audioDuration = String(format: "%.2f", totalAudio)
         let realTimeFactor = String(format: "%.2f", (t3-t0)/max(totalAudio, 0.001))
         AudioLog.inference.info(
-            "Batch timing: embed=\(embedTime)s | generate=\(generateTime)s (\(totalFrames) total steps, \(batchSize) items) | decode=\(decodeTime)s | total=\(totalTime)s | audio=\(audioDuration)s | RTF=\(realTimeFactor)")
+            "Batch timing: embed=\(embedTime, privacy: .public)s | generate=\(generateTime, privacy: .public)s (\(totalFrames, privacy: .public) total steps, \(batchSize, privacy: .public) items) | decode=\(decodeTime, privacy: .public)s | total=\(totalTime, privacy: .public)s | audio=\(audioDuration, privacy: .public)s | RTF=\(realTimeFactor, privacy: .public)")
 
         return results
     }
@@ -999,13 +1003,13 @@ public class Qwen3TTSModel {
                 let estSec = Double(iterIdx) / 12.5
                 let doneCount = finishedArray.filter { $0 }.count
                 AudioLog.inference.debug(
-                    "Batch: \(iterIdx) steps (~\(String(format: "%.1f", estSec))s), \(doneCount)/\(batchSize) done")
+                    "Batch: \(iterIdx, privacy: .public) steps (~\(String(format: "%.1f", estSec), privacy: .public)s), \(doneCount, privacy: .public)/\(batchSize, privacy: .public) done")
             }
         }
 
         let totalSteps = allCBSteps.count
         AudioLog.inference.debug(
-            "Batch generation done: \(totalSteps) steps, \(batchSize) items")
+            "Batch generation done: \(totalSteps, privacy: .public) steps, \(batchSize, privacy: .public) items")
 
         // Stack all timesteps: [B, 16, T]
         let stepsStacked = stacked(allCBSteps, axis: 0)  // [T, B, 16]
@@ -1310,7 +1314,7 @@ public class Qwen3TTSModel {
 
         guard let config = speakerConfig else {
             AudioLog.inference.warning(
-                "Speaker '\(speakerName)' requested but model has no speaker support. Use the CustomVoice model variant for speaker selection")
+                "Speaker '\(speakerName, privacy: .private)' requested but model has no speaker support. Use the CustomVoice model variant for speaker selection")
             return (nil, language)
         }
 
@@ -1318,7 +1322,7 @@ public class Qwen3TTSModel {
         guard let tokenId = config.speakerIds[normalizedName] else {
             let available = config.availableSpeakers.joined(separator: ", ")
             AudioLog.inference.warning(
-                "Unknown speaker '\(speakerName)'. Available speakers: \(available)")
+                "Unknown speaker '\(speakerName, privacy: .private)'. Available speakers: \(available, privacy: .public)")
             return (nil, language)
         }
 
@@ -1642,7 +1646,7 @@ public class Qwen3TTSModel {
             if iterIdx % 50 == 0 {
                 let estSec = Double(generatedFirstCodebook.count) / 12.5
                 AudioLog.inference.debug(
-                    "Talker: \(generatedFirstCodebook.count) tokens (~\(String(format: "%.1f", estSec))s audio)")
+                    "Talker: \(generatedFirstCodebook.count, privacy: .public) tokens (~\(String(format: "%.1f", estSec), privacy: .public)s audio)")
             }
 
             return true
@@ -1653,12 +1657,12 @@ public class Qwen3TTSModel {
         if numFrames >= safeMaxTokens && nextToken != Int32(CodecTokens.codecEos) {
             let estSec = Double(numFrames) / 12.5
             AudioLog.inference.warning(
-                "Hit safety limit of \(safeMaxTokens) tokens (~\(String(format: "%.1f", estSec))s audio). Increase SamplingConfig.maxTokens if you need longer output")
+                "Hit safety limit of \(safeMaxTokens, privacy: .public) tokens (~\(String(format: "%.1f", estSec), privacy: .public)s audio). Increase SamplingConfig.maxTokens if you need longer output")
         }
 
         let estAudioSec = Double(numFrames) / 12.5
         AudioLog.inference.debug(
-            "Talker done: \(numFrames) codec tokens (~\(String(format: "%.1f", estAudioSec))s audio)")
+            "Talker done: \(numFrames, privacy: .public) codec tokens (~\(String(format: "%.1f", estAudioSec), privacy: .public)s audio)")
 
         // Stack all codebooks: [1, 16, T]
         let codebookArrays = generatedAllCodebooks.map { tokens in
