@@ -3,12 +3,14 @@ import MLXCommon
 import MLX
 import MLXNN
 import AudioCommon
+import os
 
-/// Weight-loading progress logs go to stderr so they don't corrupt a stdout-based
-/// IPC channel (e.g. the speech-studio sidecar's NDJSON protocol).
+/// Route package-owned, non-sensitive weight-loading progress through the
+/// model-loading category. The explicit public privacy keeps this helper's
+/// dynamic string payload from being rendered as `<private>`.
 @inline(__always)
 internal func logLoad(_ message: String) {
-    FileHandle.standardError.write(Data((message + "\n").utf8))
+    AudioLog.modelLoading.debug("\(message, privacy: .public)")
 }
 
 /// Weight loading for TTS components

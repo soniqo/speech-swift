@@ -172,6 +172,50 @@ Audio waveform [1, T*1920, 1] at 24kHz
 - **Lazy code predictor chain** — 15 sequential codebook predictions use lazy MLXArray (Gumbel-max trick) with a single `eval()` at the end, reducing 15 GPU sync barriers to 1 per timestep
 - **Compiled talker + code predictor** — `compile(shapeless: true)` for the 28-layer talker (growing KV cache); `compile(shapeless: false)` for the 5-layer code predictor (14 fixed cache sizes)
 
+## Loading Local Model Bundles
+
+Use `fromLocal` when model acquisition and storage are owned by the calling app. It accepts
+separate directories for the main TTS model and the speech-tokenizer codec, validates both,
+and resolves allocation-critical model settings from `config.json` before constructing MLX
+modules. It never resolves a cache, contacts an endpoint, or downloads files.
+
+```swift
+let model = try Qwen3TTSModel.fromLocal(
+    modelDirectory: ttsDirectory,
+    tokenizerDirectory: speechTokenizerDirectory,
+    wiredMemoryPolicy: .none
+)
+```
+
+The main directory must contain `config.json`, `vocab.json`, and a complete safetensors
+checkpoint. The speech-tokenizer directory must contain its own complete safetensors
+checkpoint. Model size, quantization bits, group size, and architecture fields present in
+`config.json` are authoritative. An optional `configuration` argument can supply custom
+speech-tokenizer decoder settings and a model-size fallback for legacy bundles. Malformed or
+contradictory metadata fails with a typed
+`Qwen3TTSLoadingError.invalidConfiguration` before model allocation.
+
+`fromLocal` defaults to `.none`, leaving the process-wide Metal wired-memory limit unchanged.
+`fromPretrained` retains its existing `.pin(fraction: 0.9)` default for source compatibility.
+Both `fromPretrained` and `fromPretrainedWithEncoder` accept a separate `tokenizerCacheDir`.
+Apps with a shared resource governor should use `.none` and manage any Metal memory policy
+themselves.
+
+## Diagnostics
+
+Qwen3-TTS routes model-loading and inference diagnostics through the package's
+`AudioLog.modelLoading` and `AudioLog.inference` unified-log categories. Its
+diagnostic paths do not write directly to stdout or stderr, leaving those
+streams under the control of the embedding application or command-line tool.
+
+Warnings report fallbacks, empty generations, safety limits, and inefficient
+batches. Per-generation timing summaries use the `info` level; periodic token,
+decode, cache, and weight-loading progress uses `debug` so normal operation is
+bounded to completion summaries and actionable conditions. Package-owned
+operational values such as counts, shapes, and timings are marked public so they
+remain useful in unified logs. Caller-controlled language and speaker values
+remain private, and input or reference text is never logged.
+
 ## Streaming Synthesis
 
 The Talker, Code Predictor, and Mimi decoder are all fully causal, enabling chunk-by-chunk audio emission during generation.
@@ -186,6 +230,20 @@ The Talker, Code Predictor, and Mimi decoder are all fully causal, enabling chun
 1. **First chunk** — emitted after `firstChunkFrames` tokens (default 3, or 1 for low-latency)
 2. **Subsequent chunks** — emitted every `chunkFrames` tokens (default 25 = 2s audio)
 3. **Codec decode** — each chunk runs the Mimi decoder with left-context overlap for quality
+
+### Cooperative Cancellation
+
+The async `SpeechGenerationModel.generate()` path and `synthesizeStream()`
+cooperate with Swift task cancellation. Autoregressive inference checks for
+cancellation before every codec-token step and again before and after codec
+decode. Once cancellation is observed at a checkpoint, generation throws
+`CancellationError` instead of yielding or returning a successful final
+result.
+
+Cancellation latency is bounded to the currently executing token step or
+codec decode; MLX and Metal kernels already in flight cannot be preempted.
+The synchronous `synthesize()` and `synthesizeBatch()` APIs retain their
+existing non-throwing behavior and are not task-cancellation entry points.
 
 ### Zero-Pad Decode
 
