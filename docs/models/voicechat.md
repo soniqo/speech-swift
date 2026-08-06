@@ -1,13 +1,15 @@
-# VoiceChat 11B Perception
+# VoiceChat 11B
 
-`VoiceChat` is the native MLX Swift implementation of the speech-understanding
-half of `nvidia/NVIDIA-NemotronLabs-VoiceChat-11B`: a streaming FastConformer
-encoder, the projection that bridges it into the language model, and the
-Nemotron-H hybrid backbone.
+`VoiceChat` is the native MLX Swift implementation of the verified on-device
+pieces of `nvidia/NVIDIA-NemotronLabs-VoiceChat-11B`: a streaming
+FastConformer encoder, the projection that bridges it into the language model,
+the Nemotron-H hybrid backbone, and the decoder half of the 22.05 kHz neural
+audio codec.
 
-It does **not** include the speech-synthesis half. The TTS decoder, the audio
-codec and the full-duplex loop are not implemented, so this target understands
-speech and produces text — it cannot hold a spoken conversation.
+The EAR-TTS code generator and the full-duplex orchestration are not yet ported
+to Swift. The target can understand speech and produce text, and it can decode
+externally generated VoiceChat codec codes into waveform audio; it cannot yet
+hold a complete spoken conversation by itself.
 
 ## Model contract
 
@@ -16,6 +18,8 @@ speech and produces text — it cannot hold a spoken conversation.
 | License | OpenMDW 1.1 (commercial use permitted) |
 | Input | mono Float32 PCM at 16 kHz, 128 log-mel bins, 10 ms hop |
 | Encoder output | 80 ms frames, projected to the language model's 4,480 hidden dims |
+| Codec input | 31 RVQ codes per 80 ms frame |
+| Codec output | mono Float32 PCM at 22.05 kHz, exactly 1,764 samples per frame |
 | Language backbone | 56 layers — 27 Mamba2, 25 MLP, 4 attention |
 | Vocabulary | 131,072 tokens |
 | Context | 131,072 tokens; encoder attends 70 frames left, 0 right |
@@ -35,6 +39,19 @@ and never grows, while the four attention layers add roughly 16 KB per frame.
 
 The modality adapter in the source config is an `IdentityConnector`, so a
 single `Linear` of 1,024 to 4,480 is the entire bridge between the two halves.
+
+### Codec decoder
+
+The decoder sums one 512-dimensional entry from each of 31 residual codebooks,
+then upsamples by 9 x 7 x 7. Its final 18 channels are nine magnitudes and nine
+phases for a 16-point ISTFT; treating them as real and imaginary channels
+produces loud noise while still returning a correctly shaped waveform.
+
+The implementation preserves the other checkpoint-specific details that fail
+quietly: causal left-only ConvNeXt padding, a periodic Hann window, DC and
+Nyquist bins constrained to be real, and a six-sample ISTFT trim. Codec weights
+are stored dense fp16 in quantized bundles and promoted to fp32 for decoding,
+matching the verified Python path.
 
 ## Four things a stock Conformer gets wrong
 
@@ -67,13 +84,14 @@ than against themselves:
 |---|---|---|
 | Encoder | 0.99999934 | 0.110% |
 | Language backbone | 0.99999833 | 0.179% |
+| Codec decoder | canonical silence RMS below 1e-5 | model-backed Swift canary |
 
 For scale, the same weights in Python at float32 versus float16 differ by
 0.184%, so both are at the precision floor.
 
 ## Quantization
 
-Measured on the text channel against the FP16 bundle:
+Measured on the text channel against the FP16 understanding bundle:
 
 | Variant | Size | Top-1 agreement | KL (nats) |
 |---|---|---|---|
@@ -88,6 +106,12 @@ arguments, where one divergent token invalidates the result.
 
 The INT5 build holds `lm_head` and `function_head` at 8 bits. That costs
 0.44 GB and buys 2.75 points of agreement.
+
+Complete local exports add EAR-TTS and the dense codec payload: 22.19 GB fp16,
+12.11 GB int8, and 8.56 GB protected-head int5. The two existing published
+`Perception` repositories still carry the older understanding-only payloads;
+do not point `VoiceChatCodec` at them until a full-bundle re-export is
+separately approved and published.
 
 MLX has affine kernels for 2, 3, 4, 5, 6 and 8-bit weights. There is no INT7
 kernel; INT8 is the high-quality variant.
@@ -104,6 +128,13 @@ let embeddings = perception(logMel)          // (B, T, 128) -> (B, T/8, 4480)
 
 let llm = try VoiceChatLanguageModel.load(from: root.appending(path: "llm"))
 let logits = llm(tokenIds)
+
+// A complete bundle also contains tts/model.safetensors. Codes are
+// [batch, frames, 31] and decode to [batch, frames * 1764].
+let codec = try VoiceChatCodec.load(from: root)
+let waveform = codec.decode(codes: codes)
+let silenceCheck = codec.verifySilence()
+precondition(silenceCheck.passed)
 ```
 
 `VoiceChatLanguageModel` keeps the tool-call head aside as `functionHead`. It
@@ -136,8 +167,14 @@ reference.
 ## Tests
 
 ```bash
-VOICECHAT_BUNDLE=/path/to/bundle swift test --filter VoiceChatTests
+swift test --filter VoiceChatSpeechTests
+
+# Model-backed codec test, one E2E class per process:
+swift build --build-tests --disable-sandbox
+./scripts/build_mlx_metallib.sh debug
+E2E_ONLY_FILTER=E2EVoiceChatSpeechTests E2E_SKIP_UNIT=1 \
+  VOICECHAT_BUNDLE=/path/to/full-bundle scripts/test_e2e_isolated.sh
 ```
 
-Tests that need weights skip when `VOICECHAT_BUNDLE` is unset. The mask and
-subsampling tests need no weights and run everywhere.
+Tests that need weights skip when `VOICECHAT_BUNDLE` is unset. The DSP,
+configuration, mask, and subsampling tests need no weights and run everywhere.
