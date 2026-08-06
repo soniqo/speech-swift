@@ -8,7 +8,7 @@ import XCTest
 /// Set `QWEN3_TTS_LOCAL_MODEL_DIR` and `QWEN3_TTS_LOCAL_TOKENIZER_DIR` to override
 /// the standard cache locations. The test skips instead of downloading because `fromLocal`
 /// promises never to perform network or cache resolution.
-final class E2ELocalModelLoadingTests: XCTestCase {
+final class E2ELocalModelLoadingTests: E2ETestCase {
     func testLocalLoaderUsesBundleMetadataAndSynthesizes() throws {
         let modelDirectory = try localDirectory(
             environmentKey: "QWEN3_TTS_LOCAL_MODEL_DIR",

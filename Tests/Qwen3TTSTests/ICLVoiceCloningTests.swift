@@ -90,7 +90,7 @@ final class ICLVoiceCloningTests: XCTestCase {
 
 // MARK: - E2E Tests
 
-final class E2EICLVoiceCloningTests: XCTestCase {
+final class E2EICLVoiceCloningTests: E2ETestCase {
 
     func testE2EEncoderWeightLoading() async throws {
         // Load model with encoder
