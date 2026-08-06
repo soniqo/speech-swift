@@ -211,6 +211,20 @@ The Talker, Code Predictor, and Mimi decoder are all fully causal, enabling chun
 2. **Subsequent chunks** — emitted every `chunkFrames` tokens (default 25 = 2s audio)
 3. **Codec decode** — each chunk runs the Mimi decoder with left-context overlap for quality
 
+### Cooperative Cancellation
+
+The async `SpeechGenerationModel.generate()` path and `synthesizeStream()`
+cooperate with Swift task cancellation. Autoregressive inference checks for
+cancellation before every codec-token step and again before and after codec
+decode. Once cancellation is observed at a checkpoint, generation throws
+`CancellationError` instead of yielding or returning a successful final
+result.
+
+Cancellation latency is bounded to the currently executing token step or
+codec decode; MLX and Metal kernels already in flight cannot be preempted.
+The synchronous `synthesize()` and `synthesizeBatch()` APIs retain their
+existing non-throwing behavior and are not task-cancellation entry points.
+
 ### Zero-Pad Decode
 
 When `firstChunkFrames < 4` (the codec's minimum input size due to ConvNeXt kernel=7 after 2x pre-upsample), the decoder input is zero-padded on the left. The decoder is fully causal, so zero frames produce silence. Output is trimmed from the right to keep exactly `realChunkFrames × 1920` samples.

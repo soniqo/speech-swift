@@ -89,6 +89,10 @@ let package = Package(
             targets: ["SourceSeparation"]
         ),
         .library(
+            name: "CanaryASR",
+            targets: ["CanaryASR"]
+        ),
+        .library(
             name: "ParakeetASR",
             targets: ["ParakeetASR"]
         ),
@@ -461,6 +465,12 @@ let package = Package(
                 .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "MLXNN", package: "mlx-swift"),
                 .product(name: "MLXFast", package: "mlx-swift"),
+            ]
+        ),
+        .target(
+            name: "CanaryASR",
+            dependencies: [
+                "AudioCommon",
             ]
         ),
         .target(
@@ -927,11 +937,20 @@ let package = Package(
             ]
         ),
         .testTarget(
+            name: "CanaryASRTests",
+            dependencies: ["CanaryASR", "AudioCommon"],
+            resources: [
+                .copy("Resources/test_audio.wav"),
+                .copy("Resources/nemo_mel_reference.json")
+            ]
+        ),
+        .testTarget(
             name: "ParakeetASRTests",
             dependencies: ["ParakeetASR", "AudioCommon"],
             resources: [
                 .copy("Resources/test_audio.wav"),
-                .copy("Resources/test_audio_german.wav")
+                .copy("Resources/test_audio_german.wav"),
+                .copy("Resources/nemo_mel_reference.json")
             ]
         ),
         .testTarget(
