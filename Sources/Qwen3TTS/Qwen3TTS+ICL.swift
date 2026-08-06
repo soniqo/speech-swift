@@ -19,19 +19,26 @@ extension Qwen3TTSModel {
         // speaker-encoder bug (2048-dim fc + PyTorch conv layout), since the e2e
         // tests only ever exercised the 0.6B path.
         modelId: String = "aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-bf16",
+        tokenizerModelId: String = "Qwen/Qwen3-TTS-Tokenizer-12Hz",
         cacheDir: URL? = nil,
+        tokenizerCacheDir: URL? = nil,
         offlineMode: Bool = false,
         progressHandler: ((Double, String) -> Void)? = nil
     ) async throws -> (Qwen3TTSModel, SpeechTokenizerEncoder) {
         let tts = try await Qwen3TTSModel.fromPretrained(
-            modelId: modelId, cacheDir: cacheDir, offlineMode: offlineMode, progressHandler: progressHandler)
+            modelId: modelId,
+            tokenizerModelId: tokenizerModelId,
+            cacheDir: cacheDir,
+            tokenizerCacheDir: tokenizerCacheDir,
+            offlineMode: offlineMode,
+            progressHandler: progressHandler)
 
         // The codec encoder (Mimi) lives in the speech-tokenizer bundle, NOT the
         // talker bundle — the talker bundle has no `encoder.*`/`decoder.*` keys.
         // `fromPretrained` already downloaded the tokenizer (same dir the decoder
         // loads from), so just resolve its cache dir.
-        let tokenizerModelId = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
-        let tokenizerDir = try HuggingFaceDownloader.getCacheDirectory(for: tokenizerModelId)
+        let tokenizerDir = try tokenizerCacheDir
+            ?? HuggingFaceDownloader.getCacheDirectory(for: tokenizerModelId)
 
         let encoderConfig = tts.config.speechTokenizerDecoder
         let encoder = SpeechTokenizerEncoder(config: encoderConfig)

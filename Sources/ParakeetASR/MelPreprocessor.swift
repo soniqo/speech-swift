@@ -14,7 +14,9 @@ struct MelPreprocessor {
     private let paddedFFT: Int = 512      // n_fft (already power of 2)
     private let log2PaddedFFT: vDSP_Length = 9
     private let nBins: Int = 257          // paddedFFT / 2 + 1
-    private let reflectPad: Int = 256     // n_fft / 2
+    private let centrePad: Int = 256      // n_fft / 2
+    /// torch.stft centres a window shorter than n_fft inside the frame.
+    private let windowOffset: Int = 56    // (512 - 400) / 2
     private let logGuard: Float = 5.960464477539063e-08  // 2^{-24}
 
     private let fftSetup: FFTSetup
@@ -24,10 +26,12 @@ struct MelPreprocessor {
     init(config: ParakeetConfig) {
         self.config = config
 
-        // Hann window (periodic): 0.5 * (1 - cos(2π*i/N))
+        // Hann window, symmetric: 0.5 * (1 - cos(2π*i/(N-1))).
+        // The NeMo featurizer builds it with torch.hann_window(periodic: false);
+        // the periodic form (denominator N) is a different window.
         var window = [Float](repeating: 0, count: config.winLength)
         for i in 0..<config.winLength {
-            window[i] = 0.5 * (1.0 - cos(2.0 * Float.pi * Float(i) / Float(config.winLength)))
+            window[i] = 0.5 * (1.0 - cos(2.0 * Float.pi * Float(i) / Float(config.winLength - 1)))
         }
         self.hannWindow = window
 
@@ -64,21 +68,12 @@ struct MelPreprocessor {
             }
         }
 
-        // Reflect padding (n_fft // 2 = 256 on each side, matching torch.stft center=True)
-        let totalLen = reflectPad + preemphasized.count + reflectPad
-        var padded = [Float](repeating: 0, count: totalLen)
-        // Left reflect pad
-        for i in 0..<reflectPad {
-            padded[i] = preemphasized[reflectPad - i]
-        }
-        // Center (original signal)
+        // Centre padding with ZEROS (n_fft // 2 = 256 each side). The NeMo
+        // featurizer calls torch.stft(center: true, pad_mode: "constant") —
+        // reflect padding is a different front end, not a detail.
+        var padded = [Float](repeating: 0, count: centrePad + preemphasized.count + centrePad)
         for i in 0..<preemphasized.count {
-            padded[reflectPad + i] = preemphasized[i]
-        }
-        // Right reflect pad
-        for i in 0..<reflectPad {
-            let srcIdx = preemphasized.count - 2 - i
-            padded[reflectPad + preemphasized.count + i] = preemphasized[max(0, srcIdx)]
+            padded[centrePad + i] = preemphasized[i]
         }
 
         let nFrames = (padded.count - paddedFFT) / config.hopLength + 1
@@ -95,14 +90,17 @@ struct MelPreprocessor {
         for frame in 0..<nFrames {
             let start = frame * config.hopLength
 
-            // Apply window to first win_length samples
+            // A 400-sample window sits CENTRED in the 512-point frame, which
+            // is where torch.stft puts it: 56 zeros, the windowed samples, 56
+            // zeros. Windowing from index 0 instead shifts every frame.
+            for i in 0..<paddedFFT { paddedFrame[i] = 0 }
             padded.withUnsafeBufferPointer { buf in
-                vDSP_vmul(buf.baseAddress! + start, 1, hannWindow, 1,
-                          &paddedFrame, 1, vDSP_Length(config.winLength))
-            }
-            // Zero-pad from win_length to paddedFFT
-            for i in config.winLength..<paddedFFT {
-                paddedFrame[i] = 0
+                paddedFrame.withUnsafeMutableBufferPointer { dst in
+                    vDSP_vmul(buf.baseAddress! + start + windowOffset, 1,
+                              hannWindow, 1,
+                              dst.baseAddress! + windowOffset, 1,
+                              vDSP_Length(config.winLength))
+                }
             }
 
             // Pack into split-complex format for vDSP
