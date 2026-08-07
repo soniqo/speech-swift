@@ -14,7 +14,7 @@ input frame. The upstream architecture reference is
 - A complete VoiceChat MLX bundle with `encoder/`, `llm/`, and `tts/`.
 - Enough unified memory for the selected export (about 12.11 GB on disk for
   INT8 or 8.56 GB for INT5, plus runtime allocations). The optimized controlled
-  INT5 run peaked at about 8.70 GB RSS and 15.61–15.64 GB macOS physical
+  INT5 run peaked at about 8.70 GB RSS and 15.64–15.66 GB macOS physical
   footprint; the latter includes file-backed MLX mappings that RSS can
   undercount.
 
@@ -180,20 +180,21 @@ reported separately from per-frame inference.
 
 For reference, release builds on an M5 Pro (48 GB), using the controlled
 120-frame fixture and the default one-frame/80 ms live chunks, completed three
-independent protected-head INT5 runs in 9.183 s, 9.197 s, and 9.497 s for a
-9.600 s model timeline. Their whole-pipeline RTF values were `0.96`, `0.96`,
-and `0.99`. Typical perception/decision/synthesis p50 values were about
-9/36/31–32 ms, and total/frame p50 was 76–79 ms. Peak RSS was about 8.70 GB,
-the physical-footprint peak was 15.61–15.64 GB, and MLX reported 9.50 GB peak
-GPU allocation. A final source-matched confirmation measured RTF 0.96, first
-spoken text at 44.4 ms, and first playable audio at 77.5 ms.
+independent protected-head INT5 runs in 9.039 s, 8.833 s, and 8.786 s for a
+9.600 s model timeline. Their whole-pipeline RTF values were `0.94`, `0.92`,
+and `0.92`. Perception/decision/synthesis p50 values ranged over
+9.0–9.2/35.6–36.6/28.3–29.0 ms, and total/frame p50 was 72.9–74.8 ms. Peak RSS
+was about 8.70 GB, the physical-footprint peak was 15.64–15.66 GB, and MLX
+reported 9.53 GB peak GPU allocation. Across the three runs, first spoken text
+arrived in 44.3–46.7 ms and first playable audio in 74.0–76.4 ms.
 
 Whole-pipeline RTF below `1` establishes sustained throughput, while the
 session's `realTime` flag deliberately requires the stricter total/frame p95
-to remain below `80 ms`. Two of those runs met that p95 deadline; the slowest
-reached 83.8 ms. Measure on the deployment machine and avoid concurrent GPU
-work when comparing results. Current INT8 correctness is verified, but its
-post-optimization release performance has not yet been remeasured.
+to remain below `80 ms`. All three runs met that deadline at 76.2–78.6 ms,
+although the remaining per-frame headroom is narrow. Measure on the deployment
+machine and avoid concurrent GPU work when comparing results. Current INT8
+correctness is verified, but its post-optimization release performance has not
+yet been remeasured.
 
 The first-token/audio values printed by the command are hot compute latency
 after the controlled turn opens, not learned turn-taking latency.

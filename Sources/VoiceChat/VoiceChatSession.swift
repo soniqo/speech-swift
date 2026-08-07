@@ -362,16 +362,19 @@ public actor VoiceChatSession {
                     .expandedDimensions(axis: 0)
         let output = model.languageModel.call(
             embeddings: fused, cache: languageCache)
-        let textToken = sampleTextToken(output.logits[0, -1, 0...])
-        let functionToken: Int
-        if let functionHead = model.languageModel.functionHead {
-            functionToken = MLX.argMax(
-                functionHead(output.hidden[0, -1, 0...]), axis: -1)
-                .item(Int.self)
-        } else {
-            functionToken = model.tokenizer.padID
+        let textLogits = output.logits[0, -1, 0...]
+        let greedyText = MLX.argMax(textLogits.asType(.float32), axis: -1)
+        let functionSelection = model.languageModel.functionHead.map {
+            MLX.argMax($0(output.hidden[0, -1, 0...]), axis: -1)
         }
-        eval(output.logits)
+        // The text and function projections share the same hidden state. Ask
+        // MLX to evaluate both selections together so the default greedy path
+        // pays for one GPU synchronization rather than one per channel.
+        MLX.eval([greedyText] + [functionSelection].compactMap { $0 })
+        let textToken = sampleTextToken(
+            textLogits, greedy: greedyText.item(Int.self))
+        let functionToken = functionSelection?.item(Int.self)
+            ?? model.tokenizer.padID
         let decisionLatency = milliseconds(since: decisionStart)
 
         previousText = textToken
@@ -413,9 +416,8 @@ public actor VoiceChatSession {
         return event
     }
 
-    private func sampleTextToken(_ inputLogits: MLXArray) -> Int {
+    private func sampleTextToken(_ inputLogits: MLXArray, greedy: Int) -> Int {
         let logits = inputLogits.asType(.float32)
-        let greedy = MLX.argMax(logits, axis: -1).item(Int.self)
         if sampling.temperature == 0
             || model.tokenizer.specialIDs.contains(greedy) {
             return greedy

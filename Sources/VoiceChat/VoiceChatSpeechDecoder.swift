@@ -255,12 +255,17 @@ public final class VoiceChatSpeechDecoder {
         var codes = MLXArray.full(
             [1, 1, configuration.numQuantizers],
             values: MLXArray(Int32(configuration.codebookSize)), dtype: .int32)
+        // Masked codebooks contribute exact zero vectors. Carry the selected
+        // RVQ sum forward instead of gathering and adding all 31 codebooks
+        // again before every MaskGIT head pass.
+        var codeLatent = MLXArray.zeros(
+            [1, 1, configuration.latentSize], dtype: .float32)
         var filled = 0
         for count in Self.maskGITAssignmentCounts(
             quantizers: configuration.numQuantizers,
             iterations: parameters.iterations
         ) where count > 0 {
-            var embeddings = codeEmbedding(depthSum(codes))
+            var embeddings = codeEmbedding(codeLatent)
             if useGuidance {
                 embeddings = MLX.concatenated([
                     embeddings + hidden[0..<1, 0..., 0...],
@@ -275,8 +280,13 @@ public final class VoiceChatSpeechDecoder {
             let latent = mean + MLX.exp(logs)
                 * MLXRandom.normal(mean.shape, dtype: mean.dtype)
                 * MLXArray(parameters.noise)
-            codes = assign(
-                latent: latent, to: codes, startingAt: filled, count: count)
+            let assignment = assign(
+                latent: latent, to: codes, startingAt: filled, count: count,
+                retainEmbeddings: filled + count < configuration.numQuantizers)
+            codes = assignment.codes
+            for selected in assignment.embeddings {
+                codeLatent = codeLatent + selected
+            }
             filled += count
         }
         return codes
@@ -377,18 +387,23 @@ public final class VoiceChatSpeechDecoder {
         latent: MLXArray,
         to initialCodes: MLXArray,
         startingAt start: Int,
-        count: Int
-    ) -> MLXArray {
+        count: Int,
+        retainEmbeddings: Bool
+    ) -> (codes: MLXArray, embeddings: [MLXArray]) {
         var residual = latent
         let codes = initialCodes
+        var embeddings: [MLXArray] = []
+        if retainEmbeddings { embeddings.reserveCapacity(count) }
         for index in start ..< (start + count) {
             let codebook = residualCodebooks[index]
             let distances = MLX.sum(codebook.square(), axis: -1)
                 - MLXArray(Float(2)) * MLX.matmul(residual, codebook.transposed())
             let selected = MLX.argMin(distances, axis: -1).asType(.int32)
             codes[.ellipsis, index] = selected
-            residual = residual - codebook[selected]
+            let selectedEmbedding = codebook[selected]
+            if retainEmbeddings { embeddings.append(selectedEmbedding) }
+            residual = residual - selectedEmbedding
         }
-        return codes
+        return (codes, embeddings)
     }
 }
