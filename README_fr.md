@@ -81,14 +81,12 @@ Reconnaissance, synthese et comprehension vocale embarquees pour Mac et iOS. S'e
 - **[VoiceChat 11B](docs/models/voicechat.md)** -- Speech-to-speech duplex natif MLX avec entrée vocale continue, canaux texte/fonction et parole directe via EAR-TTS et codec neuronal (INT5/INT8 ; pas encore en temps réel)
 - **[Audio2Face-3D](docs/models/audio2face3d.md)** — Animation faciale d'avatar pilotée par la voix (NVIDIA Audio2Face-3D v2.3 Mark, 301 coefficients faciaux, MLX)
 
-Benchmark Release de VoiceChat (M5 Pro, 48 Go ; blocs d'entrée live de 80 ms ; fixture contrôlé de 120 trames) :
-
 | Variante | RSS maximal | Premier token de texte parlé | Premier audio lisible | RTF du pipeline complet |
 |---|---:|---:|---:|---:|
 | INT8 | 12.21 GB | 68.8 ms | 105.1 ms | 1.34 |
 | INT5 | 8.73 GB | 57.5 ms | 91.4 ms | 1.17 |
 
-Les valeurs premier token/audio sont des latences de calcul à chaud pour la première trame de réponse parlée, et non la latence de prise de tour apprise. Les deux variantes restent plus lentes que le temps réel.
+Les valeurs premier token/audio sont des latences de calcul à chaud pour la première trame de réponse parlée, et non la latence de prise de tour apprise. Le fonctionnement continu en temps réel exige un RTF du pipeline complet < 1 ; INT8 à 1.34 et INT5 à 1.17 n'atteignent pas encore ce seuil. Un cache FastConformer avec état est la prochaine cible d'optimisation.
 
 Référence d'architecture : [SALM-Duplex: Efficient and Direct Duplex Modeling for Speech-to-Speech Language Model](https://arxiv.org/abs/2505.15670) (Interspeech 2025).
 

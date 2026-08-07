@@ -81,14 +81,12 @@
 - **[VoiceChat 11B](docs/models/voicechat.md)** — speech-to-speech แบบ duplex บน MLX ที่รับเสียงพูดต่อเนื่อง ใช้ช่องข้อความ/ฟังก์ชัน และส่งเสียงพูดโดยตรงผ่าน EAR-TTS กับ neural codec (INT5/INT8; ยังไม่ทำงานแบบเรียลไทม์)
 - **[Audio2Face-3D](docs/models/audio2face3d.md)** — แอนิเมชันใบหน้าอวาตาร์ขับเคลื่อนด้วยเสียงพูด (NVIDIA Audio2Face-3D v2.3 Mark, ค่าสัมประสิทธิ์ใบหน้า 301 ค่า, MLX)
 
-เกณฑ์มาตรฐาน VoiceChat แบบ Release (M5 Pro, 48 GB; ชิ้นอินพุตสด 80 ms; ชุดทดสอบควบคุม 120 เฟรม):
-
 | รุ่น | RSS สูงสุด | token ข้อความพูดตัวแรก | เสียงแรกที่เล่นได้ | RTF ของ pipeline ทั้งหมด |
 |---|---:|---:|---:|---:|
 | INT8 | 12.21 GB | 68.8 ms | 105.1 ms | 1.34 |
 | INT5 | 8.73 GB | 57.5 ms | 91.4 ms | 1.17 |
 
-ค่าของ token/เสียงแรกคือเวลา compute หลัง warm-up สำหรับเฟรมคำตอบที่พูดเฟรมแรก ไม่ใช่ latency การผลัดกันพูดที่โมเดลเรียนรู้ ทั้งสองรุ่นยังช้ากว่าเรียลไทม์
+ค่าของ token/เสียงแรกคือเวลา compute หลัง warm-up สำหรับเฟรมคำตอบที่พูดเฟรมแรก ไม่ใช่ latency การผลัดกันพูดที่โมเดลเรียนรู้ การทำงานแบบเรียลไทม์อย่างต่อเนื่องต้องมี RTF ของ pipeline ทั้งหมด < 1; INT8 ที่ 1.34 และ INT5 ที่ 1.17 ยังไม่ถึงเกณฑ์นี้ เป้าหมายการปรับประสิทธิภาพถัดไปคือแคช FastConformer แบบมีสถานะ
 
 ข้อมูลอ้างอิงสถาปัตยกรรม: [SALM-Duplex: Efficient and Direct Duplex Modeling for Speech-to-Speech Language Model](https://arxiv.org/abs/2505.15670) (Interspeech 2025)
 

@@ -81,14 +81,12 @@
 - **[VoiceChat 11B](docs/models/voicechat.md)** — 原生 MLX 双工语音到语音（speech-to-speech），持续接收语音，通过文本/函数通道和 EAR-TTS 直接生成神经编解码器语音（INT5/INT8；目前尚未达到实时）
 - **[Audio2Face-3D](docs/models/audio2face3d.md)** — 语音驱动的虚拟形象面部动画（NVIDIA Audio2Face-3D v2.3 Mark，301 个面部系数，MLX）
 
-VoiceChat Release 基准（M5 Pro，48 GB；80 ms 实时输入块；120 帧受控测试）：
-
 | 变体 | 峰值 RSS | 首个语音文本 token | 首个可播放音频 | 全链路 RTF |
 |---|---:|---:|---:|---:|
 | INT8 | 12.21 GB | 68.8 ms | 105.1 ms | 1.34 |
 | INT5 | 8.73 GB | 57.5 ms | 91.4 ms | 1.17 |
 
-首 token/音频数值是首个语音响应帧的热态计算延迟，并非模型学习到的轮次切换延迟。两个变体仍慢于实时。
+首 token/音频数值是首个语音响应帧的热态计算延迟，并非模型学习到的轮次切换延迟。持续实时运行要求全链路 RTF < 1；INT8 的 1.34 和 INT5 的 1.17 尚未达到该阈值。下一项优化目标是有状态的 FastConformer 缓存。
 
 架构参考：[SALM-Duplex: Efficient and Direct Duplex Modeling for Speech-to-Speech Language Model](https://arxiv.org/abs/2505.15670)（Interspeech 2025）。
 

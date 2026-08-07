@@ -81,14 +81,12 @@ Speech Swift पैकेज के सत्यापन योग्य सं
 - **[VoiceChat 11B](docs/models/voicechat.md)** — continuous speech input, duplex text/function channels और EAR-TTS + neural codec से direct speech output वाला native MLX speech-to-speech (INT5/INT8; अभी real-time नहीं)
 - **[Audio2Face-3D](docs/models/audio2face3d.md)** — वाक्-चालित अवतार चेहरा एनीमेशन (NVIDIA Audio2Face-3D v2.3 Mark, 301 फेशियल कोएफ़िशिएंट, MLX)
 
-VoiceChat Release benchmark (M5 Pro, 48 GB; 80 ms live input chunks; 120-frame controlled fixture):
-
 | वेरिएंट | पीक RSS | पहला बोला गया text token | पहला चलने योग्य audio | पूरे pipeline का RTF |
 |---|---:|---:|---:|---:|
 | INT8 | 12.21 GB | 68.8 ms | 105.1 ms | 1.34 |
 | INT5 | 8.73 GB | 57.5 ms | 91.4 ms | 1.17 |
 
-पहले token/audio के आंकड़े पहले बोले गए response frame की warm compute latency हैं, सीखी हुई turn-taking latency नहीं। दोनों वेरिएंट अभी real time से धीमे हैं।
+पहले token/audio के आंकड़े पहले बोले गए response frame की warm compute latency हैं, सीखी हुई turn-taking latency नहीं। लगातार real-time संचालन के लिए पूरे pipeline का RTF < 1 होना चाहिए; INT8 का 1.34 और INT5 का 1.17 अभी इस सीमा तक नहीं पहुँचते। stateful FastConformer cache अगला optimization target है।
 
 Architecture reference: [SALM-Duplex: Efficient and Direct Duplex Modeling for Speech-to-Speech Language Model](https://arxiv.org/abs/2505.15670) (Interspeech 2025)।
 

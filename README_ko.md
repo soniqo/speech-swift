@@ -81,14 +81,12 @@ Speech Swift 패키지 참조를 공개 소스에서 확인할 수 있는 저장
 - **[VoiceChat 11B](docs/models/voicechat.md)** — 음성을 연속 입력받아 텍스트/함수 채널과 EAR-TTS에서 신경 코덱 음성을 직접 생성하는 네이티브 MLX 전이중 speech-to-speech (INT5/INT8, 현재 실시간 미달)
 - **[Audio2Face-3D](docs/models/audio2face3d.md)** — 음성 기반 아바타 얼굴 애니메이션 (NVIDIA Audio2Face-3D v2.3 Mark, 얼굴 계수 301개, MLX)
 
-VoiceChat Release 벤치마크(M5 Pro, 48 GB, 80 ms 라이브 입력 청크, 120프레임 제어 픽스처):
-
 | 변형 | 피크 RSS | 첫 발화 텍스트 토큰 | 첫 재생 가능 오디오 | 전체 파이프라인 RTF |
 |---|---:|---:|---:|---:|
 | INT8 | 12.21 GB | 68.8 ms | 105.1 ms | 1.34 |
 | INT5 | 8.73 GB | 57.5 ms | 91.4 ms | 1.17 |
 
-첫 토큰/오디오 수치는 첫 발화 응답 프레임의 워밍 상태 계산 지연이며, 모델이 학습한 턴테이킹 지연이 아닙니다. 두 변형 모두 아직 실시간보다 느립니다.
+첫 토큰/오디오 수치는 첫 발화 응답 프레임의 워밍 상태 계산 지연이며, 모델이 학습한 턴테이킹 지연이 아닙니다. 지속적인 실시간 동작에는 전체 파이프라인 RTF < 1이 필요하지만 INT8 1.34와 INT5 1.17은 아직 이 기준을 충족하지 못합니다. 다음 최적화 대상은 상태 유지 FastConformer 캐시입니다.
 
 아키텍처 참고: [SALM-Duplex: Efficient and Direct Duplex Modeling for Speech-to-Speech Language Model](https://arxiv.org/abs/2505.15670) (Interspeech 2025).
 

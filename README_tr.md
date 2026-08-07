@@ -81,14 +81,12 @@ Speech Swift paketine doğrulanabilir biçimde başvuran 16 açık depo.
 - **[VoiceChat 11B](docs/models/voicechat.md)** — Sürekli konuşma girişi, duplex metin/işlev kanalları ve EAR-TTS + nöral codec üzerinden doğrudan konuşma çıkışı sunan native MLX duplex speech-to-speech (INT5/INT8; henüz gerçek zamanlı değil)
 - **[Audio2Face-3D](docs/models/audio2face3d.md)** — Konuşmayla sürülen avatar yüz animasyonu (NVIDIA Audio2Face-3D v2.3 Mark, 301 yüz katsayısı, MLX)
 
-VoiceChat Release benchmark'ı (M5 Pro, 48 GB; 80 ms canlı giriş parçaları; 120 karelik kontrollü fixture):
-
 | Varyant | Tepe RSS | İlk konuşulan metin token'ı | İlk oynatılabilir ses | Tüm pipeline RTF'si |
 |---|---:|---:|---:|---:|
 | INT8 | 12.21 GB | 68.8 ms | 105.1 ms | 1.34 |
 | INT5 | 8.73 GB | 57.5 ms | 91.4 ms | 1.17 |
 
-İlk token/ses değerleri, ilk konuşulan yanıt karesinin ısınmış hesaplama gecikmesidir; öğrenilmiş sıra alma gecikmesi değildir. Her iki varyant da hâlâ gerçek zamandan yavaştır.
+İlk token/ses değerleri, ilk konuşulan yanıt karesinin ısınmış hesaplama gecikmesidir; öğrenilmiş sıra alma gecikmesi değildir. Sürdürülebilir gerçek zamanlı çalışma için tüm pipeline RTF'sinin < 1 olması gerekir; 1.34 değerindeki INT8 ve 1.17 değerindeki INT5 henüz bu eşiği karşılamıyor. Durum bilgili FastConformer önbelleği bir sonraki optimizasyon hedefidir.
 
 Mimari referansı: [SALM-Duplex: Efficient and Direct Duplex Modeling for Speech-to-Speech Language Model](https://arxiv.org/abs/2505.15670) (Interspeech 2025).
 
