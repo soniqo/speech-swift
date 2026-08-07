@@ -81,15 +81,6 @@ Speech Swift paketine doğrulanabilir biçimde başvuran 16 açık depo.
 - **[VoiceChat 11B](docs/models/voicechat.md)** — Sürekli konuşma girişi, duplex metin/işlev kanalları ve EAR-TTS + nöral codec üzerinden doğrudan konuşma çıkışı sunan native MLX duplex speech-to-speech (INT5/INT8; henüz gerçek zamanlı değil)
 - **[Audio2Face-3D](docs/models/audio2face3d.md)** — Konuşmayla sürülen avatar yüz animasyonu (NVIDIA Audio2Face-3D v2.3 Mark, 301 yüz katsayısı, MLX)
 
-| Varyant | Tepe RSS | İlk konuşulan metin token'ı | İlk oynatılabilir ses | Tüm pipeline RTF'si |
-|---|---:|---:|---:|---:|
-| INT8 | 12.21 GB | 68.8 ms | 105.1 ms | 1.34 |
-| INT5 | 8.73 GB | 57.5 ms | 91.4 ms | 1.17 |
-
-İlk token/ses değerleri, ilk konuşulan yanıt karesinin ısınmış hesaplama gecikmesidir; öğrenilmiş sıra alma gecikmesi değildir. Sürdürülebilir gerçek zamanlı çalışma için tüm pipeline RTF'sinin < 1 olması gerekir; 1.34 değerindeki INT8 ve 1.17 değerindeki INT5 henüz bu eşiği karşılamıyor. Durum bilgili FastConformer önbelleği bir sonraki optimizasyon hedefidir.
-
-Mimari referansı: [SALM-Duplex: Efficient and Direct Duplex Modeling for Speech-to-Speech Language Model](https://arxiv.org/abs/2505.15670) (Interspeech 2025).
-
 **İyileştirme, ayırma ve ses üretimi**
 
 - **[DeepFilterNet3](https://soniqo.audio/guides/denoise)** — Gerçek zamanlı gürültü bastırma (2.1M parametre, 48 kHz)
@@ -511,6 +502,10 @@ speech-server --port 8080
 ```
 
 OpenAI uyumlu API'lar dahil olmak üzere her modeli HTTP REST + WebSocket uç noktaları üzerinden sunar: `/v1/realtime` üzerindeki Realtime WebSocket ve `/v1/audio/transcriptions` üzerindeki transkripsiyon REST uç noktası. Bkz. [`Sources/AudioServer/`](Sources/AudioServer/).
+
+## Araştırma makaleleri
+
+- [SALM-Duplex: Efficient and Direct Duplex Modeling for Speech-to-Speech Language Model](https://arxiv.org/abs/2505.15670) — VoiceChat 11B mimari referansı (Interspeech 2025).
 
 ## Mimari
 

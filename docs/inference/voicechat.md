@@ -190,6 +190,11 @@ time once perception cost is included. `--chunk-frames` can test larger input
 batches, but those amortize encoder work and are not the default 80 ms live
 cadence.
 
+Sustained real-time operation requires whole-pipeline RTF < 1; INT8 at 1.34
+and INT5 at 1.17 do not yet meet that threshold. Stateful FastConformer
+caching, replacing bounded encoder recomputation, is the next optimization
+target.
+
 `--force-turn-at-end` injects BOS at the end of the input. It exists for
 controlled regression tests; do not use its onset as a natural turn-taking
 measurement.

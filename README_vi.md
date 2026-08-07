@@ -81,15 +81,6 @@ Nhận dạng, tổng hợp và hiểu giọng nói trên thiết bị cho Mac v
 - **[VoiceChat 11B](docs/models/voicechat.md)** — Speech-to-speech duplex MLX native với đầu vào giọng nói liên tục, kênh văn bản/chức năng và đầu ra giọng nói trực tiếp qua EAR-TTS cùng neural codec (INT5/INT8; chưa đạt thời gian thực)
 - **[Audio2Face-3D](docs/models/audio2face3d.md)** — Hoạt ảnh khuôn mặt avatar điều khiển bằng giọng nói (NVIDIA Audio2Face-3D v2.3 Mark, 301 hệ số khuôn mặt, MLX)
 
-| Biến thể | RSS đỉnh | Token văn bản được nói đầu tiên | Âm thanh đầu tiên có thể phát | RTF toàn pipeline |
-|---|---:|---:|---:|---:|
-| INT8 | 12.21 GB | 68.8 ms | 105.1 ms | 1.34 |
-| INT5 | 8.73 GB | 57.5 ms | 91.4 ms | 1.17 |
-
-Các số liệu token/âm thanh đầu tiên là độ trễ tính toán đã warm-up của frame phản hồi nói đầu tiên, không phải độ trễ luân phiên lượt nói mà mô hình đã học. Vận hành thời gian thực bền vững yêu cầu RTF toàn pipeline < 1; INT8 ở 1.34 và INT5 ở 1.17 chưa đạt ngưỡng này. Bộ nhớ đệm FastConformer có trạng thái là mục tiêu tối ưu hóa tiếp theo.
-
-Tài liệu kiến trúc: [SALM-Duplex: Efficient and Direct Duplex Modeling for Speech-to-Speech Language Model](https://arxiv.org/abs/2505.15670) (Interspeech 2025).
-
 **Nâng cấp, tách nguồn và tạo âm thanh**
 
 - **[DeepFilterNet3](https://soniqo.audio/guides/denoise)** — Khử nhiễu thời gian thực (2.1M tham số, 48 kHz)
@@ -511,6 +502,10 @@ speech-server --port 8080
 ```
 
 Cung cấp mỗi mô hình thông qua endpoint HTTP REST + WebSocket, bao gồm các API tương thích OpenAI: Realtime WebSocket tại `/v1/realtime` và endpoint REST phiên âm tại `/v1/audio/transcriptions`. Xem [`Sources/AudioServer/`](Sources/AudioServer/).
+
+## Bài báo nghiên cứu
+
+- [SALM-Duplex: Efficient and Direct Duplex Modeling for Speech-to-Speech Language Model](https://arxiv.org/abs/2505.15670) — Tài liệu tham khảo kiến trúc của VoiceChat 11B (Interspeech 2025).
 
 ## Kiến trúc
 

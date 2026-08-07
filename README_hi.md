@@ -81,15 +81,6 @@ Speech Swift पैकेज के सत्यापन योग्य सं
 - **[VoiceChat 11B](docs/models/voicechat.md)** — continuous speech input, duplex text/function channels और EAR-TTS + neural codec से direct speech output वाला native MLX speech-to-speech (INT5/INT8; अभी real-time नहीं)
 - **[Audio2Face-3D](docs/models/audio2face3d.md)** — वाक्-चालित अवतार चेहरा एनीमेशन (NVIDIA Audio2Face-3D v2.3 Mark, 301 फेशियल कोएफ़िशिएंट, MLX)
 
-| वेरिएंट | पीक RSS | पहला बोला गया text token | पहला चलने योग्य audio | पूरे pipeline का RTF |
-|---|---:|---:|---:|---:|
-| INT8 | 12.21 GB | 68.8 ms | 105.1 ms | 1.34 |
-| INT5 | 8.73 GB | 57.5 ms | 91.4 ms | 1.17 |
-
-पहले token/audio के आंकड़े पहले बोले गए response frame की warm compute latency हैं, सीखी हुई turn-taking latency नहीं। लगातार real-time संचालन के लिए पूरे pipeline का RTF < 1 होना चाहिए; INT8 का 1.34 और INT5 का 1.17 अभी इस सीमा तक नहीं पहुँचते। stateful FastConformer cache अगला optimization target है।
-
-Architecture reference: [SALM-Duplex: Efficient and Direct Duplex Modeling for Speech-to-Speech Language Model](https://arxiv.org/abs/2505.15670) (Interspeech 2025)।
-
 **एन्हांसमेंट, सेपरेशन और ऑडियो जनरेशन**
 
 - **[DeepFilterNet3](https://soniqo.audio/hi/guides/denoise)** — रियल-टाइम नॉइज़ सप्रेशन (2.1M params, 48 kHz)। 60 s सिंगल-शॉट सीमा से अधिक लंबे ऑडियो को crossfade के साथ स्वतः चंक किया जाता है — `enhanceChunked(...)` देखें
@@ -513,6 +504,10 @@ speech-server --port 8080
 ```
 
 सभी मॉडलों को HTTP REST + WebSocket endpoints के माध्यम से एक्सपोज़ करता है, जिसमें OpenAI-संगत APIs शामिल हैं: `/v1/realtime` पर Realtime WebSocket और `/v1/audio/transcriptions` पर ट्रांसक्रिप्शन REST endpoint। देखें [`Sources/AudioServer/`](Sources/AudioServer/)।
+
+## शोध पत्र
+
+- [SALM-Duplex: Efficient and Direct Duplex Modeling for Speech-to-Speech Language Model](https://arxiv.org/abs/2505.15670) — VoiceChat 11B का आर्किटेक्चर संदर्भ (Interspeech 2025)।
 
 ## आर्किटेक्चर
 

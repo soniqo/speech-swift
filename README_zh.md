@@ -81,15 +81,6 @@
 - **[VoiceChat 11B](docs/models/voicechat.md)** — 原生 MLX 双工语音到语音（speech-to-speech），持续接收语音，通过文本/函数通道和 EAR-TTS 直接生成神经编解码器语音（INT5/INT8；目前尚未达到实时）
 - **[Audio2Face-3D](docs/models/audio2face3d.md)** — 语音驱动的虚拟形象面部动画（NVIDIA Audio2Face-3D v2.3 Mark，301 个面部系数，MLX）
 
-| 变体 | 峰值 RSS | 首个语音文本 token | 首个可播放音频 | 全链路 RTF |
-|---|---:|---:|---:|---:|
-| INT8 | 12.21 GB | 68.8 ms | 105.1 ms | 1.34 |
-| INT5 | 8.73 GB | 57.5 ms | 91.4 ms | 1.17 |
-
-首 token/音频数值是首个语音响应帧的热态计算延迟，并非模型学习到的轮次切换延迟。持续实时运行要求全链路 RTF < 1；INT8 的 1.34 和 INT5 的 1.17 尚未达到该阈值。下一项优化目标是有状态的 FastConformer 缓存。
-
-架构参考：[SALM-Duplex: Efficient and Direct Duplex Modeling for Speech-to-Speech Language Model](https://arxiv.org/abs/2505.15670)（Interspeech 2025）。
-
 **增强、分离与音频生成**
 
 - **[DeepFilterNet3](https://soniqo.audio/zh/guides/denoise)** — 实时噪声抑制（2.1M 参数，48 kHz）。超过 60 s 单次处理上限的长音频会自动分块并使用 crossfade 拼接 — 参见 `enhanceChunked(...)`
@@ -513,6 +504,10 @@ speech-server --port 8080
 ```
 
 通过 HTTP REST + WebSocket 接口暴露每个模型，包括兼容 OpenAI 的 API：`/v1/realtime` 上的 Realtime WebSocket 和 `/v1/audio/transcriptions` 上的转录 REST 接口。详见 [`Sources/AudioServer/`](Sources/AudioServer/)。
+
+## 研究论文
+
+- [SALM-Duplex: Efficient and Direct Duplex Modeling for Speech-to-Speech Language Model](https://arxiv.org/abs/2505.15670) — VoiceChat 11B 的架构参考（Interspeech 2025）。
 
 ## 架构
 

@@ -81,15 +81,6 @@ Speech Swift 패키지 참조를 공개 소스에서 확인할 수 있는 저장
 - **[VoiceChat 11B](docs/models/voicechat.md)** — 음성을 연속 입력받아 텍스트/함수 채널과 EAR-TTS에서 신경 코덱 음성을 직접 생성하는 네이티브 MLX 전이중 speech-to-speech (INT5/INT8, 현재 실시간 미달)
 - **[Audio2Face-3D](docs/models/audio2face3d.md)** — 음성 기반 아바타 얼굴 애니메이션 (NVIDIA Audio2Face-3D v2.3 Mark, 얼굴 계수 301개, MLX)
 
-| 변형 | 피크 RSS | 첫 발화 텍스트 토큰 | 첫 재생 가능 오디오 | 전체 파이프라인 RTF |
-|---|---:|---:|---:|---:|
-| INT8 | 12.21 GB | 68.8 ms | 105.1 ms | 1.34 |
-| INT5 | 8.73 GB | 57.5 ms | 91.4 ms | 1.17 |
-
-첫 토큰/오디오 수치는 첫 발화 응답 프레임의 워밍 상태 계산 지연이며, 모델이 학습한 턴테이킹 지연이 아닙니다. 지속적인 실시간 동작에는 전체 파이프라인 RTF < 1이 필요하지만 INT8 1.34와 INT5 1.17은 아직 이 기준을 충족하지 못합니다. 다음 최적화 대상은 상태 유지 FastConformer 캐시입니다.
-
-아키텍처 참고: [SALM-Duplex: Efficient and Direct Duplex Modeling for Speech-to-Speech Language Model](https://arxiv.org/abs/2505.15670) (Interspeech 2025).
-
 **향상, 분리 및 오디오 생성**
 
 - **[DeepFilterNet3](https://soniqo.audio/ko/guides/denoise)** — 실시간 노이즈 억제 (2.1M 파라미터, 48 kHz). 60 s 단일 처리 한계를 초과하는 장시간 오디오는 crossfade로 자동 청크 처리 — `enhanceChunked(...)` API 참조
@@ -513,6 +504,10 @@ speech-server --port 8080
 ```
 
 HTTP REST + WebSocket 엔드포인트로 모든 모델을 공개합니다. OpenAI 호환 API로 `/v1/realtime`의 Realtime WebSocket과 `/v1/audio/transcriptions`의 음성 인식 REST 엔드포인트가 포함됩니다. [`Sources/AudioServer/`](Sources/AudioServer/)를 참조하세요.
+
+## 논문
+
+- [SALM-Duplex: Efficient and Direct Duplex Modeling for Speech-to-Speech Language Model](https://arxiv.org/abs/2505.15670) — VoiceChat 11B 아키텍처 참고 문헌 (Interspeech 2025).
 
 ## 아키텍처
 

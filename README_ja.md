@@ -81,15 +81,6 @@ Speech Swift パッケージへの参照を公開ソースで確認できる 16 
 - **[VoiceChat 11B](docs/models/voicechat.md)** — 音声を連続入力し、テキスト/関数チャンネルと EAR-TTS からニューラルコーデック音声を直接生成するネイティブ MLX 全二重 speech-to-speech（INT5/INT8、現時点ではリアルタイム未達）
 - **[Audio2Face-3D](docs/models/audio2face3d.md)** — 音声駆動のアバター表情アニメーション（NVIDIA Audio2Face-3D v2.3 Mark、顔係数 301 次元、MLX）
 
-| バリアント | ピーク RSS | 最初の発話テキストトークン | 最初の再生可能音声 | パイプライン全体の RTF |
-|---|---:|---:|---:|---:|
-| INT8 | 12.21 GB | 68.8 ms | 105.1 ms | 1.34 |
-| INT5 | 8.73 GB | 57.5 ms | 91.4 ms | 1.17 |
-
-最初のトークン/音声は、最初の発話応答フレームに対するウォーム状態の計算遅延であり、学習されたターンテイキング遅延ではありません。継続的なリアルタイム動作にはパイプライン全体の RTF < 1 が必要ですが、INT8 の 1.34 と INT5 の 1.17 はまだこのしきい値を満たしていません。次の最適化対象はステートフルな FastConformer キャッシュです。
-
-アーキテクチャ参照：[SALM-Duplex: Efficient and Direct Duplex Modeling for Speech-to-Speech Language Model](https://arxiv.org/abs/2505.15670)（Interspeech 2025）。
-
 **強化、分離、オーディオ生成**
 
 - **[DeepFilterNet3](https://soniqo.audio/ja/guides/denoise)** — リアルタイムノイズ抑制（2.1Mパラメーター、48 kHz）。60 s のシングルショット上限を超える長尺音声は crossfade 付きで自動チャンク化 — `enhanceChunked(...)` を参照
@@ -513,6 +504,10 @@ speech-server --port 8080
 ```
 
 HTTP REST + WebSocketエンドポイントですべてのモデルを公開します。OpenAI 互換 API として `/v1/realtime` の Realtime WebSocket と `/v1/audio/transcriptions` の文字起こし REST エンドポイントを含みます。[`Sources/AudioServer/`](Sources/AudioServer/) を参照してください。
+
+## 論文
+
+- [SALM-Duplex: Efficient and Direct Duplex Modeling for Speech-to-Speech Language Model](https://arxiv.org/abs/2505.15670) — VoiceChat 11B のアーキテクチャ参照（Interspeech 2025）。
 
 ## アーキテクチャ
 

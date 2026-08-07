@@ -81,15 +81,6 @@ On-device speech recognition, synthesis, and understanding for Mac and iOS. Runs
 - **[VoiceChat 11B](docs/models/voicechat.md)** — Native MLX duplex speech-to-speech with continuous speech input, text/function channels, direct EAR-TTS speech output, and a neural codec (INT5/INT8; not yet real-time)
 - **[Audio2Face-3D](docs/models/audio2face3d.md)** — Speech-driven facial animation for avatars (NVIDIA Audio2Face-3D v2.3 Mark, 301 facial coefficients, MLX)
 
-| Variant | Peak RSS | First spoken text token | First playable audio | Whole-pipeline RTF |
-|---|---:|---:|---:|---:|
-| INT8 | 12.21 GB | 68.8 ms | 105.1 ms | 1.34 |
-| INT5 | 8.73 GB | 57.5 ms | 91.4 ms | 1.17 |
-
-First-token/audio figures are hot compute latency for the first spoken response frame, not learned turn-taking latency. Sustained real-time operation requires a whole-pipeline RTF < 1; INT8 at 1.34 and INT5 at 1.17 do not yet meet that threshold. A stateful FastConformer cache is the next optimization target.
-
-Architecture reference: [SALM-Duplex: Efficient and Direct Duplex Modeling for Speech-to-Speech Language Model](https://arxiv.org/abs/2505.15670) (Interspeech 2025).
-
 **Enhancement, Separation & Audio Generation**
 
 - **[DeepFilterNet3](https://soniqo.audio/guides/denoise)** — Real-time noise suppression (2.1M params, 48 kHz) on Core ML (Neural Engine) or MLX (GPU, fp32). Long-form audio above the 60 s single-shot cap is auto-chunked with crossfade — see `enhanceChunked(...)`
@@ -519,6 +510,10 @@ speech-server --port 8080
 ```
 
 Exposes every model via HTTP REST + WebSocket endpoints, including OpenAI-compatible APIs: a Realtime WebSocket at `/v1/realtime` and a transcription REST endpoint at `/v1/audio/transcriptions`. See [`Sources/AudioServer/`](Sources/AudioServer/).
+
+## Papers
+
+- [SALM-Duplex: Efficient and Direct Duplex Modeling for Speech-to-Speech Language Model](https://arxiv.org/abs/2505.15670) — VoiceChat 11B architecture reference (Interspeech 2025).
 
 ## Architecture
 

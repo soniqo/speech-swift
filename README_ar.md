@@ -91,15 +91,6 @@
 - **[VoiceChat 11B](docs/models/voicechat.md)** — نموذج speech-to-speech ثنائي الاتجاه أصلي عبر MLX بمدخل كلام مستمر وقناتي نص/وظيفة وإخراج كلام مباشر عبر EAR-TTS والترميز العصبي (INT5/INT8؛ ليس آنيًا بعد)
 - **[Audio2Face-3D](docs/models/audio2face3d.md)** — تحريك وجه الأفاتار انطلاقًا من الكلام (NVIDIA Audio2Face-3D v2.3 Mark, 301 معامل وجه, MLX)
 
-| الإصدار | ذروة RSS | أول token نصي منطوق | أول صوت قابل للتشغيل | RTF للمسار الكامل |
-|---|---:|---:|---:|---:|
-| INT8 | 12.21 GB | 68.8 ms | 105.1 ms | 1.34 |
-| INT5 | 8.73 GB | 57.5 ms | 91.4 ms | 1.17 |
-
-أرقام أول token/صوت هي زمن الحساب بعد الإحماء لأول إطار استجابة منطوق، وليست زمن تبديل الأدوار الذي تعلمه النموذج. يتطلب التشغيل المستمر في الزمن الحقيقي أن يكون RTF للمسار الكامل < 1؛ ولا يحقق INT8 عند 1.34 ولا INT5 عند 1.17 هذا الحد بعد. ذاكرة FastConformer مؤقتة ذات حالة هي هدف التحسين التالي.
-
-مرجع البنية: [SALM-Duplex: Efficient and Direct Duplex Modeling for Speech-to-Speech Language Model](https://arxiv.org/abs/2505.15670) ‏(Interspeech 2025).
-
 **التحسين والفصل وتوليد الصوت**
 
 - **[DeepFilterNet3](https://soniqo.audio/ar/guides/denoise)** — قمع الضوضاء في الزمن الحقيقي (2.1M معامل، 48 كيلوهرتز) الصوت الطويل الذي يتجاوز حد اللقطة الواحدة البالغ 60 s يُقسَّم تلقائيًا إلى أجزاء مع crossfade — راجع `enhanceChunked(...)`
@@ -603,6 +594,10 @@ speech-server --port 8080
 يعرض كل نموذج عبر نقاط نهاية HTTP REST + WebSocket، بما في ذلك واجهات برمجة متوافقة مع OpenAI: WebSocket Realtime على `/v1/realtime` ونقطة نهاية REST للنسخ الصوتي على `/v1/audio/transcriptions`. انظر [`Sources/AudioServer/`](Sources/AudioServer/).
 
 </div>
+
+## الأوراق البحثية
+
+- [SALM-Duplex: Efficient and Direct Duplex Modeling for Speech-to-Speech Language Model](https://arxiv.org/abs/2505.15670) — المرجع المعماري لـ VoiceChat 11B ‏(Interspeech 2025).
 
 ## الهيكلة
 

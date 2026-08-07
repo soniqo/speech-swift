@@ -81,15 +81,6 @@
 - **[VoiceChat 11B](docs/models/voicechat.md)** — Нативная MLX-модель дуплексного speech-to-speech с непрерывным речевым входом, каналами текста/функций и прямым речевым выходом через EAR-TTS и нейрокодек (INT5/INT8; пока не в реальном времени)
 - **[Audio2Face-3D](docs/models/audio2face3d.md)** — Анимация лица аватара по речи (NVIDIA Audio2Face-3D v2.3 Mark, 301 лицевой коэффициент, MLX)
 
-| Вариант | Пиковый RSS | Первый произнесённый текстовый токен | Первое воспроизводимое аудио | RTF всего конвейера |
-|---|---:|---:|---:|---:|
-| INT8 | 12.21 GB | 68.8 ms | 105.1 ms | 1.34 |
-| INT5 | 8.73 GB | 57.5 ms | 91.4 ms | 1.17 |
-
-Значения первого токена/аудио — это прогретая вычислительная задержка первого кадра устного ответа, а не выученная задержка смены реплики. Для устойчивой работы в реальном времени требуется RTF всего конвейера < 1; INT8 с 1.34 и INT5 с 1.17 пока не достигают этого порога. Следующая цель оптимизации — кэш FastConformer с сохранением состояния.
-
-Архитектурная ссылка: [SALM-Duplex: Efficient and Direct Duplex Modeling for Speech-to-Speech Language Model](https://arxiv.org/abs/2505.15670) (Interspeech 2025).
-
 **Улучшение, разделение и генерация аудио**
 
 - **[DeepFilterNet3](https://soniqo.audio/ru/guides/denoise)** — Подавление шума в реальном времени (2.1M параметров, 48 кГц). Длинное аудио, превышающее лимит одиночного прохода в 60 s, автоматически разбивается на чанки с crossfade — см. `enhanceChunked(...)`
@@ -513,6 +504,10 @@ speech-server --port 8080
 ```
 
 Предоставляет все модели через HTTP REST + WebSocket-эндпоинты, включая совместимые с OpenAI API: Realtime WebSocket по адресу `/v1/realtime` и REST-эндпоинт транскрипции по адресу `/v1/audio/transcriptions`. См. [`Sources/AudioServer/`](Sources/AudioServer/).
+
+## Научные статьи
+
+- [SALM-Duplex: Efficient and Direct Duplex Modeling for Speech-to-Speech Language Model](https://arxiv.org/abs/2505.15670) — архитектурная основа VoiceChat 11B (Interspeech 2025).
 
 ## Архитектура
 

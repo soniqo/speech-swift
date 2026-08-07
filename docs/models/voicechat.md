@@ -170,6 +170,10 @@ with one 80 ms frame per live input push, measured:
 The corresponding macOS physical-footprint peaks were 24.42 GB for INT8 and
 20.94 GB for INT5; physical footprint includes file-backed MLX mappings that
 RSS can undercount. Both variants remain outside the 80 ms frame budget.
+Sustained real-time operation also requires whole-pipeline RTF < 1; INT8 at
+1.34 and INT5 at 1.17 do not yet meet that threshold. Stateful FastConformer
+caching, replacing bounded encoder recomputation, is the next optimization
+target.
 
 For INT8, perception/decision/synthesis p50/p95 were 23.4/28.8,
 47.0/50.8, and 33.1/36.9 ms. For INT5 they were 22.0/30.3, 36.3/39.5,

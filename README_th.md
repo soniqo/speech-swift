@@ -81,15 +81,6 @@
 - **[VoiceChat 11B](docs/models/voicechat.md)** — speech-to-speech แบบ duplex บน MLX ที่รับเสียงพูดต่อเนื่อง ใช้ช่องข้อความ/ฟังก์ชัน และส่งเสียงพูดโดยตรงผ่าน EAR-TTS กับ neural codec (INT5/INT8; ยังไม่ทำงานแบบเรียลไทม์)
 - **[Audio2Face-3D](docs/models/audio2face3d.md)** — แอนิเมชันใบหน้าอวาตาร์ขับเคลื่อนด้วยเสียงพูด (NVIDIA Audio2Face-3D v2.3 Mark, ค่าสัมประสิทธิ์ใบหน้า 301 ค่า, MLX)
 
-| รุ่น | RSS สูงสุด | token ข้อความพูดตัวแรก | เสียงแรกที่เล่นได้ | RTF ของ pipeline ทั้งหมด |
-|---|---:|---:|---:|---:|
-| INT8 | 12.21 GB | 68.8 ms | 105.1 ms | 1.34 |
-| INT5 | 8.73 GB | 57.5 ms | 91.4 ms | 1.17 |
-
-ค่าของ token/เสียงแรกคือเวลา compute หลัง warm-up สำหรับเฟรมคำตอบที่พูดเฟรมแรก ไม่ใช่ latency การผลัดกันพูดที่โมเดลเรียนรู้ การทำงานแบบเรียลไทม์อย่างต่อเนื่องต้องมี RTF ของ pipeline ทั้งหมด < 1; INT8 ที่ 1.34 และ INT5 ที่ 1.17 ยังไม่ถึงเกณฑ์นี้ เป้าหมายการปรับประสิทธิภาพถัดไปคือแคช FastConformer แบบมีสถานะ
-
-ข้อมูลอ้างอิงสถาปัตยกรรม: [SALM-Duplex: Efficient and Direct Duplex Modeling for Speech-to-Speech Language Model](https://arxiv.org/abs/2505.15670) (Interspeech 2025)
-
 **การปรับปรุง การแยก และการสร้างเสียง**
 
 - **[DeepFilterNet3](https://soniqo.audio/guides/denoise)** — การลดเสียงรบกวนแบบเรียลไทม์ (2.1M พารามิเตอร์, 48 kHz)
@@ -511,6 +502,10 @@ speech-server --port 8080
 ```
 
 เปิดให้เข้าถึงทุกโมเดลผ่าน endpoints HTTP REST + WebSocket รวมถึง API ที่รองรับ OpenAI: Realtime WebSocket ที่ `/v1/realtime` และ REST endpoint สำหรับการถอดเสียงที่ `/v1/audio/transcriptions` ดู [`Sources/AudioServer/`](Sources/AudioServer/)
+
+## งานวิจัย
+
+- [SALM-Duplex: Efficient and Direct Duplex Modeling for Speech-to-Speech Language Model](https://arxiv.org/abs/2505.15670) — เอกสารอ้างอิงด้านสถาปัตยกรรมของ VoiceChat 11B (Interspeech 2025)
 
 ## สถาปัตยกรรม
 

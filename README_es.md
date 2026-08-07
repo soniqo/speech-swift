@@ -81,15 +81,6 @@ Reconocimiento, síntesis y comprensión de voz en el dispositivo para Mac e iOS
 - **[VoiceChat 11B](docs/models/voicechat.md)** — Speech-to-speech dúplex nativo en MLX con entrada de voz continua, canales de texto/función y voz directa mediante EAR-TTS y códec neuronal (INT5/INT8; aún no funciona en tiempo real)
 - **[Audio2Face-3D](docs/models/audio2face3d.md)** — Animación facial de avatares impulsada por voz (NVIDIA Audio2Face-3D v2.3 Mark, 301 coeficientes faciales, MLX)
 
-| Variante | RSS máximo | Primer token de texto hablado | Primer audio reproducible | RTF de todo el pipeline |
-|---|---:|---:|---:|---:|
-| INT8 | 12.21 GB | 68.8 ms | 105.1 ms | 1.34 |
-| INT5 | 8.73 GB | 57.5 ms | 91.4 ms | 1.17 |
-
-Las cifras del primer token/audio son latencias de cómputo en caliente para el primer fotograma de respuesta hablada, no latencia de toma de turno aprendida. El funcionamiento sostenido en tiempo real exige un RTF del pipeline completo < 1; INT8 con 1.34 e INT5 con 1.17 aún no alcanzan ese umbral. Una caché FastConformer con estado es el siguiente objetivo de optimización.
-
-Referencia de arquitectura: [SALM-Duplex: Efficient and Direct Duplex Modeling for Speech-to-Speech Language Model](https://arxiv.org/abs/2505.15670) (Interspeech 2025).
-
 **Mejora, separación y generación de audio**
 
 - **[DeepFilterNet3](https://soniqo.audio/es/guides/denoise)** — Supresión de ruido en tiempo real (2.1M parámetros, 48 kHz). El audio de larga duración por encima del límite de 60 s en una sola pasada se divide automáticamente en fragmentos con crossfade — ver `enhanceChunked(...)`
@@ -513,6 +504,10 @@ speech-server --port 8080
 ```
 
 Expone cada modelo a través de endpoints HTTP REST + WebSocket, incluyendo APIs compatibles con OpenAI: un WebSocket Realtime en `/v1/realtime` y un endpoint REST de transcripción en `/v1/audio/transcriptions`. Ver [`Sources/AudioServer/`](Sources/AudioServer/).
+
+## Artículos científicos
+
+- [SALM-Duplex: Efficient and Direct Duplex Modeling for Speech-to-Speech Language Model](https://arxiv.org/abs/2505.15670) — Referencia de arquitectura de VoiceChat 11B (Interspeech 2025).
 
 ## Arquitectura
 

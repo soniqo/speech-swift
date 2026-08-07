@@ -81,15 +81,6 @@ Reconnaissance, synthese et comprehension vocale embarquees pour Mac et iOS. S'e
 - **[VoiceChat 11B](docs/models/voicechat.md)** -- Speech-to-speech duplex natif MLX avec entrée vocale continue, canaux texte/fonction et parole directe via EAR-TTS et codec neuronal (INT5/INT8 ; pas encore en temps réel)
 - **[Audio2Face-3D](docs/models/audio2face3d.md)** — Animation faciale d'avatar pilotée par la voix (NVIDIA Audio2Face-3D v2.3 Mark, 301 coefficients faciaux, MLX)
 
-| Variante | RSS maximal | Premier token de texte parlé | Premier audio lisible | RTF du pipeline complet |
-|---|---:|---:|---:|---:|
-| INT8 | 12.21 GB | 68.8 ms | 105.1 ms | 1.34 |
-| INT5 | 8.73 GB | 57.5 ms | 91.4 ms | 1.17 |
-
-Les valeurs premier token/audio sont des latences de calcul à chaud pour la première trame de réponse parlée, et non la latence de prise de tour apprise. Le fonctionnement continu en temps réel exige un RTF du pipeline complet < 1 ; INT8 à 1.34 et INT5 à 1.17 n'atteignent pas encore ce seuil. Un cache FastConformer avec état est la prochaine cible d'optimisation.
-
-Référence d'architecture : [SALM-Duplex: Efficient and Direct Duplex Modeling for Speech-to-Speech Language Model](https://arxiv.org/abs/2505.15670) (Interspeech 2025).
-
 **Amélioration, séparation et génération audio**
 
 - **[DeepFilterNet3](https://soniqo.audio/fr/guides/denoise)** -- Suppression de bruit en temps reel (2,1M parametres, 48 kHz). L'audio long depassant la limite de 60 s en un seul passage est decoupe automatiquement en blocs avec crossfade -- voir l'API `enhanceChunked(...)`
@@ -513,6 +504,10 @@ speech-server --port 8080
 ```
 
 Expose chaque modele via des endpoints HTTP REST + WebSocket, y compris des APIs compatibles OpenAI : un WebSocket Realtime sur `/v1/realtime` et un endpoint REST de transcription sur `/v1/audio/transcriptions`. Voir [`Sources/AudioServer/`](Sources/AudioServer/).
+
+## Articles scientifiques
+
+- [SALM-Duplex: Efficient and Direct Duplex Modeling for Speech-to-Speech Language Model](https://arxiv.org/abs/2505.15670) — Référence d'architecture de VoiceChat 11B (Interspeech 2025).
 
 ## Architecture
 

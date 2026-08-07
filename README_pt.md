@@ -81,15 +81,6 @@ Reconhecimento, sintese e compreensao de fala no dispositivo para Mac e iOS. Exe
 - **[VoiceChat 11B](docs/models/voicechat.md)** — Speech-to-speech duplex nativo em MLX com entrada contínua de fala, canais de texto/função e fala direta via EAR-TTS e codec neural (INT5/INT8; ainda não em tempo real)
 - **[Audio2Face-3D](docs/models/audio2face3d.md)** — Animação facial de avatares guiada por fala (NVIDIA Audio2Face-3D v2.3 Mark, 301 coeficientes faciais, MLX)
 
-| Variante | RSS de pico | Primeiro token de texto falado | Primeiro áudio reproduzível | RTF do pipeline completo |
-|---|---:|---:|---:|---:|
-| INT8 | 12.21 GB | 68.8 ms | 105.1 ms | 1.34 |
-| INT5 | 8.73 GB | 57.5 ms | 91.4 ms | 1.17 |
-
-Os valores do primeiro token/áudio são latências de computação aquecida do primeiro frame de resposta falada, não a latência de troca de turno aprendida. A operação sustentada em tempo real exige um RTF do pipeline completo < 1; INT8 em 1.34 e INT5 em 1.17 ainda não atingem esse limite. Um cache FastConformer com estado é o próximo alvo de otimização.
-
-Referência de arquitetura: [SALM-Duplex: Efficient and Direct Duplex Modeling for Speech-to-Speech Language Model](https://arxiv.org/abs/2505.15670) (Interspeech 2025).
-
 **Aprimoramento, separação e geração de áudio**
 
 - **[DeepFilterNet3](https://soniqo.audio/pt/guides/denoise)** — Supressao de ruido em tempo real (2.1M parametros, 48 kHz). Audio longo acima do limite de 60 s em uma unica passagem e dividido automaticamente em blocos com crossfade — veja `enhanceChunked(...)`
@@ -513,6 +504,10 @@ speech-server --port 8080
 ```
 
 Expoe cada modelo via endpoints HTTP REST + WebSocket, incluindo APIs compativeis com OpenAI: um WebSocket Realtime em `/v1/realtime` e um endpoint REST de transcricao em `/v1/audio/transcriptions`. Veja [`Sources/AudioServer/`](Sources/AudioServer/).
+
+## Artigos científicos
+
+- [SALM-Duplex: Efficient and Direct Duplex Modeling for Speech-to-Speech Language Model](https://arxiv.org/abs/2505.15670) — Referência de arquitetura do VoiceChat 11B (Interspeech 2025).
 
 ## Arquitetura
 
