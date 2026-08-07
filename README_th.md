@@ -78,7 +78,7 @@
 
 - **[Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate)** — การแปลเสียงพูดสู่เสียงพูดแบบสตรีมมิ่ง (FR/ES/PT/DE → EN, MLX INT4 + INT8, สแต็ก Kyutai Moshi/Mimi, CC-BY-4.0)
 - **[PersonaPlex](https://soniqo.audio/guides/respond)** — เสียงพูดสู่เสียงพูดแบบ full-duplex (7B, เสียงเข้า → เสียงออก, 18 พรีเซ็ตเสียง)
-- **[VoiceChat 11B](docs/models/voicechat.md)** — speech-to-speech แบบ duplex บน MLX ที่รับเสียงพูดต่อเนื่อง ใช้ช่องข้อความ/ฟังก์ชัน และส่งเสียงพูดโดยตรงผ่าน EAR-TTS กับ neural codec (INT5/INT8; ยังไม่ทำงานแบบเรียลไทม์)
+- **[VoiceChat 11B](docs/models/voicechat.md)** — speech-to-speech แบบ duplex บน MLX ที่รับเสียงพูดต่อเนื่อง ใช้ช่องข้อความ/ฟังก์ชัน และส่งเสียงพูดโดยตรงผ่าน EAR-TTS กับ neural codec (INT5/INT8)
 - **[Audio2Face-3D](docs/models/audio2face3d.md)** — แอนิเมชันใบหน้าอวาตาร์ขับเคลื่อนด้วยเสียงพูด (NVIDIA Audio2Face-3D v2.3 Mark, ค่าสัมประสิทธิ์ใบหน้า 301 ค่า, MLX)
 
 **การปรับปรุง การแยก และการสร้างเสียง**

@@ -88,7 +88,7 @@
 
 - **[Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate)** — ترجمة تدفقية من كلام إلى كلام (FR/ES/PT/DE → EN، MLX INT4 + INT8، حزمة Kyutai Moshi/Mimi، CC-BY-4.0)
 - **[PersonaPlex](https://soniqo.audio/ar/guides/respond)** — تحويل صوت إلى صوت ثنائي الاتجاه الكامل (7B، صوت داخل → صوت خارج، 18 إعداداً صوتياً مسبقاً)
-- **[VoiceChat 11B](docs/models/voicechat.md)** — نموذج speech-to-speech ثنائي الاتجاه أصلي عبر MLX بمدخل كلام مستمر وقناتي نص/وظيفة وإخراج كلام مباشر عبر EAR-TTS والترميز العصبي (INT5/INT8؛ ليس آنيًا بعد)
+- **[VoiceChat 11B](docs/models/voicechat.md)** — نموذج speech-to-speech ثنائي الاتجاه أصلي عبر MLX بمدخل كلام مستمر وقناتي نص/وظيفة وإخراج كلام مباشر عبر EAR-TTS والترميز العصبي (INT5/INT8)
 - **[Audio2Face-3D](docs/models/audio2face3d.md)** — تحريك وجه الأفاتار انطلاقًا من الكلام (NVIDIA Audio2Face-3D v2.3 Mark, 301 معامل وجه, MLX)
 
 **التحسين والفصل وتوليد الصوت**

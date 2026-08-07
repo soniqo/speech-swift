@@ -72,6 +72,56 @@ final class VoiceChatTests: XCTestCase {
         }
     }
 
+    /// Stateful inference must be the same causal computation as the batch
+    /// stack, not merely close enough to produce plausible speech.
+    func testStreamingConformerMatchesBatchAndBoundsCaches() {
+        let config = VoiceChatEncoderConfig(
+            dModel: 16,
+            nLayers: 2,
+            nHeads: 4,
+            featIn: 8,
+            ffExpansionFactor: 2,
+            convKernelSize: 3,
+            subsamplingFactor: 8,
+            subsamplingConvChannels: 4,
+            preEncodeFreqOut: 1,
+            causalConvIndices: [0, 2, 5],
+            convNormType: "layer_norm",
+            selfAttentionModel: "rel_pos",
+            attContextSize: [4, 0],
+            attContextStyle: "chunked_limited",
+            posEmbMaxLen: 64,
+            useBias: false,
+            xscaling: false)
+        let encoder = VoiceChatEncoder(config)
+        MLXRandom.seed(7)
+        let input = MLXRandom.normal([1, 12, config.dModel]).asType(.float32)
+
+        let batch = encoder.conformerStack(input)
+        let state = encoder.newStreamState()
+        var frames: [MLXArray] = []
+        for index in 0 ..< input.dim(1) {
+            let frame = encoder.stream(
+                input[0..., index..<(index + 1), 0...], state: state)
+            MLX.eval([frame] + state.evaluatedArrays)
+            frames.append(frame)
+        }
+        let streamed = MLX.concatenated(frames, axis: 1)
+        eval(batch, streamed)
+
+        let deviation = mean(abs(batch - streamed)).item(Float.self)
+        let scale = mean(abs(batch)).item(Float.self)
+        // MLX selects shape-dependent kernels for a 12-frame matrix and a
+        // sequence of one-frame matrices. They are not bit-identical, but the
+        // normalized drift must remain below one tenth of one percent.
+        XCTAssertLessThan(deviation / max(scale, 1e-7), 1e-3)
+        for cache in state.layers {
+            XCTAssertLessThanOrEqual(cache.key?.dim(2) ?? 0, config.leftContext + 1)
+            XCTAssertLessThanOrEqual(cache.value?.dim(2) ?? 0, config.leftContext + 1)
+            XCTAssertEqual(cache.convolution?.dim(1), config.convKernelSize - 1)
+        }
+    }
+
     // MARK: - Weights required
 
     func testPerceptionEncodesIntoLanguageModelSpace() throws {

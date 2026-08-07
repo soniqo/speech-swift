@@ -78,7 +78,7 @@ Speech Swift パッケージへの参照を公開ソースで確認できる 16 
 
 - **[Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate)** — ストリーミング音声間翻訳（FR/ES/PT/DE → EN、MLX INT4 + INT8、Kyutai Moshi/Mimi スタック、CC-BY-4.0）
 - **[PersonaPlex](https://soniqo.audio/ja/guides/respond)** — 全二重音声間会話（7B、音声入力 → 音声出力、18種類のボイスプリセット）
-- **[VoiceChat 11B](docs/models/voicechat.md)** — 音声を連続入力し、テキスト/関数チャンネルと EAR-TTS からニューラルコーデック音声を直接生成するネイティブ MLX 全二重 speech-to-speech（INT5/INT8、現時点ではリアルタイム未達）
+- **[VoiceChat 11B](docs/models/voicechat.md)** — 音声を連続入力し、テキスト/関数チャンネルと EAR-TTS からニューラルコーデック音声を直接生成するネイティブ MLX 全二重 speech-to-speech（INT5/INT8）
 - **[Audio2Face-3D](docs/models/audio2face3d.md)** — 音声駆動のアバター表情アニメーション（NVIDIA Audio2Face-3D v2.3 Mark、顔係数 301 次元、MLX）
 
 **強化、分離、オーディオ生成**

@@ -78,7 +78,7 @@
 
 - **[Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate)** — 流式语音到语音翻译（FR/ES/PT/DE → EN，MLX INT4 + INT8，Kyutai Moshi/Mimi 技术栈，CC-BY-4.0）
 - **[PersonaPlex](https://soniqo.audio/zh/guides/respond)** — 全双工语音到语音（7B，音频输入 → 音频输出，18 种预设音色）
-- **[VoiceChat 11B](docs/models/voicechat.md)** — 原生 MLX 双工语音到语音（speech-to-speech），持续接收语音，通过文本/函数通道和 EAR-TTS 直接生成神经编解码器语音（INT5/INT8；目前尚未达到实时）
+- **[VoiceChat 11B](docs/models/voicechat.md)** — 原生 MLX 双工语音到语音（speech-to-speech），持续接收语音，通过文本/函数通道和 EAR-TTS 直接生成神经编解码器语音（INT5/INT8）
 - **[Audio2Face-3D](docs/models/audio2face3d.md)** — 语音驱动的虚拟形象面部动画（NVIDIA Audio2Face-3D v2.3 Mark，301 个面部系数，MLX）
 
 **增强、分离与音频生成**

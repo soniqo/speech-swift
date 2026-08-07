@@ -78,7 +78,7 @@ Nhận dạng, tổng hợp và hiểu giọng nói trên thiết bị cho Mac v
 
 - **[Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate)** — Dịch giọng nói sang giọng nói streaming (FR/ES/PT/DE → EN, MLX INT4 + INT8, stack Kyutai Moshi/Mimi, CC-BY-4.0)
 - **[PersonaPlex](https://soniqo.audio/guides/respond)** — Giọng nói sang giọng nói full-duplex (7B, audio vào → audio ra, 18 preset giọng nói)
-- **[VoiceChat 11B](docs/models/voicechat.md)** — Speech-to-speech duplex MLX native với đầu vào giọng nói liên tục, kênh văn bản/chức năng và đầu ra giọng nói trực tiếp qua EAR-TTS cùng neural codec (INT5/INT8; chưa đạt thời gian thực)
+- **[VoiceChat 11B](docs/models/voicechat.md)** — Speech-to-speech duplex MLX native với đầu vào giọng nói liên tục, kênh văn bản/chức năng và đầu ra giọng nói trực tiếp qua EAR-TTS cùng neural codec (INT5/INT8)
 - **[Audio2Face-3D](docs/models/audio2face3d.md)** — Hoạt ảnh khuôn mặt avatar điều khiển bằng giọng nói (NVIDIA Audio2Face-3D v2.3 Mark, 301 hệ số khuôn mặt, MLX)
 
 **Nâng cấp, tách nguồn và tạo âm thanh**

@@ -78,7 +78,7 @@ Speech Swift पैकेज के सत्यापन योग्य सं
 
 - **[Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate)** — स्ट्रीमिंग स्पीच-टू-स्पीच अनुवाद (FR/ES/PT/DE → EN, MLX INT4 + INT8, Kyutai Moshi/Mimi स्टैक, CC-BY-4.0)
 - **[PersonaPlex](https://soniqo.audio/hi/guides/respond)** — फुल-डुप्लेक्स स्पीच-टू-स्पीच (7B, ऑडियो इन → ऑडियो आउट, 18 वॉयस प्रीसेट)
-- **[VoiceChat 11B](docs/models/voicechat.md)** — continuous speech input, duplex text/function channels और EAR-TTS + neural codec से direct speech output वाला native MLX speech-to-speech (INT5/INT8; अभी real-time नहीं)
+- **[VoiceChat 11B](docs/models/voicechat.md)** — continuous speech input, duplex text/function channels और EAR-TTS + neural codec से direct speech output वाला native MLX speech-to-speech (INT5/INT8)
 - **[Audio2Face-3D](docs/models/audio2face3d.md)** — वाक्-चालित अवतार चेहरा एनीमेशन (NVIDIA Audio2Face-3D v2.3 Mark, 301 फेशियल कोएफ़िशिएंट, MLX)
 
 **एन्हांसमेंट, सेपरेशन और ऑडियो जनरेशन**

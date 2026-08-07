@@ -13,8 +13,10 @@ input frame. The upstream architecture reference is
 - The `VoiceChat` package product.
 - A complete VoiceChat MLX bundle with `encoder/`, `llm/`, and `tts/`.
 - Enough unified memory for the selected export (about 12.11 GB on disk for
-  INT8 or 8.56 GB for INT5, plus runtime allocations). The controlled full
-  streaming run peaked at 12.21 GB RSS for INT8 and 8.73 GB for INT5.
+  INT8 or 8.56 GB for INT5, plus runtime allocations). The optimized controlled
+  INT5 run peaked at about 8.70 GB RSS and 15.61–15.64 GB macOS physical
+  footprint; the latter includes file-backed MLX mappings that RSS can
+  undercount.
 
 An older bundle containing only `encoder/` and `llm/` can still be loaded by
 the low-level perception/language APIs, but `VoiceChatModel.load` rejects it
@@ -177,23 +179,26 @@ speaker-prompt warmup. Startup latency and bundle download time are therefore
 reported separately from per-frame inference.
 
 For reference, release builds on an M5 Pro (48 GB), using the controlled
-120-frame fixture and the default one-frame/80 ms live chunks, measured:
+120-frame fixture and the default one-frame/80 ms live chunks, completed three
+independent protected-head INT5 runs in 9.183 s, 9.197 s, and 9.497 s for a
+9.600 s model timeline. Their whole-pipeline RTF values were `0.96`, `0.96`,
+and `0.99`. Typical perception/decision/synthesis p50 values were about
+9/36/31–32 ms, and total/frame p50 was 76–79 ms. Peak RSS was about 8.70 GB,
+the physical-footprint peak was 15.61–15.64 GB, and MLX reported 9.50 GB peak
+GPU allocation. A final source-matched confirmation measured RTF 0.96, first
+spoken text at 44.4 ms, and first playable audio at 77.5 ms.
 
-| Variant | Peak RSS | First spoken text token | First playable audio | Total/frame p50 / p95 | Whole-pipeline RTF |
-|---|---:|---:|---:|---:|---:|
-| INT8 | 12.21 GB | 68.8 ms | 105.1 ms | 104.6 / 114.0 ms | 1.34 |
-| INT5 | 8.73 GB | 57.5 ms | 91.4 ms | 93.0 / 104.7 ms | 1.17 |
+Whole-pipeline RTF below `1` establishes sustained throughput, while the
+session's `realTime` flag deliberately requires the stricter total/frame p95
+to remain below `80 ms`. Two of those runs met that p95 deadline; the slowest
+reached 83.8 ms. Measure on the deployment machine and avoid concurrent GPU
+work when comparing results. Current INT8 correctness is verified, but its
+post-optimization release performance has not yet been remeasured.
 
-The first-token/audio values are hot compute latency after the controlled turn
-opens, not learned turn-taking latency. Both variants remain slower than real
-time once perception cost is included. `--chunk-frames` can test larger input
-batches, but those amortize encoder work and are not the default 80 ms live
-cadence.
-
-Sustained real-time operation requires whole-pipeline RTF < 1; INT8 at 1.34
-and INT5 at 1.17 do not yet meet that threshold. Stateful FastConformer
-caching, replacing bounded encoder recomputation, is the next optimization
-target.
+The first-token/audio values printed by the command are hot compute latency
+after the controlled turn opens, not learned turn-taking latency.
+`--chunk-frames` can test larger input batches, but those are not the default
+80 ms live cadence.
 
 `--force-turn-at-end` injects BOS at the end of the input. It exists for
 controlled regression tests; do not use its onset as a natural turn-taking

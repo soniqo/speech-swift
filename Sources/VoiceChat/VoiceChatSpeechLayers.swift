@@ -1,5 +1,6 @@
 import Foundation
 import MLX
+import MLXFast
 import MLXNN
 import MLXRandom
 
@@ -159,6 +160,18 @@ final class VoiceChatSpeechAttention {
             }
             cache.keys = k
             cache.values = v
+        }
+
+        // Generation advances one cached frame at a time. With no softcap or
+        // explicit mask, fused SDPA is the same attention computation with far
+        // fewer Metal dispatches across the 28-layer speech backbone.
+        if length == 1, softcap == nil, additiveMask == nil {
+            let attended = MLXFast.scaledDotProductAttention(
+                queries: q, keys: k, values: v,
+                scale: 1 / Float(16), mask: nil)
+                .transposed(0, 2, 1, 3)
+                .reshaped([batch, length, heads * headDimension])
+            return output(attended)
         }
 
         var scores = MLX.matmul(q, k.transposed(0, 1, 3, 2)) / MLXArray(Float(16))

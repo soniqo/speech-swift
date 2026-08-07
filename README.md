@@ -78,7 +78,7 @@ On-device speech recognition, synthesis, and understanding for Mac and iOS. Runs
 
 - **[Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate)** — Streaming speech-to-speech translation (FR/ES/PT/DE → EN, MLX INT4 + INT8, Kyutai Moshi/Mimi stack, CC-BY-4.0)
 - **[PersonaPlex](https://soniqo.audio/guides/respond)** — Full-duplex speech-to-speech (7B, audio in → audio out, 18 voice presets)
-- **[VoiceChat 11B](docs/models/voicechat.md)** — Native MLX duplex speech-to-speech with continuous speech input, text/function channels, direct EAR-TTS speech output, and a neural codec (INT5/INT8; not yet real-time)
+- **[VoiceChat 11B](docs/models/voicechat.md)** — Native MLX duplex speech-to-speech with continuous speech input, text/function channels, direct EAR-TTS speech output, and a neural codec (INT5/INT8)
 - **[Audio2Face-3D](docs/models/audio2face3d.md)** — Speech-driven facial animation for avatars (NVIDIA Audio2Face-3D v2.3 Mark, 301 facial coefficients, MLX)
 
 **Enhancement, Separation & Audio Generation**

@@ -78,7 +78,7 @@
 
 - **[Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate)** — Потоковый перевод речи в речь (FR/ES/PT/DE → EN, MLX INT4 + INT8, стек Kyutai Moshi/Mimi, CC-BY-4.0)
 - **[PersonaPlex](https://soniqo.audio/ru/guides/respond)** — Полнодуплексная генерация речи из речи (7B, аудио на входе → аудио на выходе, 18 голосовых пресетов)
-- **[VoiceChat 11B](docs/models/voicechat.md)** — Нативная MLX-модель дуплексного speech-to-speech с непрерывным речевым входом, каналами текста/функций и прямым речевым выходом через EAR-TTS и нейрокодек (INT5/INT8; пока не в реальном времени)
+- **[VoiceChat 11B](docs/models/voicechat.md)** — Нативная MLX-модель дуплексного speech-to-speech с непрерывным речевым входом, каналами текста/функций и прямым речевым выходом через EAR-TTS и нейрокодек (INT5/INT8)
 - **[Audio2Face-3D](docs/models/audio2face3d.md)** — Анимация лица аватара по речи (NVIDIA Audio2Face-3D v2.3 Mark, 301 лицевой коэффициент, MLX)
 
 **Улучшение, разделение и генерация аудио**

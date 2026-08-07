@@ -78,7 +78,7 @@ Spracherkennung, -synthese und -verständnis auf dem Gerät für Mac und iOS. L�
 
 - **[Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate)** — Streaming-Sprache-zu-Sprache-Übersetzung (FR/ES/PT/DE → EN, MLX INT4 + INT8, Kyutai Moshi/Mimi-Stack, CC-BY-4.0)
 - **[PersonaPlex](https://soniqo.audio/de/guides/respond)** — Vollduplex-Sprache-zu-Sprache (7B, Audio rein → Audio raus, 18 Stimmvoreinstellungen)
-- **[VoiceChat 11B](docs/models/voicechat.md)** — Natives MLX-Duplex-Speech-to-Speech mit kontinuierlicher Spracheingabe, Text-/Funktionskanälen und direkter Sprachausgabe über EAR-TTS und neuronalen Codec (INT5/INT8; noch nicht echtzeitfähig)
+- **[VoiceChat 11B](docs/models/voicechat.md)** — Natives MLX-Duplex-Speech-to-Speech mit kontinuierlicher Spracheingabe, Text-/Funktionskanälen und direkter Sprachausgabe über EAR-TTS und neuronalen Codec (INT5/INT8)
 - **[Audio2Face-3D](docs/models/audio2face3d.md)** — Sprachgesteuerte Gesichtsanimation für Avatare (NVIDIA Audio2Face-3D v2.3 Mark, 301 Gesichtskoeffizienten, MLX)
 
 **Verbesserung, Trennung und Audiogenerierung**

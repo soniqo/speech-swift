@@ -77,14 +77,18 @@ public actor VoiceChatSession {
     public static let greetingSystemPrompt =
         baseSystemPrompt + " Start the conversation by greeting the user."
 
-    // 70 attention frames + 24 causal convolutions of reach 8 + a safety margin.
-    static let encoderLeftContextFrames = 70 + 24 * (9 - 1) + 16
+    // Three stride-2 causal subsampling stages have a 15-mel-frame receptive
+    // field (140 ms of history). The conformer now owns its longer history in
+    // bounded per-layer caches, so two preceding 80 ms input frames are enough
+    // for the recomputed frontend window.
+    static let frontendContextFrames = 2
     static let codecContextFrames = 8
 
     private let model: VoiceChatModel
     private let sampling: VoiceChatTextSamplingParameters
     private let speechParameters: VoiceChatSpeechGenerationParameters
     private var languageCache: [KVCache]
+    private var encoderState: VoiceChatEncoderStreamState
     private var inputAudio: [Float] = []
     private var completedFrames = 0
     private var previousText: Int
@@ -105,6 +109,7 @@ public actor VoiceChatSession {
         self.sampling = sampling
         self.speechParameters = speechParameters
         self.languageCache = model.languageModel.newCache()
+        self.encoderState = model.perception.encoder.newStreamState()
         self.previousText = model.tokenizer.padID
         self.previousFunction = model.tokenizer.padID
     }
@@ -189,27 +194,36 @@ public actor VoiceChatSession {
 
         let perceptionStart = DispatchTime.now().uptimeNanoseconds
         let contextStart = max(
-            0, completedFrames - Self.encoderLeftContextFrames)
+            0, completedFrames - Self.frontendContextFrames)
         let startSample = contextStart * Self.inputSamplesPerFrame
         let window = Array(inputAudio[startSample...])
         // NeMo's centred STFT needs enough signal to reveal a stable mel frame.
         guard window.count >= Self.inputSampleRate / 10 else { return [] }
 
         let mel = model.transcriber.logMel(window)
-        let embeddings = model.perception(mel).asType(.float32)
-        eval(embeddings)
-
+        let subsampled = model.perception.encoder.preEncode(mel)
         let alreadyProduced = completedFrames - contextStart
         let complete = inputAudio.count / Self.inputSamplesPerFrame
-        let limit = min(embeddings.dim(1), complete - contextStart)
+        let limit = min(subsampled.dim(1), complete - contextStart)
         guard limit > alreadyProduced else { return [] }
+
+        var embeddings: [MLXArray] = []
+        embeddings.reserveCapacity(limit - alreadyProduced)
+        for offset in alreadyProduced ..< limit {
+            let hidden = model.perception.encoder.stream(
+                subsampled[0..., offset..<(offset + 1), 0...],
+                state: encoderState)
+            let embedding = model.perception.modalityProj(hidden).asType(.float32)
+            MLX.eval([embedding] + encoderState.evaluatedArrays)
+            embeddings.append(embedding)
+        }
         let perceptionPerFrame = milliseconds(since: perceptionStart)
             / Double(limit - alreadyProduced)
 
         var events: [VoiceChatFrameEvent] = []
-        for offset in alreadyProduced ..< limit {
+        for embedding in embeddings {
             let event = try advance(
-                audioEmbedding: embeddings[0..., offset..<(offset + 1), 0...],
+                audioEmbedding: embedding,
                 record: true,
                 forceSilent: completedFrames == 0,
                 audioMilliseconds: Double(completedFrames * Self.frameMilliseconds),

@@ -54,8 +54,11 @@ The perception path applies the checkpoint's own centred-STFT frontend, a
 24-layer FastConformer at 1,024 hidden dimensions, and an `IdentityConnector`
 whose single 1,024 → 4,480 linear projection places audio in the language
 model's embedding space. The encoder attends to 70 frames on the left and none
-on the right. Streaming uses bounded recomputation over that attention window,
-the causal-convolution receptive field, and a small safety margin.
+on the right. Each streaming layer retains those projected keys/values plus its
+eight-frame causal-convolution state, so only the newly subsampled frame crosses
+the FastConformer stack. The frontend keeps two 80 ms input frames, which cover
+the centred STFT and the three causal stride-2 subsampling stages without
+recomputing the encoder's longer history.
 
 Each language-model position is the sum of three channels:
 
@@ -99,7 +102,10 @@ requires RMS below `1e-5`.
 The implementation also preserves causal left-only ConvNeXt padding, a
 periodic Hann window, real-valued DC and Nyquist bins, and the six-sample ISTFT
 trim. Codec weights remain dense fp16 in quantized bundles and are promoted to
-fp32 for decoding, matching the verified Python path.
+fp32 for decoding, matching the verified Python path. Live playback uses a
+bounded eight-frame decoder window whose fixed-shape graph is compiled during
+model warmup; short startup windows and arbitrary-length offline rendering keep
+the general decoder path.
 
 ## Quiet failure modes kept under test
 
@@ -152,33 +158,42 @@ text-token agreement for a substantially smaller bundle.
 
 ## Runtime status and latency
 
-The current implementation is functionally streaming but does not yet sustain
-the model's 80 ms frame clock on the tested M5 Pro. `VoiceChatSessionSummary`
-reports perception, language-decision, speech-synthesis, and total per-frame
-latency separately. `realTime` is true only when the p95 of the complete
-per-frame path is below 80 ms; omitting encoder cost can incorrectly classify
-the smaller variant as real-time.
+Stateful FastConformer caches and the compiled live codec path let the INT5
+bundle sustain the model's 80 ms frame clock on the tested M5 Pro.
+`VoiceChatSessionSummary` reports perception, language-decision,
+speech-synthesis, and total per-frame latency separately. Two thresholds remain
+deliberately distinct:
+
+- whole-pipeline RTF below `1` means aggregate inference keeps pace with live
+  audio; and
+- total per-frame p95 below `80 ms` means nearly every individual frame meets
+  its playback deadline. `realTime` reports this stricter p95 condition.
 
 Release builds on an M5 Pro (48 GB), over the 120-frame controlled E2E fixture
-with one 80 ms frame per live input push, measured:
+with one 80 ms frame per live input push, produced these three independent INT5
+runs after model loading and prompt warmup:
 
-| Variant | Peak RSS | First spoken text token | First playable audio | Total/frame p50 / p95 | Whole-pipeline RTF |
-|---|---:|---:|---:|---:|---:|
-| INT8 | 12.21 GB | 68.8 ms | 105.1 ms | 104.6 / 114.0 ms | 1.34 |
-| INT5 | 8.73 GB | 57.5 ms | 91.4 ms | 93.0 / 104.7 ms | 1.17 |
+| Run | Wall time | Model timeline | Whole-pipeline RTF |
+|---:|---:|---:|---:|
+| 1 | 9.183 s | 9.600 s | 0.96 |
+| 2 | 9.197 s | 9.600 s | 0.96 |
+| 3 | 9.497 s | 9.600 s | 0.99 |
 
-The corresponding macOS physical-footprint peaks were 24.42 GB for INT8 and
-20.94 GB for INT5; physical footprint includes file-backed MLX mappings that
-RSS can undercount. Both variants remain outside the 80 ms frame budget.
-Sustained real-time operation also requires whole-pipeline RTF < 1; INT8 at
-1.34 and INT5 at 1.17 do not yet meet that threshold. Stateful FastConformer
-caching, replacing bounded encoder recomputation, is the next optimization
-target.
+All three runs produced the same transcript and generated response. Typical
+perception, decision, and synthesis p50 values were about 9 ms, 36 ms, and
+31–32 ms; total/frame p50 was 76–79 ms. Peak RSS was about 8.70 GB, MLX
+reported 9.50 GB peak GPU allocation, and the macOS physical-footprint peak was
+15.61–15.64 GB. Physical footprint includes file-backed MLX mappings that RSS
+can undercount. A final source-matched confirmation measured RTF 0.96, first
+spoken text at 44.4 ms, and first playable audio at 77.5 ms.
 
-For INT8, perception/decision/synthesis p50/p95 were 23.4/28.8,
-47.0/50.8, and 33.1/36.9 ms. For INT5 they were 22.0/30.3, 36.3/39.5,
-and 33.4/36.1 ms. The whole 9.60 s model timeline took 12.86 s for INT8
-and 11.20 s for INT5.
+This establishes sustained whole-pipeline RTF below `1` for the tested INT5
+configuration, not unlimited deadline headroom: two runs had total/frame p95
+below 80 ms, while the slowest reached 83.8 ms. Current INT8 correctness gates
+pass, but release performance has not been remeasured after this optimization,
+so no updated INT8 real-time claim is made here. Run the benchmark on the target
+machine because thermal state and concurrent GPU work materially affect this
+margin.
 
 Model turn onset and hardware compute latency are different measurements. The
 default prompt is intentionally neutral because adding “greet the user” or

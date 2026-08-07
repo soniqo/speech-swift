@@ -12,6 +12,7 @@
 
 import Foundation
 import MLX
+import MLXFast
 import MLXNN
 
 // MARK: - Causal subsampling
@@ -130,7 +131,9 @@ final class RelPositionalEncoding {
         self.maxLen = maxLen
     }
 
-    func callAsFunction(_ x: MLXArray) -> MLXArray { encode(x) }
+    func callAsFunction(_ x: MLXArray) -> MLXArray {
+        embedding(length: x.shape[1], dtype: x.dtype)
+    }
 
     /// Symmetric relative positions from +(T-1) down to -(T-1).
     private func buildTable(length: Int, dtype: DType) -> MLXArray {
@@ -146,13 +149,79 @@ final class RelPositionalEncoding {
         return table.expandedDimensions(axis: 0).asType(dtype)
     }
 
-    private func encode(_ x: MLXArray) -> MLXArray {
-        let length = x.shape[1]
+    func embedding(length: Int, dtype: DType) -> MLXArray {
         if pe == nil || pe!.shape[1] < 2 * length - 1 {
-            pe = buildTable(length: max(length, maxLen / 2), dtype: x.dtype)
+            pe = buildTable(length: max(length, maxLen / 2), dtype: dtype)
         }
         let centre = pe!.shape[1] / 2
         return pe![0..., (centre - length + 1) ..< (centre + length), 0...]
+    }
+}
+
+// MARK: - Streaming encoder state
+
+/// Per-layer state for exact causal FastConformer streaming.
+///
+/// Attention retains the 70 preceding projected keys/values. Convolution
+/// retains its eight post-GLU inputs, matching the zero-left-padding batch
+/// path without recomputing prior encoder frames.
+final class VoiceChatEncoderLayerCache {
+    var key: MLXArray?
+    var value: MLXArray?
+    var convolution: MLXArray?
+
+    func append(
+        key newKey: MLXArray,
+        value newValue: MLXArray,
+        leftContext: Int
+    ) -> (MLXArray, MLXArray) {
+        var combinedKey = key.map {
+            MLX.concatenated([$0, newKey], axis: 2)
+        } ?? newKey
+        var combinedValue = value.map {
+            MLX.concatenated([$0, newValue], axis: 2)
+        } ?? newValue
+
+        let retained = leftContext + newKey.dim(2)
+        if combinedKey.dim(2) > retained {
+            let start = combinedKey.dim(2) - retained
+            combinedKey = combinedKey[0..., 0..., start..., 0...]
+            combinedValue = combinedValue[0..., 0..., start..., 0...]
+        }
+        key = combinedKey
+        value = combinedValue
+        return (key!, value!)
+    }
+
+    func prependConvolution(_ input: MLXArray, cacheSize: Int) -> MLXArray {
+        if convolution == nil {
+            convolution = MLXArray.zeros(
+                [input.dim(0), cacheSize, input.dim(2)], dtype: input.dtype)
+        }
+        let combined = MLX.concatenated([convolution!, input], axis: 1)
+        convolution = combined[
+            0..., (combined.dim(1) - cacheSize)..., 0...
+        ]
+        return combined
+    }
+
+    var evaluatedArrays: [MLXArray] {
+        [key, value, convolution].compactMap { $0 }
+    }
+
+}
+
+/// Conversation-owned FastConformer state. Model weights remain shareable;
+/// only these bounded activation caches are session-specific.
+final class VoiceChatEncoderStreamState {
+    let layers: [VoiceChatEncoderLayerCache]
+
+    init(layerCount: Int) {
+        layers = (0 ..< layerCount).map { _ in VoiceChatEncoderLayerCache() }
+    }
+
+    var evaluatedArrays: [MLXArray] {
+        layers.flatMap(\.evaluatedArrays)
     }
 }
 
@@ -199,11 +268,22 @@ final class CausalConformerConvolution: Module {
     }
 
     func callAsFunction(_ x: MLXArray) -> MLXArray {
-        var h = pointwiseConv1(x)
-        let parts = MLX.split(h, parts: 2, axis: -1)
-        h = parts[0] * sigmoid(parts[1])
+        var h = MLXNN.glu(pointwiseConv1(x), axis: 2)
         // Causal: all padding on the left, nothing on the right.
         h = MLX.padded(h, widths: [IntOrPair(0), IntOrPair((leftPad, 0)), IntOrPair(0)])
+        h = depthwiseConv(h)
+        h = batchNorm(h)
+        h = silu(h)
+        return pointwiseConv2(h)
+    }
+
+    /// Exact one-frame causal convolution using the preceding post-GLU inputs.
+    func stream(
+        _ x: MLXArray,
+        cache: VoiceChatEncoderLayerCache
+    ) -> MLXArray {
+        var h = MLXNN.glu(pointwiseConv1(x), axis: 2)
+        h = cache.prependConvolution(h, cacheSize: leftPad)
         h = depthwiseConv(h)
         h = batchNorm(h)
         h = silu(h)
@@ -276,6 +356,40 @@ final class RelPositionMultiHeadAttention: Module {
         let output = MLX.matmul(attn, v).transposed(0, 2, 1, 3).reshaped(b, -1, nHead * dK)
         return linearOut(output)
     }
+
+    /// Exact one-query attention over the current frame and bounded cached keys.
+    func stream(
+        _ x: MLXArray,
+        posEmb: MLXArray,
+        cache: VoiceChatEncoderLayerCache,
+        leftContext: Int
+    ) -> MLXArray {
+        precondition(x.dim(1) == 1, "streaming attention accepts one frame")
+        let b = x.dim(0)
+        let q = linearQ(x).reshaped(b, 1, nHead, dK).transposed(0, 2, 1, 3)
+        let newKey = linearK(x).reshaped(b, 1, nHead, dK).transposed(0, 2, 1, 3)
+        let newValue = linearV(x).reshaped(b, 1, nHead, dK).transposed(0, 2, 1, 3)
+        let (key, value) = cache.append(
+            key: newKey, value: newValue, leftContext: leftContext)
+
+        let posInput = (posEmb.dim(0) == 1 && b > 1)
+            ? MLX.repeated(posEmb, count: b, axis: 0) : posEmb
+        let p = linearPos(posInput).reshaped(b, -1, nHead, dK)
+            .transposed(0, 2, 1, 3)
+
+        let qU = q + posBiasU.expandedDimensions(axes: [0, 2])
+        let qV = q + posBiasV.expandedDimensions(axes: [0, 2])
+        // For a one-frame query the relative shift is an identity.
+        var matrixBD = MLX.matmul(qV, p.transposed(0, 1, 3, 2))
+        matrixBD = matrixBD[0..., 0..., 0..., ..<key.dim(2)] * MLXArray(scale)
+
+        let output = MLXFast.scaledDotProductAttention(
+            queries: qU, keys: key, values: value,
+            scale: scale, mask: matrixBD)
+            .transposed(0, 2, 1, 3)
+            .reshaped(b, 1, nHead * dK)
+        return linearOut(output)
+    }
 }
 
 final class ConformerLayer: Module {
@@ -309,6 +423,21 @@ final class ConformerLayer: Module {
         var h = x + 0.5 * feedForward1(normFeedForward1(x))
         h = h + selfAttn(normSelfAtt(h), posEmb: posEmb, mask: mask)
         h = h + conv(normConv(h))
+        h = h + 0.5 * feedForward2(normFeedForward2(h))
+        return normOut(h)
+    }
+
+    func stream(
+        _ x: MLXArray,
+        posEmb: MLXArray,
+        cache: VoiceChatEncoderLayerCache,
+        leftContext: Int
+    ) -> MLXArray {
+        var h = x + 0.5 * feedForward1(normFeedForward1(x))
+        h = h + selfAttn.stream(
+            normSelfAtt(h), posEmb: posEmb, cache: cache,
+            leftContext: leftContext)
+        h = h + conv.stream(normConv(h), cache: cache)
         h = h + 0.5 * feedForward2(normFeedForward2(h))
         return normOut(h)
     }
@@ -369,6 +498,32 @@ public final class VoiceChatEncoder: Module {
             rightContext: config.rightContext)
         for layer in layers {
             h = layer(h, posEmb: posEmb, mask: mask)
+        }
+        return h
+    }
+
+    /// Create session-local state for exact incremental conformer inference.
+    func newStreamState() -> VoiceChatEncoderStreamState {
+        VoiceChatEncoderStreamState(layerCount: layers.count)
+    }
+
+    /// Process one newly subsampled frame without recomputing prior layers.
+    func stream(
+        _ subsampled: MLXArray,
+        state: VoiceChatEncoderStreamState
+    ) -> MLXArray {
+        precondition(subsampled.dim(1) == 1, "streaming encoder accepts one frame")
+        precondition(state.layers.count == layers.count, "encoder state does not match model")
+
+        let seen = state.layers.first?.key?.dim(2) ?? 0
+        let keyFrames = min(config.leftContext, seen) + 1
+        let posEmb = posEnc.embedding(length: keyFrames, dtype: subsampled.dtype)
+
+        var h = subsampled
+        for (layer, cache) in zip(layers, state.layers) {
+            h = layer.stream(
+                h, posEmb: posEmb, cache: cache,
+                leftContext: config.leftContext)
         }
         return h
     }

@@ -24,6 +24,7 @@ public final class VoiceChatCodec {
 
     private let weights: [String: MLXArray]
     private let codebooks: [MLXArray]
+    private var compiledLiveDecode: (@Sendable (MLXArray) -> MLXArray)?
     public let silenceCodes: MLXArray
 
     public init(weights: [String: MLXArray]) throws {
@@ -119,6 +120,28 @@ public final class VoiceChatCodec {
 
     /// Decode `(B, T, 512)` dequantized latents.
     public func decode(latents: MLXArray) -> MLXArray {
+        if latents.dim(1) == VoiceChatSession.codecContextFrames,
+           let compiledLiveDecode {
+            return compiledLiveDecode(latents.asType(.float32))
+        }
+        return decodeUncompiled(latents: latents)
+    }
+
+    /// Compile the steady-state eight-frame live window once. Short startup
+    /// windows and arbitrary offline lengths keep the general eager path.
+    func warmUpLiveDecoding() {
+        if compiledLiveDecode == nil {
+            compiledLiveDecode = compile(shapeless: false) { [unowned self] in
+                self.decodeUncompiled(latents: $0)
+            }
+        }
+        let input = MLXArray.zeros(
+            [1, VoiceChatSession.codecContextFrames, Self.latentSize],
+            dtype: .float32)
+        eval(compiledLiveDecode!(input))
+    }
+
+    private func decodeUncompiled(latents: MLXArray) -> MLXArray {
         var x = latents.asType(.float32)
         for index in 0 ..< 13 {
             x = decoderLayer(index, x)

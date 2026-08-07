@@ -78,7 +78,7 @@ Speech Swift paketine doğrulanabilir biçimde başvuran 16 açık depo.
 
 - **[Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate)** — Akışlı konuşmadan konuşmaya çeviri (FR/ES/PT/DE → EN, MLX INT4 + INT8, Kyutai Moshi/Mimi yığını, CC-BY-4.0)
 - **[PersonaPlex](https://soniqo.audio/guides/respond)** — Tam çift yönlü (full-duplex) konuşmadan konuşmaya (7B, ses girişi → ses çıkışı, 18 ses ön ayarı)
-- **[VoiceChat 11B](docs/models/voicechat.md)** — Sürekli konuşma girişi, duplex metin/işlev kanalları ve EAR-TTS + nöral codec üzerinden doğrudan konuşma çıkışı sunan native MLX duplex speech-to-speech (INT5/INT8; henüz gerçek zamanlı değil)
+- **[VoiceChat 11B](docs/models/voicechat.md)** — Sürekli konuşma girişi, duplex metin/işlev kanalları ve EAR-TTS + nöral codec üzerinden doğrudan konuşma çıkışı sunan native MLX duplex speech-to-speech (INT5/INT8)
 - **[Audio2Face-3D](docs/models/audio2face3d.md)** — Konuşmayla sürülen avatar yüz animasyonu (NVIDIA Audio2Face-3D v2.3 Mark, 301 yüz katsayısı, MLX)
 
 **İyileştirme, ayırma ve ses üretimi**

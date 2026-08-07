@@ -77,6 +77,7 @@ public final class VoiceChatModel {
             throw VoiceChatGenerationError.invalidSpeechConfiguration(
                 "canonical silence decoded to RMS \(silence.rms), peak \(silence.peak)")
         }
+        codec.warmUpLiveDecoding()
 
         return VoiceChatModel(
             perception: perception,

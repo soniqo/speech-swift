@@ -78,7 +78,7 @@ Reconnaissance, synthese et comprehension vocale embarquees pour Mac et iOS. S'e
 
 - **[Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate)** — Traduction parole-a-parole en streaming (FR/ES/PT/DE → EN, MLX INT4 + INT8, pile Kyutai Moshi/Mimi, CC-BY-4.0)
 - **[PersonaPlex](https://soniqo.audio/fr/guides/respond)** -- Parole-a-parole en full-duplex (7B, audio entrant → audio sortant, 18 preselections de voix)
-- **[VoiceChat 11B](docs/models/voicechat.md)** -- Speech-to-speech duplex natif MLX avec entrée vocale continue, canaux texte/fonction et parole directe via EAR-TTS et codec neuronal (INT5/INT8 ; pas encore en temps réel)
+- **[VoiceChat 11B](docs/models/voicechat.md)** -- Speech-to-speech duplex natif MLX avec entrée vocale continue, canaux texte/fonction et parole directe via EAR-TTS et codec neuronal (INT5/INT8)
 - **[Audio2Face-3D](docs/models/audio2face3d.md)** — Animation faciale d'avatar pilotée par la voix (NVIDIA Audio2Face-3D v2.3 Mark, 301 coefficients faciaux, MLX)
 
 **Amélioration, séparation et génération audio**

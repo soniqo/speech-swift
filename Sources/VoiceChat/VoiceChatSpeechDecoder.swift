@@ -220,7 +220,14 @@ public final class VoiceChatSpeechDecoder {
             promptLatents: speakerPrompt,
             beginningAt: configuration.promptFrames - 1,
             conditioning: warmupConditioning(state: state))
-        _ = backbone(fused, cache: state.attention)
+        let promptHidden = backbone(fused, cache: state.attention)
+        let promptState = state.attention.flatMap { cache in
+            [cache.keys, cache.values].compactMap { $0 }
+        }
+        // MLX is lazy. Evaluating only the returned previous code leaves the
+        // 37-frame prompt prefill attached to the first live synthesis step,
+        // incorrectly charging session warmup to end-to-end streaming RTF.
+        MLX.eval([promptHidden] + promptState)
         return (
             state,
             codes[0..., (configuration.promptFrames - 1)..., 0...])
