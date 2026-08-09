@@ -249,6 +249,52 @@ public class CodePredictorModel: Module {
         return lmHeads.map { $0(lastHidden) }
     }
 
+    /// Run the complete autoregressive codebook-group loop as one fixed-shape graph.
+    ///
+    /// The predictor cache is local to one audio frame, so it can remain an internal
+    /// graph value instead of returning ten K/V tensors after every group.
+    func predictFrame(
+        inputsEmbeds: MLXArray,
+        temperature: MLXArray,
+        gumbels: MLXArray,
+        topK: Int,
+        greedy: Bool
+    ) -> MLXArray {
+        let predictedGroupCount = config.numCodeGroups - 1
+        precondition(gumbels.shape == [predictedGroupCount, config.vocabSize])
+
+        var (logits, cache) = self(
+            inputsEmbeds: inputsEmbeds,
+            groupIndex: 0,
+            cache: nil)
+        var token = sampleFrameToken(
+            logits: logits[0..., (logits.dim(1) - 1)..<logits.dim(1), 0...],
+            temperature: temperature,
+            gumbel: gumbels[0],
+            topK: topK,
+            greedy: greedy)
+        var tokens = [token]
+
+        for groupIndex in 1..<predictedGroupCount {
+            let embedding = embedCodecGroup(
+                token.reshaped(1, 1),
+                groupIndex: groupIndex - 1)
+            (logits, cache) = self(
+                inputsEmbeds: embedding,
+                groupIndex: groupIndex,
+                cache: cache)
+            token = sampleFrameToken(
+                logits: logits,
+                temperature: temperature,
+                gumbel: gumbels[groupIndex],
+                topK: topK,
+                greedy: greedy)
+            tokens.append(token)
+        }
+
+        return stacked(tokens)
+    }
+
     /// Embed a token for a specific codebook group
     public func embedCodecGroup(_ tokenIds: MLXArray, groupIndex: Int) -> MLXArray {
         codecEmbeddings[groupIndex](tokenIds)
@@ -278,4 +324,26 @@ public class CodePredictorModel: Module {
         }
         return sum
     }
+}
+
+private func sampleFrameToken(
+    logits: MLXArray,
+    temperature: MLXArray,
+    gumbel: MLXArray,
+    topK: Int,
+    greedy: Bool
+) -> MLXArray {
+    var scores = logits.squeezed().asType(.float32)
+    if greedy {
+        return argMax(scores).asType(.int32)
+    }
+
+    scores = scores / temperature.asType(.float32)
+    let vocabSize = scores.dim(0)
+    if topK > 0 && topK < vocabSize {
+        let sorted = MLX.sorted(scores)
+        let threshold = sorted[vocabSize - topK]
+        scores = MLX.where(scores .< threshold, MLXArray(Float(-1e9)), scores)
+    }
+    return argMax(scores + gumbel).asType(.int32)
 }

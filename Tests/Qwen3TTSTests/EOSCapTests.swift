@@ -28,7 +28,7 @@ final class EOSCapTests: XCTestCase {
 
 // MARK: - E2E Tests
 
-final class E2EEOSCapTests: XCTestCase {
+final class E2EEOSCapTests: E2ETestCase {
 
     func testXVectorShortEnglishEOS() async throws {
         // Short English text should stop well before maxTokens

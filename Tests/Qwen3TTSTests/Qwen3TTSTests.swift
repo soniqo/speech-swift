@@ -299,7 +299,7 @@ final class SpeakerConfigTests: XCTestCase {
 
 // MARK: - Instruct Token Tests
 
-final class E2EInstructTokenTests: XCTestCase {
+final class E2EInstructTokenTests: E2ETestCase {
 
     static let ttsModelId = "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-8bit"
     private static var _sharedModel: Qwen3TTSModel?
@@ -380,7 +380,7 @@ final class E2EInstructTokenTests: XCTestCase {
 
 /// End-to-end tests for CustomVoice model with instruct-based style control.
 /// Requires CustomVoice model weights (~1.2 GB download).
-final class E2ECustomVoiceInstructTests: XCTestCase {
+final class E2ECustomVoiceInstructTests: E2ETestCase {
 
     static let customVoiceModelId = "aufklarer/Qwen3-TTS-12Hz-0.6B-CustomVoice-MLX-bf16"
     static let ttsTokenizerModelId = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
@@ -393,13 +393,6 @@ final class E2ECustomVoiceInstructTests: XCTestCase {
         try XCTSkipUnless(
             ProcessInfo.processInfo.environment["QWEN3_CUSTOMVOICE_INSTRUCT_E2E"] == "1",
             "Set QWEN3_CUSTOMVOICE_INSTRUCT_E2E=1 to run CustomVoice instruct E2E tests")
-    }
-
-    override func tearDown() {
-        super.tearDown()
-        // Release accumulated MLX buffer pool between tests to prevent
-        // memory pressure from cascading across sequential synthesis calls.
-        Memory.clearCache()
     }
 
     /// CustomVoice + instruct should produce valid audio
@@ -641,16 +634,11 @@ final class E2ECustomVoiceInstructTests: XCTestCase {
 
 /// Verifies that speaker token position in codec prefix produces correct voice identity.
 /// Regression test for #105: speaker token must come BEFORE pad+bos.
-final class E2ESpeakerTokenPositionTests: XCTestCase {
+final class E2ESpeakerTokenPositionTests: E2ETestCase {
 
     static let customVoiceModelId = "aufklarer/Qwen3-TTS-12Hz-0.6B-CustomVoice-MLX-bf16"
     static let ttsTokenizerModelId = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
     private static var _sharedModel: Qwen3TTSModel?
-
-    override func tearDown() {
-        super.tearDown()
-        Memory.clearCache()
-    }
 
     /// Two different speakers should produce distinct audio for the same text.
     /// With the old wrong token position, all speakers sounded the same.
@@ -748,7 +736,7 @@ final class E2ESpeakerTokenPositionTests: XCTestCase {
 
 /// End-to-end tests for TTS synthesis with latency measurement.
 /// Requires TTS model weights (~1.7 GB). Tests are grouped by language.
-final class E2ETTSTests: XCTestCase {
+final class E2ETTSTests: E2ETestCase {
 
     static let ttsModelId = "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-8bit"
     static let ttsTokenizerModelId = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
@@ -1045,7 +1033,7 @@ final class E2ETTSTests: XCTestCase {
 // MARK: - TTS 8-bit E2E Tests
 
 /// End-to-end tests for 8-bit TTS model variant.
-final class E2ETTS8bitTests: XCTestCase {
+final class E2ETTS8bitTests: E2ETestCase {
 
     static let ttsModelId = "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-8bit"
     static let ttsTokenizerModelId = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
@@ -1131,7 +1119,7 @@ final class E2ETTS8bitTests: XCTestCase {
 
 // MARK: - 1.7B TTS Tests
 
-final class E2ETTS17BTests: XCTestCase {
+final class E2ETTS17BTests: E2ETestCase {
 
     static let ttsModelIdBf16 = "aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-bf16"
     static let ttsModelId8bit = "aufklarer/Qwen3-TTS-12Hz-1.7B-Base-MLX-8bit"
@@ -1300,7 +1288,7 @@ final class E2ETTS17BTests: XCTestCase {
 
 // MARK: - Long Text Memory Regression
 
-final class E2ETTSLongTextTests: XCTestCase {
+final class E2ETTSLongTextTests: E2ETestCase {
 
     /// Verify long text synthesis completes without OOM.
     /// Before the chunkedDecode eval fix, this peaked at 17+ GB and crashed on 16 GB Macs.
@@ -1327,7 +1315,7 @@ final class E2ETTSLongTextTests: XCTestCase {
 
 // MARK: - Batch TTS Tests
 
-final class E2ETTSBatchTests: XCTestCase {
+final class E2ETTSBatchTests: E2ETestCase {
 
     static let ttsModelId = "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-8bit"
     static let ttsTokenizerModelId = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
@@ -1524,7 +1512,7 @@ final class E2ETTSBatchTests: XCTestCase {
 
 /// End-to-end tests for streaming TTS synthesis.
 /// Requires TTS model weights (~1.7 GB).
-final class E2ETTSStreamingTests: XCTestCase {
+final class E2ETTSStreamingTests: E2ETestCase {
 
     static let ttsModelId = "aufklarer/Qwen3-TTS-12Hz-0.6B-Base-MLX-8bit"
     static let ttsTokenizerModelId = "Qwen/Qwen3-TTS-Tokenizer-12Hz"

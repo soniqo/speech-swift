@@ -169,8 +169,8 @@ Audio waveform [1, T*1920, 1] at 24kHz
 - **Batch embedding lookups** — All 15 codebook group embeddings summed in one call per step
 - **Bulk float extraction** — Waveform extracted via single `.asArray(Float.self)` call
 - **Causal mask in decoder transformer** — Additive causal mask for pre-transformer attention (required for chunked decoding correctness)
-- **Lazy code predictor chain** — 15 sequential codebook predictions use lazy MLXArray (Gumbel-max trick) with a single `eval()` at the end, reducing 15 GPU sync barriers to 1 per timestep
-- **Compiled talker + code predictor** — `compile(shapeless: true)` for the 28-layer talker (growing KV cache); `compile(shapeless: false)` for the 5-layer code predictor (14 fixed cache sizes)
+- **Compiled Talker** — `compile(shapeless: true)` processes the growing valid-prefix K/V cache
+- **Compiled code predictor** — Single-item synthesis runs the fixed 15-group autoregressive frame as one graph and extracts its tokens once; batch synthesis retains the per-group compiled transformer
 
 ## Loading Local Model Bundles
 

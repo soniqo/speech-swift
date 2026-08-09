@@ -21,6 +21,11 @@ public enum TTSError: Error, LocalizedError {
     }
 }
 
+private struct CodePredictorFrameCompileKey: Hashable {
+    let greedy: Bool
+    let topK: Int
+}
+
 /// Main Qwen3-TTS model for text-to-speech synthesis.
 ///
 /// - Warning: This class is not thread-safe. Create separate instances for concurrent use.
@@ -79,6 +84,9 @@ public class Qwen3TTSModel {
     /// Talker is compiled with shapeless=true — RoPE offset passed as regular MLXArray input,
     /// growing KV cache handled by shapeless mode, batch dim uses -1 reshapes.
     private var compiledCPTransformer: (([MLXArray]) -> [MLXArray])?
+    private var compiledCodePredictorFrames: [
+        CodePredictorFrameCompileKey: ([MLXArray]) -> [MLXArray]
+    ] = [:]
 
     /// Cache for voice-cloning reference audio artifacts (speaker embedding, ICL codec tokens).
     /// Bounded LRU; survives across synthesize calls on the same model instance.
@@ -1168,6 +1176,16 @@ public class Qwen3TTSModel {
             eval(groupLogits)
         }
 
+        // Compile the complete fixed 15-group predictor loop for the two common
+        // sampling modes. Other top-k values compile lazily on first use.
+        let sampledFrame = executeCompiledCodePredictorFrame(
+            inputsEmbeds: cpInput,
+            sampling: .default)
+        let greedyFrame = executeCompiledCodePredictorFrame(
+            inputsEmbeds: cpInput,
+            sampling: .greedy)
+        eval(sampledFrame, greedyFrame)
+
         // Compile codec decoder for kernel fusion (different from shader JIT compilation).
         // compile() fuses multiple kernel dispatches into fewer optimized kernels per chunk.
         // Warmup adds ~300ms to load time but saves on every generation.
@@ -1212,6 +1230,7 @@ public class Qwen3TTSModel {
             for (k, v) in newCache { result.append(k); result.append(v) }
             return result
         }
+
         let numCPLayers = config.codePredictor.numLayers
         let cpRef = codePredictor
 
@@ -1297,6 +1316,47 @@ public class Qwen3TTSModel {
             newCache.append((out[1 + i * 2], out[2 + i * 2]))
         }
         return (out[0], newCache)
+    }
+
+    private func executeCompiledCodePredictorFrame(
+        inputsEmbeds: MLXArray,
+        sampling: SamplingConfig
+    ) -> MLXArray {
+        let greedy = sampling.temperature <= 0
+        let key = CodePredictorFrameCompileKey(
+            greedy: greedy,
+            topK: greedy ? 0 : sampling.topK)
+        let compiled: ([MLXArray]) -> [MLXArray]
+        if let cached = compiledCodePredictorFrames[key] {
+            compiled = cached
+        } else {
+            let predictor = codePredictor
+            compiled = compile(
+                inputs: [predictor],
+                outputs: [predictor],
+                shapeless: false
+            ) { inputs in
+                [predictor.predictFrame(
+                    inputsEmbeds: inputs[0],
+                    temperature: inputs[1],
+                    gumbels: inputs[2],
+                    topK: key.topK,
+                    greedy: key.greedy)]
+            }
+            compiledCodePredictorFrames[key] = compiled
+        }
+
+        let predictedGroupCount = config.codePredictor.numCodeGroups - 1
+        let gumbels = greedy
+            ? MLXArray.zeros([predictedGroupCount, config.codePredictor.vocabSize])
+            : stacked((0..<predictedGroupCount).map { _ in
+                MLXRandom.gumbel([config.codePredictor.vocabSize])
+            })
+        return compiled([
+            inputsEmbeds,
+            MLXArray(sampling.temperature),
+            gumbels,
+        ])[0]
     }
 
     // MARK: - Speaker Resolution
@@ -1681,16 +1741,12 @@ public class Qwen3TTSModel {
     /// - Step 0: prefill [hidden_state, code_0_embed] (length 2)
     /// - Steps 1-14: single embedding of previous code token (length 1), KV cache
     ///
-    /// Uses lazy evaluation: all 15 groups are chained as a single MLX computation graph
-    /// with zero GPU sync barriers. One `eval()` at the end materializes all tokens.
-    /// This reduces per-step GPU syncs from 15 to 1.
+    /// The fixed group chain runs as one compiled graph and is extracted once per frame.
     private func predictCodebooksForTimestep(
         hiddenState: MLXArray,
         firstCodebookToken: Int32,
         cpSamplingConfig: SamplingConfig
     ) -> [Int32] {
-        var cpCache: [(MLXArray, MLXArray)]? = nil
-
         // First codebook embedding (from talker's codec embedding)
         let code0Embed = talker.embedCodec(
             MLXArray([firstCodebookToken]).expandedDimensions(axis: 0))  // [1, 1, D]
@@ -1698,35 +1754,11 @@ public class Qwen3TTSModel {
         // Prefill: [hidden_state, code_0_embed] — length 2
         let prefillInput = concatenated([hiddenState, code0Embed], axis: 1)  // [1, 2, D]
 
-        // Predict codebook group 0 (= codebook 2 overall)
-        let (cpLogits, cpNewCache) = codePredictor(
-            inputsEmbeds: prefillInput, groupIndex: 0, cache: nil)
-        cpCache = cpNewCache
-
-        // Sample lazily — returns MLXArray scalar, NO .item() sync
-        let lastCpLogits = cpLogits[0..., 1..<2, 0...]
-        var prevTokenArray = sampleTokenLazy(logits: lastCpLogits, config: cpSamplingConfig)
-        var lazyTokens: [MLXArray] = [prevTokenArray]
-
-        // Remaining 14 codebook groups — fully lazy chain, no GPU syncs
-        for groupIdx in 1..<(config.codePredictor.numCodeGroups - 1) {
-            // Embed previous group's token (lazy MLXArray → embedding, no sync needed)
-            let prevEmbed = codePredictor.embedCodecGroup(
-                prevTokenArray.reshaped(1, 1),
-                groupIndex: groupIdx - 1)  // [1, 1, D]
-
-            let cpResult = executeCPTransformerStep(hidden: prevEmbed, cache: cpCache!)
-            cpCache = cpResult.newCache
-            let groupLogits = codePredictor.lmHeads[groupIdx](cpResult.normed)
-
-            prevTokenArray = sampleTokenLazy(logits: groupLogits, config: cpSamplingConfig)
-            lazyTokens.append(prevTokenArray)
-        }
-
-        // ONE eval to materialize the entire 15-group computation graph
-        let tokenStack = stacked(lazyTokens)  // [15]
+        let tokenStack = executeCompiledCodePredictorFrame(
+            inputsEmbeds: prefillInput,
+            sampling: cpSamplingConfig)
         eval(tokenStack)
-        return tokenStack.asArray(Int32.self)  // bulk extraction, no per-token sync
+        return tokenStack.asArray(Int32.self)
     }
 }
 

@@ -16,6 +16,7 @@ public struct AudioCLI: ParsableCommand {
             VadStreamCommand.self,
             DiarizeCommand.self,
             EmbedSpeakerCommand.self,
+            LanguageIDCommand.self,
             DenoiseCommand.self,
             RestoreCommand.self,
             SeparateCommand.self,
