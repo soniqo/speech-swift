@@ -280,7 +280,8 @@ public final class VoiceChatSpeechDecoder {
             let latent = mean + MLX.exp(logs)
                 * MLXRandom.normal(mean.shape, dtype: mean.dtype)
                 * MLXArray(parameters.noise)
-            let assignment = assign(
+            let assignment = Self.assignRVQCodes(
+                residualCodebooks: residualCodebooks,
                 latent: latent, to: codes, startingAt: filled, count: count,
                 retainEmbeddings: filled + count < configuration.numQuantizers)
             codes = assignment.codes
@@ -383,7 +384,8 @@ public final class VoiceChatSpeechDecoder {
         return embedding
     }
 
-    private func assign(
+    static func assignRVQCodes(
+        residualCodebooks: MLXArray,
         latent: MLXArray,
         to initialCodes: MLXArray,
         startingAt start: Int,

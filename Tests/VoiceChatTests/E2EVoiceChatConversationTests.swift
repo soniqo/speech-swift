@@ -56,7 +56,9 @@ final class E2EVoiceChatConversationTests: XCTestCase {
             summary.realTime,
             summary.totalP95Milliseconds < Double(VoiceChatSession.frameMilliseconds),
             "real-time classification must include perception, decision, and synthesis")
-        if try bundleQuantizationBits(root: root, component: "llm") == 8 {
+        let quantizationBits = try bundleQuantizationBits(
+            root: root, component: "llm")
+        if quantizationBits == 8 {
             XCTAssertEqual(summary.firstSpeechFrame, 45)
             XCTAssertEqual(
                 reply,
@@ -64,6 +66,15 @@ final class E2EVoiceChatConversationTests: XCTestCase {
                     + "They had to adapt traditions, like using zero-gravity Santa suits and "
                     + "listening to carols from Earth. It was a unique way to celebrate the "
                     + "holiday spirit in space.")
+        } else if quantizationBits == 5 {
+            XCTAssertEqual(summary.firstSpeechFrame, 45)
+            XCTAssertEqual(
+                reply,
+                "Yes, Apollo eight was the first mission to orbit the moon, and Apollo "
+                    + "thirteen had an oxygen tank explosion. Apollo fourteen was the first "
+                    + "to land on the moon after Apollo eleven. Apollo fifteen was the first "
+                    + "to use a lunar rover. Apollo sixteen was the first to collect moon "
+                    + "rocks, and Apollo seventeen was the last mission to the moon.")
         }
         XCTAssertEqual(
             waveform.count,

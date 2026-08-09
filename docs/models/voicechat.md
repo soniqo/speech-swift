@@ -74,6 +74,10 @@ the idle text-channel token, `<s>` opens a spoken turn, and `</s>` closes it.
 The loader resolves and round-trips all three strings instead of trusting the
 tokenizer's advertised EOS role.
 
+The greedy text selection and optional function-head selection share the same
+language hidden state and are evaluated together. This preserves both selected
+tokens while avoiding a second GPU synchronization on every 80 ms frame.
+
 Only 4 of the Nemotron-H backbone's 56 layers use attention. The other 27
 mixing layers are Mamba2 and retain fixed recurrent state, so only four KV
 caches grow with conversation length.
@@ -89,6 +93,12 @@ The output head is a 1,024-component low-rank mixture of Gaussians. Generation
 is not one-shot: the 31 codebooks are progressively assigned over eight
 MaskGIT iterations. For the published schedule, the assignments per iteration
 are `[0, 0, 0, 1, 1, 3, 4, 22]`.
+
+Masked codebooks contribute exact zero vectors. During progressive assignment,
+the runtime therefore carries the sum of the already selected RVQ embeddings
+forward instead of gathering and summing all 31 codebooks before every
+MaskGIT head pass. The selected code IDs and resulting latent are unchanged;
+the optimization removes redundant GPU work from each generated frame.
 
 ### Neural audio codec
 
@@ -175,25 +185,25 @@ runs after model loading and prompt warmup:
 
 | Run | Wall time | Model timeline | Whole-pipeline RTF |
 |---:|---:|---:|---:|
-| 1 | 9.183 s | 9.600 s | 0.96 |
-| 2 | 9.197 s | 9.600 s | 0.96 |
-| 3 | 9.497 s | 9.600 s | 0.99 |
+| 1 | 9.039 s | 9.600 s | 0.94 |
+| 2 | 8.833 s | 9.600 s | 0.92 |
+| 3 | 8.786 s | 9.600 s | 0.92 |
 
 All three runs produced the same transcript and generated response. Typical
-perception, decision, and synthesis p50 values were about 9 ms, 36 ms, and
-31–32 ms; total/frame p50 was 76–79 ms. Peak RSS was about 8.70 GB, MLX
-reported 9.50 GB peak GPU allocation, and the macOS physical-footprint peak was
-15.61–15.64 GB. Physical footprint includes file-backed MLX mappings that RSS
-can undercount. A final source-matched confirmation measured RTF 0.96, first
-spoken text at 44.4 ms, and first playable audio at 77.5 ms.
+perception, decision, and synthesis p50 values ranged over 9.0–9.2 ms,
+35.6–36.6 ms, and 28.3–29.0 ms; total/frame p50 was 72.9–74.8 ms. Peak RSS was
+about 8.70 GB, MLX reported 9.53 GB peak GPU allocation, and the macOS
+physical-footprint peak was 15.64–15.66 GB. Physical footprint includes
+file-backed MLX mappings that RSS can undercount. Across the three runs, first
+spoken text arrived in 44.3–46.7 ms and first playable audio in 74.0–76.4 ms.
 
 This establishes sustained whole-pipeline RTF below `1` for the tested INT5
-configuration, not unlimited deadline headroom: two runs had total/frame p95
-below 80 ms, while the slowest reached 83.8 ms. Current INT8 correctness gates
-pass, but release performance has not been remeasured after this optimization,
-so no updated INT8 real-time claim is made here. Run the benchmark on the target
-machine because thermal state and concurrent GPU work materially affect this
-margin.
+configuration, with all three total/frame p95 measurements below 80 ms at
+76.2–78.6 ms. The remaining deadline headroom is still narrow. Current INT8
+correctness gates pass, but release performance has not been remeasured after
+this optimization, so no updated INT8 real-time claim is made here. Run the
+benchmark on the target machine because thermal state and concurrent GPU work
+materially affect this margin.
 
 Model turn onset and hardware compute latency are different measurements. The
 default prompt is intentionally neutral because adding “greet the user” or

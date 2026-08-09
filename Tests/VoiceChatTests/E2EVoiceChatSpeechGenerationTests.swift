@@ -72,6 +72,16 @@ final class E2EVoiceChatSpeechGenerationTests: XCTestCase {
                 559, 668, 268, 575, 588, 231, 599, 197, 645, 826, 575,
                 833, 668, 152, 726, 726, 726, 726, 726, 726, 726, 726,
             ])
+        } else if configuration.quantization?.bits == 5 {
+            // Preserve the protected-head INT5 output across performance
+            // refactors. The pre-headroom and incremental-RVQ implementations
+            // produce byte-identical full code and waveform tensors.
+            XCTAssertEqual(primary, [
+                726, 726, 474, 494, 888, 397, 891, 198, 109, 482, 580,
+                580, 580, 580, 726, 580, 80, 400, 840, 345, 471, 324,
+                452, 400, 771, 1001, 596, 345, 954, 146, 550, 231, 479,
+                914, 345, 391, 580, 726, 726, 726, 726, 726, 726, 726,
+            ])
         }
 
         XCTAssertEqual(waveform.dim(0), schedule.count * 1_764)

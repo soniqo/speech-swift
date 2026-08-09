@@ -63,6 +63,56 @@ final class VoiceChatSpeechTests: XCTestCase {
             31)
     }
 
+    func testIncrementalRVQLatentMatchesSelectedCodeReconstruction() {
+        let codebooks = MLXArray([
+            0.0, 0.0, 1.0, 0.0, 0.0, 1.0,
+            0.0, 0.0, 0.5, 0.5, 1.0, -1.0,
+            0.0, 0.0, -0.5, 1.0, 1.0, 0.5,
+            0.0, 0.0, -1.0, -0.5, 0.25, 1.0,
+        ] as [Float]).reshaped([4, 3, 2])
+        let latent = MLXArray([0.8, 0.2] as [Float]).reshaped([1, 1, 2])
+        var codes = MLXArray.full(
+            [1, 1, 4], values: MLXArray(Int32(3)), dtype: .int32)
+        var incremental = MLXArray.zeros([1, 1, 2], dtype: .float32)
+        var filled = 0
+
+        for count in [1, 2] {
+            let assignment = VoiceChatSpeechDecoder.assignRVQCodes(
+                residualCodebooks: codebooks,
+                latent: latent,
+                to: codes,
+                startingAt: filled,
+                count: count,
+                retainEmbeddings: true)
+            codes = assignment.codes
+            for selected in assignment.embeddings {
+                incremental = incremental + selected
+            }
+            filled += count
+
+            var reconstructed = MLXArray.zeros([1, 1, 2], dtype: .float32)
+            for index in 0 ..< filled {
+                reconstructed = reconstructed
+                    + codebooks[index][codes[0..., 0..., index]]
+            }
+            eval(incremental, reconstructed)
+            XCTAssertLessThan(
+                MLX.max(MLX.abs(incremental - reconstructed)).item(Float.self),
+                1e-7)
+        }
+
+        let finalAssignment = VoiceChatSpeechDecoder.assignRVQCodes(
+            residualCodebooks: codebooks,
+            latent: latent,
+            to: codes,
+            startingAt: filled,
+            count: 1,
+            retainEmbeddings: false)
+        eval(finalAssignment.codes)
+        XCTAssertTrue(finalAssignment.embeddings.isEmpty)
+        XCTAssertLessThan(MLX.max(finalAssignment.codes).item(Int.self), 3)
+    }
+
     func testDefaultPromptDoesNotBiasTurnTimingWithGreetingInstruction() {
         XCTAssertFalse(
             VoiceChatSession.defaultSystemPrompt.localizedCaseInsensitiveContains("greet"))
