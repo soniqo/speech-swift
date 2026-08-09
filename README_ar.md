@@ -203,7 +203,7 @@ struct DictateView: View {
 
 تشحن `SpeechUI` فقط `TranscriptionView` (النهائيات + الجزئيات) و `TranscriptionStore` (محول ASR تدفقي). استخدم AVFoundation لتصور الصوت وتشغيله.
 
-منتجات SPM المتاحة: `Qwen3ASR`, `WhisperASR`, `MossTranscribe`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `CohereTranscribeASR`, `VoxtralASR`, `KokoroTTS`, `SupertonicTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `IndexTTS2TTS`, `F5TTS`, `HiggsTTS`, `ChatterboxTTS`, `OmniVoiceTTS`, `IndicMioTTS`, `FishAudioTTS`, `MagpieTTS`, `MagpieTTSCoreML`, `MAGNeTMusicGen`, `StableAudio3MusicGen`, `FlashSR`, `PersonaPlex`, `VoiceChat`, `CSM`, `Audio2Face3D`, `HibikiTranslate`, `MADLADTranslation`, `SpeechVAD`, `SpeechWakeWord`, `SpeechEnhancement`, `SpeechRestoration`, `SourceSeparation`, `Qwen3Chat`, `FunctionGemma`, `SpeechCore`, `SpeechUI`, `AudioCommon`.
+منتجات SPM المتاحة: `Qwen3ASR`, `WhisperASR`, `MossTranscribe`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `CohereTranscribeASR`, `VoxtralASR`, `KokoroTTS`, `SupertonicTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `IndexTTS2TTS`, `F5TTS`, `HiggsTTS`, `ChatterboxTTS`, `OmniVoiceTTS`, `IndicMioTTS`, `FishAudioTTS`, `MagpieTTS`, `MagpieTTSCoreML`, `MAGNeTMusicGen`, `StableAudio3MusicGen`, `FlashSR`, `PersonaPlex`, `VoiceChat`, `CSM`, `Audio2Face3D`, `HibikiTranslate`, `MADLADTranslation`, `SpeechVAD`, `SpeechLanguageID`, `SpeechWakeWord`, `SpeechEnhancement`, `SpeechRestoration`, `SourceSeparation`, `Qwen3Chat`, `FunctionGemma`, `SpeechCore`, `SpeechUI`, `AudioCommon`.
 
 </div>
 
@@ -267,6 +267,7 @@ struct DictateView: View {
 | [Stable Audio 3](docs/models/stable-audio-3.md) | Text → Music/audio (44.1 kHz stereo) | MLX | Medium 1.4B (int4/int8) | EN prompts |
 | [FlashSR](https://soniqo.audio/ar/guides/upsample) | رفع دقة الصوت (48 كيلوهرتز) | MLX | 363 ميغابايت / 720 ميغابايت (int4/int8) | محايد للغة |
 | [WeSpeaker](https://soniqo.audio/ar/guides/embed-speaker) | تضمين المتحدث | MLX, CoreML | 6.6M | محايد للغة |
+| [SpeechBrain ECAPA VoxLingua107](https://soniqo.audio/ar/guides/language-id) | تحديد اللغة | MLX, CoreML | 21.25M | 107 لغة |
 | [ReDimNet2-B6](https://huggingface.co/aufklarer/ReDimNet2-B6-CoreML) | هوية صوتية مسماة | CoreML | 12.3M | محايد للغة |
 
 ## التثبيت

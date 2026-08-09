@@ -165,7 +165,7 @@ struct DictateView: View {
 
 `SpeechUI` 只提供 `TranscriptionView`（最终结果 + 部分结果）与 `TranscriptionStore`（流式 ASR 适配器）。音频可视化和播放请使用 AVFoundation。
 
-可用的 SPM products：`Qwen3ASR`, `WhisperASR`, `MossTranscribe`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `CohereTranscribeASR`, `VoxtralASR`, `KokoroTTS`, `SupertonicTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `IndexTTS2TTS`, `F5TTS`, `HiggsTTS`, `ChatterboxTTS`, `OmniVoiceTTS`, `IndicMioTTS`, `FishAudioTTS`, `MagpieTTS`, `MagpieTTSCoreML`, `MAGNeTMusicGen`, `StableAudio3MusicGen`, `FlashSR`, `PersonaPlex`, `VoiceChat`, `CSM`, `Audio2Face3D`, `HibikiTranslate`, `MADLADTranslation`, `SpeechVAD`, `SpeechWakeWord`, `SpeechEnhancement`, `SpeechRestoration`, `SourceSeparation`, `Qwen3Chat`, `FunctionGemma`, `SpeechCore`, `SpeechUI`, `AudioCommon`。
+可用的 SPM products：`Qwen3ASR`, `WhisperASR`, `MossTranscribe`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `CohereTranscribeASR`, `VoxtralASR`, `KokoroTTS`, `SupertonicTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `IndexTTS2TTS`, `F5TTS`, `HiggsTTS`, `ChatterboxTTS`, `OmniVoiceTTS`, `IndicMioTTS`, `FishAudioTTS`, `MagpieTTS`, `MagpieTTSCoreML`, `MAGNeTMusicGen`, `StableAudio3MusicGen`, `FlashSR`, `PersonaPlex`, `VoiceChat`, `CSM`, `Audio2Face3D`, `HibikiTranslate`, `MADLADTranslation`, `SpeechVAD`, `SpeechLanguageID`, `SpeechWakeWord`, `SpeechEnhancement`, `SpeechRestoration`, `SourceSeparation`, `Qwen3Chat`, `FunctionGemma`, `SpeechCore`, `SpeechUI`, `AudioCommon`。
 
 ## 模型
 
@@ -223,6 +223,7 @@ struct DictateView: View {
 | [Stable Audio 3](docs/models/stable-audio-3.md) | Text → Music/audio (44.1 kHz stereo) | MLX | Medium 1.4B (int4/int8) | EN prompts |
 | [FlashSR](https://soniqo.audio/zh/guides/upsample) | 音频超分辨率 (48 kHz) | MLX | 363 MB / 720 MB (int4/int8) | 通用 |
 | [WeSpeaker](https://soniqo.audio/zh/guides/embed-speaker) | 说话人嵌入向量 | MLX、CoreML | 6.6M | 语言无关 |
+| [SpeechBrain ECAPA VoxLingua107](https://soniqo.audio/zh/guides/language-id) | 语言识别 | MLX、CoreML | 21.25M | 107 种语言 |
 | [ReDimNet2-B6](https://huggingface.co/aufklarer/ReDimNet2-B6-CoreML) | 命名语音身份 | CoreML | 12.3M | 语言无关 |
 
 ## 安装

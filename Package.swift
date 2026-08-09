@@ -77,6 +77,10 @@ let package = Package(
             targets: ["SpeechVAD"]
         ),
         .library(
+            name: "SpeechLanguageID",
+            targets: ["SpeechLanguageID"]
+        ),
+        .library(
             name: "SpeechEnhancement",
             targets: ["SpeechEnhancement"]
         ),
@@ -470,6 +474,15 @@ let package = Package(
             ]
         ),
         .target(
+            name: "SpeechLanguageID",
+            dependencies: [
+                "AudioCommon",
+                "MLXCommon",
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXNN", package: "mlx-swift"),
+            ]
+        ),
+        .target(
             name: "LocalVQEAECFrontend",
             path: "Sources/LocalVQEAECFrontend",
             publicHeadersPath: "include",
@@ -723,6 +736,7 @@ let package = Package(
                 "CSM",
                 "HibikiTranslate",
                 "SpeechVAD",
+                "SpeechLanguageID",
                 "SpeechEnhancement",
                 "SpeechRestoration",
                 "SourceSeparation",
@@ -978,6 +992,14 @@ let package = Package(
             name: "SpeechVADTests",
             dependencies: [
                 "SpeechVAD",
+                "AudioCommon",
+                .product(name: "MLX", package: "mlx-swift"),
+            ]
+        ),
+        .testTarget(
+            name: "SpeechLanguageIDTests",
+            dependencies: [
+                "SpeechLanguageID",
                 "AudioCommon",
                 .product(name: "MLX", package: "mlx-swift"),
             ]
