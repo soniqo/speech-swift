@@ -1,6 +1,7 @@
 import AVFoundation
 import Foundation
 import MLX
+import MLXRandom
 import XCTest
 
 @testable import VoiceChat
@@ -8,6 +9,12 @@ import XCTest
 /// True audio-in/audio-out coverage. The isolated E2E runner launches this
 /// class in its own process because the complete bundle is 8–22 GB.
 final class E2EVoiceChatConversationTests: XCTestCase {
+    private let paritySystemPrompt =
+        "You are an AI voice assistant developed by NVIDIA. "
+        + "Your name is NVIDIA Voice Chat. "
+        + "Answer in a spoken, conversational style rather than a written one. "
+        + "Do not repeat the same sentence over and over again."
+
     func testRealSpeechProducesTextAndModelAudio() async throws {
         guard let path = ProcessInfo.processInfo.environment["VOICECHAT_BUNDLE"] else {
             throw XCTSkip("set VOICECHAT_BUNDLE to a complete encoder/llm/tts bundle")
@@ -21,13 +28,32 @@ final class E2EVoiceChatConversationTests: XCTestCase {
             }
         }
 
-        let model = try await VoiceChatModel.load(from: root)
+        let loadProgress = VoiceChatLoadProgressRecorder()
+        let model = try await VoiceChatModel.load(
+            from: root,
+            progressHandler: { progress, stage in
+                loadProgress.record(progress: progress, stage: stage)
+            })
+        XCTAssertEqual(loadProgress.stages, [
+            "Loading tokenizer",
+            "Loading perception encoder and RNN-T",
+            "Loading 11B language model",
+            "Loading EAR-TTS and audio codec",
+            "Verifying and warming the audio codec",
+            "VoiceChat model ready",
+        ])
+        XCTAssertEqual(loadProgress.lastProgress, 1, accuracy: 0.0001)
         let audioURL = try XCTUnwrap(
             Bundle.module.url(forResource: "fleurs_en", withExtension: "wav"))
         let samples = try loadMono16k(audioURL)
         XCTAssertFalse(model.transcriber.transcribe(samples).isEmpty)
 
-        let session = try await model.startSession()
+        // Keep the published numerical fixture independent from the product
+        // persona. Default-session coverage exercises the Soniqo prompt.
+        MLXRandom.seed(0)
+        let session = try await model.startSession(
+            systemPrompt: paritySystemPrompt,
+            streamUserTranscript: true)
         // Make completion deterministic while still exercising the learned
         // response tokens after the user audio.
         await session.forceTurn(atFrame: samples.count / VoiceChatSession.inputSamplesPerFrame)
@@ -40,13 +66,21 @@ final class E2EVoiceChatConversationTests: XCTestCase {
         _ = try await session.pushSilence(seconds: 6)
 
         let reply = await session.reply()
+        let userTranscript = await session.userTranscript().lowercased()
         let events = await session.events()
         let waveform = await session.renderedAudio()
         let summary = await session.summary()
 
         print("VoiceChat reply: \(reply)")
+        print("VoiceChat streaming transcript: \(userTranscript)")
         print("VoiceChat summary: \(summary)")
 
+        XCTAssertTrue(events.allSatisfy { $0.userTranscript != nil })
+        for expected in ["also", "paid", "tribute", "luna"] {
+            XCTAssertTrue(
+                userTranscript.contains(expected),
+                "streaming transcript is missing \(expected): \(userTranscript)")
+        }
         XCTAssertFalse(reply.isEmpty, "duplex language channel emitted no response")
         XCTAssertGreaterThan(summary.speakingFrames, 0)
         XCTAssertNotNil(summary.firstSpeechFrame)
@@ -59,22 +93,23 @@ final class E2EVoiceChatConversationTests: XCTestCase {
         let quantizationBits = try bundleQuantizationBits(
             root: root, component: "llm")
         if quantizationBits == 8 {
-            XCTAssertEqual(summary.firstSpeechFrame, 45)
+            XCTAssertEqual(summary.firstSpeechFrame, 42)
             XCTAssertEqual(
                 reply,
-                "Yes, Apollo eight, nine, and ten all celebrated Christmas in lunar orbit. "
-                    + "They had to adapt traditions, like using zero-gravity Santa suits and "
-                    + "listening to carols from Earth. It was a unique way to celebrate the "
-                    + "holiday spirit in space.")
+                "Yes, Apollo eight, nine, and ten all made lunar orbits. Apollo eight was "
+                    + "the first to orbit the moon in nineteen sixty eight. Apollo nine was "
+                    + "in nineteen sixty nine, and Apollo ten was also in nineteen sixty "
+                    + "nine. Apollo thirteen had an issue and did not reach the moon.")
         } else if quantizationBits == 5 {
             XCTAssertEqual(summary.firstSpeechFrame, 45)
             XCTAssertEqual(
                 reply,
-                "Yes, Apollo eight was the first mission to orbit the moon, and Apollo "
-                    + "thirteen had an oxygen tank explosion. Apollo fourteen was the first "
-                    + "to land on the moon after Apollo eleven. Apollo fifteen was the first "
-                    + "to use a lunar rover. Apollo sixteen was the first to collect moon "
-                    + "rocks, and Apollo seventeen was the last mission to the moon.")
+                "Yes, Apollo eight, nine, and ten all celebrated Christmas in lunar orbit. "
+                    + "Apollo eight was the first to orbit the moon in nineteen sixty eight, "
+                    + "and Apollo nine tested the lunar module in nineteen sixty nine. "
+                    + "Apollo ten was the last to orbit the moon in nineteen seventy two. "
+                    + "All three missions included the crew looping back to Earth to "
+                    + "celebrate Christmas.")
         }
         XCTAssertEqual(
             waveform.count,
@@ -153,5 +188,28 @@ final class E2EVoiceChatConversationTests: XCTestCase {
         let data = try XCTUnwrap(output.floatChannelData?[0])
         return Array(UnsafeBufferPointer(
             start: data, count: Int(output.frameLength)))
+    }
+}
+
+private final class VoiceChatLoadProgressRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var updates: [(Double, String)] = []
+
+    var stages: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return updates.map(\.1)
+    }
+
+    var lastProgress: Double {
+        lock.lock()
+        defer { lock.unlock() }
+        return updates.last?.0 ?? 0
+    }
+
+    func record(progress: Double, stage: String) {
+        lock.lock()
+        updates.append((progress, stage))
+        lock.unlock()
     }
 }

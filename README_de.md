@@ -248,6 +248,7 @@ speech speak "Hello world"
 speech csm "Nice to meet you" --ref-audio voice.wav --ref-text "reference transcript"
 speech translate "Hello, how are you?" --to es
 speech respond --input question.wav --transcript
+speech voice-chat
 speech-server --port 8080            # lokaler HTTP/WebSocket-Server (OpenAI-kompatibles /v1/realtime + /v1/audio/transcriptions)
 ```
 
@@ -324,9 +325,18 @@ make build
 - **[DictateDemo](Examples/DictateDemo/)** ([Docs](https://soniqo.audio/de/guides/dictate)) — macOS-Menüleisten-Streaming-Diktat mit Live-Teilergebnissen, VAD-basierter Äußerungsende-Erkennung und Ein-Klick-Kopieren. Läuft als Hintergrund-agent (Parakeet-EOU-120M + Silero VAD).
 - **[iOSEchoDemo](Examples/iOSEchoDemo/)** — iOS-Echo-Demo (Parakeet ASR + Kokoro TTS). Gerät und Simulator.
 - **[PersonaPlexDemo](Examples/PersonaPlexDemo/)** — Konversationeller Sprachassistent mit Mikrofoneingang, VAD und Multi-Turn-Kontext. macOS. RTF ~0.94 auf M2 Max (schneller als Echtzeit).
+- **[Soniqo VoiceChat CLI](docs/inference/voicechat.md)** ([Anleitung](https://soniqo.audio/de/guides/speech-to-speech)) — Nativer Full-Duplex-Nemotron-11B-Terminalassistent mit Live-RNN-T-Untertiteln, modellgesteuertem Sprecherwechsel, adaptiver EAR-TTS-Detailstufe und optionalen MCP-Tools. Die mitgelieferte Apple-Reminders-Konfiguration erlaubt nur Erstellen, Auflisten und Aktualisieren.
 - **[SpeechDemo](Examples/SpeechDemo/)** — Diktat und TTS-Synthese in einer Tab-Oberfläche. macOS.
 
-Die README jedes Demos enthält Bauanleitungen.
+VoiceChat-Erinnerungsdemo nach einem Release-Build starten:
+
+```bash
+./.build/release/speech voice-chat \
+  --model /path/to/voicechat-mlx-int5 \
+  --mcp-config Examples/VoiceChatMCP/apple-reminders.json
+```
+
+Mit `--debug-timeline` erscheinen Zeitstempel für Äußerungen, das Ende der erzeugten Aussprache und den vom Modell dekodierten Tool-Lebenszyklus. Tool-Argumente können sichtbar werden; nicht in gemeinsam genutzten Logs verwenden. Build- und Laufzeitdetails stehen in den App-READMEs oder der verlinkten Anleitung.
 
 ## Codebeispiele
 

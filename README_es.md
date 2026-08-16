@@ -248,6 +248,7 @@ speech speak "Hello world"
 speech csm "Nice to meet you" --ref-audio voice.wav --ref-text "reference transcript"
 speech translate "Hello, how are you?" --to es
 speech respond --input question.wav --transcript
+speech voice-chat
 speech-server --port 8080            # servidor HTTP / WebSocket local (OpenAI-compatible /v1/realtime + /v1/audio/transcriptions)
 ```
 
@@ -324,9 +325,18 @@ make build
 - **[DictateDemo](Examples/DictateDemo/)** ([documentación](https://soniqo.audio/es/guides/dictate)) — Dictado en streaming en la barra de menús de macOS con parciales en vivo, detección de fin de enunciado basada en VAD y copia con un clic. Se ejecuta como agent en segundo plano (Parakeet-EOU-120M + Silero VAD).
 - **[iOSEchoDemo](Examples/iOSEchoDemo/)** — Demo de eco iOS (Parakeet ASR + Kokoro TTS). Dispositivo y simulador.
 - **[PersonaPlexDemo](Examples/PersonaPlexDemo/)** — Asistente de voz conversacional con entrada de micrófono, VAD y contexto multi-turno. macOS. RTF ~0.94 en M2 Max (más rápido que tiempo real).
+- **[Soniqo VoiceChat CLI](docs/inference/voicechat.md)** ([guía](https://soniqo.audio/es/guides/speech-to-speech)) — Asistente de terminal Nemotron 11B dúplex nativo con subtítulos RNN-T en vivo, control de turnos del modelo, detalle EAR-TTS adaptativo y herramientas MCP opcionales. La configuración incluida de Apple Reminders solo expone crear, listar y actualizar.
 - **[SpeechDemo](Examples/SpeechDemo/)** — Dictado y síntesis TTS en una interfaz de pestañas. macOS.
 
-El README de cada demo tiene instrucciones de compilación.
+Ejecuta la demo de recordatorios de VoiceChat después de compilar en release:
+
+```bash
+./.build/release/speech voice-chat \
+  --model /path/to/voicechat-mlx-int5 \
+  --mcp-config Examples/VoiceChatMCP/apple-reminders.json
+```
+
+Añade `--debug-timeline` para ver marcas de tiempo de frases, fin de pronunciación generada y ciclo de vida de herramientas decodificado por el modelo. Puede revelar argumentos de herramientas; no lo uses en registros compartidos. Consulta el README de cada app o la guía enlazada para los detalles de compilación y ejecución.
 
 ## Ejemplos de código
 

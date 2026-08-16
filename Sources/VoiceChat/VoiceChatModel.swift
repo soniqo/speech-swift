@@ -3,6 +3,11 @@ import Foundation
 import Hub
 import MLX
 
+public typealias VoiceChatLoadProgressHandler = @Sendable (
+    _ progress: Double,
+    _ stage: String
+) -> Void
+
 /// Complete local VoiceChat 11B runtime.
 ///
 /// All five published components are loaded as one unit so a bundle missing
@@ -35,13 +40,18 @@ public final class VoiceChatModel {
         self.transcriber = transcriber
     }
 
-    public static func load(from root: URL) async throws -> VoiceChatModel {
+    public static func load(
+        from root: URL,
+        progressHandler: VoiceChatLoadProgressHandler? = nil
+    ) async throws -> VoiceChatModel {
         let encoderDirectory = root.appendingPathComponent("encoder")
         let languageDirectory = root.appendingPathComponent("llm")
         let speechDirectory = root.appendingPathComponent("tts")
 
+        progressHandler?(0.02, "Loading tokenizer")
         let tokenizer = try await VoiceChatTokenizer.load(from: languageDirectory)
 
+        progressHandler?(0.08, "Loading perception encoder and RNN-T")
         let encoderWeightsURL = encoderDirectory.appendingPathComponent("model.safetensors")
         guard FileManager.default.fileExists(atPath: encoderWeightsURL.path) else {
             throw VoiceChatLoadError.missingWeights(encoderWeightsURL)
@@ -53,11 +63,13 @@ public final class VoiceChatModel {
         let transcriber = try VoiceChatTranscriber(
             perception: perception, weights: encoderWeights)
 
+        progressHandler?(0.28, "Loading 11B language model")
         let languageModel = try VoiceChatLanguageModel.load(from: languageDirectory)
         guard languageModel.functionHead != nil else {
             throw VoiceChatLoadError.unexpectedKeys(["function_head.weight"])
         }
 
+        progressHandler?(0.72, "Loading EAR-TTS and audio codec")
         let speechConfiguration = try VoiceChatSpeechConfiguration.load(from: speechDirectory)
         let speechWeightsURL = speechDirectory.appendingPathComponent("model.safetensors")
         guard FileManager.default.fileExists(atPath: speechWeightsURL.path) else {
@@ -72,12 +84,14 @@ public final class VoiceChatModel {
 
         // Seconds here save hours later: this catches missing/promoted codec
         // tensors and the historic magnitude/phase inversion before a session.
+        progressHandler?(0.90, "Verifying and warming the audio codec")
         let silence = codec.verifySilence()
         guard silence.passed else {
             throw VoiceChatGenerationError.invalidSpeechConfiguration(
                 "canonical silence decoded to RMS \(silence.rms), peak \(silence.peak)")
         }
         codec.warmUpLiveDecoding()
+        progressHandler?(1.0, "VoiceChat model ready")
 
         return VoiceChatModel(
             perception: perception,
@@ -92,12 +106,15 @@ public final class VoiceChatModel {
     public static func loadFromHub(
         _ modelID: String = defaultModelID,
         revision: String = "main",
-        progressHandler: @escaping (Progress) -> Void = { _ in }
+        progressHandler: @escaping (Progress) -> Void = { _ in },
+        loadProgressHandler: VoiceChatLoadProgressHandler? = nil
     ) async throws -> VoiceChatModel {
         let hub = HubApi(endpoint: HuggingFaceDownloader.resolvedEndpoint())
         let directory = try await hub.snapshot(
             from: modelID, revision: revision, progressHandler: progressHandler)
-        return try await load(from: directory)
+        return try await load(
+            from: directory,
+            progressHandler: loadProgressHandler)
     }
 
     /// Start a stateful full-duplex conversation. Generation caches are owned
@@ -105,10 +122,16 @@ public final class VoiceChatModel {
     public func startSession(
         systemPrompt: String = VoiceChatSession.defaultSystemPrompt,
         sampling: VoiceChatTextSamplingParameters = .init(),
-        speech: VoiceChatSpeechGenerationParameters = .init()
+        speech: VoiceChatSpeechGenerationParameters = .init(),
+        streamUserTranscript: Bool = false,
+        turnTaking: VoiceChatTurnTakingParameters = .modelNative,
+        functionCallingEnabled: Bool = false
     ) async throws -> VoiceChatSession {
         try await VoiceChatSession.create(
             model: self, systemPrompt: systemPrompt,
-            sampling: sampling, speechParameters: speech)
+            sampling: sampling, speechParameters: speech,
+            streamUserTranscript: streamUserTranscript,
+            turnTaking: turnTaking,
+            functionCallingEnabled: functionCallingEnabled)
     }
 }

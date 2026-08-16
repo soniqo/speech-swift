@@ -19,6 +19,20 @@ EAR-TTS, and returns a 1,764-sample output-audio frame. The same session can
 also return the user's transcript, the model's text response, timing events,
 and an exact offline rendering of the generated waveform.
 
+For interactive clients, streaming captions or
+`turnTaking: .nvidiaRealtime` carry the RNN-T prediction/LSTM state alongside
+the duplex session. Each encoder frame is decoded once before its modality
+projection. Captioned events contain the complete append-only
+`userTranscript`; turn-taking also retains whether the head's first prediction
+was blank and whether that frame emitted a recognized lexical token. Both
+options share the encoder result and do not recompute mel features or the
+FastConformer. The small RNN-T prediction/joint head stays on the shared MLX
+inference stream. Moving it to a CPU stream introduces a per-frame device
+synchronization that costs more than the head itself and breaks real-time
+throughput. The low-level API's `.modelNative` default keeps existing inference
+and benchmark behavior unchanged; the live CLI explicitly selects
+`.nvidiaRealtime`.
+
 The runtime requires a **complete** bundle containing `encoder/`, `llm/`, and
 `tts/`. It deliberately rejects the earlier understanding-only exports rather
 than silently starting a session without speech generation.
@@ -75,8 +89,187 @@ The loader resolves and round-trips all three strings instead of trusting the
 tokenizer's advertised EOS role.
 
 The greedy text selection and optional function-head selection share the same
-language hidden state and are evaluated together. This preserves both selected
-tokens while avoiding a second GPU synchronization on every 80 ms frame.
+language hidden state. The 8-bit function projection is still roughly 518 MB,
+so evaluating all 131,072 rows even intermittently makes tool-enabled capture
+fall behind. The runtime precomputes only the PAD and `<SPECIAL_20>` output rows
+(about 36 KB) and evaluates that probe with the text decision after RNN-T
+confirms user speech. If the start row beats PAD before end-of-utterance, the
+runtime retains only that 4,096-value hidden-state candidate. The full head
+verifies the global argmax when the learned text head emits BOS or the final
+RNN-T safety endpoint expires, not while the user is still speaking. This is
+exact: `<SPECIAL_20>` cannot be the full-head argmax unless it first beats PAD.
+Once the verified native start token wins, the complete head runs at full
+language-model speed on a cached perception embedding generated from one second
+of zero PCM. It is no longer coupled to incoming 80 ms frames. Because the text
+channel is necessarily PAD inside the open call, these steps skip the unused
+131,072-row text projection and evaluate only the shared backbone plus native
+function projection. `VoiceChatFunctionCallDecodeMetrics` records this
+background phase's elapsed wall time, completed asynchronous decode steps,
+completion state, derived tokens per second, shared model/projection compute,
+idle EAR-TTS cache work, and the residual live-interleave time used by actor
+yields, bookkeeping, or system contention. The initial audio-frame start token
+is excluded because it is already charged to foreground audio RTF. These
+values are separate from foreground audio RTF, which covers the 80 ms
+perception/RNN-T path and cannot describe function-projection work.
+`VoiceChatFunctionResponseMetrics` independently records the elapsed time,
+token count, causal-prefill batch count, throughput, language-cache work,
+speech-cache work, and live-interleave residual for replaying a known tool
+result. Keeping response replay
+separate prevents a fast MCP call or foreground RTF from hiding expensive 11B
+cache synchronization.
+While the external provider is pending, the two-phase path freezes the shared
+language and EAR-TTS timeline at EOTC, matching NVIDIA's reference wrapper.
+Real microphone frames continue through perception and RNN-T for captions and
+interruption evidence, but are not inserted as synthetic PAD positions between
+the native call and its eventual result. Speech-bearing regions are retained as
+evaluated modality embeddings with bounded onset/tail context. Once the result
+closes, the session replays at most one retained embedding per microphone
+callback into the shared language/TTS timeline without advancing the streaming
+encoder twice. The corresponding new microphone embedding remains queued, so
+the foreground callback never drains an unbounded backlog. Replay text is
+forced to PAD and its elapsed audio is never scheduled for playback. Idle
+EAR-TTS cache positions are synchronized later in bounded eight-frame chunks.
+The session yields its actor after each asynchronous step, allowing live
+FastConformer/RNN-T work to interleave and detect a sustained user interruption.
+The live driver reads one coherent function-channel snapshot and one MCP
+snapshot every two audio periods (160 ms), instead of making several actor
+calls after every frame. Diagnostics therefore cannot repeatedly interleave
+with the asynchronous 11B decoder or delay the next microphone read.
+The call has independent 256-step and eight-second safety bounds; phase-two
+response injection has a separate 512-step/eight-second budget. PAD therefore
+cannot keep either phase active indefinitely.
+
+When function calling is enabled, `<SPECIAL_20>` opens a tool call and
+`<SPECIAL_21>` closes it. Tokens between them decode to the checkpoint's JSON
+`<TOOLCALL>` payload. The text channel is forced to idle for the complete call
+and while an external result is pending, so tool JSON cannot leak into speech.
+The runtime then feeds the tokenized
+`<TOOL_RESPONSE>...</TOOL_RESPONSE>` result back through the function feedback
+channel on a second asynchronous cached-silence phase, followed by
+`<SPECIAL_22>`. Because the complete result is known, the runtime advances the
+language and EAR-TTS caches in bounded 16-token causal-prefill chunks instead of
+performing one 11B decode per token. Cache-parity coverage checks this against
+the sequential recurrence. This mirrors the two-phase path in NVIDIA's
+[`nemotron-labs-voicechat` reference wrapper](https://github.com/NVIDIA-NeMo/NeMo/blob/nemotron-labs-voicechat/nemo/collections/speechlm2/inference/model_wrappers/nemotron_voicechat_inference_wrapper.py).
+The closing marker also restores the assistant authorization consumed when the
+native call opened. Without that transition, RNN-T self-play suppression would
+reject the checkpoint's result-conditioned BOS as an unprompted turn even
+though the tool completed successfully. The restored authorization is consumed
+by that BOS; fresh RNN-T speech is still required for every later user turn.
+System-prompt positions keep both generated feedback channels at PAD, matching
+NeMo; feeding unsupervised prompt predictions forward can otherwise begin live
+audio midway through a hallucinated call.
+
+The MCP coordinator receives only a completed native function-channel payload;
+its API has no transcript argument. It validates the selected tool and the
+small JSON-Schema subset used by MCP, applies the configured read/write policy,
+executes the provider, and returns compact structured JSON. It never classifies
+transcript text, repairs arguments, fills slots, matches spoken reminder names,
+or authors assistant speech. Missing or invalid values return through the
+trained function-response channel so the checkpoint can clarify in its own
+words.
+
+The CLI defaults to `allow`: one complete native write executes immediately and
+the provider result returns through the function channel, without a second
+confirmation turn. An identical completed write is suppressed until new
+acoustic activity, preventing an immediate model retry from duplicating the
+side effect. `confirm` remains an explicit opt-in; it returns
+`confirmation_required` and requires the checkpoint to emit the identical call
+again after fresh RNN-T non-blank activity. No yes/no phrase is interpreted by
+the runtime. These are protocol and side-effect guards, not a second
+natural-language router.
+
+The Apple Reminders facade exposes a deliberately small native tool surface.
+`create_reminder` requires only a name and otherwise uses schema-documented
+provider defaults. `list_reminders` performs one flattened EventKit read and
+returns stable session references such as `r1` instead of long provider UUIDs.
+`update_reminder` accepts one of those model-visible references, which is mapped
+exactly back to the provider ID immediately before execution. The runtime does
+not resolve a spoken name or cache reminder content. The model alone selects the
+tool and produces its arguments. No-op updates and fractional priorities are
+rejected instead of being reported as successful provider mutations. Successful
+write responses contain only `{"ok":true}`, and successful reads omit the
+redundant tool name while preserving their records. This shortens cache
+synchronization without changing the native call or fabricating assistant text.
+
+The three expensive phases have separate scheduling and measurements:
+
+1. Native call JSON is decoded on the cached-silence fast path, yielding the
+   session actor after every token.
+2. External MCP I/O runs in a separate Swift task. The coordinator and MCP
+   actors remain reentrant while awaiting the provider, so the capture loop is
+   not held by EventKit or stdio latency.
+3. A known result is synchronized into the language and EAR-TTS caches in
+   bounded 16-token causal-prefill batches, yielding between batches.
+
+Perception and RNN-T continue while phases one and three own the language cache;
+captions and sustained-speech interruption evidence therefore remain live.
+During the external wait, ordinary real-audio frames do not advance the shared
+model timeline. Meaningful captured regions are replayed immediately after the
+result, so a captioned follow-up is not lost. The model does not speak a
+runtime-authored acknowledgement. Result-conditioned speech resumes only after
+`<SPECIAL_22>` closes the response.
+
+This is the important concurrency boundary: the function and text channels
+share one Nemotron-H KV cache. They cannot generate two independent causal
+futures at once. Fully overlapping arbitrary assistant speech with a pending
+tool would require a speculative second cache plus a defined merge/replay
+policy beyond the bounded post-result input replay used here, or a separately
+trained function decoder. The current path prioritizes live microphone
+processing and truthful, model-generated post-result speech over such
+speculation. Function-response injection rejects attempts to
+overwrite an active native call, and bounded valid error JSON is used if a
+provider result cannot be injected. If both normal and fallback injection fail,
+the host aborts the function cycle so later speech remains usable. Function
+calling remains disabled by
+default; without an executor the standard conversation path and its latency are
+unchanged.
+
+Prompt conditioning is causally prefetched in chunks of 64 positions. Each
+position still receives its prompt token plus PAD feedback from both generated
+channels, but the prefill bypasses the unused text and function vocabulary
+projections. This is numerically equivalent at the checked INT5 output while
+avoiding hundreds of serialized 11B steps for a schema-rich MCP prompt.
+
+### RNN-T turn-taking
+
+The checkpoint has no standalone VAD probability head. Its bundled RNN-T
+decoder and joint projection provide the activity signal used by NVIDIA's
+realtime wrapper. For every 80 ms encoder frame, the first RNN-T prediction is
+classified as blank or non-blank before the remaining label loop runs.
+The frontend uses the checkpoint's filterbank and window together with NeMo's
+reflection padding. Zero padding changes the spectrogram at both edges of each
+rolling live window and can turn a marginal word into a different greedy
+RNN-T token sequence.
+
+The `.nvidiaRealtime` session policy ports that control path: two initial
+non-blank frames and three on later turns are sustained-activity fallbacks, and
+one recognized lexical RNN-T token immediately confirms an idle user turn.
+This token-level path matters because a short complete phrase can emit several
+labels inside one encoder frame; its caption must not wait for two more speech
+frames before it can receive a response. Unknown and punctuation-only labels
+do not qualify. Forty blanks force agent BOS after an utterance, and forty
+consecutive non-blanks provide the RNN-T agent-EOS safety fallback. This
+runtime uses the reference branch's conservative 40-frame profile; learned
+BOS/EOS predictions remain the normal low-latency turn-taking path. Agent BOS
+clears the consecutive-speech counter, so pre-BOS user activity cannot
+terminate the new response. In normal interactive mode,
+model-native BOS is suppressed before the first confirmed user turn and after
+every completed agent turn; explicit greeting mode permits only the initial
+exception. Once content has been followed by the larger of 16 PAD frames or
+three PAD frames per content token, the next blank PAD becomes EOS so the
+logical turn cannot remain stuck open. This content-scaled budget preserves
+delayed EAR-TTS speech that a fixed 1.28-second cutoff can truncate. Audio
+frames are never gated or removed; continuous silence remains part of the model
+timeline.
+
+Tool-enabled realtime sessions add a narrower endpoint only for an existing
+model-native function candidate: eight blank frames (640 ms) permit its full
+131,072-row verification, while ordinary replies and barge-in keep the
+40-frame safety thresholds. The candidate is scoped to one uninterrupted user
+speech segment and is cleared on resumed RNN-T activity, assistant output, or
+tool-result injection. This reduces native tool-start latency without turning
+the RNN-T activity signal into a general short-pause VAD.
 
 Only 4 of the Nemotron-H backbone's 56 layers use attention. The other 27
 mixing layers are Mamba2 and retain fixed recurrent state, so only four KV
@@ -93,6 +286,56 @@ The output head is a 1,024-component low-rank mixture of Gaussians. Generation
 is not one-shot: the 31 codebooks are progressively assigned over eight
 MaskGIT iterations. For the published schedule, the assignments per iteration
 are `[0, 0, 0, 1, 1, 3, 4, 22]`.
+
+The iteration count affects only progressive EAR-TTS refinement for future
+frames and can be changed on a live actor with `setSpeechIterations(_:)`.
+The CLI begins with eight iterations, uses two as a visible, reversible
+realtime fallback after the first 88 ms callback or three queued frames, and
+uses one emergency step after a 120 ms callback, six queued frames, or input
+resynchronization. Perception, language, RNN-T, turn-taking, codec state, and
+the 80 ms model clock are not skipped by this quality adjustment. If even the
+emergency setting cannot keep up, the CLI drops stale
+queued input at its latency bound and calls `resynchronizeLiveInput()`. The
+buffer removes only enough oldest audio to accept fresh capture and coalesces a
+sustained overload into one recovery episode. Fresh RNN-T counters and predictor
+text reset across the discontinuity, while an already-confirmed user turn stays
+armed so repeated overload callbacks cannot erase the whole request. Agent and
+language history remain intact.
+
+One-step synthesis is an overload safety mode, not acoustic parity with the
+checkpoint's eight-step schedule: all 31 RVQ codebooks are assigned in a single
+pass. It may change pronunciation detail, onset behavior, and pauses. The
+dashboard therefore labels the active refinement level, and quality comparisons
+must record the iteration count. A lower count protects live microphone service;
+it does not guarantee that a particular stochastic reply will contain fewer
+acoustic pauses.
+
+The realtime path also follows NVIDIA's agent-idle and content-scaled PAD
+policy. BOS opens a speech turn and EOS closes it. PAD inside that open turn
+continues normal EAR-TTS for the larger of 16 frames or three frames per
+emitted content token, because text generation can finish long before the
+corresponding audio. Continued PAD beyond that budget, PAD while idle, and EOS
+advance the TTS backbone cache but return canonical silence without discarded
+MaskGIT refinement or a live codec window. New text resets the consecutive-PAD
+counter and resumes normal synthesis immediately. This preserves delayed words,
+turn alignment, and compute headroom for microphone input.
+
+Normal synthesis evaluates the generated code and all 28 retained EAR-TTS
+attention-cache pairs together on every frame. Extended canonical-silence PAD
+advances eight frames at once with a causal mask, then evaluates the same cache
+roots. This fences MLX's lazy concatenations before they can accumulate across
+a long conversation without paying 28 decoder passes for eight inaudible
+frames. A synchronous fence is intentional: queuing unrelated live work first
+oversubscribes the shared MLX stream and is slower for this 80 ms pipeline.
+
+Unbounded attention is still the low-level and file-inference default. Live CLI
+sessions instead retain the immutable 37-frame Aria speaker prompt plus 250
+recent generated frames (20 seconds). When the rolling region fills, its oldest
+middle-history frame is removed while the absolute RoPE offset continues to
+advance. This bounds all 28 EAR-TTS attention layers without resetting position
+or losing speaker conditioning. It does not truncate Nemotron-H's semantic
+conversation state. `VoiceChatSpeechGenerationParameters.recentContextFrames`
+controls the policy; `nil` preserves the complete TTS history.
 
 Masked codebooks contribute exact zero vectors. During progressive assignment,
 the runtime therefore carries the sum of the already selected RVQ embeddings
@@ -132,6 +375,8 @@ These errors load successfully and return plausible tensor shapes:
 7. Giving the function feedback channel weight `1` instead of `2`.
 8. Running EAR-TTS in one pass instead of its eight-step MaskGIT schedule.
 9. Interpreting codec magnitude/phase channels as real/imaginary channels.
+10. Decoding the RNN-T transcript but discarding its first-prediction blank
+    signal, which removes NVIDIA's deterministic EOU and barge-in path.
 
 ## Verification
 
@@ -147,6 +392,9 @@ inputs, rather than only against itself:
 | Canonical codec silence | RMS below 1e-5; the historical decoder bug produced 1.60 |
 | Full audio → audio test | exact expected response, 50 speaking frames, finite non-silent audio |
 | Live-window codec vs exact render | cosine above 0.9999; RMSE below 2e-4 |
+| RNN-T turn policy | unit coverage for lexical short-turn confirmation, sustained activity, EOU, barge-in, silence self-play suppression, post-function turn resumption, and disabled passthrough |
+| Reminder MCP adapter | unit coverage for schema-preserving native tools, flattened list results with session-scoped opaque references, exact reference-to-provider-ID resolution, stale-reference rejection, provider-ID compatibility, invalid-argument rejection, immediate writes by default, opt-in model-mediated confirmation, write denial, duplicate suppression, and coordinator reentrancy during suspended MCP I/O |
+| Function fast path | three native reminder-list phrases emit the expected calls in 27–31 asynchronous steps and inject a 67-token result in five causal prefills; a real three-cycle list → update confirmation → confirmed update regression completes without a repeated-call loop; realistic update IDs drop from 67 steps / 5.25 s to 37 steps / about 2.29 s with lossless session references |
 
 The complete controlled E2E test uses a real 3.6-second FLEURS clip and forces
 turn opening at the end of the clip so output is deterministic. That forced
@@ -205,6 +453,31 @@ this optimization, so no updated INT8 real-time claim is made here. Run the
 benchmark on the target machine because thermal state and concurrent GPU work
 materially affect this margin.
 
+A paired live-caption regression on the same M5 Pro exposed why execution
+placement matters. Moving the small RNN-T head to a CPU stream produced RTF
+1.30 and 99.5 ms total/frame p50. Keeping it on the shared MLX inference stream
+produced the identical transcript and response at RTF 0.96 and 76.2 ms p50,
+matching the no-caption control at RTF 0.96 and 76.3 ms p50. The opt-in
+`E2EVoiceChatRealtimeCaptionTests` gate uses one-frame pushes across a
+33.6-second/420-frame session and rejects RTF at or above 1.0 or p50 at or
+above 85 ms. The long tail catches retained lazy-cache graphs that a short
+smoke test cannot expose.
+
+A separate 795-frame/63.6-second sustained profile exercised the rolling
+EAR-TTS boundary. Full speech history produced aggregate RTF `1.06`, final
+8-second RTF `1.19`, 47.7 ms/frame late synthesis, and 38.5 GB peak physical
+footprint. With the content-safe tail, retaining the prompt plus 250 recent
+frames and batching only post-tail PAD produced aggregate RTF `0.87`,
+final-window RTF `0.71`, 4.1 ms/frame final-window synthesis, 8.72 GB peak RSS,
+and 23.67 GB peak physical footprint. Its speech-active eight-step windows were
+RTF `1.05` and `1.12`. The live CLI now lowers refinement from eight to two
+steps as soon as one callback reaches 88 ms or three microphone frames queue,
+and directly to one step after a 120 ms callback, six queued frames, or input
+resynchronization. It restores the requested quality only after 100 stable
+frames. The minimum cosine between sequential and eight-frame batched cache
+state was `0.9999999`. File inference and the default Swift API do not enable
+this realtime-only compaction.
+
 Model turn onset and hardware compute latency are different measurements. The
 default prompt is intentionally neutral because adding “greet the user” or
 "wait for the user to finish" changes the model's chosen onset. Do not cite a
@@ -223,7 +496,8 @@ import VoiceChat
 
 let model = try await VoiceChatModel.load(
     from: URL(fileURLWithPath: "/path/to/complete-bundle"))
-let session = try await model.startSession()
+let session = try await model.startSession(
+    turnTaking: .nvidiaRealtime)
 
 for event in try await session.pushAudio(mono16kSamples) {
     playback.enqueue(event.audio, sampleRate: VoiceChatSession.outputSampleRate)

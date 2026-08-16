@@ -252,6 +252,7 @@ speech speak "Hello world"
 speech csm "Nice to meet you" --ref-audio voice.wav --ref-text "reference transcript"
 speech translate "Hello, how are you?" --to es
 speech respond --input question.wav --transcript
+speech voice-chat
 speech-server --port 8080            # local HTTP / WebSocket server (OpenAI-compatible /v1/realtime + /v1/audio/transcriptions)
 ```
 
@@ -329,9 +330,18 @@ make build
 - **[DictateDemo](Examples/DictateDemo/)** ([docs](https://soniqo.audio/guides/dictate)) — macOS menu-bar streaming dictation with live partials, VAD-driven end-of-utterance detection, and one-click copy. Runs as a background agent (Parakeet-EOU-120M + Silero VAD).
 - **[iOSEchoDemo](Examples/iOSEchoDemo/)** — iOS echo demo (Parakeet ASR + Kokoro TTS). Device and simulator.
 - **[PersonaPlexDemo](Examples/PersonaPlexDemo/)** — Conversational voice assistant with mic input, VAD, and multi-turn context. macOS. RTF ~0.94 on M2 Max (faster than real-time).
+- **[Soniqo VoiceChat CLI](docs/inference/voicechat.md)** ([guide](https://soniqo.audio/guides/speech-to-speech)) — Native full-duplex Nemotron 11B terminal assistant with live RNN-T captions, model-driven turn-taking, adaptive EAR-TTS detail, and optional MCP tools. The included Apple Reminders configuration exposes only create, list, and update operations.
 - **[SpeechDemo](Examples/SpeechDemo/)** — Dictation and TTS synthesis in a tabbed interface. macOS.
 
-Each demo's README has build instructions.
+Run the VoiceChat reminders demo after a release build:
+
+```bash
+./.build/release/speech voice-chat \
+  --model /path/to/voicechat-mlx-int5 \
+  --mcp-config Examples/VoiceChatMCP/apple-reminders.json
+```
+
+Add `--debug-timeline` for phrase, generated-pronunciation-end, and model-decoded tool lifecycle timestamps. It can reveal tool arguments, so keep it out of shared logs. See each app's README or the linked VoiceChat guide for build and runtime details.
 
 ## Code examples
 

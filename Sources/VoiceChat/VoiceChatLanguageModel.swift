@@ -48,6 +48,26 @@ public final class VoiceChatLanguageModel {
         model.call(embeddings: embeddings, cache: cache)
     }
 
+    /// Causally prefill fused prompt embeddings without computing unused
+    /// text logits for every prompt token.
+    func prefill(
+        embeddings: MLXArray,
+        cache: [KVCache]
+    ) -> MLXArray {
+        model.callBackbone(embeddings: embeddings, cache: cache)
+    }
+
+    /// Advance only the shared Nemotron-H backbone. An open function call or a
+    /// pending/injected result forces the text channel to PAD, so materializing
+    /// the 131k-row text projection cannot affect either channel and only adds
+    /// memory traffic.
+    func callFunctionBackbone(
+        embeddings: MLXArray,
+        cache: [KVCache]
+    ) -> MLXArray {
+        model.callBackbone(embeddings: embeddings, cache: cache)
+    }
+
     /// Shared embedding table used by the text and function feedback channels.
     public func embed(_ tokenIDs: MLXArray) -> MLXArray {
         model.embed(tokenIDs)

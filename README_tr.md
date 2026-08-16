@@ -248,6 +248,7 @@ speech speak "Hello world"
 speech csm "Nice to meet you" --ref-audio voice.wav --ref-text "reference transcript"
 speech translate "Hello, how are you?" --to es
 speech respond --input question.wav --transcript
+speech voice-chat
 speech-server --port 8080            # yerel HTTP / WebSocket sunucusu (OpenAI-compatible /v1/realtime + /v1/audio/transcriptions)
 ```
 
@@ -322,9 +323,18 @@ make build
 - **[DictateDemo](Examples/DictateDemo/)** ([dokümantasyon](https://soniqo.audio/guides/dictate)) — Canlı kısmi sonuçlar, VAD tabanlı söyleyiş sonu algılaması ve tek tıklama kopyalama ile macOS menü çubuğu akış dikte. Arka plan ajanı olarak çalışır (Parakeet-EOU-120M + Silero VAD).
 - **[iOSEchoDemo](Examples/iOSEchoDemo/)** — iOS yankı demosu (Parakeet ASR + Kokoro TTS). Cihaz ve simülatör.
 - **[PersonaPlexDemo](Examples/PersonaPlexDemo/)** — Mikrofon girişi, VAD ve çok turlu bağlam ile konuşmacı sesli asistan. macOS. M2 Max üzerinde RTF ~0.94 (gerçek zamandan hızlı).
+- **[Soniqo VoiceChat CLI](docs/inference/voicechat.md)** ([kılavuz](https://soniqo.audio/tr/guides/speech-to-speech)) — Canlı RNN-T altyazıları, model tabanlı sıra alma, uyarlanabilir EAR-TTS ayrıntısı ve isteğe bağlı MCP araçları sunan yerel tam çift yönlü Nemotron 11B terminal asistanı. Birlikte gelen Apple Reminders yapılandırması yalnızca oluşturma, listeleme ve güncelleme işlemlerini açar.
 - **[SpeechDemo](Examples/SpeechDemo/)** — Sekmeli arayüzde dikte ve TTS sentezi. macOS.
 
-Her demonun README'sinde derleme talimatları yer alır.
+Release derlemesinden sonra VoiceChat hatırlatıcı demosunu çalıştırın:
+
+```bash
+./.build/release/speech voice-chat \
+  --model /path/to/voicechat-mlx-int5 \
+  --mcp-config Examples/VoiceChatMCP/apple-reminders.json
+```
+
+İfade, üretilen telaffuzun bitişi ve modelin çözdüğü araç yaşam döngüsü zaman damgaları için `--debug-timeline` ekleyin. Araç bağımsız değişkenlerini gösterebilir; paylaşılan günlüklerde kullanmayın. Derleme ve çalışma ayrıntıları için uygulama README'lerine veya bağlantılı kılavuza bakın.
 
 ## Kod örnekleri
 

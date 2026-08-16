@@ -3,6 +3,30 @@ import MLX
 import MLXFFT
 import MLXNN
 
+/// Match NumPy/NeMo's one-dimensional `mode="reflect"` padding.
+///
+/// MLX Swift currently exposes constant and edge padding, but the VoiceChat
+/// perception checkpoint was trained with reflection padding. A general index
+/// mapping keeps short diagnostic inputs correct as well as normal live audio
+/// windows, including when the padding is wider than the input.
+func voiceChatReflectPad(_ values: MLXArray, padding: Int) -> MLXArray {
+    guard padding > 0 else { return values }
+    let count = values.dim(0)
+    precondition(count > 0, "reflection padding requires non-empty input")
+    guard count > 1 else {
+        return MLX.tiled(values, repetitions: [2 * padding + 1])
+    }
+
+    let period = 2 * (count - 1)
+    let indexes = (-padding ..< count + padding).map { position -> Int32 in
+        var reflected = position % period
+        if reflected < 0 { reflected += period }
+        if reflected >= count { reflected = period - reflected }
+        return Int32(reflected)
+    }
+    return MLX.take(values, MLXArray(indexes), axis: 0)
+}
+
 /// Audio to text through the VoiceChat perception bundle.
 ///
 /// This is the model's transcript channel — its running record of what the user
@@ -64,7 +88,7 @@ public final class VoiceChatTranscriber {
         ])
 
         let pad = Self.nFFT / 2
-        let padded = MLX.padded(emphasised, widths: [IntOrPair((pad, pad))])
+        let padded = voiceChatReflectPad(emphasised, padding: pad)
         let frames = max(1, 1 + (padded.dim(0) - Self.nFFT) / Self.hopLength)
         let strided = asStrided(padded, [frames, Self.nFFT],
                                 strides: [Self.hopLength, 1], offset: 0)
@@ -82,6 +106,47 @@ public final class VoiceChatTranscriber {
         let hidden = perception.encoder(mel)     // (1, T, 1024), pre-projection
         eval(hidden)
         return rnnt.decode(hidden[0])
+    }
+
+    struct StreamState {
+        fileprivate var decoder: RNNTHead.State
+        fileprivate var transcript = ""
+    }
+
+    struct StreamFrameResult {
+        let transcript: String
+        /// Whether the RNN-T head's first prediction for this encoder frame was
+        /// blank. NVIDIA's realtime wrapper uses this exact signal for EOU/BOU.
+        let isBlank: Bool
+        /// Whether this frame emitted at least one recognized lexical token.
+        /// A short word can be fully decoded in one encoder frame even though
+        /// turn-taking otherwise waits for several non-blank frame starts.
+        let hasLexicalToken: Bool
+    }
+
+    func makeStreamState() -> StreamState {
+        StreamState(decoder: rnnt.makeState())
+    }
+
+    /// Decode encoder frames already produced by the duplex stream.
+    ///
+    /// Reusing those frames avoids a second FastConformer pass merely to show
+    /// the user transcript. The RNN-T prediction state is carried across calls,
+    /// so the returned text is the complete append-only transcript so far.
+    func transcribeStreamingFrame(
+        _ encoded: MLXArray,
+        state: inout StreamState
+    ) -> StreamFrameResult {
+        let result = rnnt.consume(encoded, state: &state.decoder)
+        if !result.emittedTokens.isEmpty {
+            state.transcript = rnnt.transcript(state.decoder)
+        }
+        return StreamFrameResult(
+            transcript: state.transcript,
+            isBlank: result.firstPredictionWasBlank.last ?? true,
+            hasLexicalToken: result.emittedTokens.contains { token in
+                rnnt.isLexicalToken(token)
+            })
     }
 }
 
@@ -105,6 +170,21 @@ final class RNNTHead {
     private let vocabulary: [String]
     private let hidden = 640
     private let maxSymbolsPerFrame = 10
+
+    struct State {
+        fileprivate var recurrent: [(MLXArray, MLXArray)]
+        fileprivate var prediction: MLXArray
+        fileprivate var projectedPrediction: MLXArray
+        fileprivate var tokens: [Int]
+    }
+
+    struct ConsumeResult {
+        let emittedTokens: [Int]
+        /// One value per encoder frame. This intentionally records the first
+        /// prediction, matching NVIDIA's turn-taking implementation even when
+        /// the label loop emits more tokens before reaching blank.
+        let firstPredictionWasBlank: [Bool]
+    }
 
     init(weights: [String: MLXArray], vocabulary: [String]) throws {
         func need(_ key: String) throws -> MLXArray {
@@ -164,33 +244,92 @@ final class RNNTHead {
         return (input, next)
     }
 
-    func decode(_ encoded: MLXArray) -> String {
-        let encScores = MLX.matmul(encoded.asType(.float32), encW.transposed(1, 0)) + encB
-        var state = (0 ..< 2).map { _ in
+    func makeState() -> State {
+        let recurrent = (0 ..< 2).map { _ in
             (MLXArray.zeros([1, hidden]), MLXArray.zeros([1, hidden]))
         }
-        // blank_as_pad: the prediction network starts from the blank embedding.
-        var (pred, newState) = step(embed[VoiceChatTranscriber.blankIndex].expandedDimensions(axis: 0), state)
-        state = newState
+        // Keep caption decoding on the same MLX inference stream as the
+        // encoder. Moving these small recurrent operations to the CPU forces
+        // a device synchronization for every 80 ms frame and prevents the
+        // complete duplex pipeline from sustaining real time.
+        let (prediction, next) = step(
+            embed[VoiceChatTranscriber.blankIndex].expandedDimensions(axis: 0),
+            recurrent)
+        let projectedPrediction = MLX.matmul(
+            prediction, predW.transposed(1, 0)) + predB
+        MLX.eval(
+            [prediction, projectedPrediction]
+                + next.flatMap { [$0.0, $0.1] })
+        return State(
+            recurrent: next,
+            prediction: prediction,
+            projectedPrediction: projectedPrediction,
+            tokens: [])
+    }
 
-        var tokens: [Int] = []
+    @discardableResult
+    func consume(_ encoded: MLXArray, state: inout State) -> ConsumeResult {
+        let encScores = MLX.matmul(encoded.asType(.float32), encW.transposed(1, 0)) + encB
+        var emittedTokens: [Int] = []
+        var firstPredictionWasBlank: [Bool] = []
+        firstPredictionWasBlank.reserveCapacity(encScores.dim(0))
         for t in 0 ..< encScores.dim(0) {
             var emitted = 0
+            var isFirstPrediction = true
             while emitted < maxSymbolsPerFrame {
                 let joint = MLX.maximum(
                     encScores[t].expandedDimensions(axis: 0)
-                        + MLX.matmul(pred, predW.transposed(1, 0)) + predB,
+                        + state.projectedPrediction,
                     MLXArray(Float(0)))
                 let logits = MLX.matmul(joint, outW.transposed(1, 0)) + outB
                 let token = argMax(logits[0], axis: -1).item(Int.self)
+                if isFirstPrediction {
+                    firstPredictionWasBlank.append(
+                        token == VoiceChatTranscriber.blankIndex)
+                    isFirstPrediction = false
+                }
                 if token == VoiceChatTranscriber.blankIndex { break }
-                tokens.append(token)
-                (pred, newState) = step(embed[token].expandedDimensions(axis: 0), state)
-                state = newState
+                emittedTokens.append(token)
+                let (prediction, recurrent) = step(
+                    embed[token].expandedDimensions(axis: 0), state.recurrent)
+                state.prediction = prediction
+                state.recurrent = recurrent
+                state.projectedPrediction = MLX.matmul(
+                    prediction, predW.transposed(1, 0)) + predB
                 emitted += 1
             }
         }
-        return detokenize(tokens)
+        if !emittedTokens.isEmpty {
+            MLX.eval(
+                [state.prediction, state.projectedPrediction]
+                    + state.recurrent.flatMap { [$0.0, $0.1] })
+        }
+        state.tokens.append(contentsOf: emittedTokens)
+        return ConsumeResult(
+            emittedTokens: emittedTokens,
+            firstPredictionWasBlank: firstPredictionWasBlank)
+    }
+
+    func transcript(_ state: State) -> String {
+        detokenize(state.tokens)
+    }
+
+    func isLexicalToken(_ tokenID: Int) -> Bool {
+        guard tokenID > 0, tokenID < vocabulary.count else { return false }
+        return Self.isLexicalVocabularyToken(vocabulary[tokenID])
+    }
+
+    static func isLexicalVocabularyToken(_ token: String) -> Bool {
+        guard token != "<unk>", token != "\u{2047}" else { return false }
+        return token.unicodeScalars.contains {
+            CharacterSet.alphanumerics.contains($0)
+        }
+    }
+
+    func decode(_ encoded: MLXArray) -> String {
+        var state = makeState()
+        _ = consume(encoded, state: &state)
+        return transcript(state)
     }
 
     private func detokenize(_ tokens: [Int]) -> String {

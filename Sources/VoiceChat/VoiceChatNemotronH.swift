@@ -775,8 +775,18 @@ public final class VoiceChatNemotronHModel: Module, LLMModel, KVCacheDimensionPr
         embeddings: MLXArray,
         cache: [KVCache]?
     ) -> (logits: MLXArray, hidden: MLXArray) {
-        let hidden = backbone(nil, inputEmbeddings: embeddings, cache: cache)
+        let hidden = callBackbone(embeddings: embeddings, cache: cache)
         return (project(hidden), hidden)
+    }
+
+    /// Prefill fused VoiceChat conditioning without materializing a
+    /// sequence-wide vocabulary projection. The live step still uses `call`
+    /// because it needs text logits for the newest frame.
+    func callBackbone(
+        embeddings: MLXArray,
+        cache: [KVCache]?
+    ) -> MLXArray {
+        backbone(nil, inputEmbeddings: embeddings, cache: cache)
     }
 
     /// The shared text/function embedding table used for channel feedback.

@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "apple-reminders": {
+      "adapter": "apple-reminders-eventkit",
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-server-apple-events@1.4.0"
+      ],
+      "enabledTools": [
+        "list_reminders",
+        "create_reminder",
+        "update_reminder"
+      ],
+      "readOnlyTools": [
+        "list_reminders"
+      ]
+    }
+  }
+}

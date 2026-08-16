@@ -59,6 +59,25 @@ public struct VoiceChatMatrix {
         return bias.map { output + $0 } ?? output
     }
 
+    /// Dequantize only the requested output rows.
+    ///
+    /// This supports cheap exact preconditions on very large vocabulary
+    /// projections. A function-call start token cannot be the full-head argmax
+    /// unless its logit first beats the function-channel PAD token, so those two
+    /// rows can screen ordinary duplex frames without touching all 131k rows.
+    func outputRows(_ indices: MLXArray) -> MLXArray {
+        if let spec = quantization, let scales {
+            return MLX.dequantized(
+                weight[indices],
+                scales: scales[indices],
+                biases: biases.map { $0[indices] },
+                groupSize: spec.groupSize,
+                bits: spec.bits,
+                mode: .affine)
+        }
+        return weight[indices]
+    }
+
     /// Gather one row group per index, dequantizing only those selected rows.
     func selectedRows(_ indices: MLXArray, groups: Int, rowsPerGroup: Int) -> MLXArray {
         if let spec = quantization, let scales {

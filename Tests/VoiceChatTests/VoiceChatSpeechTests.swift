@@ -4,6 +4,25 @@ import XCTest
 @testable import VoiceChat
 
 final class VoiceChatSpeechTests: XCTestCase {
+    func testMatrixOutputRowsSelectOnlyRequestedVocabularyEntries() throws {
+        let matrix = try VoiceChatMatrix(
+            weights: [
+                "head.weight": MLXArray([
+                    Float(1), 2,
+                    3, 4,
+                    5, 6,
+                ]).reshaped([3, 2]),
+            ],
+            name: "head.weight",
+            quantization: nil)
+
+        let selected = matrix.outputRows(MLXArray([2, 0]))
+        eval(selected)
+
+        XCTAssertEqual(selected.shape, [2, 2])
+        XCTAssertEqual(selected.asArray(Float.self), [5, 6, 1, 2])
+    }
+
     func testSpeechConfigurationDecodesExportContract() throws {
         let json = #"""
         {
@@ -52,6 +71,33 @@ final class VoiceChatSpeechTests: XCTestCase {
         XCTAssertEqual(
             Double(VoiceChatCodec.samplesPerFrame) / Double(VoiceChatCodec.sampleRate),
             0.08, accuracy: 1e-12)
+    }
+
+    func testBoundedSpeechCachePreservesPromptAndRecentContext() {
+        let cache = VoiceChatSpeechAttentionCache(
+            retainedPrefixFrames: 2,
+            recentContextFrames: 3)
+
+        func frames(_ values: [Float]) -> MLXArray {
+            MLXArray(values).reshaped([1, 1, values.count, 1])
+        }
+
+        _ = cache.update(keys: frames([0, 1]), values: frames([10, 11]))
+        for value in 2 ... 7 {
+            _ = cache.update(
+                keys: frames([Float(value)]),
+                values: frames([Float(value + 10)]))
+        }
+        eval(cache.keys!, cache.values!)
+
+        XCTAssertEqual(cache.offset, 8, "RoPE offset must remain absolute")
+        XCTAssertEqual(cache.keys!.shape, [1, 1, 5, 1])
+        XCTAssertEqual(
+            cache.keys!.reshaped([-1]).asArray(Float.self),
+            [0, 1, 5, 6, 7])
+        XCTAssertEqual(
+            cache.values!.reshaped([-1]).asArray(Float.self),
+            [10, 11, 15, 16, 17])
     }
 
     func testPublishedMaskGITScheduleUsesEightProgressiveIterations() {
@@ -114,10 +160,42 @@ final class VoiceChatSpeechTests: XCTestCase {
     }
 
     func testDefaultPromptDoesNotBiasTurnTimingWithGreetingInstruction() {
+        XCTAssertTrue(
+            VoiceChatSession.defaultSystemPrompt.contains("Your name is Soniqo"))
+        XCTAssertFalse(
+            VoiceChatSession.defaultSystemPrompt.contains("NVIDIA Voice Chat"))
         XCTAssertFalse(
             VoiceChatSession.defaultSystemPrompt.localizedCaseInsensitiveContains("greet"))
         XCTAssertTrue(
             VoiceChatSession.greetingSystemPrompt.localizedCaseInsensitiveContains("greet"))
+    }
+
+    func testDefaultPromptDoesNotClaimUnavailableExternalActions() {
+        let prompt = VoiceChatSession.defaultSystemPrompt
+
+        XCTAssertTrue(prompt.contains("cannot access apps"))
+        XCTAssertTrue(prompt.contains("calendars, reminders"))
+        XCTAssertTrue(prompt.contains("Never claim to schedule"))
+        XCTAssertTrue(prompt.contains("do not ask for confirmation"))
+        XCTAssertTrue(VoiceChatSession.greetingSystemPrompt.hasPrefix(prompt))
+    }
+
+    func testSystemPromptPredictionsDoNotBecomeChannelFeedback() {
+        let prompt = VoiceChatSession.channelFeedbackAfterStep(
+            record: false,
+            textToken: 101,
+            functionToken: 202,
+            padID: 0)
+        XCTAssertEqual(prompt.text, 0)
+        XCTAssertEqual(prompt.function, 0)
+
+        let generated = VoiceChatSession.channelFeedbackAfterStep(
+            record: true,
+            textToken: 101,
+            functionToken: 202,
+            padID: 0)
+        XCTAssertEqual(generated.text, 101)
+        XCTAssertEqual(generated.function, 202)
     }
 
     func testSessionRejectsInvalidSamplingParameters() {
@@ -133,6 +211,16 @@ final class VoiceChatSpeechTests: XCTestCase {
             sampling: .init(), speech: .init(topP: 1.1)))
         XCTAssertThrowsError(try VoiceChatSession.validate(
             sampling: .init(), speech: .init(noise: -.infinity)))
+        XCTAssertThrowsError(try VoiceChatSession.validate(
+            sampling: .init(), speech: .init(recentContextFrames: 0)))
+        XCTAssertThrowsError(try VoiceChatSession.validate(
+            sampling: .init(),
+            speech: .init(),
+            turnTaking: .init(endOfUtteranceFrames: 0)))
+        XCTAssertNoThrow(try VoiceChatSession.validate(
+            sampling: .init(),
+            speech: .init(),
+            turnTaking: .modelNative))
     }
 
     func testSilenceDurationValidationCannotTrapOnNonFiniteInput() {

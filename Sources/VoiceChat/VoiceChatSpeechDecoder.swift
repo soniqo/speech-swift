@@ -21,17 +21,28 @@ public struct VoiceChatSpeechGenerationParameters: Sendable {
     public var topP: Float
     public var noise: Float
     public var iterations: Int
+    /// Recent generated 80 ms frames retained by EAR-TTS attention. `nil`
+    /// preserves the complete history. The speaker prompt is always retained.
+    public var recentContextFrames: Int?
+    /// Enable content-scaled PAD-tail compaction and causal idle batching. The
+    /// CLI uses this only for live microphone sessions; exact/offline defaults
+    /// off so parity generation preserves every model-produced frame.
+    public var realtimeIdleOptimization: Bool
 
     public init(
         guidance: Float = 0.2,
         topP: Float = 0.95,
         noise: Float = 0.001,
-        iterations: Int = 8
+        iterations: Int = 8,
+        recentContextFrames: Int? = nil,
+        realtimeIdleOptimization: Bool = false
     ) {
         self.guidance = guidance
         self.topP = topP
         self.noise = noise
         self.iterations = iterations
+        self.recentContextFrames = recentContextFrames
+        self.realtimeIdleOptimization = realtimeIdleOptimization
     }
 }
 
@@ -194,9 +205,12 @@ public final class VoiceChatSpeechDecoder {
     /// Prefill a session's 28 attention caches with the checkpoint's 37-frame
     /// Aria prompt. The final prompt code is the first generation input.
     public func warmup(
-        guidance: Bool = true
+        guidance: Bool = true,
+        recentContextFrames: Int? = nil
     ) -> (state: VoiceChatSpeechDecoderState, previousCode: MLXArray) {
-        let state = VoiceChatSpeechDecoderState(attention: backbone.makeCache())
+        let state = VoiceChatSpeechDecoderState(attention: backbone.makeCache(
+            retainedPrefixFrames: configuration.promptFrames,
+            recentContextFrames: recentContextFrames))
 
         let codes = MLX.broadcast(
             silenceCodes, to: [1, configuration.promptFrames, configuration.numQuantizers])
@@ -238,7 +252,8 @@ public final class VoiceChatSpeechDecoder {
         state: VoiceChatSpeechDecoderState,
         previousCode: MLXArray,
         textToken: Int,
-        parameters: VoiceChatSpeechGenerationParameters = .init()
+        parameters: VoiceChatSpeechGenerationParameters = .init(),
+        forceSilence: Bool = false
     ) throws -> MLXArray {
         guard parameters.iterations > 0 else {
             throw VoiceChatGenerationError.invalidSpeechConfiguration(
@@ -251,6 +266,20 @@ public final class VoiceChatSpeechDecoder {
             code: conditionedPrevious, token: textToken,
             guidance: useGuidance, state: state)
         let hidden = backbone(input, cache: state.attention)
+
+        // NVIDIA's realtime path replaces PAD with canonical silence only
+        // while no agent turn is open, and always does so for EOS. In that
+        // state the MaskGIT result would be discarded. The caller evaluates
+        // this returned code through a zero-valued dependency on the backbone
+        // output. One normal `eval(code)` therefore materializes the cache and
+        // skips the unused mixture/refinement work without a second sync.
+        if forceSilence {
+            let anchor = hidden[0, 0, 0]
+            let cacheDependency = (anchor - MLX.stopGradient(anchor))
+                .asType(.int32)
+            return MLX.broadcast(silenceCodes, to: previousCode.shape)
+                .asType(.int32) + cacheDependency
+        }
 
         var codes = MLXArray.full(
             [1, 1, configuration.numQuantizers],
@@ -291,6 +320,46 @@ public final class VoiceChatSpeechDecoder {
             filled += count
         }
         return codes
+    }
+
+    /// Advance several agent-idle PAD frames as one causal backbone call.
+    /// Every input after the first is conditioned on canonical silence, which
+    /// is exactly the autoregressive sequence produced by repeated
+    /// `step(... forceSilence: true)` calls, without running unused MaskGIT.
+    func advanceIdleSilence(
+        state: VoiceChatSpeechDecoderState,
+        previousCode: MLXArray,
+        frames: Int,
+        guidance: Float
+    ) -> MLXArray {
+        precondition(frames > 0)
+        let first = condition(previousCode, for: textPadID)
+        let shifted: MLXArray
+        if frames == 1 {
+            shifted = first
+        } else {
+            shifted = MLX.concatenated([
+                first,
+                MLX.broadcast(
+                    silenceCodes,
+                    to: [1, frames - 1, configuration.numQuantizers])
+                    .asType(.int32),
+            ], axis: 1)
+        }
+        let hidden = backbone(
+            fuse(
+                code: shifted,
+                token: textPadID,
+                guidance: guidance > 0,
+                state: state),
+            cache: state.attention)
+        let anchor = hidden[0, frames - 1, 0]
+        let cacheDependency = (anchor - MLX.stopGradient(anchor))
+            .asType(.int32)
+        return MLX.broadcast(
+            silenceCodes,
+            to: [1, 1, configuration.numQuantizers])
+            .asType(.int32) + cacheDependency
     }
 
     /// Replace speech control ids with the checkpoint's canonical silence frame,

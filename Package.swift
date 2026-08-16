@@ -233,6 +233,8 @@ let package = Package(
         // mlx-swift-examples. Pins mlx-swift .upToNextMinor(0.31.4), compatible with ours.
         .package(url: "https://github.com/ml-explore/mlx-swift-lm", branch: "main"),
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.5.0"),
+        .package(url: "https://github.com/modelcontextprotocol/swift-sdk.git", exact: "0.12.1"),
+        .package(url: "https://github.com/apple/swift-system.git", from: "1.8.0"),
         .package(url: "https://github.com/huggingface/swift-transformers", from: "1.1.6"),
         .package(url: "https://github.com/hummingbird-project/hummingbird.git", "2.5.0"..<"2.17.0"),
         .package(url: "https://github.com/hummingbird-project/hummingbird-websocket.git", "2.6.0"..<"2.7.0"),
@@ -745,6 +747,7 @@ let package = Package(
                 "NemotronStreamingASR",
                 "WhisperASR",
                 "MossTranscribe",
+                "VoiceChat",
                 "OmnilingualASR",
                 "VoxtralASR",
                 "KokoroTTS",
@@ -765,7 +768,9 @@ let package = Package(
                 "AudioCommon",
                 .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "MLXRandom", package: "mlx-swift"),
-                .product(name: "ArgumentParser", package: "swift-argument-parser")
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
+                .product(name: "MCP", package: "swift-sdk"),
+                .product(name: "SystemPackage", package: "swift-system")
             ]
         ),
         .executableTarget(
@@ -901,6 +906,10 @@ let package = Package(
                 .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
             ],
             resources: [.process("Resources")]
+        ),
+        .testTarget(
+            name: "VoiceChatBenchmarkTests",
+            dependencies: ["VoiceChatBenchmark"]
         ),
         .testTarget(
             name: "CohereTranscribeASRTests",

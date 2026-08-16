@@ -248,6 +248,7 @@ speech speak "Hello world"
 speech csm "Nice to meet you" --ref-audio voice.wav --ref-text "reference transcript"
 speech translate "Hello, how are you?" --to es
 speech respond --input question.wav --transcript
+speech voice-chat
 speech-server --port 8080            # ローカル HTTP / WebSocket サーバー（OpenAI 互換 /v1/realtime + /v1/audio/transcriptions）
 ```
 
@@ -324,9 +325,18 @@ make build
 - **[DictateDemo](Examples/DictateDemo/)**（[ドキュメント](https://soniqo.audio/ja/guides/dictate)）— macOSメニューバーのストリーミングディクテーション。ライブ部分結果、VADベースの発話終端検出、ワンクリックコピー付き。バックグラウンドagentとして動作（Parakeet-EOU-120M + Silero VAD）。
 - **[iOSEchoDemo](Examples/iOSEchoDemo/)** — iOSエコーデモ（Parakeet ASR + Kokoro TTS）。実機・シミュレーター対応。
 - **[PersonaPlexDemo](Examples/PersonaPlexDemo/)** — マイク入力、VAD、マルチターンコンテキスト付きの対話型音声アシスタント。macOS。M2 MaxでRTF約0.94（リアルタイムより高速）。
+- **[Soniqo VoiceChat CLI](docs/inference/voicechat.md)**（[ガイド](https://soniqo.audio/ja/guides/speech-to-speech)）— ライブ RNN-T 字幕、モデル駆動のターン制御、適応型 EAR-TTS 詳細度、任意の MCP ツールを備えたネイティブ全二重 Nemotron 11B ターミナルアシスタントです。同梱の Apple Reminders 設定は作成・一覧・更新だけを公開します。
 - **[SpeechDemo](Examples/SpeechDemo/)** — タブ形式インターフェース上でのディクテーションとTTS合成。macOS。
 
-各デモのREADMEにビルド手順があります。
+release ビルド後に VoiceChat のリマインダーデモを実行します。
+
+```bash
+./.build/release/speech voice-chat \
+  --model /path/to/voicechat-mlx-int5 \
+  --mcp-config Examples/VoiceChatMCP/apple-reminders.json
+```
+
+`--debug-timeline` を追加すると、発話、生成音声の発音終了、モデルがデコードしたツールのライフサイクル時刻を確認できます。ツール引数が表示される場合があるため、共有ログでは使用しないでください。ビルドと実行の詳細は各アプリの README または上記ガイドを参照してください。
 
 ## コード例
 

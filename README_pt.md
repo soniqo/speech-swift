@@ -248,6 +248,7 @@ speech speak "Hello world"
 speech csm "Nice to meet you" --ref-audio voice.wav --ref-text "reference transcript"
 speech translate "Hello, how are you?" --to es
 speech respond --input question.wav --transcript
+speech voice-chat
 speech-server --port 8080            # servidor HTTP / WebSocket local (OpenAI-compatible /v1/realtime + /v1/audio/transcriptions)
 ```
 
@@ -324,9 +325,18 @@ make build
 - **[DictateDemo](Examples/DictateDemo/)** ([docs](https://soniqo.audio/pt/guides/dictate)) — Ditado em streaming na barra de menus do macOS com parciais ao vivo, deteccao de fim de enunciado baseada em VAD e copia com um clique. Roda como agent em segundo plano (Parakeet-EOU-120M + Silero VAD).
 - **[iOSEchoDemo](Examples/iOSEchoDemo/)** — Demo de eco iOS (Parakeet ASR + Kokoro TTS). Dispositivo e simulador.
 - **[PersonaPlexDemo](Examples/PersonaPlexDemo/)** — Assistente de voz conversacional com entrada de microfone, VAD e contexto multi-turno. macOS. RTF ~0.94 em M2 Max (mais rapido que tempo real).
+- **[Soniqo VoiceChat CLI](docs/inference/voicechat.md)** ([guia](https://soniqo.audio/pt/guides/speech-to-speech)) — Assistente de terminal Nemotron 11B full-duplex nativo com legendas RNN-T ao vivo, controle de turnos pelo modelo, detalhe EAR-TTS adaptativo e ferramentas MCP opcionais. A configuracao Apple Reminders incluida expoe apenas criar, listar e atualizar.
 - **[SpeechDemo](Examples/SpeechDemo/)** — Ditado e sintese TTS em uma interface com abas. macOS.
 
-O README de cada demo tem instrucoes de build.
+Execute a demo de lembretes do VoiceChat depois de um build release:
+
+```bash
+./.build/release/speech voice-chat \
+  --model /path/to/voicechat-mlx-int5 \
+  --mcp-config Examples/VoiceChatMCP/apple-reminders.json
+```
+
+Adicione `--debug-timeline` para ver timestamps de frases, fim da pronuncia gerada e ciclo de vida das ferramentas decodificado pelo modelo. Ele pode revelar argumentos das ferramentas; nao use em logs compartilhados. Consulte o README de cada app ou o guia vinculado para detalhes de build e execucao.
 
 ## Exemplos de codigo
 

@@ -248,6 +248,7 @@ speech speak "Hello world"
 speech csm "Nice to meet you" --ref-audio voice.wav --ref-text "reference transcript"
 speech translate "Hello, how are you?" --to es
 speech respond --input question.wav --transcript
+speech voice-chat
 speech-server --port 8080            # 本地 HTTP / WebSocket 服务器（OpenAI 兼容 /v1/realtime + /v1/audio/transcriptions）
 ```
 
@@ -324,9 +325,18 @@ make build
 - **[DictateDemo](Examples/DictateDemo/)**（[文档](https://soniqo.audio/zh/guides/dictate)）— macOS 菜单栏流式听写，带实时部分结果、VAD 驱动的句末检测、一键复制。以后台 agent 方式运行（Parakeet-EOU-120M + Silero VAD）。
 - **[iOSEchoDemo](Examples/iOSEchoDemo/)** — iOS 回声 demo（Parakeet ASR + Kokoro TTS）。支持设备和模拟器。
 - **[PersonaPlexDemo](Examples/PersonaPlexDemo/)** — 带麦克风输入、VAD 和多轮上下文的对话式语音助手。macOS。M2 Max 上 RTF 约 0.94（快于实时）。
+- **[Soniqo VoiceChat CLI](docs/inference/voicechat.md)**（[指南](https://soniqo.audio/zh/guides/speech-to-speech)）— 原生全双工 Nemotron 11B 终端助手，提供实时 RNN-T 字幕、模型驱动的轮次控制、自适应 EAR-TTS 细节和可选 MCP 工具。随附的 Apple Reminders 配置仅开放创建、列出和更新操作。
 - **[SpeechDemo](Examples/SpeechDemo/)** — 标签式界面中的听写与 TTS 合成。macOS。
 
-每个 demo 的 README 都包含构建说明。
+完成 release 构建后运行 VoiceChat 提醒事项 demo：
+
+```bash
+./.build/release/speech voice-chat \
+  --model /path/to/voicechat-mlx-int5 \
+  --mcp-config Examples/VoiceChatMCP/apple-reminders.json
+```
+
+添加 `--debug-timeline` 可查看短语、生成发音结束和模型解码的工具生命周期时间戳。它可能显示工具参数，请勿用于共享日志。构建与运行细节请参阅各应用的 README 或上方 VoiceChat 指南。
 
 ## 代码示例
 

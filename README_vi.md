@@ -248,6 +248,7 @@ speech speak "Hello world"
 speech csm "Nice to meet you" --ref-audio voice.wav --ref-text "reference transcript"
 speech translate "Hello, how are you?" --to es
 speech respond --input question.wav --transcript
+speech voice-chat
 speech-server --port 8080            # máy chủ HTTP / WebSocket cục bộ (tương thích OpenAI /v1/realtime + /v1/audio/transcriptions)
 ```
 
@@ -322,9 +323,18 @@ make build
 - **[DictateDemo](Examples/DictateDemo/)** ([tài liệu](https://soniqo.audio/guides/dictate)) — Đọc chính tả streaming trên thanh menu macOS với kết quả tạm thời trực tiếp, phát hiện kết thúc phát ngôn dựa trên VAD và sao chép một cú nhấp. Chạy như agent nền (Parakeet-EOU-120M + Silero VAD).
 - **[iOSEchoDemo](Examples/iOSEchoDemo/)** — Demo echo iOS (Parakeet ASR + Kokoro TTS). Thiết bị và simulator.
 - **[PersonaPlexDemo](Examples/PersonaPlexDemo/)** — Trợ lý giọng nói hội thoại với đầu vào micro, VAD và ngữ cảnh nhiều lượt. macOS. RTF ~0.94 trên M2 Max (nhanh hơn thời gian thực).
+- **[Soniqo VoiceChat CLI](docs/inference/voicechat.md)** ([hướng dẫn](https://soniqo.audio/vi/guides/speech-to-speech)) — Trợ lý terminal Nemotron 11B song công gốc với phụ đề RNN-T trực tiếp, điều phối lượt nói do mô hình quyết định, độ chi tiết EAR-TTS thích ứng và công cụ MCP tùy chọn. Cấu hình Apple Reminders đi kèm chỉ mở thao tác tạo, liệt kê và cập nhật.
 - **[SpeechDemo](Examples/SpeechDemo/)** — Đọc chính tả và tổng hợp TTS trong giao diện dạng tab. macOS.
 
-README của từng demo có hướng dẫn build.
+Chạy demo nhắc việc VoiceChat sau khi build release:
+
+```bash
+./.build/release/speech voice-chat \
+  --model /path/to/voicechat-mlx-int5 \
+  --mcp-config Examples/VoiceChatMCP/apple-reminders.json
+```
+
+Thêm `--debug-timeline` để xem mốc thời gian của câu nói, lúc phát âm tạo sinh kết thúc và vòng đời công cụ do mô hình giải mã. Chế độ này có thể lộ tham số công cụ, vì vậy không dùng trong log chia sẻ. Xem README của từng app hoặc hướng dẫn liên kết để biết chi tiết build và runtime.
 
 ## Ví dụ mã
 

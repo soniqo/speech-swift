@@ -86,6 +86,68 @@ func voiceChatGumbelLike(_ input: MLXArray, epsilon: Float = 1e-8) -> MLXArray {
 final class VoiceChatSpeechAttentionCache {
     var keys: MLXArray?
     var values: MLXArray?
+    private(set) var offset = 0
+    let retainedPrefixFrames: Int
+    let recentContextFrames: Int?
+
+    init(
+        retainedPrefixFrames: Int = 0,
+        recentContextFrames: Int? = nil
+    ) {
+        self.retainedPrefixFrames = retainedPrefixFrames
+        self.recentContextFrames = recentContextFrames
+    }
+
+    /// Append projected keys/values and return the context visible to the
+    /// current query. Bounded live caches keep the immutable speaker prompt
+    /// plus a recent rolling window; `offset` remains absolute so RoPE does
+    /// not reset when middle history is removed.
+    func update(
+        keys newKeys: MLXArray,
+        values newValues: MLXArray
+    ) -> (keys: MLXArray, values: MLXArray) {
+        let attentionKeys: MLXArray
+        let attentionValues: MLXArray
+        if let keys, let values {
+            attentionKeys = MLX.concatenated([keys, newKeys], axis: 2)
+            attentionValues = MLX.concatenated([values, newValues], axis: 2)
+        } else {
+            attentionKeys = newKeys
+            attentionValues = newValues
+        }
+        offset += newKeys.dim(2)
+
+        guard let recentContextFrames else {
+            keys = attentionKeys
+            values = attentionValues
+            return (attentionKeys, attentionValues)
+        }
+
+        let length = attentionKeys.dim(2)
+        let prefix = min(retainedPrefixFrames, length)
+        let recentStart = max(prefix, length - recentContextFrames)
+        if recentStart > prefix {
+            let recentKeys = attentionKeys[.ellipsis, recentStart..., 0...]
+            let recentValues = attentionValues[.ellipsis, recentStart..., 0...]
+            if prefix > 0 {
+                keys = MLX.concatenated([
+                    attentionKeys[.ellipsis, 0 ..< prefix, 0...],
+                    recentKeys,
+                ], axis: 2)
+                values = MLX.concatenated([
+                    attentionValues[.ellipsis, 0 ..< prefix, 0...],
+                    recentValues,
+                ], axis: 2)
+            } else {
+                keys = recentKeys
+                values = recentValues
+            }
+        } else {
+            keys = attentionKeys
+            values = attentionValues
+        }
+        return (attentionKeys, attentionValues)
+    }
 }
 
 final class VoiceChatSpeechAttention {
@@ -136,6 +198,7 @@ final class VoiceChatSpeechAttention {
     ) -> MLXArray {
         let batch = input.dim(0)
         let length = input.dim(1)
+        let cachedLength = cache?.keys?.dim(2) ?? 0
         var q = query(input).reshaped([batch, length, heads, headDimension])
         var k = key(input).reshaped([batch, length, heads, headDimension])
         var v = value(input).reshaped([batch, length, heads, headDimension])
@@ -149,17 +212,12 @@ final class VoiceChatSpeechAttention {
         k = k.transposed(0, 2, 1, 3)
         v = v.transposed(0, 2, 1, 3)
 
-        let offset = cache?.keys?.dim(2) ?? 0
+        let offset = cache?.offset ?? 0
         q = voiceChatSpeechRoPE(q, offset: offset, theta: ropeTheta, headDimension: headDimension)
         k = voiceChatSpeechRoPE(k, offset: offset, theta: ropeTheta, headDimension: headDimension)
 
         if let cache {
-            if let previousKeys = cache.keys, let previousValues = cache.values {
-                k = MLX.concatenated([previousKeys, k], axis: 2)
-                v = MLX.concatenated([previousValues, v], axis: 2)
-            }
-            cache.keys = k
-            cache.values = v
+            (k, v) = cache.update(keys: k, values: v)
         }
 
         // Generation advances one cached frame at a time. With no softcap or
@@ -183,7 +241,8 @@ final class VoiceChatSpeechAttention {
             scores = scores + additiveMask
         } else if causal && length > 1 {
             let total = k.dim(2)
-            let queryPositions = MLXArray(Int32(offset) ..< Int32(offset + length))
+            let queryPositions = MLXArray(
+                Int32(cachedLength) ..< Int32(cachedLength + length))
                 .expandedDimensions(axis: 1)
             let keyPositions = MLXArray(0 ..< Int32(total)).expandedDimensions(axis: 0)
             var blocked = keyPositions .> queryPositions
@@ -256,8 +315,15 @@ final class VoiceChatSpeechBackbone {
         finalNorm = try store.dense("\(prefix).norm.weight")
     }
 
-    func makeCache() -> [VoiceChatSpeechAttentionCache] {
-        layers.map { _ in VoiceChatSpeechAttentionCache() }
+    func makeCache(
+        retainedPrefixFrames: Int = 0,
+        recentContextFrames: Int? = nil
+    ) -> [VoiceChatSpeechAttentionCache] {
+        layers.map { _ in
+            VoiceChatSpeechAttentionCache(
+                retainedPrefixFrames: retainedPrefixFrames,
+                recentContextFrames: recentContextFrames)
+        }
     }
 
     func callAsFunction(

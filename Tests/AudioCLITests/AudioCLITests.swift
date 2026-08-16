@@ -21,6 +21,7 @@ final class AudioCLIRootTests: XCTestCase {
         XCTAssertTrue(help.contains("align"))
         XCTAssertTrue(help.contains("speak"))
         XCTAssertTrue(help.contains("respond"))
+        XCTAssertTrue(help.contains("voice-chat"))
         XCTAssertTrue(help.contains("language-id"))
     }
 

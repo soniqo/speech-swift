@@ -248,6 +248,7 @@ speech speak "Hello world"
 speech csm "Nice to meet you" --ref-audio voice.wav --ref-text "reference transcript"
 speech translate "Hello, how are you?" --to es
 speech respond --input question.wav --transcript
+speech voice-chat
 speech-server --port 8080            # локальный HTTP / WebSocket сервер (OpenAI-совместимый /v1/realtime + /v1/audio/transcriptions)
 ```
 
@@ -324,9 +325,18 @@ make build
 - **[DictateDemo](Examples/DictateDemo/)** ([документация](https://soniqo.audio/ru/guides/dictate)) — macOS-приложение в строке меню с потоковой диктовкой, живыми частичными результатами, детекцией окончания реплики по VAD и копированием в один клик. Работает как фоновый агент (Parakeet-EOU-120M + Silero VAD).
 - **[iOSEchoDemo](Examples/iOSEchoDemo/)** — iOS-эхо-демо (Parakeet ASR + Kokoro TTS). Устройство и симулятор.
 - **[PersonaPlexDemo](Examples/PersonaPlexDemo/)** — Диалоговый голосовой ассистент с микрофонным вводом, VAD и многоходовым контекстом. macOS. RTF ~0.94 на M2 Max (быстрее реального времени).
+- **[Soniqo VoiceChat CLI](docs/inference/voicechat.md)** ([руководство](https://soniqo.audio/ru/guides/speech-to-speech)) — Нативный полнодуплексный терминальный ассистент Nemotron 11B с живыми субтитрами RNN-T, управлением очередностью реплик моделью, адаптивной детализацией EAR-TTS и необязательными MCP-инструментами. Включённая конфигурация Apple Reminders открывает только создание, список и обновление.
 - **[SpeechDemo](Examples/SpeechDemo/)** — Диктовка и синтез TTS в интерфейсе с вкладками. macOS.
 
-В README каждого демо есть инструкции по сборке.
+После release-сборки запустите демо напоминаний VoiceChat:
+
+```bash
+./.build/release/speech voice-chat \
+  --model /path/to/voicechat-mlx-int5 \
+  --mcp-config Examples/VoiceChatMCP/apple-reminders.json
+```
+
+Добавьте `--debug-timeline`, чтобы увидеть временные метки фраз, окончания сгенерированного произношения и жизненного цикла инструментов, декодированного моделью. Режим может раскрыть аргументы инструментов, поэтому не используйте его в общих журналах. Подробности сборки и запуска приведены в README приложений и связанном руководстве.
 
 ## Примеры кода
 

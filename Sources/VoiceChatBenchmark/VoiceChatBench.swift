@@ -63,6 +63,46 @@ struct VoiceChatBench: AsyncParsableCommand {
     @Flag(name: .long, help: "Force BOS at the end of E2E input for controlled tests.")
     var forceTurnAtEnd = false
 
+    @Flag(
+        name: .long,
+        help: "Include the streaming RNN-T user transcript in E2E timing.")
+    var streamUserTranscript = false
+
+    @Option(
+        name: .long,
+        help: "Recent EAR-TTS frames retained during E2E inference; omit for full history.")
+    var speechContextFrames: Int?
+
+    @Option(
+        name: .long,
+        help: "Run a paced full-duplex tool scenario from this JSON file.")
+    var toolScenario: String?
+
+    @Option(
+        name: .long,
+        help: "Override the scenario's deterministic provider delay, in milliseconds.")
+    var providerDelayMs: Double?
+
+    @Option(
+        name: .long,
+        help: "EAR-TTS refinement steps for the full-duplex tool benchmark.")
+    var speechIterations: Int = 4
+
+    @Option(
+        name: .long,
+        help: "Maximum wall time after the request ends for a benchmark reply.")
+    var toolTimeoutSeconds: Double = 20
+
+    @Option(
+        name: .long,
+        help: "Sustained-audio onset threshold in dBFS; filters isolated codec clicks.")
+    var audibilityThresholdDbfs: Double = -50
+
+    @Option(
+        name: .long,
+        help: "Override the native tool-candidate silence endpoint in 80 ms frames.")
+    var functionCallEndpointFrames: Int?
+
     private struct ProcessMemory {
         let residentBytes: UInt64
         let peakResidentBytes: UInt64
@@ -137,6 +177,16 @@ struct VoiceChatBench: AsyncParsableCommand {
         // stdout loses every line if a later stage crashes.
         setvbuf(stdout, nil, _IONBF, 0)
         let root = URL(fileURLWithPath: model)
+        if let toolScenario {
+            guard e2eAudio == nil else {
+                throw ValidationError(
+                    "--tool-scenario supplies its own audio; do not also pass --e2e-audio")
+            }
+            try await runFullDuplexToolScenario(
+                root: root,
+                scenarioURL: URL(fileURLWithPath: toolScenario))
+            return
+        }
         if let e2eAudio {
             try await runCompletePipeline(
                 root: root, audioURL: URL(fileURLWithPath: e2eAudio))
@@ -312,13 +362,20 @@ struct VoiceChatBench: AsyncParsableCommand {
         guard chunkFrames > 0, chunkFrames <= 128 else {
             throw ValidationError("--chunk-frames must be between 1 and 128")
         }
+        if let speechContextFrames, speechContextFrames <= 0 {
+            throw ValidationError("--speech-context-frames must be positive")
+        }
         let samples = try AudioFileLoader.load(
             url: audioURL, targetSampleRate: VoiceChatSession.inputSampleRate)
         let baselineMemory = processMemory()
         print("loading complete VoiceChat bundle...")
         let loadStarted = DispatchTime.now().uptimeNanoseconds
         let fullModel = try await VoiceChatModel.load(from: root)
-        let session = try await fullModel.startSession()
+        let session = try await fullModel.startSession(
+            speech: .init(
+                recentContextFrames: speechContextFrames,
+                realtimeIdleOptimization: speechContextFrames != nil),
+            streamUserTranscript: streamUserTranscript)
         let loadElapsed = Double(
             DispatchTime.now().uptimeNanoseconds - loadStarted) / 1_000_000
         let loadedMemory = processMemory()
@@ -364,10 +421,13 @@ struct VoiceChatBench: AsyncParsableCommand {
         let reply = await session.reply()
         let userTranscript = await session.userTranscript()
         let summary = await session.summary()
+        let frameEvents = await session.events()
         let streamingMemory = processMemory()
         let timelineMilliseconds = Double(summary.frames * VoiceChatSession.frameMilliseconds)
 
         print(String(format: "load + warmup   %.0f ms", loadElapsed))
+        print("user captions   \(streamUserTranscript ? "streaming" : "offline after run")")
+        print("speech context  \(speechContextFrames.map { "37 prompt + \($0) recent frames" } ?? "full history")")
         print("user transcript \(String(reflecting: userTranscript))")
         print("model response  \(String(reflecting: reply))")
         print("frames          \(summary.frames) (\(summary.speakingFrames) speaking)")
@@ -396,6 +456,28 @@ struct VoiceChatBench: AsyncParsableCommand {
             elapsed, timelineMilliseconds,
             elapsed / max(1, timelineMilliseconds)))
         print("real time       \(summary.realTime ? "yes" : "NO")")
+        if frameEvents.count >= 200 {
+            print("latency windows  mean ms per 100 frames (8 s)")
+            for start in stride(from: 0, to: frameEvents.count, by: 100) {
+                let end = min(frameEvents.count, start + 100)
+                let window = frameEvents[start ..< end]
+                let divisor = Double(window.count)
+                let perception = window.reduce(0.0) {
+                    $0 + $1.perceptionLatencyMilliseconds
+                } / divisor
+                let decision = window.reduce(0.0) {
+                    $0 + $1.decisionLatencyMilliseconds
+                } / divisor
+                let synthesis = window.reduce(0.0) {
+                    $0 + $1.synthesisLatencyMilliseconds
+                } / divisor
+                let total = perception + decision + synthesis
+                print(String(
+                    format: "  %4d-%-4d  perception %5.1f  decision %5.1f  synthesis %5.1f  total %5.1f  RTF %.2f",
+                    start, end - 1, perception, decision, synthesis, total,
+                    total / Double(VoiceChatSession.frameMilliseconds)))
+            }
+        }
         print(String(
             format: "streaming RSS   %.2f GB current  %.2f GB peak  (+%.2f GB)",
             Double(streamingMemory.residentBytes) / 1e9,

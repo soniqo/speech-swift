@@ -248,6 +248,7 @@ speech speak "Hello world"
 speech csm "Nice to meet you" --ref-audio voice.wav --ref-text "reference transcript"
 speech translate "Hello, how are you?" --to es
 speech respond --input question.wav --transcript
+speech voice-chat
 speech-server --port 8080            # स्थानीय HTTP / WebSocket सर्वर (OpenAI-compatible /v1/realtime + /v1/audio/transcriptions)
 ```
 
@@ -324,9 +325,18 @@ make build
 - **[DictateDemo](Examples/DictateDemo/)** ([डॉक्स](https://soniqo.audio/hi/guides/dictate)) — macOS मेनू-बार स्ट्रीमिंग डिक्टेशन, लाइव पार्शियल्स, VAD-संचालित एंड-ऑफ-अटरन्स डिटेक्शन, और वन-क्लिक कॉपी। बैकग्राउंड एजेंट के रूप में चलता है (Parakeet-EOU-120M + Silero VAD)।
 - **[iOSEchoDemo](Examples/iOSEchoDemo/)** — iOS इको डेमो (Parakeet ASR + Kokoro TTS)। डिवाइस और सिम्युलेटर।
 - **[PersonaPlexDemo](Examples/PersonaPlexDemo/)** — माइक इनपुट, VAD, और मल्टी-टर्न संदर्भ के साथ संवादात्मक वॉयस असिस्टेंट। macOS। M2 Max पर RTF ~0.94 (रियल-टाइम से तेज़)।
+- **[Soniqo VoiceChat CLI](docs/inference/voicechat.md)** ([गाइड](https://soniqo.audio/hi/guides/speech-to-speech)) — लाइव RNN-T कैप्शन, मॉडल-आधारित टर्न-टेकिंग, adaptive EAR-TTS detail और वैकल्पिक MCP tools वाला native full-duplex Nemotron 11B terminal assistant। शामिल Apple Reminders configuration केवल create, list और update operations उपलब्ध कराता है।
 - **[SpeechDemo](Examples/SpeechDemo/)** — टैब्ड इंटरफ़ेस में डिक्टेशन और TTS सिंथेसिस। macOS।
 
-प्रत्येक डेमो के README में बिल्ड निर्देश हैं।
+release build के बाद VoiceChat reminders demo चलाएँ:
+
+```bash
+./.build/release/speech voice-chat \
+  --model /path/to/voicechat-mlx-int5 \
+  --mcp-config Examples/VoiceChatMCP/apple-reminders.json
+```
+
+Phrase, generated-pronunciation-end और model-decoded tool lifecycle timestamps के लिए `--debug-timeline` जोड़ें। यह tool arguments दिखा सकता है, इसलिए shared logs में उपयोग न करें। Build और runtime details के लिए प्रत्येक app का README या ऊपर linked guide देखें।
 
 ## कोड उदाहरण
 
