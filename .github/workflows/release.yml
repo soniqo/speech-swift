@@ -3,6 +3,12 @@ name: Release
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to rebuild
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -10,10 +16,16 @@ permissions:
 jobs:
   build:
     runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: main
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Select Xcode 16.4
+        run: sudo xcode-select --switch /Applications/Xcode_16.4.app/Contents/Developer
 
       - name: Build release binary
         run: swift build -c release --disable-sandbox
@@ -36,11 +48,12 @@ jobs:
           # Globbing keeps future modules from silently shipping broken.
           cp -R .build/release/*.bundle dist/
           cd dist
-          tar czf speech-macos-arm64.tar.gz speech speech-server audio audio-server mlx.metallib *.bundle
+          tar czf speech-macos-arm64.tar.gz speech speech-server audio audio-server mlx.metallib ./*.bundle
 
       - name: Upload release asset
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.RELEASE_TAG }}
           files: dist/speech-macos-arm64.tar.gz
 
       # Mint a short-lived installation token for soniqo/homebrew-tap via the
@@ -61,7 +74,7 @@ jobs:
           HOMEBREW_TAP_TOKEN: ${{ steps.tap-token.outputs.token }}
         run: |
           SHA=$(shasum -a 256 dist/speech-macos-arm64.tar.gz | awk '{print $1}')
-          TAG="${GITHUB_REF_NAME}"
+          TAG="${RELEASE_TAG}"
           VERSION="${TAG#v}"
           URL="https://github.com/${{ github.repository }}/releases/download/${TAG}/speech-macos-arm64.tar.gz"
 
