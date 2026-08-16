@@ -538,21 +538,21 @@ final class VoiceChatTests: XCTestCase {
         XCTAssertFalse(VoiceChatSession.functionStartCommitReady(
             parameters: parameters,
             speechConfirmed: true,
-            consecutiveBlankFrames: 9,
+            consecutiveBlankFrames: 6,
             rnntIsBlank: true,
             proposedTextToken: 12,
             bosID: 1))
         XCTAssertTrue(VoiceChatSession.functionStartCommitReady(
             parameters: parameters,
             speechConfirmed: true,
-            consecutiveBlankFrames: 9,
+            consecutiveBlankFrames: 6,
             rnntIsBlank: true,
             proposedTextToken: 1,
             bosID: 1))
         XCTAssertFalse(VoiceChatSession.functionStartCommitReady(
             parameters: parameters,
             speechConfirmed: false,
-            consecutiveBlankFrames: 9,
+            consecutiveBlankFrames: 6,
             rnntIsBlank: true,
             proposedTextToken: 1,
             bosID: 1))
