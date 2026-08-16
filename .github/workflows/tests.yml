@@ -28,7 +28,6 @@ jobs:
         with:
           path: .build
           key: spm-${{ runner.os }}-${{ hashFiles('Package.swift') }}
-          restore-keys: spm-${{ runner.os }}-
 
       - name: Build debug
         run: swift build --build-tests --disable-sandbox
@@ -39,7 +38,7 @@ jobs:
       - name: Copy metallib to test bundle
         run: |
           ARCH="$(uname -m)-apple-macosx"
-          for BUNDLE in .build/$ARCH/debug/*.xctest/Contents/MacOS; do
+          for BUNDLE in .build/"$ARCH"/debug/*.xctest/Contents/MacOS; do
             [ -d "$BUNDLE" ] && cp .build/debug/mlx.metallib "$BUNDLE/" 2>/dev/null || true
           done
 
