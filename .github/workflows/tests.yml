@@ -29,6 +29,9 @@ jobs:
           path: .build
           key: spm-${{ runner.os }}-${{ hashFiles('Package.swift') }}
 
+      - name: Resolve dependencies (heals a corrupt cache)
+        run: ./scripts/ci_resolve.sh
+
       - name: Build debug
         run: swift build --build-tests --disable-sandbox
 

@@ -172,15 +172,27 @@ jobs:
       - uses: actions/checkout@v5
         if: steps.shard-filter.outputs.selected == 'true'
 
+      # Package.resolved is gitignored, so it never exists in the checkout and
+      # never contributed to this key — hash the manifest alone.
+      #
+      # The restore-keys fallbacks are kept deliberately: 13 shards each need a
+      # warm .build, and a manifest edit would otherwise cold-build all of them
+      # inside the 30-minute shard cap. The risk they carry — restoring a stale
+      # or corrupt archive — is handled by the resolve step below rather than by
+      # giving up the warm start.
       - name: Cache SwiftPM build
         if: steps.shard-filter.outputs.selected == 'true'
         uses: actions/cache@v5
         with:
           path: .build
-          key: spm-nightly-${{ runner.os }}-${{ hashFiles('Package.swift', 'Package.resolved') }}
+          key: spm-nightly-${{ runner.os }}-${{ hashFiles('Package.swift') }}
           restore-keys: |
             spm-nightly-${{ runner.os }}-
             spm-${{ runner.os }}-
+
+      - name: Resolve dependencies (heals a corrupt cache)
+        if: steps.shard-filter.outputs.selected == 'true'
+        run: ./scripts/ci_resolve.sh
 
       - name: Build debug + tests
         if: steps.shard-filter.outputs.selected == 'true'
