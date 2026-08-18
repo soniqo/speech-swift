@@ -30,6 +30,7 @@ final class EchoViewModel {
     private var debugMicBuffer: [Float] = []
     private var debugTTSBuffer: [Float] = []
     private var speechStartTime: Date?
+    private var isSpeaking = false
 
     var modelsLoaded: Bool { vad != nil && asr != nil && tts != nil }
 
@@ -96,6 +97,7 @@ final class EchoViewModel {
 
         player.onPlaybackFinished = { [weak self] in
             guard let self, self.isRunning else { return }
+            self.isSpeaking = false
             self.pipeline?.resumeListening()
             self.pipelineState = "listening"
             self.appendLog("Listening...")
@@ -115,6 +117,7 @@ final class EchoViewModel {
         pipeline?.stop()
         pipeline = nil
         isRunning = false
+        isSpeaking = false
         pipelineState = "idle"
         saveDebugFiles()
         appendLog("Pipeline stopped.")
@@ -140,14 +143,19 @@ final class EchoViewModel {
             }
         case .transcriptionCompleted(let text, let language, _):
             pipelineState = "synthesizing..."
+            if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                isSpeaking = true
+            }
             lastTranscription = text
             lastLanguage = language ?? ""
             appendLog("[STT\(language.map { " [\($0)]" } ?? "")] \(text)")
         case .responseCreated:
             pipelineState = "speaking..."
+            isSpeaking = true
             player.resetGeneration()
         case .responseInterrupted:
             player.stop()
+            isSpeaking = false
             pipelineState = "listening"
         case .responseAudioDelta(let samples):
             debugTTSBuffer.append(contentsOf: samples)
@@ -159,6 +167,7 @@ final class EchoViewModel {
             break
         case .error(let msg):
             pipelineState = "error"
+            isSpeaking = false
             appendLog("[ERROR] \(msg)")
             pipeline?.resumeListening()
         }
@@ -220,7 +229,10 @@ final class EchoViewModel {
             }
 
             self.debugMicBuffer.append(contentsOf: samples)
-            self.pipeline?.pushAudio(samples)
+            // Keep the C++ pipeline's audio clock continuous, but do not let
+            // speaker playback become a new VAD speech turn.
+            self.pipeline?.pushAudio(
+                EchoMicrophoneGate.samplesToPush(samples, muted: self.isSpeaking))
         }
 
         do {
