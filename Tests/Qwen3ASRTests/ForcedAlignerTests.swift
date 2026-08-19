@@ -509,4 +509,90 @@ final class ForcedAlignerTests: XCTestCase {
         XCTAssertEqual(offset[1].startTime, 12.0)
         XCTAssertEqual(offset[1].endTime, 12.5)
     }
+
+    // MARK: - Saturation detection (no model download)
+
+    private func word(_ start: Float, _ end: Float) -> AlignedWord {
+        AlignedWord(text: "w", startTime: start, endTime: end)
+    }
+
+    /// A healthy monotonic alignment inside the audio has no saturation point.
+    func testFindFirstSaturationCleanAlignment() {
+        let aligned = (0..<20).map { word(Float($0), Float($0) + 0.8) }
+        let idx = Qwen3ForcedAligner.findFirstSaturation(
+            aligned, durationSec: 25, tolerance: 0.1, minSize: 5)
+        XCTAssertEqual(idx, aligned.count)
+    }
+
+    /// A word stamped past the end of the audio marks saturation at that word,
+    /// wherever it occurs — such an index is not a timestamp.
+    func testFindFirstSaturationPastAudioEnd() {
+        var aligned = (0..<10).map { word(Float($0), Float($0) + 0.5) }
+        aligned[6] = word(120.0, 120.4)
+        let idx = Qwen3ForcedAligner.findFirstSaturation(
+            aligned, durationSec: 30, tolerance: 0.1, minSize: 5)
+        XCTAssertEqual(idx, 6)
+    }
+
+    /// A plateau in the MIDDLE of the sequence is saturation too. The old
+    /// trailing-only walk missed exactly this shape on narrowband audio,
+    /// where the classify head collapses mid-call and recovers later.
+    func testFindFirstSaturationMidSequencePlateau() {
+        var aligned: [AlignedWord] = []
+        aligned += (0..<8).map { word(Float($0), Float($0) + 0.5) }
+        aligned += (0..<6).map { _ in word(9.0, 9.0) }          // stuck run
+        aligned += (0..<8).map { word(15 + Float($0), 15.5 + Float($0)) }
+        let idx = Qwen3ForcedAligner.findFirstSaturation(
+            aligned, durationSec: 60, tolerance: 0.1, minSize: 5)
+        XCTAssertEqual(idx, 8)
+    }
+
+    /// Runs shorter than `minSize` are legitimate fast speech, not saturation.
+    func testFindFirstSaturationShortRunNotFlagged() {
+        var aligned: [AlignedWord] = []
+        aligned += (0..<5).map { word(Float($0), Float($0) + 0.5) }
+        aligned += (0..<4).map { _ in word(6.0, 6.0) }          // below minSize
+        aligned += (0..<5).map { word(8 + Float($0), 8.5 + Float($0)) }
+        let idx = Qwen3ForcedAligner.findFirstSaturation(
+            aligned, durationSec: 30, tolerance: 0.1, minSize: 5)
+        XCTAssertEqual(idx, aligned.count)
+    }
+
+    /// Saturated from the very first word: index 0, so callers know there is
+    /// no reliable prefix to keep.
+    func testFindFirstSaturationFromFirstWord() {
+        let aligned = (0..<8).map { _ in word(3.0, 3.0) }
+        let idx = Qwen3ForcedAligner.findFirstSaturation(
+            aligned, durationSec: 30, tolerance: 0.1, minSize: 5)
+        XCTAssertEqual(idx, 0)
+    }
+
+    // MARK: - Index capping regression (no model download)
+
+    /// Reproduces the failure that motivated capping BEFORE monotonicity
+    /// correction: on hard audio the classify head emits a slow upward drift
+    /// of impossible indices (far past the audio's extent). That drift is
+    /// itself increasing, so uncapped it wins the LIS anchor competition and
+    /// the genuine indices around it get interpolated toward garbage. Capped
+    /// to the audio's addressable range first, the garbage collapses into a
+    /// plateau and the genuine indices survive as anchors.
+    func testCappingKeepsGenuineAnchorsAgainstGarbageDrift() {
+        // Genuine word indices for ~2s of speech, then a garbage staircase
+        // (impossible for 4s audio = maxIndex 50), then genuine again.
+        let raw = [10, 12, 3000, 3001, 3002, 3003, 3004, 3005, 14, 16]
+        let maxIndex = 50
+        let capped = raw.map { min($0, maxIndex) }
+        let corrected = TimestampCorrection.enforceMonotonicity(capped)
+
+        // The genuine tail must survive uncorrupted...
+        XCTAssertEqual(Array(corrected.suffix(2)), [14, 16])
+        // ...and nothing may exceed the audio's addressable range.
+        XCTAssertLessThanOrEqual(corrected.max() ?? 0, maxIndex)
+
+        // Control: WITHOUT the cap the garbage staircase becomes the LIS and
+        // drags the tail to impossible values. This is the bug, pinned.
+        let uncorrectedTail = TimestampCorrection.enforceMonotonicity(raw).suffix(2)
+        XCTAssertTrue(uncorrectedTail.allSatisfy { $0 >= 3000 })
+    }
+
 }
