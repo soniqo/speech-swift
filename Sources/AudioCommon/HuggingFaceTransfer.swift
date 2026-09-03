@@ -124,6 +124,14 @@ extension HuggingFaceDownloader {
     /// interrupted transfer never leaves a short file at the real path.
     static func downloadWhole(_ file: RepoFile, modelId: String, to destination: URL) async throws {
         let url = try resolveURL(modelId: modelId, file: file.path)
+        if let background = HuggingFaceDownloader.backgroundTransfer {
+            try await BackgroundTransferCoordinator.coordinator(for: background).download(
+                wholeFile: file,
+                from: url,
+                label: "\(modelId)/\(file.path)",
+                to: destination)
+            return
+        }
         let request = makeHubRequest(url: url, timeout: 120)
         let (tempURL, response) = try await URLSession.shared.download(for: request)
         defer { try? FileManager.default.removeItem(at: tempURL) }
@@ -168,7 +176,22 @@ extension HuggingFaceDownloader {
             sidecar: sidecar,
             totalSize: file.size,
             chunkCount: chunks.count)
-        let alreadyDone = await writer.completedChunkIndices()
+        if HuggingFaceDownloader.backgroundTransfer != nil {
+            if writer.resumedExistingFile {
+                // A background transfer can land while no process is assembling
+                // this file. Those ranges wait beside the staging file, and are
+                // spliced here before anything decides what is still owed.
+                BackgroundTransferCoordinator.spliceHeldChunks(
+                    staging: staging, chunks: chunks, writer: writer)
+            } else {
+                // The staging file was reset, so it describes a different
+                // export than whatever is held. Held ranges of a matching
+                // length would splice cleanly and corrupt the result.
+                BackgroundTransferCoordinator.discardHeldChunks(
+                    staging: staging, chunks: chunks)
+            }
+        }
+        let alreadyDone = writer.completedChunkIndices()
 
         let state = RangedDownloadProgress(
             completedBeforeFile: completedBeforeFile,
@@ -180,7 +203,25 @@ extension HuggingFaceDownloader {
         }
 
         let pending = chunks.filter { !alreadyDone.contains($0.index) }
-        if !pending.isEmpty {
+        if !pending.isEmpty, let background = HuggingFaceDownloader.backgroundTransfer {
+            let url = try resolveURL(modelId: modelId, file: file.path)
+            do {
+                try await BackgroundTransferCoordinator.coordinator(for: background).download(
+                    chunks: pending,
+                    from: url,
+                    label: "\(modelId)/\(file.path)",
+                    writer: writer,
+                    staging: staging,
+                    sidecar: sidecar,
+                    expectedSize: file.size,
+                    chunkCount: chunks.count,
+                    progress: state)
+            } catch {
+                // Keep the staging file and sidecar: they are the resume point.
+                writer.close()
+                throw error
+            }
+        } else if !pending.isEmpty {
             let url = try resolveURL(modelId: modelId, file: file.path)
             let concurrency = downloadRangeConcurrency
             let configuration = URLSessionConfiguration.default
@@ -221,16 +262,23 @@ extension HuggingFaceDownloader {
                 }
             } catch {
                 // Keep the staging file and sidecar: they are the resume point.
-                await writer.close()
+                writer.close()
                 throw error
             }
         }
 
-        await writer.close()
+        writer.close()
 
         try? FileManager.default.removeItem(at: destination)
         try FileManager.default.moveItem(at: staging, to: destination)
         try? FileManager.default.removeItem(at: sidecar)
+        if HuggingFaceDownloader.backgroundTransfer != nil {
+            // A range delivered after the file was already assembled has
+            // nothing left to splice into, and would otherwise keep the
+            // staging directory alive forever.
+            BackgroundTransferCoordinator.discardHeldChunks(
+                staging: staging, chunks: chunks)
+        }
     }
 
     static func downloadRangeChunk(
@@ -258,7 +306,7 @@ extension HuggingFaceDownloader {
             throw DownloadError.failedToDownload(
                 "\(label) part \(chunk.index): got \(data.count) bytes, expected \(chunk.length)")
         }
-        try await writer.write(data, at: chunk.start, chunkIndex: chunk.index)
+        try writer.write(data, at: chunk.start, chunkIndex: chunk.index)
         await state.addCompletedBytes(chunk.length)
     }
 
@@ -381,7 +429,22 @@ struct DownloadChunk: Sendable {
 
 /// Serializes positional writes into the staging file and records which chunks
 /// have landed, so an interrupted transfer resumes instead of restarting.
-actor ChunkedFileWriter {
+///
+/// A lock rather than an actor: the background session delivers a finished
+/// range inside a delegate callback and deletes the file it handed over as soon
+/// as that callback returns, so the splice has to happen there and then. An
+/// actor can only be reached by suspending, which is exactly what a delegate
+/// callback cannot do.
+final class ChunkedFileWriter: @unchecked Sendable {
+    /// Whether this writer picked up a staging file a previous attempt left,
+    /// rather than starting one.
+    ///
+    /// A reset means the manifest's size disagreed with what is on disk, so
+    /// everything recorded about the old file describes a different export.
+    /// Anything else holding bytes for it has to be discarded too.
+    let resumedExistingFile: Bool
+
+    private let lock = NSLock()
     private let handle: FileHandle
     private let sidecar: URL
     private let chunkCount: Int
@@ -395,6 +458,7 @@ actor ChunkedFileWriter {
         let fm = FileManager.default
         let resumable = fm.fileExists(atPath: destination.path)
             && HuggingFaceDownloader.localFileSize(destination) == totalSize
+        self.resumedExistingFile = resumable
         if resumable {
             self.completed = Self.readSidecar(sidecar, chunkCount: chunkCount)
         } else {
@@ -421,10 +485,14 @@ actor ChunkedFileWriter {
     }
 
     func completedChunkIndices() -> Set<Int> {
-        completed
+        lock.lock()
+        defer { lock.unlock() }
+        return completed
     }
 
     func write(_ data: Data, at offset: Int64, chunkIndex: Int) throws {
+        lock.lock()
+        defer { lock.unlock() }
         guard !closed else {
             throw DownloadError.failedToDownload("write after close on chunk \(chunkIndex)")
         }
@@ -435,6 +503,8 @@ actor ChunkedFileWriter {
     }
 
     func close() {
+        lock.lock()
+        defer { lock.unlock() }
         guard !closed else { return }
         closed = true
         try? handle.synchronize()

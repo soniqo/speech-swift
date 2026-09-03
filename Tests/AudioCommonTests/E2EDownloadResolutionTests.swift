@@ -153,8 +153,8 @@ final class E2EDownloadResolutionTests: XCTestCase {
         var head = HuggingFaceDownloader.makeHubRequest(url: url, timeout: 60)
         head.setValue("bytes=0-262143", forHTTPHeaderField: "Range")
         let (firstChunk, _) = try await URLSession.shared.data(for: head)
-        try await writer.write(firstChunk, at: 0, chunkIndex: 0)
-        await writer.close()
+        try writer.write(firstChunk, at: 0, chunkIndex: 0)
+        writer.close()
 
         XCTAssertTrue(FileManager.default.fileExists(atPath: sidecar.path))
 

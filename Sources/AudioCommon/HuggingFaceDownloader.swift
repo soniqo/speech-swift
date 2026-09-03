@@ -388,7 +388,7 @@ public enum HuggingFaceDownloader {
 
         for attempt in 1...maxAttempts {
             do {
-                try await withDownloadStallGuard(modelId: modelId) { tick in
+                try await withDownloadStallGuardIfInProcess(modelId: modelId) { tick in
                     let files = try await resolve()
                     tick(0)
                     try await downloadManifestFiles(
@@ -444,6 +444,53 @@ public enum HuggingFaceDownloader {
         default:
             return false
         }
+    }
+
+    // MARK: - Background transfer
+
+    private static let backgroundTransferLock = NSLock()
+    nonisolated(unsafe) private static var storedBackgroundTransfer: BackgroundTransferConfiguration?
+
+    /// Transfer model files through a background `URLSession` that keeps
+    /// running while the process is suspended.
+    ///
+    /// `nil` — the default — keeps the in-process session every caller has
+    /// today. Set it once, before the first download, from a host that can be
+    /// suspended; see `BackgroundTransferConfiguration` for what it costs.
+    public static var backgroundTransfer: BackgroundTransferConfiguration? {
+        get {
+            backgroundTransferLock.lock()
+            defer { backgroundTransferLock.unlock() }
+            return storedBackgroundTransfer
+        }
+        set {
+            backgroundTransferLock.lock()
+            storedBackgroundTransfer = newValue
+            backgroundTransferLock.unlock()
+        }
+    }
+
+    /// Hand back the completion handler the system supplies when it relaunches
+    /// the process to deliver finished background transfers.
+    ///
+    /// The handler must be called, so an identifier this process knows nothing
+    /// about is answered immediately rather than dropped.
+    public static func handleBackgroundSessionEvents(
+        identifier: String,
+        completionHandler: @escaping @Sendable () -> Void
+    ) {
+        if let existing = BackgroundTransferCoordinator.existingCoordinator(for: identifier) {
+            existing.addSessionFinishedHandler(completionHandler)
+            return
+        }
+        guard let configuration = backgroundTransfer,
+              configuration.sessionIdentifier == identifier
+        else {
+            completionHandler()
+            return
+        }
+        BackgroundTransferCoordinator.coordinator(for: configuration)
+            .addSessionFinishedHandler(completionHandler)
     }
 
     // MARK: - Retry ladder
@@ -550,6 +597,25 @@ public enum HuggingFaceDownloader {
             lock.lock(); defer { lock.unlock() }
             return Date().timeIntervalSince(last)
         }
+    }
+
+    /// Apply the stall guard only when this process is the one transferring.
+    ///
+    /// The guard measures wall-clock time since the last reported byte, which
+    /// says nothing about a background session: its clock keeps running while
+    /// the process is suspended, so a transfer the system was performing
+    /// correctly the whole time would look wedged the moment the process came
+    /// back. A background transfer is bounded by the session's own resource
+    /// timeout instead, which the system enforces out of process.
+    static func withDownloadStallGuardIfInProcess(
+        modelId: String,
+        _ operation: @escaping (@escaping @Sendable (Double) -> Void) async throws -> Void
+    ) async throws {
+        guard backgroundTransfer == nil else {
+            try await operation { _ in }
+            return
+        }
+        try await withDownloadStallGuard(modelId: modelId, operation)
     }
 
     /// Run a download `operation` that reports progress, and abort it if

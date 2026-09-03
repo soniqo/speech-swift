@@ -803,10 +803,10 @@ final class ChunkedFileWriterTests: XCTestCase {
 
         let writer = try ChunkedFileWriter(
             destination: target, sidecar: sidecar, totalSize: 20, chunkCount: 3)
-        try await writer.write(c, at: 16, chunkIndex: 2)
-        try await writer.write(a, at: 0, chunkIndex: 0)
-        try await writer.write(b, at: 8, chunkIndex: 1)
-        await writer.close()
+        try writer.write(c, at: 16, chunkIndex: 2)
+        try writer.write(a, at: 0, chunkIndex: 0)
+        try writer.write(b, at: 8, chunkIndex: 1)
+        writer.close()
 
         XCTAssertEqual(try Data(contentsOf: target), a + b + c)
     }
@@ -821,14 +821,14 @@ final class ChunkedFileWriterTests: XCTestCase {
 
         let first = try ChunkedFileWriter(
             destination: target, sidecar: sidecar, totalSize: 24, chunkCount: 3)
-        try await first.write(Data(repeating: 0x01, count: 8), at: 0, chunkIndex: 0)
-        try await first.write(Data(repeating: 0x03, count: 8), at: 16, chunkIndex: 2)
-        await first.close()
+        try first.write(Data(repeating: 0x01, count: 8), at: 0, chunkIndex: 0)
+        try first.write(Data(repeating: 0x03, count: 8), at: 16, chunkIndex: 2)
+        first.close()
 
         let resumed = try ChunkedFileWriter(
             destination: target, sidecar: sidecar, totalSize: 24, chunkCount: 3)
-        let done = await resumed.completedChunkIndices()
-        await resumed.close()
+        let done = resumed.completedChunkIndices()
+        resumed.close()
 
         XCTAssertEqual(done, [0, 2], "chunk 1 is the only one still owed")
     }
@@ -844,14 +844,14 @@ final class ChunkedFileWriterTests: XCTestCase {
 
         let stale = try ChunkedFileWriter(
             destination: target, sidecar: sidecar, totalSize: 24, chunkCount: 3)
-        try await stale.write(Data(repeating: 0x01, count: 8), at: 0, chunkIndex: 0)
-        await stale.close()
+        try stale.write(Data(repeating: 0x01, count: 8), at: 0, chunkIndex: 0)
+        stale.close()
 
         // Same staging path, different expected size — a re-export.
         let fresh = try ChunkedFileWriter(
             destination: target, sidecar: sidecar, totalSize: 32, chunkCount: 4)
-        let done = await fresh.completedChunkIndices()
-        await fresh.close()
+        let done = fresh.completedChunkIndices()
+        fresh.close()
 
         XCTAssertTrue(done.isEmpty, "stale chunk records must not be trusted")
         XCTAssertEqual(HuggingFaceDownloader.localFileSize(target), 32)
@@ -869,8 +869,8 @@ final class ChunkedFileWriterTests: XCTestCase {
 
         let writer = try ChunkedFileWriter(
             destination: target, sidecar: sidecar, totalSize: 16, chunkCount: 2)
-        let done = await writer.completedChunkIndices()
-        await writer.close()
+        let done = writer.completedChunkIndices()
+        writer.close()
 
         XCTAssertEqual(done, [0])
     }

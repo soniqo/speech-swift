@@ -85,6 +85,61 @@ once complete. The directory is removed when empty; anything left in it is a
 resume point for an interrupted transfer and is safe to delete manually if you
 want to force a clean re-download.
 
+### Transfers that outlive the process
+
+The transfers above run inside the process, which is the right answer wherever
+the process keeps running. On iOS it is not: the system suspends an application
+shortly after it leaves the screen, and an in-process transfer stops with it —
+the sockets go down, the retry ladder's timers do not run, and a
+several-hundred-megabyte model freezes at whatever percentage it had reached
+until the application is frontmost again.
+
+Hand the transfer to the system instead by setting a background session
+identifier once, before the first download:
+
+```swift
+HuggingFaceDownloader.backgroundTransfer = BackgroundTransferConfiguration(
+    sessionIdentifier: "com.example.app.models")
+```
+
+and forwarding the completion handler the system supplies when it relaunches
+the process to deliver finished transfers:
+
+```swift
+func application(
+    _ application: UIApplication,
+    handleEventsForBackgroundURLSession identifier: String,
+    completionHandler: @escaping () -> Void
+) {
+    HuggingFaceDownloader.handleBackgroundSessionEvents(
+        identifier: identifier, completionHandler: completionHandler)
+}
+```
+
+Everything else is unchanged: the same ranged chunks, the same staging file and
+sidecar, the same resume point. What changes is who performs the transfer.
+
+It is opt-in, and `nil` — the default — keeps the in-process session, because
+a background session is not free:
+
+- Only download tasks are allowed, so a range arrives as a file rather than as
+  bytes in memory. That costs a splice per chunk and saves the 128 MB of
+  transient buffers the in-process path holds at the default settings.
+- The system decides when the work runs. `isDiscretionary` is off by default so
+  it starts promptly, but a session created while the application is already in
+  the background is discretionary whatever this says.
+- A completion may be delivered to a process that never asked for it. A range
+  that lands with nobody assembling its file waits beside the staging file and
+  is spliced by whoever asks for that file next, so those bytes are not lost.
+- The stall guard does not apply. Its clock keeps running while the process is
+  suspended, so a transfer the system was performing correctly the whole time
+  would look wedged the moment the process came back. `resourceTimeout` bounds
+  the transfer instead, enforced by the system out of process; it defaults to
+  24 hours, because a large bundle on a slow link legitimately takes hours.
+
+Resolution against the Hub tree API stays an ordinary request either way — it
+is small, and it is the one part that cannot be handed over.
+
 ### When the Hub is unreachable
 
 Resolution always goes to the network, so that a re-exported model is picked
