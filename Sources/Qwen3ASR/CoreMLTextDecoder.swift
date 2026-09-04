@@ -252,8 +252,12 @@ public class CoreMLTextDecoder {
     /// (embedding lookup, part1 hidden) may come back as Float16 with
     /// padded strides on ANE; a raw ``assumingMemoryBound(to: Float)``
     /// copy would then read garbage.
-    private static func copyRow(from src: MLMultiArray, sourceRow: Int, hidden: Int,
-                                to dst: UnsafeMutablePointer<Float>, destSlot: Int) {
+    ///
+    /// Exposed ``internal`` (not ``private``) so
+    /// ``CoreMLEmbeddingExtractionTests`` can pin the dtype/stride
+    /// behaviour without instantiating the three CoreML models.
+    static func copyRow(from src: MLMultiArray, sourceRow: Int, hidden: Int,
+                        to dst: UnsafeMutablePointer<Float>, destSlot: Int) {
         let rowStride = src.strides.count >= 2 ? src.strides[src.strides.count - 2].intValue : hidden
         let lastStride = src.strides.last?.intValue ?? 1
         let base = sourceRow * rowStride
@@ -281,14 +285,11 @@ public class CoreMLTextDecoder {
     public func decoderPrefill(embeddings: MLMultiArray, realCount n: Int) throws -> MLMultiArray {
         precondition(n > 0 && n <= batchSize,
                      "realCount \(n) must be in 1...\(batchSize)")
+        try Self.validateEmbeddingSource(embeddings, hidden: hiddenSize, requiredRows: n)
         let bufs = try writeChunk(realEmbeddingsSource: { (slot, dstPtr) in
-            let srcPtr = embeddings.dataPointer.assumingMemoryBound(to: Float.self)
             for t in 0..<n {
-                let srcOff = t * self.hiddenSize
-                let dstOff = (slot + t) * self.hiddenSize
-                for j in 0..<self.hiddenSize {
-                    dstPtr[dstOff + j] = srcPtr[srcOff + j]
-                }
+                Self.copyRow(from: embeddings, sourceRow: t, hidden: self.hiddenSize,
+                             to: dstPtr, destSlot: slot + t)
             }
         }, realCount: n)
         return try runParts(embeds: bufs.embeds, positions: bufs.positions, mask: bufs.mask)
@@ -542,15 +543,96 @@ public class CoreMLTextDecoder {
 
     /// Extract audio embedding at index from MLMultiArray (no MLX dependency).
     public func audioEmbeddingFromMultiArray(_ embeddings: MLMultiArray, at index: Int) throws -> MLMultiArray {
-        let hidden = embeddings.shape[2].intValue
-        let result = try MLMultiArray(shape: [1, 1, hidden as NSNumber], dataType: .float32)
-        let srcPtr = embeddings.dataPointer.assumingMemoryBound(to: Float.self)
-        let dstPtr = result.dataPointer.assumingMemoryBound(to: Float.self)
-        let offset = index * hidden
-        for i in 0..<hidden {
-            dstPtr[i] = srcPtr[offset + i]
+        let shape = embeddings.shape.map { $0.intValue }
+        guard let hidden = shape.last, hidden > 0 else {
+            throw AudioModelError.inferenceFailed(
+                operation: "CoreML audio embedding",
+                reason: "Embeddings have no trailing dimension (shape \(shape))")
         }
+        return try Self.extractRow(from: embeddings, at: index, hidden: hidden)
+    }
+
+    /// Bulk-copy the first ``count`` embedding rows into one contiguous
+    /// Float32 buffer, ready for
+    /// ``decoderPrefill(flatEmbeddings:offset:realCount:)``.
+    ///
+    /// This is how the background-safe path gets encoder output into the
+    /// decoder: dtype- and stride-aware, MLX-free, and one call instead of
+    /// a fixed-T ANE dispatch per audio token.
+    public func audioEmbeddingsToFloatArray(_ embeddings: MLMultiArray, count: Int) throws -> [Float] {
+        try Self.extractRows(from: embeddings, count: count, hidden: hiddenSize)
+    }
+
+    // MARK: - Internal: embedding extraction
+
+    /// Copy row ``index`` into a fresh ``[1, 1, hidden]`` Float32 array.
+    ///
+    /// Reads through ``copyRow``, so a Float16 or strided encoder output is
+    /// converted rather than reinterpreted. The previous
+    /// ``assumingMemoryBound(to: Float.self)`` read walked the buffer at
+    /// twice the real element stride against the Float16 encoder output,
+    /// which both returned garbage and ran off the end of the allocation
+    /// past row 194 of 390 (~15 s of audio).
+    ///
+    /// ``internal`` so ``CoreMLEmbeddingExtractionTests`` can pin this
+    /// without instantiating the three CoreML models.
+    static func extractRow(from embeddings: MLMultiArray, at index: Int, hidden: Int) throws -> MLMultiArray {
+        guard index >= 0 else {
+            throw AudioModelError.inferenceFailed(
+                operation: "CoreML audio embedding",
+                reason: "Negative embedding index \(index)")
+        }
+        try validateEmbeddingSource(embeddings, hidden: hidden, requiredRows: index + 1)
+
+        let result = try MLMultiArray(shape: [1, 1, hidden as NSNumber], dataType: .float32)
+        let dstPtr = result.dataPointer.assumingMemoryBound(to: Float.self)
+        copyRow(from: embeddings, sourceRow: index, hidden: hidden, to: dstPtr, destSlot: 0)
         return result
+    }
+
+    /// Copy the first ``count`` rows into a contiguous row-major Float32 buffer.
+    static func extractRows(from embeddings: MLMultiArray, count: Int, hidden: Int) throws -> [Float] {
+        try validateEmbeddingSource(embeddings, hidden: hidden, requiredRows: count)
+        guard count > 0 else { return [] }
+
+        var out = [Float](repeating: 0, count: count * hidden)
+        out.withUnsafeMutableBufferPointer { buf in
+            guard let base = buf.baseAddress else { return }
+            for row in 0..<count {
+                copyRow(from: embeddings, sourceRow: row, hidden: hidden,
+                        to: base, destSlot: row)
+            }
+        }
+        return out
+    }
+
+    /// Reject an embeddings buffer that cannot supply ``requiredRows`` rows
+    /// of ``hidden`` values.
+    ///
+    /// Catches the two ways a CoreML output has silently gone out of bounds
+    /// on this path: a model reporting more real tokens than its own output
+    /// tensor holds, and a trailing dimension that disagrees with the
+    /// decoder's hidden size. The dtype/stride hazard is ``copyRow``'s job.
+    static func validateEmbeddingSource(
+        _ embeddings: MLMultiArray, hidden: Int, requiredRows: Int
+    ) throws {
+        let shape = embeddings.shape.map { $0.intValue }
+        guard let last = shape.last, last == hidden else {
+            throw AudioModelError.inferenceFailed(
+                operation: "CoreML audio embedding",
+                reason: "Embedding width mismatch: buffer shape \(shape) does not end in hidden size \(hidden)")
+        }
+        let rows = shape.count >= 2 ? shape[shape.count - 2] : 1
+        guard requiredRows >= 0 else {
+            throw AudioModelError.inferenceFailed(
+                operation: "CoreML audio embedding",
+                reason: "Negative row count \(requiredRows)")
+        }
+        guard requiredRows <= rows else {
+            throw AudioModelError.inferenceFailed(
+                operation: "CoreML audio embedding",
+                reason: "Requested \(requiredRows) embedding rows but buffer shape \(shape) holds \(rows)")
+        }
     }
 
     // MARK: - Helpers

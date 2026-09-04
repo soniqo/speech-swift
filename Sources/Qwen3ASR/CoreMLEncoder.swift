@@ -167,7 +167,13 @@ public class CoreMLASREncoder {
             throw AudioModelError.inferenceFailed(
                 operation: "CoreML encoder", reason: "Missing output_length output (encoder may be an older export without the chunked-attention mask)")
         }
-        let outLen = max(0, Int(lengthOut[0].int32Value))
+        // Clamp the model-reported length to the embeddings tensor's own
+        // token extent. ``output_length`` is computed in-graph; a re-export
+        // whose length formula outran its output tensor would otherwise hand
+        // callers an index range that reads past the buffer.
+        let embedShape = embeddings.shape.map { $0.intValue }
+        let availableTokens = embedShape.count >= 2 ? embedShape[embedShape.count - 2] : 0
+        let outLen = min(max(0, Int(lengthOut[0].int32Value)), availableTokens)
         return EncodedAudio(embeddings: embeddings, outputLength: outLen)
     }
 

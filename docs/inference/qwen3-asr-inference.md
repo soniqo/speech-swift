@@ -166,7 +166,23 @@ The 8× conv stride downsamples 3000 mel frames to up to 390 audio tokens. For s
 
 ### Swift consumer
 
-`CoreMLEncoder.encode(_:)` returns `(embeddings: MLXArray, outputLength: Int)`. `CoreMLASRModel.transcribe` uses `outputLength` directly as `numAudioTokens` when chunking the audio prefill into the decoder; this replaces the previous `ceil(realMelFrames / 8)` heuristic with the model-reported truth.
+`CoreMLEncoder.encode(_:)` returns `(embeddings: MLXArray, outputLength: Int)`. `CoreMLASRModel.transcribe` uses `outputLength` directly as `numAudioTokens` when chunking the audio prefill into the decoder; this replaces the previous `ceil(realMelFrames / 8)` heuristic with the model-reported truth. `outputLength` is clamped to the embeddings tensor's own token extent, so a re-export whose in-graph length formula outran its output tensor throws instead of handing callers an out-of-range index.
+
+### Consuming `audio_embeddings`
+
+`audio_embeddings` is **Float16**, and ANE may hand it back with padded row strides. Never read it with `assumingMemoryBound(to: Float.self)` — that walks the buffer at twice the real element stride, which both corrupts every value and runs off the end of the allocation at row 195 of 390 (~15 s of audio). Go through one of:
+
+| Entry point | Use when |
+|---|---|
+| `CoreMLTextDecoder.audioEmbeddingsToFloatArray(_:count:)` | Bulk: the whole audio run at once, for batched prefill. This is what `transcribeWithoutMLX` uses. |
+| `CoreMLTextDecoder.audioEmbeddingFromMultiArray(_:at:)` | A single row. |
+| `CoreMLEncoder.encode(_:)` (MLXArray overload) | The MLX path — `multiArrayToMLXArray` converts. |
+
+All three are dtype- and stride-aware and bounds-check against the tensor's real extent.
+
+### Which path is MLX-free
+
+Only `CoreMLASRModel.transcribeWithoutMLX(...)` (and its wrapper `transcribeBackgroundSafe(...)`) is free of MLXArray operations end to end, so it is the one that is safe under iOS background execution. `CoreMLASRModel.transcribe(...)` dispatches all three models through CoreML but still round-trips through MLXArray for mel extraction and encoder output, both of which evaluate on Metal.
 
 ### Why the rebuild
 

@@ -68,5 +68,56 @@ final class E2ECoreMLASRTests: XCTestCase {
                           "Missing expected word '\(word)' — raw=\"\(result)\"")
         }
     }
+
+    /// The MLX-free path, which had no coverage at all until it shipped a
+    /// SIGSEGV. It reads the encoder's Float16 `audio_embeddings` output;
+    /// reading that as Float32 corrupted every embedding and ran off the
+    /// end of the buffer past audio token 194 (~15 s). This asserts the
+    /// same transcript `transcribe()` produces, so a dtype or stride
+    /// regression shows up as wrong text rather than as a crash on
+    /// somebody's phone.
+    func testMLXFreeTranscriptionMatchesMLXPath() async throws {
+        guard let wavURL = Bundle.module.url(forResource: "test_audio", withExtension: "wav") else {
+            throw XCTSkip("test_audio.wav not found in Qwen3ASRTests resources")
+        }
+
+        let asr: CoreMLASRModel
+        do {
+            asr = try await CoreMLASRModel.fromPretrained { _, _ in }
+        } catch {
+            throw XCTSkip("CoreML ASR bundle unavailable: \(error)")
+        }
+
+        let (samples, sampleRate) = try AudioFileLoader.loadWAV(url: wavURL)
+        let targetSampleRate = 16000
+        let audio: [Float]
+        if sampleRate != targetSampleRate {
+            audio = AudioFileLoader.resample(samples, from: sampleRate, to: targetSampleRate)
+        } else {
+            audio = samples
+        }
+
+        let start = CFAbsoluteTimeGetCurrent()
+        let result = try asr.transcribeWithoutMLX(
+            audio: audio, sampleRate: targetSampleRate, language: "english")
+        let elapsedMs = (CFAbsoluteTimeGetCurrent() - start) * 1000
+        let audioMs = Double(audio.count) / Double(targetSampleRate) * 1000
+
+        let normalised = result
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .joined(separator: " ")
+            .replacingOccurrences(of: "  ", with: " ")
+            .trimmingCharacters(in: .whitespaces)
+        print("[COREML-ASR-NOMLX] raw=\"\(result)\"  normalised=\"\(normalised)\"")
+        print(String(format: "[COREML-ASR-NOMLX-PERF] transcribe=%.0fms audio=%.0fms rtf=%.3f",
+                     elapsedMs, audioMs, elapsedMs / audioMs))
+
+        XCTAssertFalse(result.isEmpty, "MLX-free transcription should not be empty")
+        for word in ["guarantee", "replacement", "shipped", "tomorrow"] {
+            XCTAssertTrue(normalised.contains(word),
+                          "Missing expected word '\(word)' — raw=\"\(result)\"")
+        }
+    }
 }
 #endif
