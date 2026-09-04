@@ -193,6 +193,66 @@ final class CoreMLEmbeddingExtractionTests: XCTestCase {
                 from: embeddings, count: 5, hidden: hidden))
     }
 
+    // MARK: - Unexpected dtypes are refused, never reinterpreted
+
+    /// Float64 is the third dtype CoreML can emit for a float tensor, and
+    /// reading it through a `Float` pointer is the same defect mirrored:
+    /// half the stride, so the values are wrong while staying inside the
+    /// allocation. It must be converted like Float16 is.
+    func testFloat64SourceIsConvertedNotReinterpreted() throws {
+        let rows = 6
+        let embeddings = try makeArray(rows: rows, dataType: .double)
+
+        for row in 0..<rows {
+            let slice = try CoreMLTextDecoder.extractRow(
+                from: embeddings, at: row, hidden: hidden)
+            XCTAssertEqual(values(of: slice), expected(row: row),
+                           "row \(row) misread from a Float64 buffer")
+        }
+
+        let flat = try CoreMLTextDecoder.extractRows(
+            from: embeddings, count: rows, hidden: hidden)
+        for row in 0..<rows {
+            let start = row * hidden
+            XCTAssertEqual(Array(flat[start..<(start + hidden)]), expected(row: row))
+        }
+    }
+
+    /// A dtype we cannot read must be rejected at the boundary rather than
+    /// reinterpreted. The old `default:` branches read *any* dtype through a
+    /// `Float` pointer, which is how a Float16 buffer became fluent nonsense.
+    func testUnreadableDtypeIsRejected() throws {
+        let embeddings = try MLMultiArray(
+            shape: [1, 4 as NSNumber, hidden as NSNumber], dataType: .int32)
+
+        XCTAssertThrowsError(
+            try CoreMLTextDecoder.validateEmbeddingSource(
+                embeddings, hidden: hidden, requiredRows: 4),
+            "an unreadable dtype must throw, not be reinterpreted as Float32")
+        XCTAssertThrowsError(
+            try CoreMLTextDecoder.extractRow(from: embeddings, at: 0, hidden: hidden))
+        XCTAssertThrowsError(
+            try CoreMLTextDecoder.extractRows(from: embeddings, count: 4, hidden: hidden))
+    }
+
+    /// `copyRow` cannot throw — it runs inside a non-throwing closure. Its
+    /// fallback must still not reinterpret memory; it zero-fills, which
+    /// surfaces as an obviously empty transcript instead of a plausible one
+    /// decoded from misread bytes.
+    func testCopyRowFallbackZeroFillsInsteadOfReinterpreting() throws {
+        let embeddings = try MLMultiArray(
+            shape: [1, 2 as NSNumber, hidden as NSNumber], dataType: .int32)
+        for i in 0..<(2 * hidden) { embeddings[i] = NSNumber(value: Int32(i + 1)) }
+
+        var out = [Float](repeating: .nan, count: hidden)
+        out.withUnsafeMutableBufferPointer { buf in
+            CoreMLTextDecoder.copyRow(from: embeddings, sourceRow: 1, hidden: hidden,
+                                      to: buf.baseAddress!, destSlot: 0)
+        }
+        XCTAssertEqual(out, [Float](repeating: 0, count: hidden),
+                       "the fallback reinterpreted memory instead of zero-filling")
+    }
+
     // MARK: - Encoder output_length clamp
 
     /// The second route to the same fault: the encoder reports its real

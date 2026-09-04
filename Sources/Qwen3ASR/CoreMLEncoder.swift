@@ -99,7 +99,7 @@ public class CoreMLASREncoder {
         let melTime = melFeatures.dim(1)
         let melData: [Float] = melFeatures.asArray(Float.self)
         let raw = try encodeRaw(melData: melData, melBins: melBins, realFrames: melTime)
-        return (multiArrayToMLXArray(raw.embeddings), raw.outputLength)
+        return (try multiArrayToMLXArray(raw.embeddings), raw.outputLength)
     }
 
     // MARK: - MLX-free encoding (for iOS background / pure CoreML path)
@@ -186,7 +186,11 @@ public class CoreMLASREncoder {
         return EncodedAudio(embeddings: embeddings, outputLength: outLen)
     }
 
-    private func multiArrayToMLXArray(_ array: MLMultiArray) -> MLXArray {
+    /// Throws rather than reinterpreting an unexpected dtype. Reading a
+    /// non-Float32 buffer through a `Float` pointer is precisely the defect
+    /// that shipped in the MLX-free path: it corrupts every value, and for
+    /// narrower dtypes it also runs off the end of the allocation.
+    private func multiArrayToMLXArray(_ array: MLMultiArray) throws -> MLXArray {
         let shape = array.shape.map { $0.intValue }
         let count = array.count
 
@@ -199,9 +203,16 @@ public class CoreMLASREncoder {
         case .float32:
             let src = array.dataPointer.assumingMemoryBound(to: Float.self)
             return MLXArray(Array(UnsafeBufferPointer(start: src, count: count)), shape)
+        case .double:
+            let src = array.dataPointer.assumingMemoryBound(to: Float64.self)
+            var floats = [Float](repeating: 0, count: count)
+            for i in 0..<count { floats[i] = Float(src[i]) }
+            return MLXArray(floats, shape)
         default:
-            let src = array.dataPointer.assumingMemoryBound(to: Float.self)
-            return MLXArray(Array(UnsafeBufferPointer(start: src, count: count)), shape)
+            throw AudioModelError.inferenceFailed(
+                operation: "CoreML encoder",
+                reason: "Unsupported audio_embeddings dtype (raw \(array.dataType.rawValue)) — "
+                    + "expected Float16, Float32 or Float64")
         }
     }
 }

@@ -269,9 +269,17 @@ public class CoreMLTextDecoder {
         case .float32:
             let p = src.dataPointer.assumingMemoryBound(to: Float.self)
             for j in 0..<hidden { dst[dstBase + j] = p[base + j * lastStride] }
+        case .double:
+            let p = src.dataPointer.assumingMemoryBound(to: Float64.self)
+            for j in 0..<hidden { dst[dstBase + j] = Float(p[base + j * lastStride]) }
         default:
-            let p = src.dataPointer.assumingMemoryBound(to: Float.self)
-            for j in 0..<hidden { dst[dstBase + j] = p[base + j * lastStride] }
+            // Never reinterpret an unknown dtype as Float32 — that is the
+            // defect this file already shipped once. Callers that can throw
+            // reject the dtype in ``validateEmbeddingSource`` before reaching
+            // here; this non-throwing path zero-fills instead, which surfaces
+            // as an obviously empty transcript rather than as the fluent
+            // fabrication a misread produces.
+            for j in 0..<hidden { dst[dstBase + j] = 0 }
         }
     }
 
@@ -468,9 +476,12 @@ public class CoreMLTextDecoder {
         case .float32:
             let ptr = logits.dataPointer.assumingMemoryBound(to: Float.self)
             return ptr[i]
+        case .double:
+            let ptr = logits.dataPointer.assumingMemoryBound(to: Float64.self)
+            return Float(ptr[i])
         default:
-            let ptr = logits.dataPointer.assumingMemoryBound(to: Float.self)
-            return ptr[i]
+            // See ``copyRow`` — an unknown dtype is not reinterpreted.
+            return -.infinity
         }
     }
 
@@ -511,16 +522,21 @@ public class CoreMLTextDecoder {
                     maxIdx = Int32(i)
                 }
             }
-        default:
-            let ptr = logits.dataPointer.assumingMemoryBound(to: Float.self)
+        case .double:
+            let ptr = logits.dataPointer.assumingMemoryBound(to: Float64.self)
             for i in 0..<vocab where i != skipIdx {
-                let val = ptr[i * lastStride]
+                let val = Float(ptr[i * lastStride])
                 if val.isNaN { nanCount += 1; continue }
                 if val > maxVal {
                     maxVal = val
                     maxIdx = Int32(i)
                 }
             }
+        default:
+            // See ``copyRow`` — an unknown dtype is not reinterpreted. Token 0
+            // is returned so the caller produces visibly wrong output instead
+            // of a plausible transcript decoded from misread memory.
+            return 0
         }
 
         return maxIdx
@@ -616,6 +632,17 @@ public class CoreMLTextDecoder {
     static func validateEmbeddingSource(
         _ embeddings: MLMultiArray, hidden: Int, requiredRows: Int
     ) throws {
+        switch embeddings.dataType {
+        case .float16, .float32, .double:
+            break
+        default:
+            throw AudioModelError.inferenceFailed(
+                operation: "CoreML audio embedding",
+                reason: "Unsupported embeddings dtype (raw \(embeddings.dataType.rawValue)) — "
+                    + "expected Float16, Float32 or Float64. Reading it as Float32 would "
+                    + "silently corrupt every value.")
+        }
+
         let shape = embeddings.shape.map { $0.intValue }
         guard let last = shape.last, last == hidden else {
             throw AudioModelError.inferenceFailed(
