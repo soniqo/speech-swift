@@ -192,5 +192,31 @@ final class CoreMLEmbeddingExtractionTests: XCTestCase {
             try CoreMLTextDecoder.extractRows(
                 from: embeddings, count: 5, hidden: hidden))
     }
+
+    // MARK: - Encoder output_length clamp
+
+    /// The second route to the same fault: the encoder reports its real
+    /// audio-token count in-graph, and every consumer uses it as an index
+    /// bound. A count larger than the tensor holds must be clamped, not
+    /// handed on.
+    func testReportedLengthIsClampedToTensorExtent() {
+        let shape = [1, 390, 1024]
+
+        XCTAssertEqual(CoreMLASREncoder.clampOutputLength(260, embeddingShape: shape), 260,
+                       "a length inside the tensor passes through untouched")
+        XCTAssertEqual(CoreMLASREncoder.clampOutputLength(390, embeddingShape: shape), 390,
+                       "the full extent is legal")
+        XCTAssertEqual(CoreMLASREncoder.clampOutputLength(391, embeddingShape: shape), 390,
+                       "one past the extent clamps rather than overruns")
+        XCTAssertEqual(CoreMLASREncoder.clampOutputLength(100_000, embeddingShape: shape), 390,
+                       "a wildly wrong report clamps too")
+    }
+
+    func testNegativeOrDegenerateLengthsClampToZero() {
+        XCTAssertEqual(CoreMLASREncoder.clampOutputLength(-1, embeddingShape: [1, 390, 1024]), 0)
+        XCTAssertEqual(CoreMLASREncoder.clampOutputLength(5, embeddingShape: [1024]), 0,
+                       "a shape with no token axis can supply nothing")
+        XCTAssertEqual(CoreMLASREncoder.clampOutputLength(5, embeddingShape: []), 0)
+    }
 }
 #endif

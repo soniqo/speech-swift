@@ -127,6 +127,19 @@ public class CoreMLASREncoder {
                              realFrames: melFeatures.timeFrames)
     }
 
+    /// Clamp a model-reported audio-token count to what the embeddings
+    /// tensor can actually supply.
+    ///
+    /// ``output_length`` is computed in-graph. A re-export whose length
+    /// formula outran its own output tensor would otherwise hand callers an
+    /// index range that reads past the buffer — the same class of fault as
+    /// reading the Float16 embeddings as Float32, arriving by a different
+    /// route. ``internal`` so it is unit-testable without the model.
+    static func clampOutputLength(_ reported: Int, embeddingShape shape: [Int]) -> Int {
+        let availableTokens = shape.count >= 2 ? shape[shape.count - 2] : 0
+        return min(max(0, reported), max(0, availableTokens))
+    }
+
     /// Shared core: zero-pads ``melData`` to the fixed ``paddedMelLength``,
     /// runs the two-input/two-output graph, and returns the model's reported
     /// ``output_length`` alongside the full padded embeddings.
@@ -167,13 +180,9 @@ public class CoreMLASREncoder {
             throw AudioModelError.inferenceFailed(
                 operation: "CoreML encoder", reason: "Missing output_length output (encoder may be an older export without the chunked-attention mask)")
         }
-        // Clamp the model-reported length to the embeddings tensor's own
-        // token extent. ``output_length`` is computed in-graph; a re-export
-        // whose length formula outran its output tensor would otherwise hand
-        // callers an index range that reads past the buffer.
-        let embedShape = embeddings.shape.map { $0.intValue }
-        let availableTokens = embedShape.count >= 2 ? embedShape[embedShape.count - 2] : 0
-        let outLen = min(max(0, Int(lengthOut[0].int32Value)), availableTokens)
+        let outLen = Self.clampOutputLength(
+            Int(lengthOut[0].int32Value),
+            embeddingShape: embeddings.shape.map { $0.intValue })
         return EncodedAudio(embeddings: embeddings, outputLength: outLen)
     }
 
