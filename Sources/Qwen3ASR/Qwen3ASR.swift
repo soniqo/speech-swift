@@ -274,7 +274,39 @@ public class Qwen3ASRModel {
             ? Double(audio.count) / Double(sampleRate)
             : 0.0
         let effective = options.adaptedFor(audioDurationSeconds: durationSeconds)
+        return Self.catchingMLXErrors {
+            self.transcribeAdapted(audio: audio, sampleRate: sampleRate, options: effective)
+        }
+    }
 
+    /// Run `body`, converting an MLX failure into a diagnostic string rather
+    /// than a process kill.
+    ///
+    /// mlx-swift's default error handler calls `fatalError`, so *any* MLX
+    /// failure — a Metal allocation that fails under memory pressure, a bad
+    /// shape — terminates the host application with no way to intervene.
+    /// Tolerable for a CLI, wrong for an app: a transcription that cannot
+    /// complete should degrade to an error, not take the process with it.
+    /// `withError` scopes a handler that rethrows instead, and the string
+    /// form matches the convention ``CoreMLASRModel`` already uses.
+    ///
+    /// This does not make MLX errors less likely, only survivable.
+    static func catchingMLXErrors(_ body: () throws -> String) -> String {
+        do {
+            return try withError { try body() }
+        } catch {
+            return "[Qwen3ASR MLX error: \(error.localizedDescription)]"
+        }
+    }
+
+    /// Body of ``transcribe(audio:sampleRate:options:)``, split out so the
+    /// public entry point is nothing but the MLX guard around it. `options`
+    /// has already been length-adapted by the caller.
+    private func transcribeAdapted(
+        audio: [Float],
+        sampleRate: Int,
+        options: Qwen3DecodingOptions
+    ) -> String {
         let melFeatures = featureExtractor.process(audio, sampleRate: sampleRate)
         let batchedFeatures = melFeatures.expandedDimensions(axis: 0)
         var audioEmbeds = audioEncoder(batchedFeatures)
@@ -286,10 +318,10 @@ public class Qwen3ASRModel {
         return generateText(
             audioEmbeds: audioEmbeds,
             textDecoder: textDecoder,
-            language: effective.language,
-            maxTokens: effective.maxTokens,
-            context: effective.context,
-            decodingOptions: effective
+            language: options.language,
+            maxTokens: options.maxTokens,
+            context: options.context,
+            decodingOptions: options
         )
     }
 
@@ -313,7 +345,18 @@ public class Qwen3ASRModel {
         let baseOptions = Qwen3DecodingOptions(
             maxTokens: maxTokens, language: language, context: context)
         let effective = baseOptions.adaptedFor(audioDurationSeconds: durationSeconds)
+        return Self.catchingMLXErrors {
+            self.transcribeLegacyAdapted(audio: audio, sampleRate: sampleRate, options: effective)
+        }
+    }
 
+    /// Body of the legacy ``transcribe(audio:sampleRate:language:maxTokens:context:)``
+    /// overload, split out for the same reason as ``transcribeAdapted``.
+    private func transcribeLegacyAdapted(
+        audio: [Float],
+        sampleRate: Int,
+        options effective: Qwen3DecodingOptions
+    ) -> String {
         // Extract mel features
         let melFeatures = featureExtractor.process(audio, sampleRate: sampleRate)
 
@@ -1002,7 +1045,11 @@ public class Qwen3ASRModel {
 
         // Pull logits to CPU. `logits` is [1, 1, vocabSize]; after squeeze
         // and conversion we have a plain `[Float]` of length vocabSize.
-        let flat = logits.squeezed().asType(.float32)
+        // No explicit `asType(.float32)`: `asArray(Float.self)` already casts
+        // when the dtype differs, so that cast allocated a second full-vocab
+        // array (151,936 floats, ~608 KB) per generated token and then copied
+        // it again. Behaviour is identical without it.
+        let flat = logits.squeezed()
         let vocabSize = flat.size
         var scores: [Float] = flat.asArray(Float.self)
         precondition(scores.count == vocabSize, "pickNextToken: vocab size mismatch")
@@ -1171,6 +1218,38 @@ internal enum Qwen3ASRMemory {
         return max(0, min(fourGB, quarterRAM))
     }
 
+    /// True when the platform's real ceiling is the app's own jetsam budget
+    /// rather than the machine's RAM.
+    static var isMemoryConstrainedPlatform: Bool {
+        #if os(macOS)
+        return false
+        #else
+        return true
+        #endif
+    }
+
+    /// MLX cache ceiling to apply at load, or `nil` to leave the process
+    /// default alone.
+    ///
+    /// macOS caps only the 1.7B variant — the case observed to swap (see
+    /// ``cacheLimitForLarge``). Memory-constrained platforms cap every
+    /// variant, because MLX's default cache limit tracks the *device's*
+    /// recommended working set, which on a phone bears no relation to what
+    /// the app may hold before jetsam terminates it. Under sustained
+    /// decoding even the 0.6B model can grow its scratch pool past that
+    /// budget, and nothing was bounding it.
+    ///
+    /// The bound reuses the 1.7B formula: a ceiling where there was none,
+    /// not a figure tuned against device telemetry.
+    static func cacheLimitBytes(
+        isLargeModel: Bool,
+        isMemoryConstrainedPlatform: Bool,
+        physicalMemoryBytes: Int
+    ) -> Int? {
+        guard isLargeModel || isMemoryConstrainedPlatform else { return nil }
+        return cacheLimitForLarge(physicalMemoryBytes: physicalMemoryBytes)
+    }
+
     /// True when the 1.7B variant should print the soft RAM warning. Total
     /// (not available) RAM is the pragmatic signal — see threshold doc.
     static func shouldWarnForLarge(physicalMemoryBytes: UInt64) -> Bool {
@@ -1305,9 +1384,12 @@ public extension Qwen3ASRModel {
         // of the loaded ASR. Stacks correctly across multiple ASR
         // instances: each save captures whatever was active when it
         // loaded, and each unload pops its own saved value.
-        if modelSize == .large {
-            let physical = Int(ProcessInfo.processInfo.physicalMemory)
-            let newCap = Qwen3ASRMemory.cacheLimitForLarge(physicalMemoryBytes: physical)
+        let physical = Int(ProcessInfo.processInfo.physicalMemory)
+        if let newCap = Qwen3ASRMemory.cacheLimitBytes(
+            isLargeModel: modelSize == .large,
+            isMemoryConstrainedPlatform: Qwen3ASRMemory.isMemoryConstrainedPlatform,
+            physicalMemoryBytes: physical)
+        {
             // Only apply the cap if it would lower the current limit —
             // never raise a limit a caller has already chosen for itself.
             let currentLimit = MLX.Memory.cacheLimit
