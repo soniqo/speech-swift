@@ -270,12 +270,14 @@ public class Qwen3ASRModel {
         sampleRate: Int = 16000,
         options: Qwen3DecodingOptions
     ) -> String {
+        guard !Task.isCancelled else { return "" }
         let durationSeconds = sampleRate > 0
             ? Double(audio.count) / Double(sampleRate)
             : 0.0
         let effective = options.adaptedFor(audioDurationSeconds: durationSeconds)
 
         let melFeatures = featureExtractor.process(audio, sampleRate: sampleRate)
+        guard !Task.isCancelled else { return "" }
         let batchedFeatures = melFeatures.expandedDimensions(axis: 0)
         var audioEmbeds = audioEncoder(batchedFeatures)
         audioEmbeds = audioEmbeds.expandedDimensions(axis: 0)
@@ -307,6 +309,7 @@ public class Qwen3ASRModel {
         maxTokens: Int = 448,
         context: String? = nil
     ) -> String {
+        guard !Task.isCancelled else { return "" }
         let durationSeconds = sampleRate > 0
             ? Double(audio.count) / Double(sampleRate)
             : 0.0
@@ -318,6 +321,7 @@ public class Qwen3ASRModel {
         let melFeatures = featureExtractor.process(audio, sampleRate: sampleRate)
 
         // Add batch dimension: [mel, time] -> [1, mel, time]
+        guard !Task.isCancelled else { return "" }
         let batchedFeatures = melFeatures.expandedDimensions(axis: 0)
 
         // Encode audio - returns [time, features] without batch dim (matching Python)
@@ -372,6 +376,7 @@ public class Qwen3ASRModel {
         context: String? = nil,
         decodingOptions: Qwen3DecodingOptions = Qwen3DecodingOptions()
     ) -> String {
+        guard !Task.isCancelled else { return "" }
         let T = Qwen3ASRTokens.self
         let numAudioTokens = audioEmbeds.dim(1)
         var inputIds: [Int32] = []
@@ -425,6 +430,7 @@ public class Qwen3ASRModel {
         var cache: [(MLXArray, MLXArray)]? = nil
 
         // First pass: process the full input embeddings
+        guard !Task.isCancelled else { return "" }
         let (hiddenStates, newCache) = textDecoder(inputsEmbeds: inputEmbeds, cache: cache)
         cache = newCache
 
@@ -547,7 +553,7 @@ public class Qwen3ASRModel {
         maxTokens: Int
     ) -> [Int32] {
         var generatedTokens: [Int32] = []
-        guard maxTokens > 0 else { return generatedTokens }
+        guard maxTokens > 0, !Task.isCancelled else { return generatedTokens }
 
         // Stage 0: argmax of the prefill's last logits. Stays lazy until
         // the first `.item()` below.
@@ -568,6 +574,7 @@ public class Qwen3ASRModel {
         let eosToken = Int32(Qwen3ASRTokens.eosTokenId)
 
         for step in 0..<maxTokens {
+            if Task.isCancelled { break }
             // Stage N+1's graph BEFORE syncing N. embedTokens expects a
             // [batch, seq] int32 tensor; nextTokenArr is 0-D so we expand
             // twice to [1, 1].
@@ -943,7 +950,7 @@ public class Qwen3ASRModel {
         options: Qwen3DecodingOptions
     ) -> [Int32] {
         var generatedTokens: [Int32] = []
-        guard maxTokens > 0 else { return generatedTokens }
+        guard maxTokens > 0, !Task.isCancelled else { return generatedTokens }
         var cache: [(MLXArray, MLXArray)]? = initialCache
 
         var nextToken = Self.pickNextToken(
@@ -954,6 +961,7 @@ public class Qwen3ASRModel {
         generatedTokens.append(nextToken)
 
         for _ in 1..<maxTokens {
+            if Task.isCancelled { break }
             if nextToken == Int32(Qwen3ASRTokens.eosTokenId) { break }
 
             let tokenEmbeds = textDecoder.embedTokens(
