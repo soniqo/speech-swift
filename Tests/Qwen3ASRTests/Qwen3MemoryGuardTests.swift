@@ -1,5 +1,6 @@
 import XCTest
 import MLX
+import MLXCommon
 import Foundation
 @testable import Qwen3ASR
 
@@ -8,6 +9,89 @@ import Foundation
 /// formatter. They are pure — no model download, no GPU — so they run on
 /// every CI shard.
 final class Qwen3MemoryGuardTests: XCTestCase {
+
+    // MARK: - Platform-aware cache ceiling (#479 hardening)
+
+    /// On macOS only the 1.7B variant is capped — the case observed to swap.
+    /// Leaving the 0.6B alone preserves existing desktop behaviour.
+    func testDesktopCapsOnlyTheLargeVariant() {
+        let sixteenGB = 16 * 1024 * 1024 * 1024
+
+        XCTAssertNil(
+            Qwen3ASRMemory.cacheLimitBytes(
+                isLargeModel: false, isMemoryConstrainedPlatform: false,
+                physicalMemoryBytes: sixteenGB),
+            "the 0.6B model on a Mac should keep MLX's default cache limit")
+        XCTAssertEqual(
+            Qwen3ASRMemory.cacheLimitBytes(
+                isLargeModel: true, isMemoryConstrainedPlatform: false,
+                physicalMemoryBytes: sixteenGB),
+            Qwen3ASRMemory.cacheLimitForLarge(physicalMemoryBytes: sixteenGB))
+    }
+
+    /// On a memory-constrained platform every variant is capped. MLX's
+    /// default tracks the device's recommended working set, which has no
+    /// relation to the app's jetsam budget, so the small model was running
+    /// with no ceiling at all on iOS.
+    func testConstrainedPlatformCapsEveryVariant() {
+        let twelveGB = 12 * 1024 * 1024 * 1024
+        let expected = Qwen3ASRMemory.cacheLimitForLarge(physicalMemoryBytes: twelveGB)
+
+        for isLarge in [false, true] {
+            XCTAssertEqual(
+                Qwen3ASRMemory.cacheLimitBytes(
+                    isLargeModel: isLarge, isMemoryConstrainedPlatform: true,
+                    physicalMemoryBytes: twelveGB),
+                expected,
+                "isLargeModel=\(isLarge) should be capped on a constrained platform")
+        }
+    }
+
+    // MARK: - Wired-memory pinning policy (#479 hardening)
+
+    /// Pinning 90% of the *device* working set is a macOS policy. On iOS
+    /// what kills the app is its own jetsam limit, and wired pages are not
+    /// reclaimable, so the default there is to pin nothing.
+    func testPinFractionZeroMeansNoWiredLimit() {
+        XCTAssertNil(MetalBudget.wiredLimit(workingSet: 8 * 1024 * 1024 * 1024, fraction: 0),
+                     "a zero fraction must set no wired limit at all")
+        XCTAssertNil(MetalBudget.wiredLimit(workingSet: 0, fraction: 0.9),
+                     "an unknown working set must set no wired limit")
+        XCTAssertEqual(MetalBudget.wiredLimit(workingSet: 1000, fraction: 0.9), 900)
+    }
+
+    #if os(macOS)
+    func testDesktopStillPinsNinetyPercent() {
+        XCTAssertEqual(MetalBudget.defaultPinFraction, 0.9,
+                       "macOS behaviour must be unchanged")
+    }
+    #else
+    func testConstrainedPlatformPinsNothingByDefault() {
+        XCTAssertEqual(MetalBudget.defaultPinFraction, 0.0)
+    }
+    #endif
+
+    // MARK: - MLX errors are survivable (#479 hardening)
+
+    /// mlx-swift's default handler calls `fatalError`, so any MLX failure
+    /// took the host process with it. Transcription must degrade to a
+    /// diagnostic string instead.
+    func testMLXErrorsBecomeADiagnosticStringNotAProcessKill() {
+        struct Boom: Error, LocalizedError {
+            var errorDescription: String? { "simulated MLX failure" }
+        }
+
+        XCTAssertEqual(
+            Qwen3ASRModel.catchingMLXErrors { "transcript" },
+            "transcript",
+            "the guard must be transparent when nothing fails")
+
+        let result = Qwen3ASRModel.catchingMLXErrors { throw Boom() }
+        XCTAssertTrue(result.hasPrefix("[Qwen3ASR MLX error:"),
+                      "a failure must surface as a diagnostic, got: \(result)")
+        XCTAssertTrue(result.contains("simulated MLX failure"),
+                      "the diagnostic must carry the underlying reason")
+    }
 
     // MARK: - cacheLimitForLarge
 

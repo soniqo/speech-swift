@@ -31,12 +31,41 @@ public enum MetalBudget {
         Memory.activeMemory
     }
 
+    /// Fraction of the recommended working set wired by default.
+    ///
+    /// macOS keeps 90%: there, wiring genuinely prevents paging under
+    /// memory pressure. iOS and the other embedded platforms pin nothing.
+    /// ``maxRecommendedWorkingSetSize`` describes the *device's* GPU budget,
+    /// but what terminates an app on those platforms is its own jetsam
+    /// limit, which is far smaller and treats wired pages as
+    /// non-reclaimable. Wiring 90% of the device working set there asks the
+    /// OS to hold memory it may need back in order to keep the app alive.
+    /// A caller that wants pinning anyway can still pass a fraction.
+    #if os(macOS)
+    public static let defaultPinFraction: Double = 0.9
+    #else
+    public static let defaultPinFraction: Double = 0.0
+    #endif
+
+    /// The wired limit implied by a working-set size and fraction, or `nil`
+    /// when no limit should be set at all.
+    ///
+    /// Pure, so the policy is testable on any platform rather than only on
+    /// the one running the tests.
+    public static func wiredLimit(workingSet: Int, fraction: Double) -> Int? {
+        guard fraction > 0, workingSet > 0 else { return nil }
+        return Int(Double(workingSet) * fraction)
+    }
+
     /// Pin GPU memory to prevent paging under pressure.
-    /// Uses 90% of recommended working set by default.
-    /// Only effective on macOS 15+ / iOS 18+.
+    /// Uses ``defaultPinFraction`` — 90% of the recommended working set on
+    /// macOS, nothing on iOS. Only effective on macOS 15+ / iOS 18+.
+    ///
+    /// Returns the previous wired limit, or 0 when no limit was applied.
     @discardableResult
-    public static func pinMemory(fraction: Double = 0.9) -> Int {
-        let limit = Int(Double(maxRecommendedWorkingSet) * fraction)
+    public static func pinMemory(fraction: Double = defaultPinFraction) -> Int {
+        guard let limit = wiredLimit(workingSet: maxRecommendedWorkingSet, fraction: fraction)
+        else { return 0 }
         var previous: size_t = 0
         mlx_set_wired_limit(&previous, size_t(limit))
         return Int(previous)
