@@ -18,8 +18,17 @@ public struct DiarizeCommand: ParsableCommand {
     @Option(name: .long, help: "Enrollment audio for target speaker extraction")
     public var targetSpeaker: String?
 
-    @Option(name: .long, help: "Diarization engine: pyannote (default), community1, or sortformer")
+    @Option(name: .long, help: "Diarization engine: pyannote (default), community1, sortformer, or nemotron3")
     public var engine: String = "pyannote"
+
+    @Option(name: .long, help: "Nemotron 3 backend: coreml (default) or mlx")
+    public var nemotron3Backend: String = "coreml"
+
+    @Option(name: .long, help: "Optional local Nemotron 3 bundle directory")
+    public var nemotron3Directory: String?
+
+    @Option(name: .long, help: "Nemotron 3 Core ML compute units: ane (default), cpu, gpu, or all")
+    public var nemotron3ComputeUnits: String = "ane"
 
     @Option(name: .long, help: "Sortformer variant: default (offline, ~125x RTF), balanced (faster first-load, ~hundreds-x RTF), or streaming (low-latency)")
     public var sortformerVariant: String = "default"
@@ -63,7 +72,7 @@ public struct DiarizeCommand: ParsableCommand {
     @Option(name: .long, help: "Speaker activity onset threshold (default 0.5)")
     public var onset: Float = 0.5
 
-    @Option(name: .long, help: "Speaker activity offset threshold (default: 0.5 for sortformer, matching NeMo; 0.3 for pyannote)")
+    @Option(name: .long, help: "Speaker activity offset threshold (default: 0.5 for Sortformer and Nemotron 3; 0.3 for pyannote)")
     public var offset: Float?
 
     @Option(name: .long, help: "Cosine distance threshold for speaker clustering (default 0.715, lower = fewer speakers)")
@@ -83,7 +92,7 @@ public struct DiarizeCommand: ParsableCommand {
             // pyannote pipeline keeps its tuned 0.3 hysteresis offset.
             let config = DiarizationConfig(
                 onset: onset,
-                offset: offset ?? (engine == "sortformer" ? 0.5 : 0.3),
+                offset: offset ?? ((engine == "sortformer" || engine == "nemotron3") ? 0.5 : 0.3),
                 minSpeechDuration: minSpeech,
                 minSilenceDuration: minSilence,
                 clusteringThreshold: clusterThreshold)
@@ -94,6 +103,12 @@ public struct DiarizeCommand: ParsableCommand {
                 #else
                 print("Error: Sortformer requires CoreML (not available on this platform).")
                 #endif
+            } else if engine == "nemotron3" {
+                #if canImport(CoreML)
+                try await runNemotron3(audio: audio, config: config)
+                #else
+                print("Error: Nemotron 3 requires an Apple Silicon runtime.")
+                #endif
             } else if engine == "community1" {
                 #if canImport(CoreML)
                 try await runCommunity1(audio: audio)
@@ -103,12 +118,70 @@ public struct DiarizeCommand: ParsableCommand {
             } else if engine == "pyannote" {
                 try await runPyannote(audio: audio, config: config)
             } else {
-                print("Error: unknown engine '\(engine)'. Use 'pyannote', 'community1', or 'sortformer'.")
+                print("Error: unknown engine '\(engine)'. Use 'pyannote', 'community1', 'sortformer', or 'nemotron3'.")
             }
         }
     }
 
     #if canImport(CoreML)
+    private func runNemotron3(audio: [Float], config: DiarizationConfig) async throws {
+        if targetSpeaker != nil {
+            print("Warning: --target-speaker is not supported with Nemotron 3. Ignoring.")
+        }
+        let backend = nemotron3Backend.lowercased()
+        let diarizer: Nemotron3Diarizer
+        switch backend {
+        case "coreml":
+            let computeUnits: MLComputeUnits
+            switch nemotron3ComputeUnits.lowercased() {
+            case "ane", "cpuandneuralengine", "neuralengine":
+                computeUnits = .cpuAndNeuralEngine
+            case "cpu", "cpuonly":
+                computeUnits = .cpuOnly
+            case "gpu", "cpuandgpu":
+                computeUnits = .cpuAndGPU
+            case "all":
+                computeUnits = .all
+            default:
+                print("Error: unknown Nemotron 3 compute units '\(nemotron3ComputeUnits)'. Use 'ane', 'cpu', 'gpu', or 'all'.")
+                return
+            }
+            if let nemotron3Directory {
+                diarizer = try Nemotron3Diarizer.fromCoreMLDirectory(
+                    URL(fileURLWithPath: nemotron3Directory, isDirectory: true),
+                    computeUnits: computeUnits)
+            } else {
+                diarizer = try await Nemotron3Diarizer.fromCoreMLPretrained(
+                    computeUnits: computeUnits, progressHandler: reportProgress)
+            }
+        case "mlx":
+            if let nemotron3Directory {
+                diarizer = try Nemotron3Diarizer.fromMLXDirectory(
+                    URL(fileURLWithPath: nemotron3Directory, isDirectory: true))
+            } else {
+                diarizer = try await Nemotron3Diarizer.fromMLXPretrained(
+                    progressHandler: reportProgress)
+            }
+        default:
+            print("Error: unknown Nemotron 3 backend '\(nemotron3Backend)'. Use 'coreml' or 'mlx'.")
+            return
+        }
+
+        print("Running diarization (Nemotron 3 \(backend))...")
+        let start = Date()
+        var result = try diarizer.diarize(audio: audio, sampleRate: 16_000, config: config)
+        if vadFilter {
+            let vadModel = try await SileroVADModel.fromPretrained(
+                progressHandler: reportProgress)
+            let speech = vadModel.detectSpeech(audio: audio, sampleRate: 16_000)
+            result = Self.maskedToSpeech(result, speech: speech)
+        }
+        outputResult(result, elapsed: Date().timeIntervalSince(start))
+        if let scoreAgainst {
+            try scoreDER(result: result, refFile: scoreAgainst)
+        }
+    }
+
     private func runSortformer(audio: [Float], config: DiarizationConfig) async throws {
         if targetSpeaker != nil {
             print("Warning: --target-speaker is not supported with Sortformer (no speaker embeddings). Ignoring.")

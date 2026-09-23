@@ -390,7 +390,7 @@ public final class SortformerDiarizer {
             }
         }
 
-        let frameDuration = Float(config.subsamplingFactor * config.hopLength)
+        let frameDuration = Float(config.predictionSubsamplingFactor * config.hopLength)
             / Float(config.sampleRate)
         var allSegments = [DiarizedSegment]()
         for spk in 0..<numSpeakers {

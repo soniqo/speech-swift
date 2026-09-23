@@ -2,11 +2,17 @@
 
 ## Overview
 
-Speaker diarization identifies **who spoke when** in an audio recording. Three engines are available:
+Speaker diarization identifies **who spoke when** in an audio recording. Four
+engines are available:
 
 1. **Pyannote** (default) — two-stage pipeline: segmentation + activity-based speaker chaining → post-hoc WeSpeaker embedding
 2. **Community-1** (CoreML) — Pyannote segmentation + masked WeSpeaker embeddings + native PLDA/VBx clustering
 3. **Sortformer** (CoreML) — NVIDIA's end-to-end neural diarization model, runs on Neural Engine
+4. **Nemotron 3** (Core ML or MLX INT8) — eight-speaker activity at 10 ms resolution
+
+`Nemotron3Diarizer` adds eight-speaker, 10 ms speaker activity through public
+Core ML INT8 and MLX INT8 exports. Both backends share the same audio and
+streaming-cache pipeline.
 
 Named voice identity is a separate operation. `ReDimNet2SpeakerModel` compares
 clean voice samples across recordings; it does not replace the embedding and
@@ -20,6 +26,7 @@ clustering stages inside any diarization engine.
 speech diarize meeting.wav                    # Pyannote (default)
 speech diarize meeting.wav --engine community1  # Community-1 (CoreML + VBx)
 speech diarize meeting.wav --engine sortformer  # Sortformer (CoreML)
+speech diarize meeting.wav --engine nemotron3    # Nemotron 3 (Core ML)
 ```
 
 ### Community-1 (CoreML + Native VBx)
@@ -70,6 +77,35 @@ Audio → [128-dim Mel] → [Chunk Sliding Window] → [CoreML Neural Engine] �
 - **Frame duration**: 0.08s per prediction frame
 
 No speaker embeddings are produced — `--target-speaker` and `--embedding-engine` are not available with Sortformer.
+
+### Nemotron 3 Diarization (Core ML and MLX INT8)
+
+The Nemotron runtime uses the final model's 31-layer, 512-dimensional
+Transformer and eight arrival-order speaker slots. It preserves the published
+offline cache geometry while exporting the audio pre-encoder separately from
+the stateful diarization head.
+
+```
+16 kHz audio → 128-bin log-mel → 8× pre-encoder → 31-layer Transformer
+             → 8× subpixel head → 10 ms speaker probabilities → segments
+                         ↕
+             264-row speaker cache + 40-row FIFO
+```
+
+- **Core chunk**: 340 encoder rows (27.2 seconds)
+- **Cache update period**: 300 encoder rows (24 seconds)
+- **Right context**: 40 encoder rows (3.2 seconds)
+- **Output resolution**: 10 ms after the subpixel head
+- **Speaker capacity**: eight arrival-order slots
+- **Core ML artifact**: compiled pre-encoder and head graphs; linear operators
+  use symmetric INT8 blocks while convolutions and activations remain FP16
+- **MLX artifact**: 128 affine INT8 linear layers with group size 64;
+  convolutions remain FP16
+- **State**: the learned 512-value silence embedding is loaded from the local
+  bundle and used when maintaining speaker-cache silence rows
+
+Both loaders reject incompatible geometry and missing files. The public loaders
+download the final exports; directory loaders work offline.
 
 ### Pyannote Pipeline
 
@@ -292,6 +328,24 @@ let result = diarizer.diarize(audio: samples, sampleRate: 16000) { progress, sta
 }
 ```
 
+### Nemotron 3 Swift API
+
+```swift
+let coreML = try await Nemotron3Diarizer.fromCoreMLPretrained()
+let coreMLResult = try coreML.diarize(
+    audio: samples,
+    sampleRate: 16_000
+)
+
+let mlx = try await Nemotron3Diarizer.fromMLXPretrained()
+let mlxResult = try mlx.diarize(audio: samples, sampleRate: 16_000)
+```
+
+The two public bundles use different backend-native INT8 layouts and should
+be evaluated as separate variants. The `fromCoreMLDirectory` and
+`fromMLXDirectory` methods remain available for offline files. Neither
+backend produces speaker embeddings.
+
 ### Incremental streaming session
 
 `SortformerStreamingSession` runs the same model incrementally for live
@@ -335,6 +389,11 @@ speech diarize meeting.wav --engine community1 --min-speakers 2 --max-speakers 6
 # Sortformer diarization (CoreML, Neural Engine)
 speech diarize meeting.wav --engine sortformer
 
+# Nemotron 3 diarization (Core ML or MLX)
+speech diarize meeting.wav --engine nemotron3
+speech diarize meeting.wav --engine nemotron3 --nemotron3-backend mlx
+speech diarize meeting.wav --engine nemotron3 --nemotron3-directory /path/to/bundle
+
 # CoreML embeddings (Neural Engine, pyannote only)
 speech diarize meeting.wav --embedding-engine coreml
 
@@ -376,6 +435,8 @@ whose collar and boundary accounting are intentionally different.
 - **Speaker Embedding (CoreML)**: `aufklarer/WeSpeaker-ResNet34-LM-CoreML` (~13 MB)
 - **Named Voice Identity (CoreML)**: `aufklarer/ReDimNet2-B6-CoreML` (~25 MiB)
 - **Sortformer (CoreML)**: `aufklarer/Sortformer-Diarization-CoreML` (~240 MB)
+- **Nemotron 3 (Core ML/MLX INT8)**: public 100M parameter exports with
+  eight-speaker, 10 ms output
 - Cache: `~/Library/Caches/qwen3-speech/`
 
 ### Weight Conversion
@@ -422,6 +483,9 @@ Sources/SpeechVAD/
 ├── SortformerMelExtractor.swift       128-dim log-mel for Sortformer (Hann window)
 ├── SortformerModel.swift              CoreML wrapper for Sortformer inference
 ├── SortformerDiarizer.swift           End-to-end Sortformer pipeline (streaming)
+├── Nemotron3Diarizer.swift            Cache orchestration + 10 ms decoding
+├── Nemotron3CoreMLModel.swift          Split compiled Core ML INT8 backend
+├── Nemotron3MLXModel.swift             Native MLX INT8 Transformer backend
 └── SpeechVAD+Protocols.swift          Protocol conformances
 
 Sources/AudioCommon/Protocols.swift    DiarizedSegment, SpeakerEmbeddingModel, SpeakerDiarizationModel

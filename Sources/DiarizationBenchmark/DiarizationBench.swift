@@ -20,7 +20,7 @@ struct DiarizationBench: AsyncParsableCommand {
     var manifest: String
 
     @Option(name: .shortAndLong, parsing: .upToNextOption,
-            help: "Engines: community1-coreml, sortformer-default, sortformer-balanced, sortformer-streaming, sortformer-session, sortformer-streaming-ultra8, sortformer-session-ultra8, pyannote-mlx, pyannote-coreml, moss-coreml-int8, moss-mlx-int5, moss-mlx-int8.")
+            help: "Engines: community1-coreml, sortformer-default, sortformer-balanced, sortformer-streaming, sortformer-session, sortformer-streaming-ultra8, sortformer-session-ultra8, pyannote-mlx, pyannote-coreml, moss-coreml-int8, moss-mlx-int5, moss-mlx-int8, nemotron3-coreml-int8, nemotron3-mlx-int8.")
     var engines: [String] = ["sortformer-default", "pyannote-mlx"]
 
     @Option(name: .shortAndLong, help: "Max files to process.")
@@ -308,8 +308,60 @@ private func makeDiarizationEngine(
         return MossMLXDiarizationBenchEngine(variant: .int5)
     case "moss-mlx-int8":
         return MossMLXDiarizationBenchEngine(variant: .int8)
+    case "nemotron3-coreml-int8":
+        return Nemotron3CoreMLDiarizationBenchEngine()
+    case "nemotron3-mlx-int8":
+        return Nemotron3MLXDiarizationBenchEngine()
     default:
         return nil
+    }
+}
+
+private final class Nemotron3CoreMLDiarizationBenchEngine:
+    DiarizationBenchEngine
+{
+    let name = "nemotron3-coreml-int8"
+    private var model: Nemotron3Diarizer?
+
+    func load() async throws {
+        let key = "NEMOTRON3_DIARIZATION_COREML_DIR"
+        if let local = ProcessInfo.processInfo.environment[key], !local.isEmpty {
+            model = try Nemotron3Diarizer.fromCoreMLDirectory(
+                URL(fileURLWithPath: local, isDirectory: true))
+        } else {
+            model = try await Nemotron3Diarizer.fromCoreMLPretrained()
+        }
+    }
+
+    func diarize(audio: [Float], sampleRate: Int) throws -> DiarizationResult {
+        guard let model else {
+            throw ValidationError("Nemotron 3 Core ML engine is not loaded")
+        }
+        return try model.diarize(audio: audio, sampleRate: sampleRate)
+    }
+}
+
+private final class Nemotron3MLXDiarizationBenchEngine:
+    DiarizationBenchEngine
+{
+    let name = "nemotron3-mlx-int8"
+    private var model: Nemotron3Diarizer?
+
+    func load() async throws {
+        let key = "NEMOTRON3_DIARIZATION_MLX_DIR"
+        if let local = ProcessInfo.processInfo.environment[key], !local.isEmpty {
+            model = try Nemotron3Diarizer.fromMLXDirectory(
+                URL(fileURLWithPath: local, isDirectory: true))
+        } else {
+            model = try await Nemotron3Diarizer.fromMLXPretrained()
+        }
+    }
+
+    func diarize(audio: [Float], sampleRate: Int) throws -> DiarizationResult {
+        guard let model else {
+            throw ValidationError("Nemotron 3 MLX engine is not loaded")
+        }
+        return try model.diarize(audio: audio, sampleRate: sampleRate)
     }
 }
 
@@ -743,45 +795,91 @@ private func speakerFrames(
 
 private func bestJaccardSum(_ matrix: [[Float]]) -> Float {
     guard !matrix.isEmpty else { return 0 }
-    let refCount = matrix.count
     let hypCount = matrix[0].count
     guard hypCount > 0 else { return 0 }
 
-    var used = [Bool](repeating: false, count: hypCount)
-    var best: Float = 0
+    let assignment = maximumJaccardAssignment(matrix)
+    return assignment.enumerated().reduce(0) { sum, pair in
+        guard let column = pair.element else { return sum }
+        return sum + matrix[pair.offset][column]
+    }
+}
 
-    func search(_ refIndex: Int, _ sum: Float) {
-        if refIndex == refCount {
-            best = max(best, sum)
-            return
+/// Exact rectangular maximum-weight assignment for JER. Zero-padding allows
+/// unmatched speakers on either side without a greedy fallback.
+func maximumJaccardAssignment(
+    _ weights: [[Float]]
+) -> [Int?] {
+    let rowCount = weights.count
+    let columnCount = weights.first?.count ?? 0
+    guard rowCount > 0, columnCount > 0 else {
+        return [Int?](repeating: nil, count: rowCount)
+    }
+
+    let size = max(rowCount, columnCount)
+    let maximumWeight = Double(
+        weights.lazy.flatMap { $0 }.max() ?? 0)
+    var rowPotential = [Double](repeating: 0, count: size + 1)
+    var columnPotential = [Double](repeating: 0, count: size + 1)
+    var matchedRow = [Int](repeating: 0, count: size + 1)
+    var previousColumn = [Int](repeating: 0, count: size + 1)
+
+    func cost(row: Int, column: Int) -> Double {
+        guard row <= rowCount, column <= columnCount else {
+            return maximumWeight
         }
+        return maximumWeight - Double(weights[row - 1][column - 1])
+    }
 
-        search(refIndex + 1, sum)
-        for hypIndex in 0..<hypCount where !used[hypIndex] {
-            used[hypIndex] = true
-            search(refIndex + 1, sum + matrix[refIndex][hypIndex])
-            used[hypIndex] = false
+    for row in 1...size {
+        matchedRow[0] = row
+        var column = 0
+        var minimum = [Double](repeating: 1.0e30, count: size + 1)
+        var used = [Bool](repeating: false, count: size + 1)
+
+        repeat {
+            used[column] = true
+            let currentRow = matchedRow[column]
+            var delta = 1.0e30
+            var nextColumn = 0
+            for candidate in 1...size where !used[candidate] {
+                let reducedCost = cost(
+                    row: currentRow, column: candidate)
+                    - rowPotential[currentRow]
+                    - columnPotential[candidate]
+                if reducedCost < minimum[candidate] {
+                    minimum[candidate] = reducedCost
+                    previousColumn[candidate] = column
+                }
+                if minimum[candidate] < delta {
+                    delta = minimum[candidate]
+                    nextColumn = candidate
+                }
+            }
+            for candidate in 0...size {
+                if used[candidate] {
+                    rowPotential[matchedRow[candidate]] += delta
+                    columnPotential[candidate] -= delta
+                } else {
+                    minimum[candidate] -= delta
+                }
+            }
+            column = nextColumn
+        } while matchedRow[column] != 0
+
+        repeat {
+            let prior = previousColumn[column]
+            matchedRow[column] = matchedRow[prior]
+            column = prior
+        } while column != 0
+    }
+
+    var assignment = [Int?](repeating: nil, count: rowCount)
+    for column in 1...size {
+        let row = matchedRow[column]
+        if row > 0, row <= rowCount, column <= columnCount {
+            assignment[row - 1] = column - 1
         }
     }
-
-    if refCount <= 8 && hypCount <= 8 {
-        search(0, 0)
-        return best
-    }
-
-    var pairs: [(Float, Int, Int)] = []
-    for r in 0..<refCount {
-        for h in 0..<hypCount {
-            pairs.append((matrix[r][h], r, h))
-        }
-    }
-    pairs.sort { $0.0 > $1.0 }
-    var usedRefs = Set<Int>()
-    var usedHyps = Set<Int>()
-    for (score, r, h) in pairs where !usedRefs.contains(r) && !usedHyps.contains(h) {
-        best += score
-        usedRefs.insert(r)
-        usedHyps.insert(h)
-    }
-    return best
+    return assignment
 }

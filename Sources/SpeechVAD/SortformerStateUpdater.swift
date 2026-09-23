@@ -77,9 +77,18 @@ public struct SortformerStreamingState: Sendable {
 ///      frame per speaker survives, not the most recent one.
 struct SortformerStateUpdater {
     let config: SortformerConfig
+    /// Nemotron 3 uses a trained silence anchor during cache compression;
+    /// classic Sortformer estimates the anchor from observed quiet frames.
+    let learnedSilenceEmbedding: [Float]?
 
-    init(config: SortformerConfig) {
+    init(config: SortformerConfig, learnedSilenceEmbedding: [Float]? = nil) {
         self.config = config
+        if let learnedSilenceEmbedding,
+           learnedSilenceEmbedding.count == config.fcDModel {
+            self.learnedSilenceEmbedding = learnedSilenceEmbedding
+        } else {
+            self.learnedSilenceEmbedding = nil
+        }
     }
 
     /// Result of one streaming update — the per-chunk predictions in the
@@ -218,6 +227,7 @@ struct SortformerStateUpdater {
         preds: [Float],
         frameCount: Int
     ) {
+        guard learnedSilenceEmbedding == nil else { return }
         let dim = config.fcDModel
         let numSpeakers = config.maxSpeakers
         let silenceThreshold = config.silenceThreshold
@@ -294,6 +304,7 @@ struct SortformerStateUpdater {
         let (indices, disabled) = topKIndices(
             scores: scores, frameCount: totalFrames, k: spkcacheCapacity)
 
+        let silenceEmbedding = learnedSilenceEmbedding ?? state.meanSilenceEmbedding
         var newSpkcache = [Float](repeating: 0, count: spkcacheCapacity * dim)
         var newPreds = [Float](repeating: 0, count: spkcacheCapacity * numSpeakers)
 
@@ -301,7 +312,7 @@ struct SortformerStateUpdater {
             if disabled[i] {
                 // Fill with running silence profile.
                 for d in 0..<dim {
-                    newSpkcache[i * dim + d] = state.meanSilenceEmbedding[d]
+                    newSpkcache[i * dim + d] = silenceEmbedding[d]
                 }
                 // Predictions left at zero.
             } else if frameIdx < currentLen {

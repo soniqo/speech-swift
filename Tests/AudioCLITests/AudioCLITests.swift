@@ -555,6 +555,18 @@ final class AlignCommandTests: XCTestCase {
 
 final class DiarizeCommandTests: XCTestCase {
 
+    func testNemotron3BackendAndLocalDirectoryParse() throws {
+        let command = try AudioCLI.parseAsRoot([
+            "diarize", "meeting.wav", "--engine", "nemotron3",
+            "--nemotron3-backend", "mlx",
+            "--nemotron3-directory", "/tmp/nemotron3-mlx",
+        ])
+        let diarize = try XCTUnwrap(command as? DiarizeCommand)
+        XCTAssertEqual(diarize.engine, "nemotron3")
+        XCTAssertEqual(diarize.nemotron3Backend, "mlx")
+        XCTAssertEqual(diarize.nemotron3Directory, "/tmp/nemotron3-mlx")
+    }
+
     func testCommunity1Defaults() throws {
         let cmd = try AudioCLI.parseAsRoot([
             "diarize", "meeting.wav", "--engine", "community1",

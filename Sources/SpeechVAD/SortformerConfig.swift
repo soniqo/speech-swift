@@ -28,6 +28,11 @@ public struct SortformerConfig: Sendable {
     public let rightContextSeconds: Float
     /// Subsampling factor of the encoder (frames → mel frames)
     public let subsamplingFactor: Int
+    /// Mel-frame stride represented by one emitted prediction. Standard
+    /// Sortformer emits at encoder resolution (8 × 10 ms); Nemotron 3 uses
+    /// sub-pixel upsampling and emits every 10 ms while retaining an 80 ms
+    /// cache/update resolution.
+    public let predictionSubsamplingFactor: Int
 
     // MARK: - State Dimensions
 
@@ -234,6 +239,39 @@ public struct SortformerConfig: Sendable {
         variantName: "streaming"
     )
 
+    /// Nemotron 3 Diarization's recommended offline
+    /// geometry. The cache runs at 80 ms while speaker probabilities are
+    /// emitted at 10 ms.
+    public static let nemotron3Offline = SortformerConfig(
+        nMels: 128,
+        nFFT: 400,
+        hopLength: 160,
+        sampleRate: 16000,
+        chunkLenSeconds: 340.0,
+        leftContextSeconds: 0.0,
+        rightContextSeconds: 40.0,
+        subsamplingFactor: 8,
+        predictionSubsamplingFactor: 1,
+        spkcacheLen: 264,
+        fifoLen: 40,
+        fcDModel: 512,
+        maxSpeakers: 8,
+        onset: 0.5,
+        offset: 0.5,
+        minSpeechDuration: 0.3,
+        minSilenceDuration: 0.15,
+        spkcacheUpdatePeriod: 300,
+        spkcacheSilFramesPerSpk: 1,
+        silenceThreshold: 0.2,
+        predScoreThreshold: 0.25,
+        scoresBoostLatest: 0.05,
+        strongBoostRate: 0.75,
+        weakBoostRate: 1.5,
+        minPosScoresRate: 0.5,
+        maxIndex: 99_999,
+        variantName: "nemotron3-offline"
+    )
+
     public init(
         nMels: Int = 128,
         nFFT: Int = 400,
@@ -243,6 +281,7 @@ public struct SortformerConfig: Sendable {
         leftContextSeconds: Float = 1.0,
         rightContextSeconds: Float = 7.0,
         subsamplingFactor: Int = 8,
+        predictionSubsamplingFactor: Int = 8,
         spkcacheLen: Int = 188,
         fifoLen: Int = 40,
         fcDModel: Int = 512,
@@ -270,6 +309,7 @@ public struct SortformerConfig: Sendable {
         self.leftContextSeconds = leftContextSeconds
         self.rightContextSeconds = rightContextSeconds
         self.subsamplingFactor = subsamplingFactor
+        self.predictionSubsamplingFactor = predictionSubsamplingFactor
         self.spkcacheLen = spkcacheLen
         self.fifoLen = fifoLen
         self.fcDModel = fcDModel
