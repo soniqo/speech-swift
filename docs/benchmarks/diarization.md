@@ -1,5 +1,60 @@
 # Speaker Diarization Benchmarks
 
+## Multilingual diarization benchmark (23 September 2026)
+
+The shipped Nemotron 3 INT8 MLX and Core ML runtimes were evaluated on 132
+internal benchmark recordings (12.82 hours) across eight languages. The model
+export is from [`nvidia/Nemotron-3-Diarization`](https://huggingface.co/nvidia/Nemotron-3-Diarization),
+revision `a435e9867d79e789e90053f9b6d6834053af564a`. The benchmark
+runner invoked `speech diarize --engine nemotron3` with automatic speaker count and
+the package's default postprocessing. `pyannote.metrics` scored each recording
+inside its UEM, including overlap, with a 0.25-second collar. DER is pooled by
+reference speaker time; no reference speaker count was passed to the model.
+
+| Language | Files | Nemotron 3 MLX | Nemotron 3 Core ML | Sortformer source |
+| --- | ---: | ---: | ---: | ---: |
+| Arabic | 12 | 16.54% | 18.16% | 22.32% |
+| German | 12 | 7.32% | 7.21% | 8.38% |
+| English | 48 | 10.31% | 10.24% | 13.81% |
+| Spanish | 12 | 12.56% | 13.19% | 16.33% |
+| Mandarin | 12 | 10.00% | 9.68% | 9.95% |
+| Azerbaijani | 12 | 2.53% | 2.55% | 5.25% |
+| Swiss German | 12 | 15.72% | 15.69% | 21.59% |
+| Russian | 12 | 4.47% | 4.44% | 5.35% |
+| **All** | **132** | **10.98%** | **11.20%** | — |
+
+As a postprocessing check, setting both minimum speech and minimum silence to
+zero (the source model's default) changed MLX pooled DER from 10.98% to 10.88%
+and count agreement from 85.6% to 84.8%. Results varied by language, so this
+check does not change the package default.
+
+## Local VoxConverse comparison (23 September 2026)
+
+`diarization-bench` scored five VoxConverse recordings (2,346.6 seconds total) on an Apple Silicon Mac with a 0.25-second collar and 0.01-second scoring resolution. DER includes missed speech, false alarms, and speaker confusion. Throughput excludes model loading.
+
+| Engine | DER | Throughput | Load | Peak RSS |
+| --- | ---: | ---: | ---: | ---: |
+| Nemotron 3 MLX INT8 | 17.26% | 333.4× real time | 7.3 s | 498 MB |
+| Nemotron 3 Core ML INT8 | 17.55% | 51.0× real time | 15.9 s | 782 MB |
+| Sortformer default Core ML | 20.77% | 113.1× real time | 36.5 s | 305 MB |
+
+A matched excerpt run used the first 25 seconds of each recording (125 seconds total), with the RTTM references clipped at the same boundary:
+
+| Engine | DER | Throughput | Load | Peak RSS |
+| --- | ---: | ---: | ---: | ---: |
+| Nemotron 3 MLX INT8 | 1.25% | 307.1× real time | 0.3 s | 184 MB |
+| Nemotron 3 Core ML INT8 | 1.25% | 52.4× real time | 14.4 s | 425 MB |
+| Sortformer default Core ML | 0.22% | 109.4× real time | 40.3 s | 132 MB |
+
+A repeat after Core ML compilation was cached measured 186.8× real time and
+404 MB peak RSS for Nemotron 3 Core ML, and 185.4× and 131 MB for Sortformer
+on these same excerpts. Across the five files and warmup, Nemotron 3's head predictions took 0.81 s;
+input preparation and output copying together took under 4 ms. The timing
+figures vary with Core ML compilation state, so the paired runs are the useful
+comparison; the higher Nemotron 3 RSS persisted after warmup.
+
+The short excerpts contain one to three reference speakers each; their DER cannot be compared directly with the full-recording DER. Speaker-count accuracy and per-count errors are available in the benchmark JSON output. These local measurements are a small regression check, not a corpus-wide quality estimate.
+
 ## Published Streaming Sortformer baseline
 
 The table below is NVIDIA's published raw-diarization baseline for

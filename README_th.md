@@ -217,6 +217,7 @@ struct DictateView: View {
 | [Pyannote](https://soniqo.audio/guides/diarize) | VAD + การแยกผู้พูด | MLX | 1.5M | ไม่จำกัดภาษา |
 | [Pyannote Community-1](https://huggingface.co/aufklarer/Pyannote-Community-1-CoreML) | การแยกผู้พูด + เอ็มเบดดิงผู้พูด | CoreML (ANE) + Swift VBx | 8.35M | ไม่จำกัดภาษา |
 | [Sortformer](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) | [การแยกผู้พูด (E2E), สตรีมมิงแบบเพิ่มทีละส่วน](https://soniqo.audio/th/guides/diarize) | CoreML (ANE) | 117M | ไม่จำกัดภาษา |
+| [Nemotron 3](docs/models/nemotron3-diarization.md) | การแยกผู้พูด (สูงสุด 8 คน) | CoreML / MLX (INT8) | 100M | ไม่จำกัดภาษา |
 | [DeepFilterNet3](https://soniqo.audio/guides/denoise) | การปรับปรุงเสียงพูด | CoreML | 2.1M | ไม่จำกัดภาษา |
 | [LocalVQE v1.4-AEC](https://soniqo.audio/th/guides/echo-cancellation) | การตัดเสียงสะท้อนอะคูสติก | CoreML + C++ | 200K + 2,742 | ไม่จำกัดภาษา |
 | [Sidon](https://soniqo.audio/guides/restore) | การฟื้นฟูเสียงพูด (ลดเสียงรบกวน + ลดเสียงก้อง, 48 kHz) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | ไม่จำกัดภาษา |

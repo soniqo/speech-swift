@@ -217,6 +217,7 @@ struct DictateView: View {
 | [Pyannote](https://soniqo.audio/ja/guides/diarize) | VAD + ダイアライゼーション | MLX | 1.5M | 言語非依存 |
 | [Pyannote Community-1](https://huggingface.co/aufklarer/Pyannote-Community-1-CoreML) | ダイアライゼーション + 話者embedding | CoreML (ANE) + Swift VBx | 8.35M | 言語非依存 |
 | [Sortformer](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) | [ダイアライゼーション（E2E）, インクリメンタルストリーミング](https://soniqo.audio/ja/guides/diarize) | CoreML (ANE) | 117M | 言語非依存 |
+| [Nemotron 3](docs/models/nemotron3-diarization.md) | 話者ダイアライゼーション（最大8話者） | CoreML / MLX (INT8) | 100M | 言語非依存 |
 | [DeepFilterNet3](https://soniqo.audio/ja/guides/denoise) | 音声強調 | CoreML | 2.1M | 言語非依存 |
 | [LocalVQE v1.4-AEC](https://soniqo.audio/ja/guides/echo-cancellation) | 音響エコーキャンセル | CoreML + C++ | 200K + 2,742 | 言語非依存 |
 | [Sidon](https://soniqo.audio/ja/guides/restore) | 音声修復（ノイズ抑制 + 残響除去、48 kHz） | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | 言語非依存 |

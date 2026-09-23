@@ -217,6 +217,7 @@ struct DictateView: View {
 | [Pyannote](https://soniqo.audio/ru/guides/diarize) | VAD + Диаризация | MLX | 1.5M | Универсальный |
 | [Pyannote Community-1](https://huggingface.co/aufklarer/Pyannote-Community-1-CoreML) | Диаризация + эмбеддинги спикеров | CoreML (ANE) + Swift VBx | 8.35M | Универсальный |
 | [Sortformer](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) | [Диаризация (E2E), инкрементальный стриминг](https://soniqo.audio/ru/guides/diarize) | CoreML (ANE) | 117M | Универсальный |
+| [Nemotron 3](docs/models/nemotron3-diarization.md) | Диаризация (до 8 говорящих) | CoreML / MLX (INT8) | 100M | Универсальный |
 | [DeepFilterNet3](https://soniqo.audio/ru/guides/denoise) | Улучшение речи | CoreML | 2.1M | Универсальный |
 | [LocalVQE v1.4-AEC](https://soniqo.audio/ru/guides/echo-cancellation) | Акустическое эхоподавление | CoreML + C++ | 200K + 2,742 | Универсальный |
 | [Sidon](https://soniqo.audio/ru/guides/restore) | Восстановление речи (подавление шума + дереверберация, 48 кГц) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | Универсальный |

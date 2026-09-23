@@ -146,6 +146,27 @@ final class DERScoringTests: XCTestCase {
         XCTAssertEqual(optimal.der, 0, accuracy: 0.01)
     }
 
+    func testDEROptimalMappingCanSelectAnyReferenceSpeaker() {
+        let ref = (0..<9).map { speaker in
+            DiarizedSegment(
+                startTime: Float(speaker),
+                endTime: Float(speaker + 1),
+                speakerId: speaker)
+        }
+        let hyp = [
+            DiarizedSegment(startTime: 8, endTime: 9, speakerId: 42)
+        ]
+
+        let optimal = computeDERWithOptimalMapping(
+            reference: ref, hypothesis: hyp, collar: 0, resolution: 0.1
+        )
+
+        XCTAssertEqual(optimal.totalSpeech, 9, accuracy: 0.1)
+        XCTAssertEqual(optimal.missedSpeech, 8, accuracy: 0.1)
+        XCTAssertEqual(optimal.confusion, 0, accuracy: 0.01)
+        XCTAssertEqual(optimal.der, 8.0 / 9.0, accuracy: 0.01)
+    }
+
     // MARK: - DER: Partial Overlap
 
     func testDERPartialOverlap() {

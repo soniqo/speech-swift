@@ -20,6 +20,41 @@ final class SortformerTests: XCTestCase {
         XCTAssertEqual(config.onset, 0.5, accuracy: 0.001)
         // NeMo parity: symmetric 0.5/0.5 binarization thresholds.
         XCTAssertEqual(config.offset, 0.5, accuracy: 0.001)
+        XCTAssertEqual(config.predictionSubsamplingFactor, 8)
+    }
+
+    func testNemotron3OfflineConfig() {
+        let config = SortformerConfig.nemotron3Offline
+        XCTAssertEqual(config.spkcacheLen, 264)
+        XCTAssertEqual(config.fifoLen, 40)
+        XCTAssertEqual(config.chunkLenSeconds, 340)
+        XCTAssertEqual(config.rightContextSeconds, 40)
+        XCTAssertEqual(config.spkcacheUpdatePeriod, 300)
+        XCTAssertEqual(config.maxSpeakers, 8)
+        XCTAssertEqual(config.subsamplingFactor, 8)
+        XCTAssertEqual(config.predictionSubsamplingFactor, 1)
+        XCTAssertEqual(config.coreMLInputFrames, 3_040)
+    }
+
+    func testNemotron3BinarizationUsesTenMillisecondFrames() {
+        let config = SortformerConfig.nemotron3Offline
+        var probabilities = [Float](repeating: 0, count: 100 * config.maxSpeakers)
+        for frame in 10..<50 {
+            probabilities[frame * config.maxSpeakers] = 0.9
+        }
+        let segments = SortformerDiarizer.binarize(
+            probs: probabilities,
+            frameCount: 100,
+            audioDuration: 1,
+            config: config,
+            thresholds: DiarizationConfig(
+                onset: 0.5,
+                offset: 0.5,
+                minSpeechDuration: 0,
+                minSilenceDuration: 0))
+        XCTAssertEqual(segments.count, 1)
+        XCTAssertEqual(segments[0].startTime, 0.1, accuracy: 0.011)
+        XCTAssertEqual(segments[0].endTime, 0.5, accuracy: 0.011)
     }
 
     func testCustomConfig() {

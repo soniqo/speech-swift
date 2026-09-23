@@ -217,6 +217,7 @@ Kompakte Übersicht unten. **[Vollständiger Modellkatalog mit Größen, Quantis
 | [Pyannote](https://soniqo.audio/de/guides/diarize) | VAD + Diarisierung | MLX | 1.5M | Sprachunabhängig |
 | [Pyannote Community-1](https://huggingface.co/aufklarer/Pyannote-Community-1-CoreML) | Diarisierung + Sprechereinbettungen | CoreML (ANE) + Swift VBx | 8.35M | Sprachunabhängig |
 | [Sortformer](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) | [Diarisierung (E2E), inkrementelles Streaming](https://soniqo.audio/de/guides/diarize) | CoreML (ANE) | 117M | Sprachunabhängig |
+| [Nemotron 3](docs/models/nemotron3-diarization.md) | Sprecherdiarisierung (bis zu 8 Sprecher) | CoreML / MLX (INT8) | 100M | Sprachunabhängig |
 | [DeepFilterNet3](https://soniqo.audio/de/guides/denoise) | Sprachverbesserung | CoreML | 2.1M | Sprachunabhängig |
 | [LocalVQE v1.4-AEC](https://soniqo.audio/de/guides/echo-cancellation) | Akustische Echounterdrückung | CoreML + C++ | 200K + 2,742 | Sprachunabhängig |
 | [Sidon](https://soniqo.audio/de/guides/restore) | Sprachwiederherstellung (Rauschunterdrückung + Enthallung, 48 kHz) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | Sprachunabhängig |

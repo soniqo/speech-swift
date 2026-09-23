@@ -174,8 +174,9 @@ public func computeDER(
 
 /// Compute DER with optimal 1-to-1 speaker mapping between reference and hypothesis.
 ///
-/// Tries all permutations of hypothesis speaker labels to find the mapping
-/// that minimizes DER. For >8 speakers, falls back to greedy matching.
+/// Uses an exact maximum-overlap assignment between reference and hypothesis
+/// speakers, then scores the remapped hypothesis once. The assignment is
+/// polynomial in the speaker count and supports unequal speaker sets.
 public func computeDERWithOptimalMapping(
     reference: [DiarizedSegment],
     hypothesis: [DiarizedSegment],
@@ -190,17 +191,7 @@ public func computeDERWithOptimalMapping(
                          collar: collar, resolution: resolution)
     }
 
-    // For small speaker counts, try all permutations
-    if hypSpeakers.count <= 8 {
-        return bruteForceOptimalMapping(
-            reference: reference, hypothesis: hypothesis,
-            refSpeakers: refSpeakers, hypSpeakers: hypSpeakers,
-            collar: collar, resolution: resolution
-        )
-    }
-
-    // For large speaker counts, use greedy matching
-    return greedyOptimalMapping(
+    return assignedOptimalMapping(
         reference: reference, hypothesis: hypothesis,
         refSpeakers: refSpeakers, hypSpeakers: hypSpeakers,
         collar: collar, resolution: resolution
@@ -275,7 +266,7 @@ private func countExactMatched(ref: [Int], hyp: [Int]) -> Int {
     return matched
 }
 
-private func bruteForceOptimalMapping(
+private func assignedOptimalMapping(
     reference: [DiarizedSegment],
     hypothesis: [DiarizedSegment],
     refSpeakers: [Int],
@@ -283,48 +274,6 @@ private func bruteForceOptimalMapping(
     collar: Float,
     resolution: Float
 ) -> DERResult {
-    let permutations = generatePermutations(Array(0..<hypSpeakers.count))
-    var bestResult: DERResult?
-
-    for perm in permutations {
-        // Build mapping: hypSpeakers[i] → refSpeakers[perm[i]] (if in range)
-        var mapping = [Int: Int]()
-        for (i, p) in perm.enumerated() {
-            if p < refSpeakers.count {
-                mapping[hypSpeakers[i]] = refSpeakers[p]
-            } else {
-                mapping[hypSpeakers[i]] = 1000 + i // unmapped → unique ID
-            }
-        }
-
-        let remapped = hypothesis.map { seg in
-            DiarizedSegment(
-                startTime: seg.startTime,
-                endTime: seg.endTime,
-                speakerId: mapping[seg.speakerId] ?? seg.speakerId
-            )
-        }
-
-        let result = computeDER(reference: reference, hypothesis: remapped,
-                               collar: collar, resolution: resolution)
-
-        if bestResult == nil || result.der < bestResult!.der {
-            bestResult = result
-        }
-    }
-
-    return bestResult!
-}
-
-private func greedyOptimalMapping(
-    reference: [DiarizedSegment],
-    hypothesis: [DiarizedSegment],
-    refSpeakers: [Int],
-    hypSpeakers: [Int],
-    collar: Float,
-    resolution: Float
-) -> DERResult {
-    // Compute overlap matrix between ref and hyp speakers
     let allSegs: [DiarizedSegment] = reference + hypothesis
     let maxTime = allSegs.map(\.endTime).max()!
     let numFrames = Int(ceil(maxTime / resolution))
@@ -332,12 +281,32 @@ private func greedyOptimalMapping(
     let refFrames = buildFrameSpeakers(segments: reference, numFrames: numFrames, resolution: resolution)
     let hypFrames = buildFrameSpeakers(segments: hypothesis, numFrames: numFrames, resolution: resolution)
 
-    // Overlap[r][h] = number of frames where ref speaker r and hyp speaker h both active
+    var excluded = [Bool](repeating: false, count: numFrames)
+    if collar > 0 {
+        let collarFrames = Int(collar / resolution)
+        for segment in reference {
+            let start = Int(segment.startTime / resolution)
+            let end = Int(segment.endTime / resolution)
+            for frame in max(0, start - collarFrames)..<min(
+                numFrames, start + collarFrames)
+            {
+                excluded[frame] = true
+            }
+            for frame in max(0, end - collarFrames)..<min(
+                numFrames, end + collarFrames)
+            {
+                excluded[frame] = true
+            }
+        }
+    }
+
+    // overlap[r][h] is scored time shared by a reference and hypothesis
+    // speaker. Maximizing its one-to-one sum minimizes speaker confusion.
     var overlap = [[Int]](repeating: [Int](repeating: 0, count: hypSpeakers.count), count: refSpeakers.count)
     let refIndex = Dictionary(uniqueKeysWithValues: refSpeakers.enumerated().map { ($1, $0) })
     let hypIndex = Dictionary(uniqueKeysWithValues: hypSpeakers.enumerated().map { ($1, $0) })
 
-    for f in 0..<numFrames {
+    for f in 0..<numFrames where !excluded[f] {
         for rSpk in refFrames[f] {
             guard let ri = refIndex[rSpk] else { continue }
             for hSpk in hypFrames[f] {
@@ -347,33 +316,24 @@ private func greedyOptimalMapping(
         }
     }
 
-    // Greedy match: pick highest overlap pair, assign, repeat
     var mapping = [Int: Int]()
-    var usedRef = Set<Int>()
-    var usedHyp = Set<Int>()
-
-    for _ in 0..<min(refSpeakers.count, hypSpeakers.count) {
-        var bestR = -1, bestH = -1, bestOverlap = -1
-        for r in 0..<refSpeakers.count where !usedRef.contains(r) {
-            for h in 0..<hypSpeakers.count where !usedHyp.contains(h) {
-                if overlap[r][h] > bestOverlap {
-                    bestOverlap = overlap[r][h]
-                    bestR = r
-                    bestH = h
-                }
-            }
-        }
-        guard bestR >= 0 else { break }
-        mapping[hypSpeakers[bestH]] = refSpeakers[bestR]
-        usedRef.insert(bestR)
-        usedHyp.insert(bestH)
+    for (refIndex, hypIndex) in maximumWeightAssignment(overlap).enumerated() {
+        guard let hypIndex else { continue }
+        mapping[hypSpeakers[hypIndex]] = refSpeakers[refIndex]
     }
 
+    let maximumSpeakerID = max(refSpeakers.max() ?? 0, hypSpeakers.max() ?? 0)
+    let unmappedBase = maximumSpeakerID < Int.max - hypSpeakers.count
+        ? maximumSpeakerID + 1
+        : Int.min / 2
+    let unmapped = Dictionary(uniqueKeysWithValues: hypSpeakers.enumerated().map {
+        ($1, unmappedBase + $0)
+    })
     let remapped = hypothesis.map { seg in
         DiarizedSegment(
             startTime: seg.startTime,
             endTime: seg.endTime,
-            speakerId: mapping[seg.speakerId] ?? (1000 + seg.speakerId)
+            speakerId: mapping[seg.speakerId] ?? unmapped[seg.speakerId]!
         )
     }
 
@@ -381,28 +341,77 @@ private func greedyOptimalMapping(
                      collar: collar, resolution: resolution)
 }
 
-private func generatePermutations(_ elements: [Int]) -> [[Int]] {
-    if elements.count <= 1 { return [elements] }
-
-    var result = [[Int]]()
-    // Generate permutations of size elements.count from range 0..<elements.count
-    // For speaker mapping, we need arrangements: pick from 0..<max(ref,hyp) count
-    let n = elements.count
-    func permute(_ current: [Int], _ remaining: [Int]) {
-        if current.count == n {
-            result.append(current)
-            return
-        }
-        for (i, elem) in remaining.enumerated() {
-            var rest = remaining
-            rest.remove(at: i)
-            permute(current + [elem], rest)
-        }
+/// Exact maximum-weight bipartite assignment. Rows map to optional columns.
+/// A square zero-padded Hungarian solve lets either side contain more speakers.
+private func maximumWeightAssignment(_ weights: [[Int]]) -> [Int?] {
+    let rowCount = weights.count
+    let columnCount = weights.first?.count ?? 0
+    guard rowCount > 0, columnCount > 0 else {
+        return [Int?](repeating: nil, count: rowCount)
     }
 
-    // Permute indices 0..<n (mapping hyp speakers to ref speaker slots)
-    let indices = Array(0..<max(n, n))
-    permute([], indices)
+    let size = max(rowCount, columnCount)
+    let maximumWeight = weights.lazy.flatMap { $0 }.max() ?? 0
+    var rowPotential = [Int](repeating: 0, count: size + 1)
+    var columnPotential = [Int](repeating: 0, count: size + 1)
+    var matchedRow = [Int](repeating: 0, count: size + 1)
+    var previousColumn = [Int](repeating: 0, count: size + 1)
+    let infinity = Int.max / 4
 
-    return result
+    func cost(row: Int, column: Int) -> Int {
+        guard row <= rowCount, column <= columnCount else {
+            return maximumWeight
+        }
+        return maximumWeight - weights[row - 1][column - 1]
+    }
+
+    for row in 1...size {
+        matchedRow[0] = row
+        var column = 0
+        var minimum = [Int](repeating: infinity, count: size + 1)
+        var used = [Bool](repeating: false, count: size + 1)
+
+        repeat {
+            used[column] = true
+            let currentRow = matchedRow[column]
+            var delta = infinity
+            var nextColumn = 0
+            for candidate in 1...size where !used[candidate] {
+                let reducedCost = cost(row: currentRow, column: candidate)
+                    - rowPotential[currentRow] - columnPotential[candidate]
+                if reducedCost < minimum[candidate] {
+                    minimum[candidate] = reducedCost
+                    previousColumn[candidate] = column
+                }
+                if minimum[candidate] < delta {
+                    delta = minimum[candidate]
+                    nextColumn = candidate
+                }
+            }
+            for candidate in 0...size {
+                if used[candidate] {
+                    rowPotential[matchedRow[candidate]] += delta
+                    columnPotential[candidate] -= delta
+                } else {
+                    minimum[candidate] -= delta
+                }
+            }
+            column = nextColumn
+        } while matchedRow[column] != 0
+
+        repeat {
+            let prior = previousColumn[column]
+            matchedRow[column] = matchedRow[prior]
+            column = prior
+        } while column != 0
+    }
+
+    var assignment = [Int?](repeating: nil, count: rowCount)
+    for column in 1...size {
+        let row = matchedRow[column]
+        if row > 0, row <= rowCount, column <= columnCount {
+            assignment[row - 1] = column - 1
+        }
+    }
+    return assignment
 }

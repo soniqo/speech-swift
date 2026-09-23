@@ -261,6 +261,7 @@ struct DictateView: View {
 | [Pyannote](https://soniqo.audio/ar/guides/diarize) | VAD + تمييز | MLX | 1.5M | محايد للغة |
 | [Pyannote Community-1](https://huggingface.co/aufklarer/Pyannote-Community-1-CoreML) | فرز المتحدثين + تضمينات المتحدث | CoreML (ANE) + Swift VBx | 8.35M | محايد للغة |
 | [Sortformer](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) | [تمييز (E2E), بث تزايدي](https://soniqo.audio/ar/guides/diarize) | CoreML (ANE) | 117M | محايد للغة |
+| [Nemotron 3](docs/models/nemotron3-diarization.md) | تمييز المتحدثين (حتى 8 متحدثين) | CoreML / MLX (INT8) | 100M | محايد للغة |
 | [DeepFilterNet3](https://soniqo.audio/ar/guides/denoise) | تحسين الكلام | CoreML | 2.1M | محايد للغة |
 | [LocalVQE v1.4-AEC](https://soniqo.audio/ar/guides/echo-cancellation) | إلغاء الصدى الصوتي | CoreML + C++ | 200K + 2,742 | محايد للغة |
 | [Sidon](https://soniqo.audio/ar/guides/restore) | استعادة الكلام (إزالة الضوضاء + إزالة الصدى، 48 kHz) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | محايد للغة |

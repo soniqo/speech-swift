@@ -4,6 +4,27 @@ import Foundation
 import XCTest
 
 final class DiarizationReportPrinterTests: XCTestCase {
+    func testJaccardAssignmentFindsNonGreedyOptimum() {
+        let assignment = maximumJaccardAssignment([
+            [10, 9],
+            [9, 0],
+        ])
+
+        XCTAssertEqual(assignment, [1, 0])
+    }
+
+    func testJaccardAssignmentSupportsUnequalSpeakerCounts() {
+        let assignment = maximumJaccardAssignment([
+            [1, 8],
+            [7, 0],
+            [2, 2],
+        ])
+
+        XCTAssertEqual(assignment[0], 1)
+        XCTAssertEqual(assignment[1], 0)
+        XCTAssertNil(assignment[2])
+    }
+
     func testTablePrintsSpeakerCountBreakdownSeparately() {
         let report = makeReport()
 

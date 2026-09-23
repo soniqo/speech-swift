@@ -217,6 +217,7 @@ Xem tổng quan gọn bên dưới. **[Danh mục mô hình đầy đủ với k
 | [Pyannote](https://soniqo.audio/guides/diarize) | VAD + Phân tách người nói | MLX | 1.5M | Không phụ thuộc ngôn ngữ |
 | [Pyannote Community-1](https://huggingface.co/aufklarer/Pyannote-Community-1-CoreML) | Phân tách người nói + embedding người nói | CoreML (ANE) + Swift VBx | 8.35M | Không phụ thuộc ngôn ngữ |
 | [Sortformer](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) | [Phân tách người nói (E2E), streaming tăng dần](https://soniqo.audio/vi/guides/diarize) | CoreML (ANE) | 117M | Không phụ thuộc ngôn ngữ |
+| [Nemotron 3](docs/models/nemotron3-diarization.md) | Phân tách người nói (tối đa 8 người nói) | CoreML / MLX (INT8) | 100M | Không phụ thuộc ngôn ngữ |
 | [DeepFilterNet3](https://soniqo.audio/guides/denoise) | Cải thiện chất lượng giọng nói | CoreML | 2.1M | Không phụ thuộc ngôn ngữ |
 | [LocalVQE v1.4-AEC](https://soniqo.audio/vi/guides/echo-cancellation) | Khử tiếng vọng âm học | CoreML + C++ | 200K + 2,742 | Không phụ thuộc ngôn ngữ |
 | [Sidon](https://soniqo.audio/guides/restore) | Phục hồi giọng nói (khử nhiễu + khử vang, 48 kHz) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | Không phụ thuộc ngôn ngữ |
