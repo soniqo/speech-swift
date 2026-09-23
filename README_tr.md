@@ -217,6 +217,7 @@ Aşağıda kompakt bir görünüm. **[Boyutlar, kuantizasyonlar, indirme URL'ler
 | [Pyannote](https://soniqo.audio/guides/diarize) | VAD + Konuşmacı Ayrımı | MLX | 1.5M | Bağımsız |
 | [Pyannote Community-1](https://huggingface.co/aufklarer/Pyannote-Community-1-CoreML) | Konuşmacı ayrıştırma + konuşmacı gömmeleri | CoreML (ANE) + Swift VBx | 8.35M | Bağımsız |
 | [Sortformer](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) | [Konuşmacı Ayrımı (E2E), artımlı akış](https://soniqo.audio/tr/guides/diarize) | CoreML (ANE) | 117M | Bağımsız |
+| [Nemotron 3](docs/models/nemotron3-diarization.md) | Konuşmacı ayrıştırma (en fazla 8 konuşmacı) | CoreML / MLX (INT8) | 100M | Bağımsız |
 | [DeepFilterNet3](https://soniqo.audio/guides/denoise) | Konuşma İyileştirme | CoreML | 2.1M | Bağımsız |
 | [LocalVQE v1.4-AEC](https://soniqo.audio/tr/guides/echo-cancellation) | Akustik Yankı Giderme | CoreML + C++ | 200K + 2,742 | Bağımsız |
 | [Sidon](https://soniqo.audio/guides/restore) | Konuşma Onarımı (gürültü bastırma + yankı giderme, 48 kHz) | CoreML | w2v-BERT 2.0 + DAC (fp16/int8) | Bağımsız |

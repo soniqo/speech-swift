@@ -220,6 +220,7 @@ Compact view below. **[Full model catalogue with sizes, quantisations, download 
 | [Pyannote](https://soniqo.audio/guides/diarize) | VAD + Diarization | MLX | 1.5M | Agnostic |
 | [Pyannote Community-1](https://huggingface.co/aufklarer/Pyannote-Community-1-CoreML) | Diarization + speaker embeddings | CoreML (ANE) + Swift VBx | 8.35M | Agnostic |
 | [Sortformer](https://huggingface.co/aufklarer/Sortformer-Diarization-CoreML) | [Diarization (E2E), incremental streaming](https://soniqo.audio/guides/diarize) | CoreML (ANE) | 117M | Agnostic |
+| [Nemotron 3](docs/models/nemotron3-diarization.md) | Diarization (E2E, up to 8 speakers) | CoreML / MLX (INT8) | 100M | Agnostic |
 | [Ultra-Sortformer 8spk](https://huggingface.co/aufklarer/Ultra-Sortformer-Diarization-CoreML) | Diarization (E2E, up to 8 speakers, experimental) | CoreML (ANE) | 117M | Agnostic |
 | [DeepFilterNet3](https://soniqo.audio/guides/denoise) | Speech Enhancement | CoreML / MLX | 2.1M | Agnostic |
 | [LocalVQE v1.4-AEC](https://soniqo.audio/guides/echo-cancellation) | Acoustic Echo Cancellation | CoreML + C++ | 200K + 2,742 | Agnostic |
