@@ -1,9 +1,41 @@
 import CoreML
 import Foundation
 import XCTest
+import AudioCommon
 @testable import SpeechVAD
 
 final class E2ENemotron3DiarizationTests: XCTestCase {
+    func testIncrementalCoreMLMatchesShortCadenceReplay() throws {
+        let environment = ProcessInfo.processInfo.environment
+        guard let modelPath = environment["NEMOTRON3_DIARIZATION_COREML_DIR"],
+              let audioPath = environment["NEMOTRON3_DIARIZATION_E2E_AUDIO"] else {
+            throw XCTSkip("Set Core ML model and E2E audio paths")
+        }
+        let model = try Nemotron3Diarizer.fromCoreMLDirectory(
+            URL(fileURLWithPath: modelPath, isDirectory: true),
+            computeUnits: .all)
+        let audio = try AudioFileLoader.load(
+            url: URL(fileURLWithPath: audioPath), targetSampleRate: 16_000)
+        let reference = try model.diarize(
+            audio: audio, sampleRate: 16_000,
+            coreEncoderFrames: 6, rightContextEncoderFrames: 7)
+        let session = try model.makeStreamingSession()
+        var cursor = 0
+        while cursor < audio.count {
+            let end = min(audio.count, cursor + 8_000)
+            _ = try session.push(audio: Array(audio[cursor..<end]))
+            cursor = end
+        }
+        let streamed = try session.finish()
+        XCTAssertEqual(streamed.numSpeakers, reference.numSpeakers)
+        XCTAssertEqual(streamed.segments.count, reference.segments.count)
+        for (actual, expected) in zip(streamed.segments, reference.segments) {
+            XCTAssertEqual(actual.speakerId, expected.speakerId)
+            XCTAssertEqual(actual.startTime, expected.startTime, accuracy: 0.011)
+            XCTAssertEqual(actual.endTime, expected.endTime, accuracy: 0.011)
+        }
+    }
+
     func testLocalCoreMLAndMLXArtifactsAgree() throws {
         let environment = ProcessInfo.processInfo.environment
         guard let coreMLPath = environment["NEMOTRON3_DIARIZATION_COREML_DIR"],

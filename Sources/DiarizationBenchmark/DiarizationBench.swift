@@ -310,6 +310,16 @@ private func makeDiarizationEngine(
         return MossMLXDiarizationBenchEngine(variant: .int8)
     case "nemotron3-coreml-int8":
         return Nemotron3CoreMLDiarizationBenchEngine()
+    case "nemotron3-coreml-int8-core32":
+        return Nemotron3CoreMLDiarizationBenchEngine(coreEncoderFrames: 32)
+    case "nemotron3-coreml-int8-core6":
+        return Nemotron3CoreMLDiarizationBenchEngine(
+            coreEncoderFrames: 6, rightContextEncoderFrames: 7)
+    case "nemotron3-coreml-int8-core16":
+        return Nemotron3CoreMLDiarizationBenchEngine(
+            coreEncoderFrames: 16, rightContextEncoderFrames: 7)
+    case "nemotron3-coreml-session":
+        return Nemotron3CoreMLSessionBenchEngine()
     case "nemotron3-mlx-int8":
         return Nemotron3MLXDiarizationBenchEngine()
     default:
@@ -320,16 +330,31 @@ private func makeDiarizationEngine(
 private final class Nemotron3CoreMLDiarizationBenchEngine:
     DiarizationBenchEngine
 {
-    let name = "nemotron3-coreml-int8"
+    let name: String
+    private let coreEncoderFrames: Int
+    private let rightContextEncoderFrames: Int
     private var model: Nemotron3Diarizer?
 
+    init(coreEncoderFrames: Int = 340, rightContextEncoderFrames: Int = 40) {
+        self.coreEncoderFrames = coreEncoderFrames
+        self.rightContextEncoderFrames = rightContextEncoderFrames
+        self.name = coreEncoderFrames == 340
+            ? "nemotron3-coreml-int8"
+            : "nemotron3-coreml-int8-core\(coreEncoderFrames)"
+    }
+
     func load() async throws {
+        let computeUnits: MLComputeUnits =
+            ProcessInfo.processInfo.environment["NEMOTRON3_COREML_COMPUTE_UNITS"] == "all"
+                ? .all : .cpuAndNeuralEngine
         let key = "NEMOTRON3_DIARIZATION_COREML_DIR"
         if let local = ProcessInfo.processInfo.environment[key], !local.isEmpty {
             model = try Nemotron3Diarizer.fromCoreMLDirectory(
-                URL(fileURLWithPath: local, isDirectory: true))
+                URL(fileURLWithPath: local, isDirectory: true),
+                computeUnits: computeUnits)
         } else {
-            model = try await Nemotron3Diarizer.fromCoreMLPretrained()
+            model = try await Nemotron3Diarizer.fromCoreMLPretrained(
+                computeUnits: computeUnits)
         }
     }
 
@@ -337,7 +362,19 @@ private final class Nemotron3CoreMLDiarizationBenchEngine:
         guard let model else {
             throw ValidationError("Nemotron 3 Core ML engine is not loaded")
         }
-        return try model.diarize(audio: audio, sampleRate: sampleRate)
+        let thresholds: DiarizationConfig
+        if let raw = ProcessInfo.processInfo.environment[
+            "NEMOTRON3_DIARIZATION_BENCH_THRESHOLD"
+        ], let value = Float(raw) {
+            thresholds = DiarizationConfig(onset: value, offset: value)
+        } else {
+            thresholds = .sortformer
+        }
+        return try model.diarize(
+            audio: audio, sampleRate: sampleRate,
+            config: thresholds,
+            coreEncoderFrames: coreEncoderFrames,
+            rightContextEncoderFrames: rightContextEncoderFrames)
     }
 }
 
@@ -362,6 +399,59 @@ private final class Nemotron3MLXDiarizationBenchEngine:
             throw ValidationError("Nemotron 3 MLX engine is not loaded")
         }
         return try model.diarize(audio: audio, sampleRate: sampleRate)
+    }
+}
+
+/// Exercises the actual incremental API instead of replaying short chunks
+/// through one offline call. Push latency includes snapshot construction.
+private final class Nemotron3CoreMLSessionBenchEngine: DiarizationBenchEngine {
+    let name = "nemotron3-coreml-session"
+    private var model: Nemotron3Diarizer?
+    private var pushMilliseconds: [Double] = []
+
+    func load() async throws {
+        let key = "NEMOTRON3_DIARIZATION_COREML_DIR"
+        if let local = ProcessInfo.processInfo.environment[key], !local.isEmpty {
+            model = try Nemotron3Diarizer.fromCoreMLDirectory(
+                URL(fileURLWithPath: local, isDirectory: true), computeUnits: .all)
+        } else {
+            model = try await Nemotron3Diarizer.fromCoreMLPretrained(
+                computeUnits: .all)
+        }
+        let warmup = try model!.makeStreamingSession()
+        _ = try warmup.push(audio: [Float](
+            repeating: 0,
+            count: Nemotron3StreamingSession.firstConfirmationSampleCount()))
+    }
+
+    func diarize(audio: [Float], sampleRate: Int) throws -> DiarizationResult {
+        guard let model else {
+            throw ValidationError("Nemotron 3 Core ML engine is not loaded")
+        }
+        let session = try model.makeStreamingSession()
+        let samples = sampleRate == 16_000
+            ? audio
+            : AudioFileLoader.resample(audio, from: sampleRate, to: 16_000)
+        let pushSize = 8_000
+        var cursor = 0
+        while cursor < samples.count {
+            let end = min(samples.count, cursor + pushSize)
+            let started = Date()
+            _ = try session.push(audio: Array(samples[cursor..<end]))
+            pushMilliseconds.append(Date().timeIntervalSince(started) * 1_000)
+            cursor = end
+        }
+        let result = try session.finish()
+        let sorted = pushMilliseconds.sorted()
+        if !sorted.isEmpty {
+            let p50 = sorted[sorted.count / 2]
+            let p95 = sorted[min(sorted.count - 1, Int(Double(sorted.count) * 0.95))]
+            print(String(
+                format: "    session push latency: p50 %.1f ms · p95 %.1f ms (%d pushes)",
+                p50, p95, sorted.count))
+            pushMilliseconds.removeAll(keepingCapacity: true)
+        }
+        return result
     }
 }
 

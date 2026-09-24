@@ -339,12 +339,30 @@ let coreMLResult = try coreML.diarize(
 
 let mlx = try await Nemotron3Diarizer.fromMLXPretrained()
 let mlxResult = try mlx.diarize(audio: samples, sampleRate: 16_000)
+
+// Core ML only: low-latency incremental inference on 16 kHz PCM.
+let session = try coreML.makeStreamingSession()
+while let buffer = captureNextBuffer() {
+    let snapshot = try session.push(audio: buffer)
+    render(snapshot.segments)
+}
+let final = try session.finish()
 ```
 
 The two public bundles use different backend-native INT8 layouts and should
 be evaluated as separate variants. The `fromCoreMLDirectory` and
 `fromMLXDirectory` methods remain available for offline files. Neither
 backend produces speaker embeddings.
+
+The Core ML session uses a 480 ms core and 560 ms right context by default.
+It confirms its first core after 1.06 seconds of input, and `finish()` flushes
+the pending tail. `currentResult()` returns a whole-stream snapshot, while
+`confirmedThroughSample` marks the committed audio boundary. `reset()` starts
+a new recording without reloading the model. The session is experimental:
+on five VoxConverse-dev files it matched the corresponding short-cadence
+offline decode (2.41% DER, 80% speaker-count agreement), but one four-speaker
+file was undercounted even by full-context offline Nemotron 3. It is not yet
+a proven drop-in replacement for Sortformer's live consumer.
 
 ### Incremental streaming session
 
