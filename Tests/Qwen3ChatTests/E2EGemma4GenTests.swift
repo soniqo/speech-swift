@@ -144,4 +144,67 @@ final class E2EGemma4GenTests: XCTestCase {
         XCTAssertEqual(cacheArgmax, singleForwardArgmax,
                        "KV-cache prefill must match the single-forward argmax")
     }
+
+    /// Sampled replies never open the reasoning channel, so a budget cannot be spent on text the
+    /// filter will discard.
+    func testSampledDecodeNeverOpensTheReasoningChannel() throws {
+        guard FileManager.default.fileExists(
+            atPath: Self.modelDir.appendingPathComponent("config.json").path) else {
+            throw XCTSkip("Gemma 4 model dir unavailable: \(Self.modelDir.path)")
+        }
+        let chat: Gemma4Chat
+        do { chat = try Gemma4Chat.fromDirectory(Self.modelDir) }
+        catch { throw XCTSkip("model load failed: \(error)") }
+        let messages = [
+            ChatMessage(role: .system, content: "Reason carefully before you answer."),
+            ChatMessage(role: .user, content: "A train leaves at 9:40 and arrives at 13:05. How long is the trip?"),
+        ]
+        let prompt = Gemma4ChatTemplate.encode(messages: messages, tokenizer: chat.gemmaTokenizer)
+        for _ in 0 ..< 3 {
+            var tokens: [Int] = []
+            var text = ""
+            chat.decode(
+                promptTokens: prompt,
+                sampling: ChatSamplingConfig(temperature: 0.7, topK: 40, topP: 0.9, maxTokens: 96,
+                                             repetitionPenalty: 1.1),
+                onToken: { tokens.append($0) },
+                onText: { text += $0 })
+            XCTAssertFalse(tokens.contains(Gemma4AnswerFilter.channelOpen), "reasoning channel opened")
+            XCTAssertFalse(text.isEmpty, "empty reply")
+        }
+    }
+
+    /// Replays recorded requests (`GEMMA4_REPLAY_PROMPTS`: a JSON array of `{id, system, user,
+    /// max_tokens, temperature}`) with production sampling and counts empty replies and
+    /// reasoning-channel tokens. Measurement only; skipped without the file.
+    func testReplayRecordedPromptsForEmptyReplies() throws {
+        guard let path = ProcessInfo.processInfo.environment["GEMMA4_REPLAY_PROMPTS"] else {
+            throw XCTSkip("set GEMMA4_REPLAY_PROMPTS")
+        }
+        let chat = try Gemma4Chat.fromDirectory(Self.modelDir)
+        let entries = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: path))) as? [[String: Any]])
+        let repeats = Int(ProcessInfo.processInfo.environment["GEMMA4_REPLAY_REPEATS"] ?? "3") ?? 3
+        var runs = 0, empty = 0, opened = 0
+        for entry in entries {
+            let messages = [
+                ChatMessage(role: .system, content: entry["system"] as? String ?? ""),
+                ChatMessage(role: .user, content: entry["user"] as? String ?? ""),
+            ]
+            let prompt = Gemma4ChatTemplate.encode(messages: messages, tokenizer: chat.gemmaTokenizer)
+            let sampling = ChatSamplingConfig(
+                temperature: Float(entry["temperature"] as? Double ?? 0.1), topK: 20, topP: 0.85,
+                maxTokens: entry["max_tokens"] as? Int ?? 256, repetitionPenalty: 1.1)
+            for _ in 0 ..< repeats {
+                var tokens: [Int] = []
+                var text = ""
+                chat.decode(promptTokens: prompt, sampling: sampling,
+                            onToken: { tokens.append($0) }, onText: { text += $0 })
+                runs += 1
+                if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { empty += 1 }
+                if tokens.contains(Gemma4AnswerFilter.channelOpen) { opened += 1 }
+            }
+        }
+        print("[replay] \(entries.count) prompts x \(repeats): \(runs) runs, \(empty) empty, \(opened) opened the reasoning channel")
+    }
 }
