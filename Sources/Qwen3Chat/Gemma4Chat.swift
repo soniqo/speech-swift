@@ -213,6 +213,7 @@ public final class Gemma4Chat: @unchecked Sendable {
         var produced = false
         var filter = Gemma4AnswerFilter(tokenizer: gemmaTokenizer)
         let endTokens = Array(gemmaTokenizer.eosTokenIds)
+        let noReasoning = [Gemma4AnswerFilter.channelOpen]
         var constraint = constraint
         var mask: DeviceTokenMask?
         var failure: ChatResponseFormatError?
@@ -229,8 +230,11 @@ public final class Gemma4Chat: @unchecked Sendable {
             let next = ChatSampler.sampleOnDevice(
                 logits: logits,
                 config: sampling,
-                // Don't let the model end the turn before emitting any visible answer.
-                suppressing: produced ? [] : endTokens,
+                // Don't let the model end the turn before emitting any visible answer, and never
+                // let it open the reasoning channel: this template does not enable thinking,
+                // the filter below discards whatever the channel holds, and a channel that ran
+                // to the budget returned an empty reply after spending every token on it.
+                suppressing: produced ? noReasoning : endTokens + noReasoning,
                 previousTokens: history,
                 vocabSize: denseConfig.vocabSize,
                 uniform: sampling.temperature > 0 ? Float.random(in: 0 ..< 1) : 0,
@@ -345,8 +349,10 @@ extension Gemma4Chat: Qwen35ChatBackend {
 /// skipped, so the filter is robust to multi-token reasoning blocks.
 struct Gemma4AnswerFilter {
     private let tokenizer: Gemma4Tokenizer
-    private let channelOpen = 100
-    private let channelClose = 101
+    static let channelOpen = 100
+    static let channelClose = 101
+    private var channelOpen: Int { Self.channelOpen }
+    private var channelClose: Int { Self.channelClose }
     private var inThoughtChannel = false
     private var pending: [UInt8] = []
 
