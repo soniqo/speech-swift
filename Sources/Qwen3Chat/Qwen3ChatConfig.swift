@@ -264,19 +264,25 @@ public struct ChatSamplingConfig: Sendable {
     public var topP: Float
     public var maxTokens: Int
     public var repetitionPenalty: Float
+    /// Shape the reply must take, enforced during decoding. `nil` (the default) decodes freely.
+    /// Only `Gemma4Chat` enforces a format; every other backend fails a request that sets one
+    /// with ``ChatResponseFormatError/unsupportedBackend(_:)``.
+    public var responseFormat: ChatResponseFormat?
 
     public init(
         temperature: Float = 0.7,
         topK: Int = 50,
         topP: Float = 0.9,
         maxTokens: Int = 256,
-        repetitionPenalty: Float = 1.1
+        repetitionPenalty: Float = 1.1,
+        responseFormat: ChatResponseFormat? = nil
     ) {
         self.temperature = temperature
         self.topK = topK
         self.topP = topP
         self.maxTokens = maxTokens
         self.repetitionPenalty = repetitionPenalty
+        self.responseFormat = responseFormat
     }
 
     public static let `default` = ChatSamplingConfig()

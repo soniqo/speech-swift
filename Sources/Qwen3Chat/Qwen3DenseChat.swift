@@ -118,6 +118,12 @@ public final class Qwen3DenseChat: @unchecked Sendable {
     ) -> AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in
             Task {
+                do {
+                    try sampling.requireNoResponseFormat(backend: "Qwen3DenseChat")
+                } catch {
+                    continuation.finish(throwing: error)
+                    return
+                }
                 self.resetState()
                 let prompt = self.encodeChat(messages)
                 let promptArray = MLXArray(prompt.map { Int32($0) }).expandedDimensions(axis: 0)

@@ -20,6 +20,8 @@ public final class Gemma4Chat: @unchecked Sendable {
     public let tokenizer: ChatTokenizer
     var state: Gemma4Model.InferenceState
     var _isLoaded = true
+    private let vocabularyLock = NSLock()
+    private var _constraintVocabulary: JSONTokenVocabulary?
 
     private init(config: Gemma4DenseConfig, gemmaTokenizer: Gemma4Tokenizer,
                  tokenizer: ChatTokenizer, model: Gemma4Model) {
@@ -112,15 +114,47 @@ public final class Gemma4Chat: @unchecked Sendable {
     ) -> AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in
             Task {
+                let constraint: JSONTokenConstraint?
+                do {
+                    constraint = try self.makeConstraint(sampling.responseFormat)
+                } catch {
+                    continuation.finish(throwing: error)
+                    return
+                }
                 let promptTokens = Gemma4ChatTemplate.encode(
                     messages: messages, tokenizer: self.gemmaTokenizer)
-                self.decode(
+                let failure = self.decode(
                     promptTokens: promptTokens,
                     sampling: sampling,
                     shouldContinue: shouldContinue,
+                    constraint: constraint,
                     onText: { text in continuation.yield(text) })
-                continuation.finish()
+                if let failure { continuation.finish(throwing: failure) } else { continuation.finish() }
             }
+        }
+    }
+
+    // MARK: - Constrained decoding
+
+    /// The vocabulary index constrained decoding walks, built on first use and kept: indexing
+    /// 262,144 tokens is a one-off cost of a fraction of a second.
+    func constraintVocabulary() -> JSONTokenVocabulary {
+        vocabularyLock.lock()
+        defer { vocabularyLock.unlock() }
+        if let v = _constraintVocabulary { return v }
+        let v = JSONTokenVocabulary(gemma: gemmaTokenizer, size: denseConfig.vocabSize)
+        _constraintVocabulary = v
+        return v
+    }
+
+    func makeConstraint(_ format: ChatResponseFormat?) throws -> JSONTokenConstraint? {
+        guard let format else { return nil }
+        switch format {
+        case .jsonSchema(let schema):
+            let grammar = try JSONSchemaGrammar(schema: schema)
+            return JSONTokenConstraint(
+                grammar: grammar, vocabulary: constraintVocabulary(),
+                endTokens: gemmaTokenizer.eosTokenIds.sorted())
         }
     }
 
@@ -134,13 +168,20 @@ public final class Gemma4Chat: @unchecked Sendable {
     /// draw — and reading the sampled id is the only point it is waited on. The previous shape
     /// evaluated the logits, pulled all 262k of them to the host, and sampled there: two
     /// synchronisations and a megabyte per token.
+    ///
+    /// With a `constraint`, every step samples only tokens that keep the output a valid prefix of
+    /// the constrained document, and the loop stops the moment the document is complete. The
+    /// mask for the next step is computed on the host while the device runs the forward pass for
+    /// it. Returns an error only when the constraint reached a state with no admissible token.
+    @discardableResult
     func decode(
         promptTokens: [Int],
         sampling: ChatSamplingConfig,
         shouldContinue: () -> Bool = { true },
+        constraint: JSONTokenConstraint? = nil,
         onToken: (Int) -> Void = { _ in },
         onText: (String) -> Void
-    ) {
+    ) -> ChatResponseFormatError? {
         resetState()
 
         // Prefill. Only the final position is sampled, so the lm_head runs on that row alone —
@@ -152,10 +193,18 @@ public final class Gemma4Chat: @unchecked Sendable {
         var produced = false
         var filter = Gemma4AnswerFilter(tokenizer: gemmaTokenizer)
         let endTokens = Array(gemmaTokenizer.eosTokenIds)
+        var constraint = constraint
+        var mask: DeviceTokenMask?
+        var failure: ChatResponseFormatError?
+        if let c = constraint {
+            asyncEval(logits)
+            mask = DeviceTokenMask(cleanChars: c.vocabulary.cleanChars, allowance: c.allowance())
+        }
 
         var remaining = sampling.maxTokens
         while remaining > 0 && shouldContinue() {
             remaining -= 1
+            if let mask, mask.allowance.isEmpty { failure = .noAdmissibleToken; break }
 
             let next = ChatSampler.sampleOnDevice(
                 logits: logits,
@@ -164,24 +213,34 @@ public final class Gemma4Chat: @unchecked Sendable {
                 suppressing: produced ? [] : endTokens,
                 previousTokens: history,
                 vocabSize: denseConfig.vocabSize,
-                uniform: sampling.temperature > 0 ? Float.random(in: 0 ..< 1) : 0
+                uniform: sampling.temperature > 0 ? Float.random(in: 0 ..< 1) : 0,
+                allowed: mask
             ).item(Int.self)
 
             if gemmaTokenizer.eosTokenIds.contains(next) { break }
+            if constraint != nil, !constraint!.accept(next) { failure = .noAdmissibleToken; break }
             history.append(next)
             onToken(next)
 
             let text = filter.consume(next)
             if !text.isEmpty { produced = true; onText(text) }
 
+            // A complete document ends the turn; no forward is spent on a token nothing may follow.
+            if constraint?.isDone == true { break }
+
             // Decode one step — but not a step whose logits nothing will read. The budget's last
             // token used to be followed by a full forward that was evaluated and thrown away.
             guard remaining > 0 else { break }
             let arr = MLXArray([Int32(next)]).expandedDimensions(axis: 0)
             logits = model.forward(inputIds: arr, state: &state)
+            if let c = constraint {
+                asyncEval(logits)
+                mask = DeviceTokenMask(cleanChars: c.vocabulary.cleanChars, allowance: c.allowance())
+            }
         }
 
         if let tail = filter.flush(), !tail.isEmpty { onText(tail) }
+        return failure
     }
 
     // MARK: - Parity harness (unchanged surface used by Gemma4ParityTests)
