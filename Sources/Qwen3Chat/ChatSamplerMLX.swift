@@ -122,13 +122,35 @@ extension ChatSampler {
     }
 }
 
-/// A constrained-decoding mask in the form the device sampler applies it.
+/// A constrained-decoding mask in the form the device sampler applies it: either the Swift
+/// matcher's allowance or XGrammar's packed bitmask.
+enum DeviceTokenMask {
+    case allowance(JSONAllowanceMask)
+    case packed(PackedTokenMask)
+
+    /// No token is admissible.
+    var isEmpty: Bool {
+        switch self {
+        case .allowance(let mask): mask.allowance.isEmpty
+        case .packed(let mask): mask.isEmpty
+        }
+    }
+
+    func apply(to logits: MLXArray) -> MLXArray {
+        switch self {
+        case .allowance(let mask): mask.apply(to: logits)
+        case .packed(let mask): mask.apply(to: logits)
+        }
+    }
+}
+
+/// The Swift matcher's mask.
 ///
 /// Disallowed logits become `-greatestFiniteMagnitude`, the value end-token suppression uses, so
 /// the repetition penalty, top-K, top-P and greedy argmax all treat a masked token exactly as a
 /// suppressed one. The wholesale part of the mask is one comparison against a per-token array
 /// already on the device; only the individually admitted ids cross from the host.
-struct DeviceTokenMask {
+struct JSONAllowanceMask {
     /// Per-token clean-character counts (`JSONTokenVocabulary.cleanChars`), `[vocab]` Int16.
     let cleanChars: MLXArray
     let allowance: JSONTokenAllowance

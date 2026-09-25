@@ -245,7 +245,11 @@ let package = Package(
         // on a clean checkout. https://github.com/hummingbird-project/swift-websocket
         .package(url: "https://github.com/hummingbird-project/swift-websocket.git", "1.5.0"..<"1.6.0"),
         // WhisperKit (Argmax) — retained for benchmark comparison against the native WhisperASR runtime.
-        .package(url: "https://github.com/argmaxinc/WhisperKit", from: "1.0.0")
+        .package(url: "https://github.com/argmaxinc/WhisperKit", from: "1.0.0"),
+        // Grammar-constrained decoding for chat response formats. The same engine and release
+        // Ollama's MLX runner applies to structured outputs; exact so a grammar change is a
+        // deliberate bump.
+        .package(url: "https://github.com/mlc-ai/xgrammar", exact: "0.2.7")
     ],
     targets: [
         .target(
@@ -666,11 +670,27 @@ let package = Package(
                 "AudioCommon",
             ]
         ),
+        // C surface over XGrammar's C++ API, so Qwen3Chat (and everything importing it) stays
+        // free of Swift/C++ interoperability.
+        .target(
+            name: "CXGrammarBridge",
+            dependencies: [
+                .product(name: "XGrammar", package: "xgrammar"),
+            ],
+            cxxSettings: [
+                // dlpack.h, vendored from XGrammar's own 3rdparty copy (Apache-2.0): XGrammar's
+                // public matcher header includes it but keeps its search path private.
+                .headerSearchPath("vendor"),
+                .define("XGRAMMAR_ENABLE_LOG_DEBUG", to: "0"),
+                .define("XGRAMMAR_ENABLE_CPPTRACE", to: "0"),
+            ]
+        ),
         .target(
             name: "Qwen3Chat",
             dependencies: [
                 "AudioCommon",
                 "MLXCommon",
+                "CXGrammarBridge",
                 .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "MLXNN", package: "mlx-swift"),
                 .product(name: "MLXFast", package: "mlx-swift"),
@@ -1252,5 +1272,7 @@ let package = Package(
                 "AudioCommon"
             ]
         )
-    ]
+    ],
+    // XGrammar's headers need C++17; LocalVQEAECFrontend is C++17-clean.
+    cxxLanguageStandard: .cxx17
 )

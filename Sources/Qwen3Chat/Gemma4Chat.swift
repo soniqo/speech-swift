@@ -22,6 +22,7 @@ public final class Gemma4Chat: @unchecked Sendable {
     var _isLoaded = true
     private let vocabularyLock = NSLock()
     private var _constraintVocabulary: JSONTokenVocabulary?
+    private var _xgrammarVocabulary: XGrammarVocabulary?
 
     private init(config: Gemma4DenseConfig, gemmaTokenizer: Gemma4Tokenizer,
                  tokenizer: ChatTokenizer, model: Gemma4Model) {
@@ -114,7 +115,7 @@ public final class Gemma4Chat: @unchecked Sendable {
     ) -> AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in
             Task {
-                let constraint: JSONTokenConstraint?
+                let constraint: (any TokenDecodeConstraint)?
                 do {
                     constraint = try self.makeConstraint(sampling.responseFormat)
                 } catch {
@@ -147,14 +148,33 @@ public final class Gemma4Chat: @unchecked Sendable {
         return v
     }
 
-    func makeConstraint(_ format: ChatResponseFormat?) throws -> JSONTokenConstraint? {
+    /// XGrammar's compiler over this model's vocabulary, built on first use and kept.
+    func xgrammarVocabulary() throws -> XGrammarVocabulary {
+        vocabularyLock.lock()
+        defer { vocabularyLock.unlock() }
+        if let v = _xgrammarVocabulary { return v }
+        let v = try XGrammarVocabulary(gemma: gemmaTokenizer, size: denseConfig.vocabSize)
+        _xgrammarVocabulary = v
+        return v
+    }
+
+    func makeConstraint(
+        _ format: ChatResponseFormat?, engine: JSONConstraintEngine = .current
+    ) throws -> (any TokenDecodeConstraint)? {
         guard let format else { return nil }
         switch format {
         case .jsonSchema(let schema):
+            // The keyword gate is shared: a schema either engine would enforce only in part is
+            // rejected before anything compiles.
             let grammar = try JSONSchemaGrammar(schema: schema)
-            return JSONTokenConstraint(
-                grammar: grammar, vocabulary: constraintVocabulary(),
-                endTokens: gemmaTokenizer.eosTokenIds.sorted())
+            switch engine {
+            case .xgrammar:
+                return try xgrammarVocabulary().constraint(schema: schema)
+            case .swift:
+                return JSONTokenConstraint(
+                    grammar: grammar, vocabulary: constraintVocabulary(),
+                    endTokens: gemmaTokenizer.eosTokenIds.sorted())
+            }
         }
     }
 
@@ -178,7 +198,7 @@ public final class Gemma4Chat: @unchecked Sendable {
         promptTokens: [Int],
         sampling: ChatSamplingConfig,
         shouldContinue: () -> Bool = { true },
-        constraint: JSONTokenConstraint? = nil,
+        constraint: (any TokenDecodeConstraint)? = nil,
         onToken: (Int) -> Void = { _ in },
         onText: (String) -> Void
     ) -> ChatResponseFormatError? {
@@ -196,15 +216,15 @@ public final class Gemma4Chat: @unchecked Sendable {
         var constraint = constraint
         var mask: DeviceTokenMask?
         var failure: ChatResponseFormatError?
-        if let c = constraint {
+        if constraint != nil {
             asyncEval(logits)
-            mask = DeviceTokenMask(cleanChars: c.vocabulary.cleanChars, allowance: c.allowance())
+            mask = constraint!.nextMask()
         }
 
         var remaining = sampling.maxTokens
         while remaining > 0 && shouldContinue() {
             remaining -= 1
-            if let mask, mask.allowance.isEmpty { failure = .noAdmissibleToken; break }
+            if let mask, mask.isEmpty { failure = .noAdmissibleToken; break }
 
             let next = ChatSampler.sampleOnDevice(
                 logits: logits,
@@ -233,9 +253,9 @@ public final class Gemma4Chat: @unchecked Sendable {
             guard remaining > 0 else { break }
             let arr = MLXArray([Int32(next)]).expandedDimensions(axis: 0)
             logits = model.forward(inputIds: arr, state: &state)
-            if let c = constraint {
+            if constraint != nil {
                 asyncEval(logits)
-                mask = DeviceTokenMask(cleanChars: c.vocabulary.cleanChars, allowance: c.allowance())
+                mask = constraint!.nextMask()
             }
         }
 
