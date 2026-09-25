@@ -677,6 +677,7 @@ let package = Package(
             dependencies: [
                 .product(name: "XGrammar", package: "xgrammar"),
             ],
+            exclude: ["vendor/dlpack/LICENSE"],
             cxxSettings: [
                 // dlpack.h, vendored from XGrammar's own 3rdparty copy (Apache-2.0): XGrammar's
                 // public matcher header includes it but keeps its search path private.
