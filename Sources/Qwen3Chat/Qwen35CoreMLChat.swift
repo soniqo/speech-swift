@@ -194,6 +194,7 @@ public final class Qwen35CoreMLChat: @unchecked Sendable {
         messages: [ChatMessage],
         sampling: ChatSamplingConfig = .default
     ) throws -> String {
+        try sampling.requireNoResponseFormat(backend: "Qwen35CoreMLChat")
         resetState()
 
         let promptTokens = ChatTemplate.encode(
@@ -251,6 +252,7 @@ public final class Qwen35CoreMLChat: @unchecked Sendable {
         AsyncThrowingStream { continuation in
             Task {
                 do {
+                    try sampling.requireNoResponseFormat(backend: "Qwen35CoreMLChat")
                     self.resetState()
                     let promptTokens = ChatTemplate.encode(
                         messages: messages, tokenizer: self.tokenizer,

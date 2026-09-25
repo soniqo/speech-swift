@@ -36,6 +36,8 @@ extension ChatSampler {
     ///   - vocabSize: logits wider than the tokenizer's vocabulary are trimmed, matching the host
     ///     path's `prefix(vocabSize)`.
     ///   - uniform: the nucleus draw, in `[0, 1)`. Unread when sampling greedily.
+    ///   - allowed: when set, every other token is forced out of the running before anything
+    ///     else — the constrained-decoding mask. `nil` leaves the step exactly as before.
     /// - Returns: a scalar Int32 `MLXArray`. Reading it (`.item(Int.self)`) is the one host/GPU
     ///   synchronisation a decode step needs — the model forward, the sampling, and nothing else.
     static func sampleOnDevice(
@@ -44,7 +46,8 @@ extension ChatSampler {
         suppressing: [Int] = [],
         previousTokens: [Int] = [],
         vocabSize: Int? = nil,
-        uniform: Float
+        uniform: Float,
+        allowed: DeviceTokenMask? = nil
     ) -> MLXArray {
         var row = logits
         if row.ndim == 3 { row = row[0, row.dim(1) - 1] }
@@ -53,6 +56,8 @@ extension ChatSampler {
         if let vocabSize, vocabSize < scaled.dim(0) { scaled = scaled[0 ..< vocabSize] }
         let vocab = scaled.dim(0)
         if vocab == 0 { return MLXArray(Int32(0)) }
+
+        if let allowed { scaled = allowed.apply(to: scaled) }
 
         // End-token suppression. `-greatestFiniteMagnitude` rather than `-infinity` because the
         // penalty below multiplies whatever it finds and the host path suppresses with the same
@@ -114,5 +119,64 @@ extension ChatSampler {
         let target = which(keptSum .> 0, keptSum, MLXArray(Float(1))) * uniform
         let rank = (cumsum(kept, axis: 0, inclusive: true) .< target).asType(.int32).sum()
         return take(order, minimum(rank, MLXArray(Int32(order.dim(0) - 1))), axis: 0)
+    }
+}
+
+/// A constrained-decoding mask in the form the device sampler applies it: either the Swift
+/// matcher's allowance or XGrammar's packed bitmask.
+enum DeviceTokenMask {
+    case allowance(JSONAllowanceMask)
+    case packed(PackedTokenMask)
+
+    /// No token is admissible.
+    var isEmpty: Bool {
+        switch self {
+        case .allowance(let mask): mask.allowance.isEmpty
+        case .packed(let mask): mask.isEmpty
+        }
+    }
+
+    func apply(to logits: MLXArray) -> MLXArray {
+        switch self {
+        case .allowance(let mask): mask.apply(to: logits)
+        case .packed(let mask): mask.apply(to: logits)
+        }
+    }
+}
+
+/// The Swift matcher's mask.
+///
+/// Disallowed logits become `-greatestFiniteMagnitude`, the value end-token suppression uses, so
+/// the repetition penalty, top-K, top-P and greedy argmax all treat a masked token exactly as a
+/// suppressed one. The wholesale part of the mask is one comparison against a per-token array
+/// already on the device; only the individually admitted ids cross from the host.
+struct JSONAllowanceMask {
+    /// Per-token clean-character counts (`JSONTokenVocabulary.cleanChars`), `[vocab]` Int16.
+    let cleanChars: MLXArray
+    let allowance: JSONTokenAllowance
+
+    func apply(to logits: MLXArray) -> MLXArray {
+        let vocab = logits.dim(0)
+        let floor = MLXArray(-Float.greatestFiniteMagnitude)
+        var masked: MLXArray
+        if let limit = allowance.cleanUpTo, limit > 0 {
+            var counts = cleanChars
+            if counts.dim(0) > vocab { counts = counts[0 ..< vocab] }
+            let admitted = counts .<= MLXArray(Int16(clamping: limit))
+            if counts.dim(0) < vocab {
+                masked = full([vocab], values: floor)
+                masked[0 ..< counts.dim(0)] = which(admitted, logits[0 ..< counts.dim(0)], floor)
+            } else {
+                masked = which(admitted, logits, floor)
+            }
+        } else {
+            masked = full([vocab], values: floor)
+        }
+        let ids = allowance.ids.filter { $0 >= 0 && Int($0) < vocab }
+        if !ids.isEmpty {
+            let index = MLXArray(ids)
+            masked[index] = logits[index]
+        }
+        return masked
     }
 }

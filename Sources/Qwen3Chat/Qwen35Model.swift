@@ -663,6 +663,8 @@ public final class Qwen35MLXModel: Module {
         promptIds: [Int],
         sampling: ChatSamplingConfig = .default
     ) -> [Int] {
+        precondition(sampling.responseFormat == nil,
+                     "Qwen35Model.generate does not support a constrained response format")
         var state = InferenceState.initial(config: config)
 
         // Prefill
