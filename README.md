@@ -74,6 +74,7 @@ On-device speech recognition, synthesis, and understanding for Mac and iOS. Runs
 - **[FunctionGemma](https://soniqo.audio/guides/function-calls)** — On-device LLM for structured function / tool calls (Gemma 3 270M, CoreML 8-bit palettized, Neural Engine, ~252 tok/s on M5 Pro · 128 tok/s on iPhone 16 Pro)
 - **[MADLAD-400](https://soniqo.audio/guides/translate)** — Many-to-many translation across 400+ languages (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
 - **[GLiNER2.5-Decide](https://soniqo.audio/guides/gliner)** - Local schema-conditioned text classification and entity spans (DeBERTa-v3-large encoder, MLX, INT8/FP16/FP32; development preview, Apache 2.0)
+- **[Clef-flash](docs/models/clef.md)** — Local decisions from text and allowed answers (9B, MLX 4-bit; development preview, Apache 2.0)
 
 **Speech-to-Speech & Voice Agents**
 
@@ -170,7 +171,7 @@ struct DictateView: View {
 
 `SpeechUI` ships only `TranscriptionView` (finals + partials) and `TranscriptionStore` (streaming ASR adapter). Use AVFoundation for audio visualization and playback.
 
-Available SPM products: `Qwen3ASR`, `WhisperASR`, `MossTranscribe`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `CohereTranscribeASR`, `VoxtralASR`, `KokoroTTS`, `SupertonicTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `IndexTTS2TTS`, `F5TTS`, `HiggsTTS`, `ChatterboxTTS`, `OmniVoiceTTS`, `IndicMioTTS`, `FishAudioTTS`, `MagpieTTS`, `MagpieTTSCoreML`, `MAGNeTMusicGen`, `StableAudio3MusicGen`, `FlashSR`, `PersonaPlex`, `VoiceChat`, `CSM`, `Audio2Face3D`, `HibikiTranslate`, `MADLADTranslation`, `GLiNER`, `SpeechVAD`, `SpeechLanguageID`, `SpeechWakeWord`, `SpeechEnhancement`, `SpeechRestoration`, `SourceSeparation`, `Qwen3Chat`, `FunctionGemma`, `SpeechCore`, `SpeechUI`, `AudioCommon`.
+Available SPM products: `Qwen3ASR`, `WhisperASR`, `MossTranscribe`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `CohereTranscribeASR`, `VoxtralASR`, `KokoroTTS`, `SupertonicTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `IndexTTS2TTS`, `F5TTS`, `HiggsTTS`, `ChatterboxTTS`, `OmniVoiceTTS`, `IndicMioTTS`, `FishAudioTTS`, `MagpieTTS`, `MagpieTTSCoreML`, `MAGNeTMusicGen`, `StableAudio3MusicGen`, `FlashSR`, `PersonaPlex`, `VoiceChat`, `CSM`, `Audio2Face3D`, `HibikiTranslate`, `MADLADTranslation`, `GLiNER`, `Clef`, `SpeechVAD`, `SpeechLanguageID`, `SpeechWakeWord`, `SpeechEnhancement`, `SpeechRestoration`, `SourceSeparation`, `Qwen3Chat`, `FunctionGemma`, `SpeechCore`, `SpeechUI`, `AudioCommon`.
 
 ## Models
 
@@ -212,6 +213,7 @@ Compact view below. **[Full model catalogue with sizes, quantisations, download 
 | [FunctionGemma](docs/models/function-gemma.md) | Text → Tool calls (LLM) | CoreML | 270M | EN-tuned |
 | [MADLAD-400](https://soniqo.audio/guides/translate) | Text → Text (Translation) | MLX | 3B | **400+** |
 | [GLiNER2.5-Decide](docs/models/gliner.md) | Text → Labels + spans (classification, entity extraction) | MLX | 340M | EN |
+| [Clef-flash](docs/models/clef.md) | Text → Probabilities for allowed answers | MLX | 9B (4-bit) | EN-tested |
 | [Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate) | Speech → Speech (Translation) | MLX | 3B | FR/ES/PT/DE → EN |
 | [PersonaPlex](https://soniqo.audio/guides/respond) | Speech → Speech | MLX | 7B | EN |
 | [VoiceChat 11B](docs/models/voicechat.md) | Speech → Speech + Text | MLX | 11B (INT5 / INT8) | EN |
@@ -258,6 +260,7 @@ speech speak "Hello world"
 speech csm "Nice to meet you" --ref-audio voice.wav --ref-text "reference transcript"
 speech translate "Hello, how are you?" --to es
 speech gliner classify "Remind me to call Dad at six PM." --labels create_reminder,send_message,other
+speech clef decide request.json
 speech respond --input question.wav --transcript
 speech voice-chat
 speech-server --port 8080            # local HTTP / WebSocket server (OpenAI-compatible /v1/realtime + /v1/audio/transcriptions)
@@ -300,6 +303,7 @@ import FishAudioTTS         // Experimental Fish Audio S2 Pro runtime with voice
 import IndicMioTTS          // Hindi/Indic TTS with emotion markers
 import Qwen3Chat            // On-device LLM chat
 import FunctionGemma    // On-device tool-call LLM
+import Clef                // Local decisions from text
 import MADLADTranslation    // Many-to-many translation across 400+ languages
 import HibikiTranslate      // Streaming speech-to-speech translation (FR/ES/PT/DE → EN)
 import PersonaPlex          // Full-duplex speech-to-speech
@@ -415,6 +419,28 @@ chat.chat(messages: [(.user, "Explain MLX in one sentence")]) { token, isFinal i
     print(token, terminator: "")
 }
 ```
+
+### Local decisions with Clef-flash
+
+Give Clef some text and a list of answers. It scores each answer so your app can choose the next step. Supports choices, true/false questions, and ordered scores. Add the `Clef` SPM product to use the library.
+
+```swift
+import Clef
+
+let model = try await Clef.fromPretrained()
+let result = try model.decide(
+    state: "Please turn the kitchen lights on.",
+    questions: [
+        ClefQuestion(id: "action", instructions: "Which action was requested?",
+            kind: .choice(["on": "Turn lights on", "off": "Turn lights off", "other": "Other request"]))
+    ])
+print(result.decisions[0].selectedOption)
+print(result.decisions[0].probabilities)
+```
+
+Requires Apple Silicon and macOS 15+. The first load downloads about 5.3 GB; runtime memory is additional. Keep one instance loaded and use it serially.
+
+[Model](https://huggingface.co/aufklarer/Clef-flash-9B-MLX-4bit) · [Usage](docs/inference/clef.md) · [Measured latency and memory](docs/benchmarks/clef.md)
 
 ### Translation — [full guide →](https://soniqo.audio/guides/translate)
 
@@ -540,7 +566,7 @@ speech-swift is split into one SPM target per model so consumers only pay for wh
 **[Full architecture diagram with backends, memory tables, and module map → soniqo.audio/architecture](https://soniqo.audio/architecture)** · **[API reference → soniqo.audio/api](https://soniqo.audio/api)** · **[Benchmarks → soniqo.audio/benchmarks](https://soniqo.audio/benchmarks)**
 
 Local docs (repo):
-- **Models:** [Qwen3-ASR](docs/models/asr-model.md) · [WhisperASR](docs/models/whisper-asr.md) · [MOSS Transcribe Diarize](docs/models/moss-transcribe-diarize.md) · [Qwen3-TTS](docs/models/tts-model.md) · [CosyVoice](docs/models/cosyvoice-tts.md) · [Kokoro](docs/models/kokoro-tts.md) · [VoxCPM2](docs/models/voxcpm2-tts.md) · [IndexTTS2](docs/models/indextts2.md) · [F5-TTS](docs/models/f5-tts.md) · [Higgs TTS 3](docs/models/higgs-tts.md) · [VibeVoice](docs/models/vibevoice.md) · [Supertonic](docs/models/supertonic-tts.md) · [Chatterbox](docs/models/chatterbox-tts.md) · [Indic-Mio](docs/models/indic-mio-tts.md) · [Fish Audio S2 Pro](docs/models/fish-audio-s2-pro.md) · [Magpie TTS](docs/models/magpie-tts.md) · [Parakeet TDT](docs/models/parakeet-asr.md) · [Parakeet Streaming](docs/models/parakeet-streaming-asr.md) · [Nemotron Streaming](docs/models/nemotron-asr-streaming.md) · [Omnilingual ASR](docs/models/omnilingual-asr.md) · [PersonaPlex](docs/models/personaplex.md) · [VoiceChat](docs/models/voicechat.md) · [CSM](docs/models/csm.md) · [Hibiki](docs/models/hibiki.md) · [MADLAD-400](docs/models/madlad-translation.md) · [GLiNER](docs/models/gliner.md) · [FunctionGemma](docs/models/function-gemma.md) · [Qwen3.5 Chat](docs/models/qwen35-chat.md) · [Gemma 4 Chat](docs/models/gemma4-chat.md) · [Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md) · [FireRedVAD](docs/models/fireredvad.md) · [Smart Turn v3.2](docs/models/smart-turn-v3.md) · [KWS Zipformer](docs/models/kws-zipformer.md) · [Sidon](docs/models/sidon.md) · [Source Separation](docs/models/source-separation.md) · [HTDemucs](docs/models/htdemucs.md) · [MAGNeT](docs/models/magnet-music-gen.md) · [Stable Audio 3](docs/models/stable-audio-3.md) · [FlashSR](docs/models/flashsr.md) · [Audio2Face-3D](docs/models/audio2face3d.md)
+- **Models:** [Qwen3-ASR](docs/models/asr-model.md) · [WhisperASR](docs/models/whisper-asr.md) · [MOSS Transcribe Diarize](docs/models/moss-transcribe-diarize.md) · [Qwen3-TTS](docs/models/tts-model.md) · [CosyVoice](docs/models/cosyvoice-tts.md) · [Kokoro](docs/models/kokoro-tts.md) · [VoxCPM2](docs/models/voxcpm2-tts.md) · [IndexTTS2](docs/models/indextts2.md) · [F5-TTS](docs/models/f5-tts.md) · [Higgs TTS 3](docs/models/higgs-tts.md) · [VibeVoice](docs/models/vibevoice.md) · [Supertonic](docs/models/supertonic-tts.md) · [Chatterbox](docs/models/chatterbox-tts.md) · [Indic-Mio](docs/models/indic-mio-tts.md) · [Fish Audio S2 Pro](docs/models/fish-audio-s2-pro.md) · [Magpie TTS](docs/models/magpie-tts.md) · [Parakeet TDT](docs/models/parakeet-asr.md) · [Parakeet Streaming](docs/models/parakeet-streaming-asr.md) · [Nemotron Streaming](docs/models/nemotron-asr-streaming.md) · [Omnilingual ASR](docs/models/omnilingual-asr.md) · [PersonaPlex](docs/models/personaplex.md) · [VoiceChat](docs/models/voicechat.md) · [CSM](docs/models/csm.md) · [Hibiki](docs/models/hibiki.md) · [MADLAD-400](docs/models/madlad-translation.md) · [GLiNER](docs/models/gliner.md) · [Clef-flash](docs/models/clef.md) · [FunctionGemma](docs/models/function-gemma.md) · [Qwen3.5 Chat](docs/models/qwen35-chat.md) · [Gemma 4 Chat](docs/models/gemma4-chat.md) · [Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md) · [FireRedVAD](docs/models/fireredvad.md) · [Smart Turn v3.2](docs/models/smart-turn-v3.md) · [KWS Zipformer](docs/models/kws-zipformer.md) · [Sidon](docs/models/sidon.md) · [Source Separation](docs/models/source-separation.md) · [HTDemucs](docs/models/htdemucs.md) · [MAGNeT](docs/models/magnet-music-gen.md) · [Stable Audio 3](docs/models/stable-audio-3.md) · [FlashSR](docs/models/flashsr.md) · [Audio2Face-3D](docs/models/audio2face3d.md)
 - **Inference:** [Qwen3-ASR](docs/inference/qwen3-asr-inference.md) · [WhisperASR](docs/inference/whisper-asr-inference.md) · [MOSS Transcribe Diarize](docs/inference/moss-transcribe-diarize.md) · [Parakeet TDT](docs/inference/parakeet-asr-inference.md) · [Parakeet Streaming](docs/inference/parakeet-streaming-asr-inference.md) · [Nemotron Streaming](docs/inference/nemotron-asr-streaming.md) · [Omnilingual ASR](docs/inference/omnilingual-asr-inference.md) · [TTS](docs/inference/qwen3-tts-inference.md) · [VoxCPM2](docs/inference/voxcpm2-inference.md) · [IndexTTS2](docs/inference/indextts2.md) · [F5-TTS](docs/inference/f5-tts.md) · [Higgs TTS 3](docs/inference/higgs-tts.md) · [VibeVoice](docs/inference/vibevoice-inference.md) · [Fish Audio S2 Pro](docs/inference/fish-audio-s2-pro.md) · [Magpie TTS](docs/inference/magpie-tts.md) · [CSM](docs/inference/csm.md) · [Hibiki](docs/inference/hibiki-inference.md) · [MADLAD-400](docs/inference/madlad-translation.md) · [MAGNeT](docs/inference/magnet-music-gen.md) · [Stable Audio 3](docs/inference/stable-audio-3.md) · [FlashSR](docs/inference/flashsr.md) · [Forced Aligner](docs/inference/forced-aligner.md) · [Silero VAD](docs/inference/silero-vad.md) · [Smart Turn](docs/inference/smart-turn.md) · [FireRedVAD](docs/inference/fireredvad.md) · [Wake-word](docs/inference/wake-word.md) · [Speaker Diarization](docs/inference/speaker-diarization.md) · [Speech Enhancement](docs/inference/speech-enhancement.md) · [Echo Cancellation](docs/inference/echo-cancellation.md) · [Sidon](docs/inference/sidon.md) · [Cache/offline](docs/inference/cache-and-offline.md)
 - **Reference:** [Shared Protocols](docs/shared-protocols.md)
 

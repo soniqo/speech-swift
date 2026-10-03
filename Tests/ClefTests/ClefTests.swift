@@ -146,6 +146,25 @@ final class E2EClefHeadParityTests: XCTestCase {
 import MLXNN
 
 final class E2EClefBackboneTests: XCTestCase {
+    func testModelOptimizationRequiresExplicitOptIn() {
+        let config = Qwen3ChatConfig(hiddenSize: 64, numHiddenLayers: 2,
+            numAttentionHeads: 1, numKeyValueHeads: 1, headDim: 64,
+            intermediateSize: 128, vocabSize: 64, maxSeqLen: 16,
+            ropeTheta: 10000, rmsNormEps: 1e-6, eosTokenId: 0, padTokenId: 0,
+            quantization: "int4", quantizationBits: 4, quantizationGroupSize: 64,
+            modelType: .qwen35, layerTypes: ["linear_attention", "full_attention"],
+            linearNumKeyHeads: 2, linearKeyHeadDim: 64,
+            linearNumValueHeads: 2, linearValueHeadDim: 64)
+        let chat = Qwen35MLXModel(config: config)
+        let optimized = Qwen35MLXModel(config: config, optimizedDeltaNet: true)
+        XCTAssertFalse(chat.layers[0].deltaNet!.useFusedRecurrence)
+        XCTAssertFalse(chat.layers[0].deltaNet!.useNativeConvolution)
+        XCTAssertTrue(optimized.layers[0].deltaNet!.useFusedRecurrence)
+        XCTAssertTrue(optimized.layers[0].deltaNet!.useNativeConvolution)
+        XCTAssertNil(chat.layers[1].deltaNet)
+        XCTAssertNil(optimized.layers[1].deltaNet)
+    }
+
     func testGroupedDeltaHeadsMatchIncrementalInference() {
         checkIncremental(keyHeads: 1, valueHeads: 2, keyDim: 16, valueDim: 32)
     }

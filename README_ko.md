@@ -74,6 +74,7 @@ Speech Swift 패키지 참조를 공개 소스에서 확인할 수 있는 저장
 - **[FunctionGemma](https://soniqo.audio/ko/guides/function-calls)** — 온디바이스 구조화된 함수 / 도구 호출 LLM (Gemma 3 270M, CoreML 8비트 팔레타이즈, Neural Engine, 약 252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/ko/guides/translate)** — 400+ 언어 간 다대다 번역 (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
 - **[GLiNER2.5-Decide](https://soniqo.audio/ko/guides/gliner)** - 지정한 레이블에 따른 로컬 텍스트 분류 및 엔터티 스팬 추출 (DeBERTa-v3-large 인코더, MLX, INT8/FP16/FP32, 개발 프리뷰, Apache 2.0)
+- **[Clef-flash](docs/models/clef.md)** — 텍스트와 허용된 답변으로 로컬에서 판단 (9B, MLX 4비트, 개발 프리뷰, Apache 2.0)
 
 **Speech-to-Speech 및 음성 에이전트**
 
@@ -168,7 +169,7 @@ struct DictateView: View {
 
 `SpeechUI`에는 `TranscriptionView`(파이널 + 파셜)와 `TranscriptionStore`(스트리밍 ASR 어댑터)만 포함됩니다. 오디오 시각화와 재생에는 AVFoundation을 사용하세요.
 
-사용 가능한 SPM 프로덕트: `Qwen3ASR`, `WhisperASR`, `MossTranscribe`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `CohereTranscribeASR`, `VoxtralASR`, `KokoroTTS`, `SupertonicTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `IndexTTS2TTS`, `F5TTS`, `HiggsTTS`, `ChatterboxTTS`, `OmniVoiceTTS`, `IndicMioTTS`, `FishAudioTTS`, `MagpieTTS`, `MagpieTTSCoreML`, `MAGNeTMusicGen`, `StableAudio3MusicGen`, `FlashSR`, `PersonaPlex`, `VoiceChat`, `CSM`, `Audio2Face3D`, `HibikiTranslate`, `MADLADTranslation`, `GLiNER`, `SpeechVAD`, `SpeechLanguageID`, `SpeechWakeWord`, `SpeechEnhancement`, `SpeechRestoration`, `SourceSeparation`, `Qwen3Chat`, `FunctionGemma`, `SpeechCore`, `SpeechUI`, `AudioCommon`.
+사용 가능한 SPM 프로덕트: `Qwen3ASR`, `WhisperASR`, `MossTranscribe`, `Qwen3TTS`, `Qwen3TTSCoreML`, `ParakeetASR`, `ParakeetStreamingASR`, `NemotronStreamingASR`, `OmnilingualASR`, `CohereTranscribeASR`, `VoxtralASR`, `KokoroTTS`, `SupertonicTTS`, `VibeVoiceTTS`, `CosyVoiceTTS`, `VoxCPM2TTS`, `IndexTTS2TTS`, `F5TTS`, `HiggsTTS`, `ChatterboxTTS`, `OmniVoiceTTS`, `IndicMioTTS`, `FishAudioTTS`, `MagpieTTS`, `MagpieTTSCoreML`, `MAGNeTMusicGen`, `StableAudio3MusicGen`, `FlashSR`, `PersonaPlex`, `VoiceChat`, `CSM`, `Audio2Face3D`, `HibikiTranslate`, `MADLADTranslation`, `GLiNER`, `Clef`, `SpeechVAD`, `SpeechLanguageID`, `SpeechWakeWord`, `SpeechEnhancement`, `SpeechRestoration`, `SourceSeparation`, `Qwen3Chat`, `FunctionGemma`, `SpeechCore`, `SpeechUI`, `AudioCommon`.
 
 ## 모델
 
@@ -209,6 +210,7 @@ struct DictateView: View {
 | [FunctionGemma](https://soniqo.audio/ko/guides/function-calls) | 텍스트 → 도구 호출 (LLM) | CoreML | 270M | 영어 위주 |
 | [MADLAD-400](https://soniqo.audio/ko/guides/translate) | 텍스트 → 텍스트 (번역) | MLX | 3B | **400+** |
 | [GLiNER2.5-Decide](docs/models/gliner.md) | 텍스트 → 레이블 + 스팬 (분류, 엔터티 추출) | MLX | 340M | EN |
+| [Clef-flash](docs/models/clef.md) | 텍스트 → 허용된 답변의 확률 | MLX | 9B (4-bit) | 영어로 검증 |
 | [Hibiki Zero-3B](https://soniqo.audio/guides/audio-translate) | 음성 → 음성 (번역) | MLX | 3B | FR/ES/PT/DE → EN |
 | [PersonaPlex](https://soniqo.audio/ko/guides/respond) | 음성 → 음성 | MLX | 7B | EN |
 | [VoiceChat 11B](docs/models/voicechat.md) | 음성 → 음성 + 텍스트 | MLX | 11B (INT5 / INT8) | EN |
@@ -254,6 +256,7 @@ speech speak "Hello world"
 speech csm "Nice to meet you" --ref-audio voice.wav --ref-text "reference transcript"
 speech translate "Hello, how are you?" --to es
 speech gliner classify "Remind me to call Dad at six PM." --labels create_reminder,send_message,other
+speech clef decide request.json
 speech respond --input question.wav --transcript
 speech voice-chat
 speech-server --port 8080            # 로컬 HTTP / WebSocket 서버 (OpenAI 호환 /v1/realtime + /v1/audio/transcriptions)
@@ -295,6 +298,7 @@ import MagpieTTSCoreML      // Magpie CoreML 백엔드 (CoreML + MLX 하이브�
 import FishAudioTTS         // 음성 복제 지원 실험적 Fish Audio S2 Pro 런타임
 import Qwen3Chat            // 온디바이스 LLM 채팅
 import FunctionGemma    // 온디바이스 함수 / 도구 호출 LLM
+import Clef                // 텍스트를 바탕으로 로컬에서 판단
 import MADLADTranslation    // 400+ 언어 간 다대다 번역
 import HibikiTranslate      // 스트리밍 음성-음성 번역 (FR/ES/PT/DE → EN)
 import PersonaPlex          // 전이중 음성-음성 변환
@@ -410,6 +414,28 @@ chat.chat(messages: [(.user, "Explain MLX in one sentence")]) { token, isFinal i
     print(token, terminator: "")
 }
 ```
+
+### Clef-flash로 로컬에서 판단하기
+
+Clef에 텍스트와 답변 목록을 전달하세요. 각 답변에 점수를 매겨 앱이 다음 단계를 선택하도록 돕습니다. 선택형, 참/거짓 질문, 순서가 있는 점수를 지원합니다. `Clef` SPM 제품을 추가하면 라이브러리를 사용할 수 있습니다.
+
+```swift
+import Clef
+
+let model = try await Clef.fromPretrained()
+let result = try model.decide(
+    state: "Please turn the kitchen lights on.",
+    questions: [
+        ClefQuestion(id: "action", instructions: "Which action was requested?",
+            kind: .choice(["on": "Turn lights on", "off": "Turn lights off", "other": "Other request"]))
+    ])
+print(result.decisions[0].selectedOption)
+print(result.decisions[0].probabilities)
+```
+
+Apple Silicon과 macOS 15+가 필요합니다. 처음에는 약 5.3 GB를 다운로드하며 실행 시 추가 메모리가 필요합니다. 인스턴스 하나를 로드한 상태로 유지하고 순차적으로 호출하세요.
+
+[모델](https://huggingface.co/aufklarer/Clef-flash-9B-MLX-4bit) · [사용법](docs/inference/clef.md) · [측정한 지연 시간과 메모리](docs/benchmarks/clef.md)
 
 ### 번역 — [전체 가이드 →](https://soniqo.audio/ko/guides/translate)
 
@@ -534,7 +560,7 @@ speech-swift는 모델당 하나의 SPM 타겟으로 분리되어 있어 사용�
 **[백엔드, 메모리 테이블, 모듈 맵이 포함된 전체 아키텍처 다이어그램 → soniqo.audio/architecture](https://soniqo.audio/ko/architecture)** · **[API 레퍼런스 → soniqo.audio/api](https://soniqo.audio/ko/api)** · **[벤치마크 → soniqo.audio/benchmarks](https://soniqo.audio/ko/benchmarks)**
 
 로컬 문서 (리포지토리):
-- **모델:** [Qwen3-ASR](docs/models/asr-model.md) · [WhisperASR](docs/models/whisper-asr.md) · [MOSS Transcribe Diarize](docs/models/moss-transcribe-diarize.md) · [Qwen3-TTS](docs/models/tts-model.md) · [CosyVoice](docs/models/cosyvoice-tts.md) · [Kokoro](docs/models/kokoro-tts.md) · [VoxCPM2](docs/models/voxcpm2-tts.md) · [IndexTTS2](docs/models/indextts2.md) · [F5-TTS](docs/models/f5-tts.md) · [Higgs TTS 3](docs/models/higgs-tts.md) · [VibeVoice](docs/models/vibevoice.md) · [Supertonic](docs/models/supertonic-tts.md) · [Chatterbox](docs/models/chatterbox-tts.md) · [Indic-Mio](docs/models/indic-mio-tts.md) · [Fish Audio S2 Pro](docs/models/fish-audio-s2-pro.md) · [Magpie TTS](docs/models/magpie-tts.md) · [Parakeet TDT](docs/models/parakeet-asr.md) · [Parakeet Streaming](docs/models/parakeet-streaming-asr.md) · [Nemotron Streaming](docs/models/nemotron-asr-streaming.md) · [Omnilingual ASR](docs/models/omnilingual-asr.md) · [PersonaPlex](docs/models/personaplex.md) · [VoiceChat](docs/models/voicechat.md) · [CSM](docs/models/csm.md) · [Hibiki](docs/models/hibiki.md) · [MADLAD-400](docs/models/madlad-translation.md) · [GLiNER](docs/models/gliner.md) · [FunctionGemma](docs/models/function-gemma.md) · [Qwen3.5 Chat](docs/models/qwen35-chat.md) · [Gemma 4 Chat](docs/models/gemma4-chat.md) · [Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md) · [FireRedVAD](docs/models/fireredvad.md) · [Smart Turn v3.2](docs/models/smart-turn-v3.md) · [KWS Zipformer](docs/models/kws-zipformer.md) · [Sidon](docs/models/sidon.md) · [Source Separation](docs/models/source-separation.md) · [HTDemucs](docs/models/htdemucs.md) · [MAGNeT](docs/models/magnet-music-gen.md) · [Stable Audio 3](docs/models/stable-audio-3.md) · [FlashSR](docs/models/flashsr.md) · [Audio2Face-3D](docs/models/audio2face3d.md)
+- **모델:** [Qwen3-ASR](docs/models/asr-model.md) · [WhisperASR](docs/models/whisper-asr.md) · [MOSS Transcribe Diarize](docs/models/moss-transcribe-diarize.md) · [Qwen3-TTS](docs/models/tts-model.md) · [CosyVoice](docs/models/cosyvoice-tts.md) · [Kokoro](docs/models/kokoro-tts.md) · [VoxCPM2](docs/models/voxcpm2-tts.md) · [IndexTTS2](docs/models/indextts2.md) · [F5-TTS](docs/models/f5-tts.md) · [Higgs TTS 3](docs/models/higgs-tts.md) · [VibeVoice](docs/models/vibevoice.md) · [Supertonic](docs/models/supertonic-tts.md) · [Chatterbox](docs/models/chatterbox-tts.md) · [Indic-Mio](docs/models/indic-mio-tts.md) · [Fish Audio S2 Pro](docs/models/fish-audio-s2-pro.md) · [Magpie TTS](docs/models/magpie-tts.md) · [Parakeet TDT](docs/models/parakeet-asr.md) · [Parakeet Streaming](docs/models/parakeet-streaming-asr.md) · [Nemotron Streaming](docs/models/nemotron-asr-streaming.md) · [Omnilingual ASR](docs/models/omnilingual-asr.md) · [PersonaPlex](docs/models/personaplex.md) · [VoiceChat](docs/models/voicechat.md) · [CSM](docs/models/csm.md) · [Hibiki](docs/models/hibiki.md) · [MADLAD-400](docs/models/madlad-translation.md) · [GLiNER](docs/models/gliner.md) · [Clef-flash](docs/models/clef.md) · [FunctionGemma](docs/models/function-gemma.md) · [Qwen3.5 Chat](docs/models/qwen35-chat.md) · [Gemma 4 Chat](docs/models/gemma4-chat.md) · [Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md) · [FireRedVAD](docs/models/fireredvad.md) · [Smart Turn v3.2](docs/models/smart-turn-v3.md) · [KWS Zipformer](docs/models/kws-zipformer.md) · [Sidon](docs/models/sidon.md) · [Source Separation](docs/models/source-separation.md) · [HTDemucs](docs/models/htdemucs.md) · [MAGNeT](docs/models/magnet-music-gen.md) · [Stable Audio 3](docs/models/stable-audio-3.md) · [FlashSR](docs/models/flashsr.md) · [Audio2Face-3D](docs/models/audio2face3d.md)
 - **추론:** [Qwen3-ASR](docs/inference/qwen3-asr-inference.md) · [WhisperASR](docs/inference/whisper-asr-inference.md) · [MOSS Transcribe Diarize](docs/inference/moss-transcribe-diarize.md) · [Parakeet TDT](docs/inference/parakeet-asr-inference.md) · [Parakeet Streaming](docs/inference/parakeet-streaming-asr-inference.md) · [Nemotron Streaming](docs/inference/nemotron-asr-streaming.md) · [Omnilingual ASR](docs/inference/omnilingual-asr-inference.md) · [TTS](docs/inference/qwen3-tts-inference.md) · [VoxCPM2](docs/inference/voxcpm2-inference.md) · [IndexTTS2](docs/inference/indextts2.md) · [F5-TTS](docs/inference/f5-tts.md) · [Higgs TTS 3](docs/inference/higgs-tts.md) · [VibeVoice](docs/inference/vibevoice-inference.md) · [Fish Audio S2 Pro](docs/inference/fish-audio-s2-pro.md) · [Magpie TTS](docs/inference/magpie-tts.md) · [CSM](docs/inference/csm.md) · [Hibiki](docs/inference/hibiki-inference.md) · [MADLAD-400](docs/inference/madlad-translation.md) · [MAGNeT](docs/inference/magnet-music-gen.md) · [Stable Audio 3](docs/inference/stable-audio-3.md) · [FlashSR](docs/inference/flashsr.md) · [Forced Aligner](docs/inference/forced-aligner.md) · [Silero VAD](docs/inference/silero-vad.md) · [Smart Turn](docs/inference/smart-turn.md) · [FireRedVAD](docs/inference/fireredvad.md) · [Wake-word](docs/inference/wake-word.md) · [Speaker Diarization](docs/inference/speaker-diarization.md) · [Speech Enhancement](docs/inference/speech-enhancement.md) · [Sidon](docs/inference/sidon.md) · [Cache/offline](docs/inference/cache-and-offline.md)
 - **에코 제거:** [LocalVQE AEC](docs/inference/echo-cancellation.md)
 - **레퍼런스:** [공유 프로토콜](docs/shared-protocols.md)

@@ -1,14 +1,20 @@
-# Clef-flash local validation — 2026-10-02
+# Clef-flash local validation
 
 Apple M5 Pro, 48 GB unified memory; native MLX Swift, release build with compiled Metal shaders. Checkpoint: `TrevorJS/clef-flash-mlx-4bit` at revision `6d4dc3ff7f43fba6065f1caef5c7a135315dfc8d`. Text-only, affine 4-bit groups of 64, float32 joint head. No remote decision API.
 
-## Fidelity
+## Current result — 2026-10-03
+
+The unchanged runtime averaged **about 276 ms** in each of two fresh runs of twenty warmed repeats, with a combined range of **274–284 ms**. This is one 303-token, three-field request on this Mac; model load is excluded. A separate earlier process measured **5.11 GiB peak RSS** and **6.81 GiB peak physical footprint**. The thirteen focused Clef tests, including the local full-model reference, passed; maximum reference probability difference was **0.0026641**. The existing Qwen3.5 chat path also matched `main` in the small prefill/decode comparison described below. These checks do not establish broad decision accuracy or full-checkpoint chat parity.
+
+The following sections preserve the earlier measurements and the subsequent optimization and regression checks.
+
+## Initial fidelity — 2026-10-02
 
 Nine distinct focused tests passed: the eight-test suite including the locally loaded checkpoint (no skipped tests), followed by a two-test grouped/equal-head regression run after adding the equal-head case. The small PyTorch head fixture matches at 2e-5 tolerance on CPU and 5e-4 on Metal. The observed Metal discrepancy also occurs in Python MLX; CPU agrees within 2e-7.
 
 The full-model fixture uses “Please turn the kitchen lights on.” with three fields: action (three choices), whether it is a factual question (noul), and urgency (two score levels). All **303 encoded token IDs match** the Python reference. Both implementations select lights on, not a factual question, and normal urgency. The largest absolute probability difference is approximately **0.00292**, within the test's 0.006 tolerance. This is a fidelity smoke test, not a quality benchmark.
 
-## Timing
+## Initial timing — 2026-10-02
 
 For the same three-field request, five sequential warmed native runs had a **0.918 s median**, approximately **0.921 s mean**, and a **0.916–0.930 s range**. Timing starts before schema encoding and ends after probabilities are materialized; it excludes model load. The first standalone run took 4.02 s. No percentile tail or cross-model performance conclusion is justified by five identical requests.
 
@@ -64,3 +70,13 @@ The release `speech` binary built successfully. `speech clef decide` returned va
 The final correctness run's five repeated timings were **0.462–0.897 s**, slower than the separate twenty-run memory probe. Immediately afterward, another local model process was active (about 31% CPU and 8.9% process memory), along with editor activity. This suggests contention but does not establish its exact cause; no controlled interference test was performed and no applications were stopped. Treat the 0.291-second mean as a measured run, not a guaranteed latency under background load. Runtime dependencies matched between the benchmark harness and main package: mlx-swift 0.31.6, mlx-swift-lm 3.31.4, swift-transformers 1.3.4.
 
 Before opening the pull request, optimized DeltaNet execution was made an explicit initializer option. Clef enables it; existing Qwen3.5 chat callers retain their original execution defaults. The measured Clef execution path is unchanged.
+
+## Regression audit and further latency trial — 2026-10-03
+
+A temporary comparison harness loaded the Qwen3.5 implementation from `main` at `ca382ee` and this branch with identical weights. A small two-layer model with both linear and full attention was tested at 4-, 5-, and 8-bit quantization. Logits and recurrent states matched exactly for a five-token prefill followed by three decoding steps. This checks the existing chat execution path; it is not a full-checkpoint chat quality benchmark. A permanent test also verifies that model-level optimization requires explicit opt-in.
+
+CI for the initial PR revision passed its debug build, Metal build, demo builds, and unit suite: 1,588 tests reported, 46 skipped, zero failures. The CLI's two new argument-parsing tests passed. Model-download E2E suites were excluded from that CI run.
+
+After reverting the normalization trial, the thirteen focused Clef tests and the separate `main` comparison passed again. The full-model fixture retained all 303 reference token IDs, the same three selected answers, and a maximum probability difference of 0.0026641 (tolerance 0.006).
+
+Two additional runs of the unchanged Clef runtime, each with twenty warmed repeats of the same 303-token request, averaged **276.03 ms** and **275.70 ms**. The combined observed range was **274.46–284.44 ms**. A trial using fused RMS normalization instead of the existing Q/K normalization averaged 396.08 ms and 283.80 ms in the corresponding runs. The order was current → trial → current → trial, in separate sequential processes. All selected answers matched. The trial did not demonstrate a speed improvement and was reverted; it is not part of the runtime. These timings exclude model load and do not replace the separate memory measurements above.
