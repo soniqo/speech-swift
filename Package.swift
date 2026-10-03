@@ -9,6 +9,8 @@ let package = Package(
     ],
     products: [
         .library(name: "GLiNER", targets: ["GLiNER"]),
+        .library(name: "Clef", targets: ["Clef"]),
+        .executable(name: "clef-decide", targets: ["ClefCLI"]),
         .executable(name: "gliner-bench", targets: ["GLiNERBenchmark"]),
         .library(
             name: "Qwen3ASR",
@@ -697,8 +699,19 @@ let package = Package(
                 .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "MLXNN", package: "mlx-swift"),
                 .product(name: "MLXFast", package: "mlx-swift"),
+                .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
             ]
         ),
+        .target(name: "Clef", dependencies: ["Qwen3Chat", "MLXCommon", "AudioCommon",
+            .product(name: "MLX", package: "mlx-swift"),
+            .product(name: "MLXNN", package: "mlx-swift"),
+            .product(name: "MLXFast", package: "mlx-swift"),
+            .product(name: "Hub", package: "swift-transformers"),
+            .product(name: "Tokenizers", package: "swift-transformers")], resources: [.copy("LICENSE-reference")]),
+        .executableTarget(name: "ClefCLI", dependencies: ["Clef"]),
+        .testTarget(name: "ClefTests", dependencies: ["Clef", "Qwen3Chat",
+            .product(name: "MLXNN", package: "mlx-swift"),
+            .product(name: "MLX", package: "mlx-swift")], resources: [.copy("Fixtures")]),
         .target(name: "GLiNER", dependencies: [
             "AudioCommon",
             .product(name: "Hub", package: "swift-transformers"),
@@ -798,6 +811,7 @@ let package = Package(
                 "MagpieTTSCoreML",
                 "MADLADTranslation",
                 "GLiNER",
+                "Clef",
                 "SpeechWakeWord",
                 "Audio2Face3D",
                 "AudioCommon",

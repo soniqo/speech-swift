@@ -3,34 +3,23 @@ import MLXCommon
 import MLX
 import MLXNN
 import MLXFast
+import MLXLMCommon
 
 // MARK: - DeltaNet Linear Attention
 
-/// DeltaNet linear attention layer for Qwen3.5 hybrid model.
-///
-/// Uses linear attention (no softmax) with a recurrent state matrix S of shape [B, H, D, D].
-/// The state evolves per-token: S = alpha * S + beta * (v outer k), where alpha/beta
-/// are learned per-head scalar gates derived from the input via softplus/sigmoid.
-///
-/// A causal conv1d (kernel=4) provides short-range local context before the attention.
-/// Output is gated: `o_proj(attention_output * silu(z))` where both are 2*hiddenSize = numHeads*headDim.
-///
-/// Weight shapes (HuggingFace safetensors):
-///   - in_proj_qkv.weight: [6144, 1024]   (3 * 16 * 128)
-///   - in_proj_z.weight: [2048, 1024]      (2 * hiddenSize, for gate)
-///   - in_proj_b.weight: [16, 1024]        (beta gate, per head)
-///   - in_proj_a.weight: [16, 1024]        (alpha gate, per head)
-///   - conv1d.weight: [6144, 4, 1]         (depthwise causal conv, MLX [C, K, 1] format)
-///   - dt_bias: [16]                       (time-step bias)
-///   - A_log: [16]                         (log of decay rate)
-///   - norm.weight: [128]                  (per-head RMSNorm)
-///   - out_proj.weight: [1024, 2048]       (gated output projection)
+/// Gated DeltaNet linear attention with a recurrent [B, valueHeads, valueDim, keyDim]
+/// state. Key/query heads repeat to match value heads when their counts differ.
+/// A depthwise causal convolution supplies local context before recurrence.
 public final class DeltaNetLayer: Module {
     let numHeads: Int
+    let numKeyHeads: Int
+    let valueDim: Int
     let headDim: Int
     let hiddenSize: Int
     let convKernel: Int
     let qkvDim: Int
+    var useFusedRecurrence = false
+    var useNativeConvolution = false
 
     @ModuleInfo(key: "in_proj_qkv") var inProjQKV: QuantizedLinear
     @ModuleInfo(key: "in_proj_z") var inProjZ: QuantizedLinear
@@ -50,16 +39,18 @@ public final class DeltaNetLayer: Module {
     @ModuleInfo(key: "out_proj") var outProj: QuantizedLinear
 
     public init(config: Qwen3ChatConfig) {
-        self.numHeads = config.linearNumKeyHeads ?? 16
+        self.numKeyHeads = config.linearNumKeyHeads ?? 16
+        self.numHeads = config.linearNumValueHeads ?? config.linearNumKeyHeads ?? 16
+        self.valueDim = config.linearValueHeadDim ?? config.linearKeyHeadDim ?? 128
         self.headDim = config.linearKeyHeadDim ?? 128
         self.hiddenSize = config.hiddenSize
         self.convKernel = config.linearConvKernelDim ?? 4
-        self.qkvDim = 3 * numHeads * headDim
+        self.qkvDim = 2 * numKeyHeads * headDim + numHeads * valueDim
 
         let groupSize = config.quantGroupSize
         let bits = config.quantBits
         self._inProjQKV = ModuleInfo(wrappedValue: QuantizedLinear(hiddenSize, qkvDim, bias: false, groupSize: groupSize, bits: bits))
-        self._inProjZ = ModuleInfo(wrappedValue: QuantizedLinear(hiddenSize, 2 * hiddenSize, bias: false, groupSize: groupSize, bits: bits))
+        self._inProjZ = ModuleInfo(wrappedValue: QuantizedLinear(hiddenSize, numHeads * valueDim, bias: false, groupSize: groupSize, bits: bits))
         self._inProjB = ModuleInfo(wrappedValue: QuantizedLinear(hiddenSize, numHeads, bias: false, groupSize: groupSize, bits: bits))
         self._inProjA = ModuleInfo(wrappedValue: QuantizedLinear(hiddenSize, numHeads, bias: false, groupSize: groupSize, bits: bits))
 
@@ -70,9 +61,9 @@ public final class DeltaNetLayer: Module {
         self._aLog = ParameterInfo(wrappedValue: MLXArray.zeros([numHeads]))
 
         self._norm = ModuleInfo(
-            wrappedValue: RMSNorm(dimensions: headDim, eps: Float(config.rmsNormEps)))
+            wrappedValue: RMSNorm(dimensions: valueDim, eps: Float(config.rmsNormEps)))
 
-        self._outProj = ModuleInfo(wrappedValue: QuantizedLinear(2 * hiddenSize, hiddenSize, bias: false, groupSize: groupSize, bits: bits))
+        self._outProj = ModuleInfo(wrappedValue: QuantizedLinear(numHeads * valueDim, hiddenSize, bias: false, groupSize: groupSize, bits: bits))
 
         super.init()
     }
@@ -86,10 +77,10 @@ public final class DeltaNetLayer: Module {
 
         public static func initial(
             batchSize: Int, numHeads: Int, headDim: Int,
-            qkvDim: Int, convKernel: Int, dtype: DType = .float32
+            qkvDim: Int, convKernel: Int, valueDim: Int? = nil, dtype: DType = .float32
         ) -> State {
             State(
-                s: MLXArray.zeros([batchSize, numHeads, headDim, headDim], dtype: dtype),
+                s: MLXArray.zeros([batchSize, numHeads, valueDim ?? headDim, headDim], dtype: dtype),
                 convState: MLXArray.zeros([batchSize, qkvDim, convKernel - 1], dtype: dtype)
             )
         }
@@ -138,10 +129,10 @@ public final class DeltaNetLayer: Module {
         let qkvActivated = silu(qkvConv.transposed(0, 2, 1))  // [B, T, C]
 
         // Split into Q, K, V — each [B, T, H, D]
-        let hd = numHeads * headDim
-        var q = qkvActivated[0..., 0..., ..<hd].reshaped(b, t, numHeads, headDim)
-        var k = qkvActivated[0..., 0..., hd..<(2 * hd)].reshaped(b, t, numHeads, headDim)
-        let v = qkvActivated[0..., 0..., (2 * hd)...].reshaped(b, t, numHeads, headDim)
+        let hd = numKeyHeads * headDim
+        var q = qkvActivated[0..., 0..., ..<hd].reshaped(b, t, numKeyHeads, headDim)
+        var k = qkvActivated[0..., 0..., hd..<(2 * hd)].reshaped(b, t, numKeyHeads, headDim)
+        let v = qkvActivated[0..., 0..., (2 * hd)...].reshaped(b, t, numHeads, valueDim)
 
         // Q/K normalization (reference: inv_scale * rms_norm, different scaling for Q and K)
         // rms_norm(x, None, eps) = x / sqrt(mean(x^2) + eps)
@@ -151,62 +142,77 @@ public final class DeltaNetLayer: Module {
         q = MLXArray(invScale * invScale) * rmsNormNoWeight(q)
         k = MLXArray(invScale) * rmsNormNoWeight(k)
 
-        // Compute gating: g = exp(-exp(A_log) * softplus(a + dt_bias))
-        let g = computeDecayGate(aRaw: aRaw)  // [B, T, H]
-        // beta = sigmoid(b_raw)  (independent learned gate, NOT 1-alpha)
-        let beta = sigmoid(bRaw)  // [B, T, H]
-
-        // Sequential gated delta rule recurrence
+        let output: MLXArray
         var currentS: MLXArray
-        if let s = state {
-            currentS = s.s
+        // The Metal kernel processes the entire sequence in one dispatch and
+        // maps grouped key heads directly, without materializing repeated Q/K.
+        if useFusedRecurrence && headDim % 32 == 0 && Device.defaultDevice().deviceType == .gpu {
+            (output, currentS) = gatedDeltaUpdate(q: q, k: k, v: v,
+                a: aRaw, b: bRaw, aLog: aLog, dtBias: dtBias, state: state?.s)
         } else {
-            currentS = MLXArray.zeros([b, numHeads, headDim, headDim], dtype: x.dtype)
+            if numHeads != numKeyHeads {
+                let repeats = numHeads / numKeyHeads
+                q = repeated(q, count: repeats, axis: 2)
+                k = repeated(k, count: repeats, axis: 2)
+            }
+
+            // Compute gating: g = exp(-exp(A_log) * softplus(a + dt_bias))
+            let g = computeDecayGate(aRaw: aRaw)  // [B, T, H]
+            // beta = sigmoid(b_raw)  (independent learned gate, NOT 1-alpha)
+            let beta = sigmoid(bRaw)  // [B, T, H]
+
+            // Sequential gated delta rule recurrence
+            if let s = state {
+                currentS = s.s
+            } else {
+                currentS = MLXArray.zeros([b, numHeads, valueDim, headDim], dtype: x.dtype)
+            }
+
+            var outputSteps: [MLXArray] = []
+            outputSteps.reserveCapacity(t)
+
+            for step in 0..<t {
+                // Extract step: [B, H, D] or [B, H]
+                let qStep = q[0..., step..<(step + 1), 0..., 0...].squeezed(axis: 1)  // [B, H, D]
+                let kStep = k[0..., step..<(step + 1), 0..., 0...].squeezed(axis: 1)  // [B, H, D]
+                let vStep = v[0..., step..<(step + 1), 0..., 0...].squeezed(axis: 1)  // [B, H, D]
+                let gStep = g[0..., step..<(step + 1), 0...].squeezed(axis: 1)        // [B, H]
+                let betaStep = beta[0..., step..<(step + 1), 0...].squeezed(axis: 1)  // [B, H]
+
+                // 1. Decay: S = g * S   (g is scalar per-head: [B, H, 1, 1])
+                let decay = gStep.reshaped(b, numHeads, 1, 1)
+                currentS = currentS * decay
+
+                // 2. Error correction:
+                //    kv_mem = (S * k[..., None, :]).sum(-1)  →  [B, H, Dv]
+                //    delta = (v - kv_mem) * beta[..., None]  →  [B, H, Dv]
+                let kExpanded = kStep.expandedDimensions(axis: -2)  // [B, H, 1, Dk]
+                let kvMem = (currentS * kExpanded).sum(axis: -1)     // [B, H, Dv]
+                let delta = (vStep - kvMem) * betaStep.expandedDimensions(axis: -1)  // [B, H, Dv]
+
+                // 3. Update: S = S + k[..., None, :] * delta[..., None]
+                //    k: [B, H, Dk] → [B, H, 1, Dk], delta: [B, H, Dv] → [B, H, Dv, 1]
+                currentS = currentS + kExpanded * delta.expandedDimensions(axis: -1)
+
+                // 4. Output: y = (S * q[..., None, :]).sum(-1)  →  [B, H, Dv]
+                let qExpanded = qStep.expandedDimensions(axis: -2)  // [B, H, 1, Dk]
+                let oStep = (currentS * qExpanded).sum(axis: -1)     // [B, H, Dv]
+                outputSteps.append(oStep)
+            }
+
+            // Stack: [B, T, H, D]
+            output = stacked(outputSteps, axis: 1)
+
         }
-
-        var outputSteps: [MLXArray] = []
-        outputSteps.reserveCapacity(t)
-
-        for step in 0..<t {
-            // Extract step: [B, H, D] or [B, H]
-            let qStep = q[0..., step..<(step + 1), 0..., 0...].squeezed(axis: 1)  // [B, H, D]
-            let kStep = k[0..., step..<(step + 1), 0..., 0...].squeezed(axis: 1)  // [B, H, D]
-            let vStep = v[0..., step..<(step + 1), 0..., 0...].squeezed(axis: 1)  // [B, H, D]
-            let gStep = g[0..., step..<(step + 1), 0...].squeezed(axis: 1)        // [B, H]
-            let betaStep = beta[0..., step..<(step + 1), 0...].squeezed(axis: 1)  // [B, H]
-
-            // 1. Decay: S = g * S   (g is scalar per-head: [B, H, 1, 1])
-            let decay = gStep.reshaped(b, numHeads, 1, 1)
-            currentS = currentS * decay
-
-            // 2. Error correction:
-            //    kv_mem = (S * k[..., None, :]).sum(-1)  →  [B, H, Dv]
-            //    delta = (v - kv_mem) * beta[..., None]  →  [B, H, Dv]
-            let kExpanded = kStep.expandedDimensions(axis: -2)  // [B, H, 1, Dk]
-            let kvMem = (currentS * kExpanded).sum(axis: -1)     // [B, H, Dv]
-            let delta = (vStep - kvMem) * betaStep.expandedDimensions(axis: -1)  // [B, H, Dv]
-
-            // 3. Update: S = S + k[..., None, :] * delta[..., None]
-            //    k: [B, H, Dk] → [B, H, 1, Dk], delta: [B, H, Dv] → [B, H, Dv, 1]
-            currentS = currentS + kExpanded * delta.expandedDimensions(axis: -1)
-
-            // 4. Output: y = (S * q[..., None, :]).sum(-1)  →  [B, H, Dv]
-            let qExpanded = qStep.expandedDimensions(axis: -2)  // [B, H, 1, Dk]
-            let oStep = (currentS * qExpanded).sum(axis: -1)     // [B, H, Dv]
-            outputSteps.append(oStep)
-        }
-
-        // Stack: [B, T, H, D]
-        let output = stacked(outputSteps, axis: 1)
 
         // RMSNormGated: norm(output) * silu(z)
         // z has shape [B, T, 2*hiddenSize=2048], reshape to [B, T, H, D] for per-head norm
-        let zReshaped = zRaw.reshaped(b, t, numHeads, headDim)
+        let zReshaped = zRaw.reshaped(b, t, numHeads, valueDim)
         let normedOutput = norm(output)  // per-head RMSNorm, [B, T, H, D]
         let gated = normedOutput * silu(zReshaped)  // [B, T, H, D]
 
         // Reshape to [B, T, H*D=2048] and project to hiddenSize
-        let result = outProj(gated.reshaped(b, t, numHeads * headDim))  // [B, T, 1024]
+        let result = outProj(gated.reshaped(b, t, numHeads * valueDim))  // [B, T, 1024]
 
         return (result, State(s: currentS, convState: newConvState))
     }
@@ -232,6 +238,10 @@ public final class DeltaNetLayer: Module {
     /// - Parameter outputLen: number of output time steps T
     /// - Returns: [B, C, T]
     private func depthwiseConv1dCausal(_ input: MLXArray, outputLen: Int) -> MLXArray {
+        if useNativeConvolution {
+            return conv1d(input.transposed(0, 2, 1), convWeight,
+                groups: qkvDim).transposed(0, 2, 1)
+        }
         let c = input.dim(1)
         let k = convKernel
 
@@ -437,7 +447,7 @@ public final class Qwen35TransformerLayer: Module {
     /// Key is "linear_attn" for DeltaNet, "self_attn" for GatedAttention (HuggingFace convention).
     @ModuleInfo var attn: Module
 
-    public init(config: Qwen3ChatConfig, layerType: String) {
+    public init(config: Qwen3ChatConfig, layerType: String, optimizedDeltaNet: Bool = false) {
         self.layerType = layerType
 
         self._inputLayerNorm = ModuleInfo(wrappedValue:  RMSNorm(dimensions: config.hiddenSize, eps: Float(config.rmsNormEps)))
@@ -446,9 +456,10 @@ public final class Qwen35TransformerLayer: Module {
             wrappedValue: Qwen35MLP(config: config))
 
         if layerType == "linear_attention" {
-            self._attn = ModuleInfo(
-                wrappedValue: DeltaNetLayer(config: config),
-                key: "linear_attn")
+            let deltaNet = DeltaNetLayer(config: config)
+            deltaNet.useFusedRecurrence = optimizedDeltaNet
+            deltaNet.useNativeConvolution = optimizedDeltaNet
+            self._attn = ModuleInfo(wrappedValue: deltaNet, key: "linear_attn")
         } else {
             self._attn = ModuleInfo(
                 wrappedValue: GatedAttentionLayer(config: config),
@@ -549,7 +560,8 @@ public final class Qwen35MLXModel: Module {
     @ModuleInfo var layers: [Qwen35TransformerLayer]
     @ModuleInfo var norm: RMSNorm
 
-    public init(config: Qwen3ChatConfig) {
+    /// Opt into fused recurrence and native convolution for validated workloads.
+    public init(config: Qwen3ChatConfig, optimizedDeltaNet: Bool = false) {
         self.config = config
 
         let types = config.layerTypes ?? Array(
@@ -565,7 +577,7 @@ public final class Qwen35MLXModel: Module {
                 groupSize: config.quantGroupSize, bits: config.quantBits))
 
         self._layers = ModuleInfo(
-            wrappedValue: types.map { Qwen35TransformerLayer(config: config, layerType: $0) })
+            wrappedValue: types.map { Qwen35TransformerLayer(config: config, layerType: $0, optimizedDeltaNet: optimizedDeltaNet) })
 
         self._norm = ModuleInfo(
             wrappedValue: RMSNorm(dimensions: config.hiddenSize, eps: Float(config.rmsNormEps)))
@@ -588,9 +600,11 @@ public final class Qwen35MLXModel: Module {
         public static func initial(config: Qwen3ChatConfig, batchSize: Int = 1) -> InferenceState {
             let types = config.layerTypes ?? Array(
                 repeating: "full_attention", count: config.numHiddenLayers)
-            let numHeads = config.linearNumKeyHeads ?? 16
+            let keyHeads = config.linearNumKeyHeads ?? 16
+            let numHeads = config.linearNumValueHeads ?? keyHeads
+            let valueDim = config.linearValueHeadDim ?? config.linearKeyHeadDim ?? 128
             let headDim = config.linearKeyHeadDim ?? 128
-            let qkvDim = 3 * numHeads * headDim
+            let qkvDim = 2 * keyHeads * headDim + numHeads * valueDim
             let convKernel = config.linearConvKernelDim ?? 4
 
             return InferenceState(
@@ -598,7 +612,7 @@ public final class Qwen35MLXModel: Module {
                     type == "linear_attention"
                         ? DeltaNetLayer.State.initial(
                             batchSize: batchSize, numHeads: numHeads, headDim: headDim,
-                            qkvDim: qkvDim, convKernel: convKernel)
+                            qkvDim: qkvDim, convKernel: convKernel, valueDim: valueDim)
                         : nil
                 },
                 kvCaches: types.map { _ in nil },
@@ -618,6 +632,14 @@ public final class Qwen35MLXModel: Module {
     public func forward(
         inputIds: MLXArray,
         state: InferenceState
+    ) -> (MLXArray, InferenceState) {
+        let (hidden, next) = forwardHidden(inputIds: inputIds, state: state)
+        return (embedTokens.asLinear(hidden), next)
+    }
+
+    /// Normalized backbone states without projecting to vocabulary logits.
+    public func forwardHidden(
+        inputIds: MLXArray, state: InferenceState
     ) -> (MLXArray, InferenceState) {
         let seqLen = inputIds.dim(1)
         var hidden = embedTokens(inputIds)  // [B, T, hiddenSize]
@@ -640,15 +662,12 @@ public final class Qwen35MLXModel: Module {
 
         hidden = norm(hidden)
 
-        // Tied LM head
-        let logits = embedTokens.asLinear(hidden)
-
         let newState = InferenceState(
             deltaNetStates: newDeltaStates,
             kvCaches: newKVCaches,
             position: state.position + seqLen)
 
-        return (logits, newState)
+        return (hidden, newState)
     }
 
     // MARK: - Text Generation

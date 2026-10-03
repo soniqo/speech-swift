@@ -1,0 +1,19 @@
+head-reference.json: deterministic CPU fixture from Cloudflare/clef-flash
+joint_schema_model.py (Apache-2.0), retrieved 2026-10-02.
+https://huggingface.co/Cloudflare/clef-flash/blob/main/joint_schema_model.py
+Generator: torch.manual_seed(1729); JointSchemaHead(hidden_size=8, width=8,
+routing_layers=1, layers=1, heads=2, feedforward=12).eval(); then torch.randn
+hidden [1, encoded_length, 8], lexical [256, 8]. Text tokenization uses UTF-8
+bytes to independently validate piece boundaries and schema offsets.
+State: Turn on the light. Fields, in order:
+action: choice, instructions Choose, criteria off=Off, on=On.
+safe: noul, instructions Safe?, default true/false descriptions.
+Expected values are raw per-option logits from the released PyTorch head.
+
+full-model-reference.json: token IDs and probabilities from TrevorJS's
+clef_mlx.py with mlx-lm 0.31.3, checkpoint revision
+6d4dc3ff7f43fba6065f1caef5c7a135315dfc8d, on Apple M5 Pro, 2026-10-02.
+Request is in E2EClefTests.testLocalDecision. All 303 token IDs must match;
+probabilities allow 0.006 absolute error for backbone accumulation differences.
+The head-only fixture checks CPU logits at 2e-5 and Metal at 5e-4. Python MLX
+reproduced the same Metal drift; CPU matched the PyTorch fixture within 2e-7.
