@@ -243,3 +243,8 @@ All models support both parameters:
 | `PyannoteDiarizationPipeline` | `cacheBaseDir`, `offlineMode` |
 | `Qwen35CoreMLChat` | `cacheDir`, `offlineMode` |
 | `Qwen35MLXChat` | `cacheDir`, `offlineMode` |
+
+For the default ReDimNet2 model, `cacheDir` names the repository root and the
+loader uses a versioned child directory. Use `modelCacheDirectory(in:)` to
+locate its files and `isCached(at:)` to route an offline load. Retired cache
+generations stay intact but do not satisfy the corrected artifact contract.
