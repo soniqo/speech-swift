@@ -59,6 +59,15 @@ public enum Qwen35WeightLoader {
 
         // Load all safetensors files from the directory
         let allWeights = try CommonWeightLoader.loadAllSafetensors(from: directory)
+        try loadWeights(into: model, weights: allWeights, progressHandler: progressHandler)
+    }
+
+    /// Apply an already loaded checkpoint without reopening safetensors files.
+    public static func loadWeights(
+        into model: Qwen35MLXModel,
+        weights allWeights: [String: MLXArray],
+        progressHandler: ((Double, String) -> Void)? = nil
+    ) throws {
         progressHandler?(0.3, "Loaded \(allWeights.count) tensors")
 
         // Strip prefix from keys. Handles two formats:

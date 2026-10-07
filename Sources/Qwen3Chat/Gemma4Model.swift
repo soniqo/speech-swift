@@ -272,6 +272,23 @@ public final class Gemma4KVCache {
         self.base = position
     }
 
+    /// An independent cache holding the same entries. The arrays are shared, not copied: the next
+    /// write into either cache finds the buffer held twice, so MLX cannot donate it and writes into
+    /// a new one, leaving the other cache's entries as they were.
+    func copy() -> Gemma4KVCache {
+        let copy = Gemma4KVCache(retention: retention, startingAt: base)
+        copy.storedKeys = storedKeys
+        copy.storedValues = storedValues
+        copy.count = count
+        return copy
+    }
+
+    /// The arrays this cache holds, for evaluating them where a snapshot is taken.
+    var arrays: [MLXArray] { [storedKeys, storedValues].compactMap { $0 } }
+
+    /// Bytes the stored arrays occupy, spare room included.
+    var byteCount: Int { arrays.reduce(0) { $0 + $1.nbytes } }
+
     private var capacity: Int { storedKeys?.dim(2) ?? 0 }
 
     /// How many of the oldest entries `append` will drop to fit `t` more.
@@ -964,6 +981,15 @@ public final class Gemma4Model: Module {
         public static func initial(config c: Gemma4DenseConfig) -> InferenceState {
             InferenceState(kvCaches: Array(repeating: nil, count: c.numHiddenLayers), position: 0)
         }
+
+        /// A state that continues from the same point without sharing any cache object with this
+        /// one, so decoding from it leaves this one reusable.
+        func copied() -> InferenceState {
+            InferenceState(kvCaches: kvCaches.map { $0?.copy() }, position: position)
+        }
+
+        var arrays: [MLXArray] { kvCaches.flatMap { $0?.arrays ?? [] } }
+        var byteCount: Int { kvCaches.reduce(0) { $0 + ($1?.byteCount ?? 0) } }
     }
 
     /// Incremental forward over `T` new tokens, updating `state`'s caches in place.

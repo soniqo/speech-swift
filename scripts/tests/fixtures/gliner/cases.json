@@ -1,0 +1,147 @@
+[
+  {
+    "text": "Remind me to call Dad at six PM.",
+    "action": "create_reminder"
+  },
+  {
+    "text": "Please remind me tomorrow to buy milk.",
+    "action": "create_reminder"
+  },
+  {
+    "text": "Don't let me forget to send the invoice on Friday.",
+    "action": "create_reminder"
+  },
+  {
+    "text": "Schedule a meeting with Alice tomorrow at ten AM.",
+    "action": "create_calendar_event"
+  },
+  {
+    "text": "Put lunch with Sam on my calendar for noon.",
+    "action": "create_calendar_event"
+  },
+  {
+    "text": "Text Dad that I will be late.",
+    "action": "send_message"
+  },
+  {
+    "text": "Send Alice a message saying I arrived.",
+    "action": "send_message"
+  },
+  {
+    "text": "Find my notes about the Berlin trip.",
+    "action": "search_notes"
+  },
+  {
+    "text": "Search my notes for the project budget.",
+    "action": "search_notes"
+  },
+  {
+    "text": "Set a timer for ten minutes.",
+    "action": "set_timer"
+  },
+  {
+    "text": "Start a five minute countdown.",
+    "action": "set_timer"
+  },
+  {
+    "text": "What is the capital of France?",
+    "action": "other"
+  },
+  {
+    "text": "Turn on the kitchen lights.",
+    "action": "other"
+  },
+  {
+    "text": "Do not set a timer.",
+    "action": "other"
+  },
+  {
+    "text": "How do reminders work?",
+    "action": "other"
+  },
+  {
+    "text": "Remind me to text Alice at noon.",
+    "action": "create_reminder"
+  },
+  {
+    "text": "Remind me to call Dad at six PM.",
+    "entities": {
+      "person": [
+        "Dad"
+      ],
+      "time": [
+        "six PM"
+      ]
+    }
+  },
+  {
+    "text": "Remind me to call Alice at 8 AM.",
+    "entities": {
+      "person": [
+        "Alice"
+      ],
+      "time": [
+        "8 AM"
+      ]
+    }
+  },
+  {
+    "text": "Text Sam at noon.",
+    "entities": {
+      "person": [
+        "Sam"
+      ],
+      "time": [
+        "noon"
+      ]
+    }
+  },
+  {
+    "text": "Schedule lunch with Maria at 12:30.",
+    "entities": {
+      "person": [
+        "Maria"
+      ],
+      "time": [
+        "12:30"
+      ]
+    }
+  },
+  {
+    "text": "Remind me to call Dad.",
+    "entities": {
+      "person": [
+        "Dad"
+      ],
+      "time": []
+    }
+  },
+  {
+    "text": "Set a timer for ten minutes.",
+    "entities": {
+      "person": [],
+      "time": [
+        "ten minutes"
+      ]
+    }
+  },
+  {
+    "text": "Find my notes.",
+    "entities": {
+      "person": [],
+      "time": []
+    }
+  },
+  {
+    "text": "Call Alice, not Bob, at six PM.",
+    "entities": {
+      "person": [
+        "Alice",
+        "Bob"
+      ],
+      "time": [
+        "six PM"
+      ]
+    }
+  }
+]

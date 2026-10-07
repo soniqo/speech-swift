@@ -358,9 +358,20 @@ Result of speech recognition including detected language:
 ```swift
 public struct TranscriptionResult: Sendable {
     public let text: String
-    public let language: String?  // e.g. "english", "russian"
+    public let language: String?          // e.g. "english", "russian"
+    public let confidence: Float          // 0.0-1.0, 0.0 when the model does not provide it
+    public let words: [WordConfidence]?   // per-word detail, nil when the model does not provide it
+}
+
+public struct WordConfidence: Sendable {
+    public let word: String
+    public let confidence: Float          // 0.0-1.0
+    public let startTime: Double?         // seconds from the start of the audio, nil if unavailable
+    public let endTime: Double?
 }
 ```
+
+`startTime` and `endTime` are emission-aligned, not forced-aligned: they mark the encoder frame at which the decoder emitted the word's tokens, and an offline encoder can stamp a word before its onset. `ParakeetASRModel` fills them; other models leave them nil. Use `Qwen3ForcedAligner` when you need acoustic word boundaries.
 
 ### SpeechSegment
 

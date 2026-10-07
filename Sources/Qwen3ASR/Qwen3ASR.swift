@@ -140,12 +140,9 @@ public class Qwen3ASRModel {
     /// Whether the model weights are loaded and ready for inference.
     var _isLoaded = true
 
-    /// MLX cache limit captured at load time for the .large variant. Stored
-    /// per-instance so `unload()` can restore it — preventing the 4 GB cap
-    /// from leaking into co-loaded models (PersonaPlex loads ASR + LM + TTS
-    /// in the same process). `nil` when no cap was applied (small variant
-    /// or already-capped global state).
-    var savedMLXCacheLimit: Int?
+    /// Registration in the shared cache-budget coordinator. Released by
+    /// `unload()` or automatically when this model is destroyed.
+    var mlxCacheLimitLease: Qwen3ASRCacheLimitCoordinator.Lease?
 
     init(
         audioConfig: Qwen3AudioEncoderConfig = .default,
@@ -413,6 +410,10 @@ public class Qwen3ASRModel {
     /// `checkCancellation` is invoked before decoder prefill and forwarded
     /// to the decoder loop, which invokes it before each token's work is
     /// submitted. Synchronous callers pass a no-op closure.
+    ///
+    /// Single-input transcription entry points share this decoder. Clear
+    /// reusable MLX buffers on return or cancellation so a long-running
+    /// process releases its scratch pool between requests.
     func generateText(
         audioEmbeds: MLXArray,
         textDecoder: QuantizedTextModel,
@@ -420,6 +421,28 @@ public class Qwen3ASRModel {
         maxTokens: Int,
         context: String? = nil,
         decodingOptions: Qwen3DecodingOptions = Qwen3DecodingOptions(),
+        checkCancellation: () throws -> Void
+    ) rethrows -> String {
+        defer {
+            // Speculative greedy work can still be running at EOS or
+            // cancellation. Wait for its buffers to become reusable before
+            // clearing the pool, after the decoder's local arrays are gone.
+            StreamOrDevice.default.stream.synchronize()
+            Memory.clearCache()
+        }
+        return try generateTextImpl(
+            audioEmbeds: audioEmbeds, textDecoder: textDecoder,
+            language: language, maxTokens: maxTokens, context: context,
+            decodingOptions: decodingOptions, checkCancellation: checkCancellation)
+    }
+
+    private func generateTextImpl(
+        audioEmbeds: MLXArray,
+        textDecoder: QuantizedTextModel,
+        language: String?,
+        maxTokens: Int,
+        context: String?,
+        decodingOptions: Qwen3DecodingOptions,
         checkCancellation: () throws -> Void
     ) rethrows -> String {
         let T = Qwen3ASRTokens.self
@@ -1240,6 +1263,14 @@ internal enum Qwen3ASRMemory {
         return max(0, min(fourGB, quarterRAM))
     }
 
+    /// The 0.6B variant needs a smaller scratch pool than 1.7B. Bound it
+    /// to `min(1 GB, 12.5% of physical RAM)` for repeated transcription.
+    static func cacheLimitForSmall(physicalMemoryBytes: Int) -> Int {
+        let oneGB = 1 * 1024 * 1024 * 1024
+        let eighthRAM = physicalMemoryBytes / 8
+        return max(0, min(oneGB, eighthRAM))
+    }
+
     /// True when the 1.7B variant should print the soft RAM warning. Total
     /// (not available) RAM is the pragmatic signal — see threshold doc.
     static func shouldWarnForLarge(physicalMemoryBytes: UInt64) -> Bool {
@@ -1359,32 +1390,15 @@ public extension Qwen3ASRModel {
 
         MetalBudget.pinMemory()
 
-        // Bug 4b: cap MLX scratch pool for the 1.7B variant. Default cache
-        // limit tracks `recommendedMaxWorkingSetSize` which on a 16 GB Mac
-        // can grow to several GB during sustained decoding and trigger
-        // swap. Bounding to `min(4 GB, 25% of physical RAM)` leaves enough
-        // headroom for per-token decoder working set while keeping the
-        // total residency under the OS jetsam threshold. 0.6B path is
-        // unchanged.
-        //
-        // Process-global cap leak fix (adversarial review): we save the
-        // prior limit on the model instance and restore it in `unload()`,
-        // so co-loaded models in the same process (e.g. PersonaPlex
-        // loading ASR + LM + TTS) inherit our cap only for the lifetime
-        // of the loaded ASR. Stacks correctly across multiple ASR
-        // instances: each save captures whatever was active when it
-        // loaded, and each unload pops its own saved value.
-        if modelSize == .large {
-            let physical = Int(ProcessInfo.processInfo.physicalMemory)
-            let newCap = Qwen3ASRMemory.cacheLimitForLarge(physicalMemoryBytes: physical)
-            // Only apply the cap if it would lower the current limit —
-            // never raise a limit a caller has already chosen for itself.
-            let currentLimit = MLX.Memory.cacheLimit
-            if newCap > 0 && newCap < currentLimit {
-                model.savedMLXCacheLimit = currentLimit
-                MLX.Memory.cacheLimit = newCap
-            }
-        }
+        // Register both variants in the process-wide budget. The shared
+        // coordinator preserves the tightest live ceiling and the caller's
+        // budget, including when models unload in a different order.
+        let physical = Int(ProcessInfo.processInfo.physicalMemory)
+        let cacheCeiling = modelSize == .large
+            ? Qwen3ASRMemory.cacheLimitForLarge(physicalMemoryBytes: physical)
+            : Qwen3ASRMemory.cacheLimitForSmall(physicalMemoryBytes: physical)
+        model.mlxCacheLimitLease = Qwen3ASRCacheLimitCoordinator.shared.acquire(
+            ceiling: cacheCeiling)
 
         // Bug 4f: post-load memory snapshot. Difference vs `memBeforeLoad`
         // is the model's load-time footprint (weights + activations +

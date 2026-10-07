@@ -36,6 +36,12 @@ control-token ranges. Hidden control tokens still update the recurrent decoder s
 
 The pipeline returns an overall confidence score (0.0 to 1.0) computed as the sigmoid-scaled mean of token logits. This provides a rough estimate of transcription reliability — useful for deciding whether to retry with a different model or prompt the user.
 
+### 5. Word Timestamps
+
+`transcribeWithLanguage` returns `TranscriptionResult.words`. Each `WordConfidence` carries `startTime` and `endTime` in seconds from the start of the input audio, taken from the encoder frame at which the decoder emitted the word's tokens. One encoder frame is 80 ms (hop 160 × subsampling 8 at 16 kHz). Audio longer than the encoder window is decoded in windows, and the times are converted to absolute seconds through mel frames, so they stay exact even when the window length is not a multiple of the subsampling factor (the 5 s encoder is 62.5 encoder frames).
+
+The times are emission-aligned, not forced-aligned. The offline encoder sees the whole window, so a word can be stamped before its sound begins: on the bundled test clip the first word of an utterance starts about 0.3 s before the acoustic onset and the last word ends about 0.2 s after the acoustic end. `endTime` is one frame after the last token's start rather than the start plus the predicted TDT duration, so gaps between consecutive words reflect decoding pace as well as silence. Use `Qwen3ForcedAligner` when you need acoustic word boundaries.
+
 ## Language Support
 
 Parakeet TDT supports 25 European languages via its SentencePiece vocabulary. The model handles multilingual audio without explicit language selection.

@@ -121,10 +121,12 @@ public class ParakeetASRModel {
         let tInfer0 = CFAbsoluteTimeGetCurrent()
         var tokenIds: [Int] = []
         var tokenLogProbs: [Float] = []
+        var tokenTimes: [Double] = []
 
         if melLength <= maxWindow {
             let r = try encodeAndDecodeWindow(mel: mel, actualLength: melLength, maskedTokenIds: masked)
             tokenIds = r.tokens; tokenLogProbs = r.tokenLogProbs
+            tokenTimes = Self.absoluteTokenTimes(windowStartMelFrame: 0, tokenFrames: r.tokenFrames, config: config)
         } else {
             // The mel buffer is [1, 128, bufferFrames] where bufferFrames
             // (mel.shape[2]) can exceed the valid melLength — extract zero-pads
@@ -137,7 +139,9 @@ public class ParakeetASRModel {
                 let win = min(maxWindow, melLength - start)
                 let windowMel = try sliceMel(mel: mel, start: start, length: win, totalFrames: bufferFrames)
                 let r = try encodeAndDecodeWindow(mel: windowMel, actualLength: win, maskedTokenIds: masked)
+                // Decoder frames are window-relative and are converted to absolute seconds.
                 tokenIds += r.tokens; tokenLogProbs += r.tokenLogProbs
+                tokenTimes += Self.absoluteTokenTimes(windowStartMelFrame: start, tokenFrames: r.tokenFrames, config: config)
                 start += maxWindow; windows += 1
             }
             AudioLog.inference.debug(
@@ -153,7 +157,10 @@ public class ParakeetASRModel {
         lastConfidence = tokenLogProbs.isEmpty
             ? 0
             : min(1.0, exp(tokenLogProbs.reduce(0, +) / Float(tokenLogProbs.count)))
-        lastWordConfidences = vocabulary.decodeWords(tokenIds, logProbs: tokenLogProbs)
+        let secondsPerEncoderFrame = Double(config.hopLength * config.subsamplingFactor) / Double(config.sampleRate)
+        lastWordConfidences = vocabulary.decodeWords(
+            tokenIds, logProbs: tokenLogProbs,
+            tokenStartTimes: tokenTimes, frameDuration: secondsPerEncoderFrame)
 
         let melMs = (tMel1 - tMel0) * 1000
         let inferMs = (tInfer1 - tInfer0) * 1000
@@ -164,7 +171,7 @@ public class ParakeetASRModel {
 
     /// Encode one mel window and run TDT greedy decode on it.
     private func encodeAndDecodeWindow(mel: MLMultiArray, actualLength: Int, maskedTokenIds: Set<Int> = [])
-        throws -> (tokens: [Int], tokenLogProbs: [Float], confidence: Float)
+        throws -> (tokens: [Int], tokenLogProbs: [Float], tokenFrames: [Int], confidence: Float)
     {
         let (paddedMel, effectiveLength) = try padMelToSupportedShape(mel: mel, actualLength: actualLength)
         let encoderOutput = try runEncoder(mel: paddedMel, length: effectiveLength)
@@ -187,6 +194,18 @@ public class ParakeetASRModel {
     static func effectiveLanguageHint(perCall: String?, override: String?) -> String? {
         let trimmed = perCall?.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed?.isEmpty == false ? trimmed : override
+    }
+
+    /// Absolute start time in seconds of each window-relative encoder frame.
+    /// Window starts are mel-frame aligned and an encoder window need not be a
+    /// multiple of the subsampling factor (500 mel frames is 62.5 encoder
+    /// frames), so this counts in mel frames. Rounding a window start to whole
+    /// encoder frames would stamp every later window up to one frame early.
+    static func absoluteTokenTimes(windowStartMelFrame: Int, tokenFrames: [Int], config: ParakeetConfig) -> [Double] {
+        tokenFrames.map {
+            Double(windowStartMelFrame + $0 * config.subsamplingFactor)
+                * Double(config.hopLength) / Double(config.sampleRate)
+        }
     }
 
     /// Copy frames `[start, start+length)` out of a `[1, 128, totalFrames]`

@@ -154,15 +154,28 @@ extension SpeechGenerationModel {
 
 // MARK: - Speech Recognition (STT)
 
-/// A word with its confidence score.
+/// A word with its confidence score and, when the model tracks emission
+/// frames, the time span it was decoded over.
 public struct WordConfidence: Sendable {
     public let word: String
     /// Confidence score (0.0–1.0) derived from mean token log-probability.
     public let confidence: Float
+    /// Seconds from the start of the audio to the encoder frame that emitted
+    /// the word's first token. Emission-aligned rather than forced-aligned: an
+    /// offline encoder sees the whole window, so the stamp can precede the
+    /// word's onset. Nil when the model does not expose frame alignment.
+    public let startTime: Double?
+    /// Seconds from the start of the audio to the end of the encoder frame
+    /// that emitted the word's last token, one frame after that token's start.
+    /// Gaps between consecutive words reflect decoding pace as well as
+    /// silence. Nil when the model does not expose frame alignment.
+    public let endTime: Double?
 
-    public init(word: String, confidence: Float) {
+    public init(word: String, confidence: Float, startTime: Double? = nil, endTime: Double? = nil) {
         self.word = word
         self.confidence = confidence
+        self.startTime = startTime
+        self.endTime = endTime
     }
 }
 

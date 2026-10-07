@@ -213,6 +213,33 @@ Cancellation latency is bounded by the MLX work already in flight — one encode
 
 `speech-server` routes Qwen3-ASR requests through the cancellation-aware entry point, so cancelling the task running Qwen3-ASR transcription stops decoding at the next checkpoint instead of continuing to EOS. Disconnect handling must propagate cancellation to that task.
 
+## MLX Cache Budget
+
+Loading an MLX Qwen3-ASR model bounds MLX's process-wide pool of reusable
+Metal buffers. The 0.6B variant uses `min(1 GiB, physical RAM / 8)`; the
+1.7B variant uses `min(4 GiB, physical RAM / 4)`. These ceilings apply to
+cached scratch buffers, not active model weights or the total process
+footprint. Other MLX models in the same process share this pool.
+
+Every loaded Qwen3-ASR instance registers its ceiling. The tightest live
+ceiling and the caller's existing `MLX.Memory.cacheLimit` determine the
+effective limit. Unloading instances in any order preserves the remaining
+models' ceilings; releasing the last instance restores the caller's budget.
+Registrations are also released when instances are destroyed. A tighter
+limit set by the caller while models are loaded is preserved on unload.
+
+Single-input transcription clears reusable MLX buffers when its decoder
+returns or throws, including cancellation inside the decoder. Active arrays
+and model weights remain loaded. `transcribeBatch` shares the same cache
+ceiling; its greedy batch decoder does not clear the pool after each batch.
+No transcription options or CLI flags change.
+
+Clearing the pool reduces retained memory but requires new allocations on
+later requests, so short requests can take longer. Waiting for submitted
+decoder work to finish makes cleanup deterministic, including cancellation.
+See the [cache regression probe](../benchmarks/qwen3-asr.md) for measured
+memory and latency tradeoffs; results depend on hardware, model, and audio.
+
 ## Language Detection
 
 The model automatically detects the spoken language from the audio content. No language hint or locale parameter is required. The text decoder emits a language token at the start of generation, followed by the transcribed text. Supported languages include English, Chinese, Japanese, Korean, and many European languages.

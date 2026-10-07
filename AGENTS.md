@@ -37,6 +37,10 @@ rebooted development machines.
 - If a second SwiftPM command queues on the same `.build` lock, don't leave
   it queued — it will pile its model loads on top of the first the moment
   the lock frees. Cancel it and rerun after the first completes.
+- Never commit raw benchmark run data (per-run JSON, logs, profiler output).
+  Commit one summary report, `docs/benchmarks/<model>.md`; keep raw results
+  in a scratch directory. Test fixtures belong under `scripts/tests/fixtures/`
+  or the test target.
 
 ## Git Conventions
 
@@ -140,6 +144,7 @@ The same skills are exposed to agents that scan `.codex/skills/` through relativ
 **On-Device LLM**
 - `Sources/Qwen3Chat/` — On-device LLM chat (Qwen3.5-0.8B, MLX INT5/INT8 + CoreML INT8)
 - `Sources/FunctionGemma/` — On-device Gemma function-calling (swift-transformers)
+- `Sources/GLiNER/` - Schema-conditioned text classification and entity spans (GLiNER2.5-Decide, DeBERTa encoder, MLX; `speech gliner` CLI command, `gliner-bench` binary)
 
 **Infrastructure**
 - `Sources/MLXCommon/` — Shared MLX utilities (weight loading, quantized layers, memory estimation, `SDPA` multi-head attention helper)
@@ -243,6 +248,7 @@ The `speech` binary is the main entry point (`audio` is a deprecated alias that 
 .build/release/speech compose "happy rock" -o music.wav # MAGNeT text-to-music (30s, 32 kHz)
 .build/release/speech kokoro "Hello" --voice af_heart   # Kokoro TTS (iOS)
 .build/release/speech qwen3-tts-coreml "Hello"          # Qwen3-TTS CoreML (6-model pipeline)
+.build/release/speech gliner classify "Remind me at 6" --labels create_reminder,other --variant int8  # GLiNER decision
 ```
 
 The `speech-server` binary exposes an HTTP + WebSocket API (Hummingbird):

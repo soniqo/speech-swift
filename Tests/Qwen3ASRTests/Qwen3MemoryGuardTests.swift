@@ -1,5 +1,4 @@
 import XCTest
-import MLX
 import Foundation
 @testable import Qwen3ASR
 
@@ -65,6 +64,78 @@ final class Qwen3MemoryGuardTests: XCTestCase {
             Qwen3ASRMemory.cacheLimitForLarge(physicalMemoryBytes: Int.min),
             0
         )
+    }
+
+    // MARK: - cacheLimitForSmall
+
+    func testCacheLimitForSmall_8GBMacReturnsEighthRAM() {
+        // 8 GB / 8 = 1 GB, exactly the cap. min picks 1 GB.
+        let eightGB = 8 * 1024 * 1024 * 1024
+        let oneGB = 1 * 1024 * 1024 * 1024
+        XCTAssertEqual(
+            Qwen3ASRMemory.cacheLimitForSmall(physicalMemoryBytes: eightGB),
+            oneGB
+        )
+    }
+
+    func testCacheLimitForSmall_4GBMacReturnsEighthRAM() {
+        // 4 GB / 8 = 512 MB, which is below the 1 GB cap → eighth-RAM wins.
+        let fourGB = 4 * 1024 * 1024 * 1024
+        let fiveTwelveMB = 512 * 1024 * 1024
+        XCTAssertEqual(
+            Qwen3ASRMemory.cacheLimitForSmall(physicalMemoryBytes: fourGB),
+            fiveTwelveMB
+        )
+    }
+
+    func testCacheLimitForSmall_16GBMacCapDominates() {
+        // 16 GB / 8 = 2 GB; cap clamps to 1 GB.
+        let sixteenGB = 16 * 1024 * 1024 * 1024
+        let oneGB = 1 * 1024 * 1024 * 1024
+        XCTAssertEqual(
+            Qwen3ASRMemory.cacheLimitForSmall(physicalMemoryBytes: sixteenGB),
+            oneGB
+        )
+    }
+
+    func testCacheLimitForSmall_64GBMacCapDominates() {
+        // 64 GB / 8 = 8 GB; cap clamps to 1 GB.
+        let sixtyFourGB = 64 * 1024 * 1024 * 1024
+        let oneGB = 1 * 1024 * 1024 * 1024
+        XCTAssertEqual(
+            Qwen3ASRMemory.cacheLimitForSmall(physicalMemoryBytes: sixtyFourGB),
+            oneGB
+        )
+    }
+
+    func testCacheLimitForSmall_ZeroReturnsZero() {
+        // Edge case: 0 physical memory shouldn't underflow.
+        XCTAssertEqual(
+            Qwen3ASRMemory.cacheLimitForSmall(physicalMemoryBytes: 0),
+            0
+        )
+    }
+
+    func testCacheLimitForSmall_NegativeClampedToZero() {
+        // The max(0, …) clamp must absorb pathological negatives.
+        XCTAssertEqual(
+            Qwen3ASRMemory.cacheLimitForSmall(physicalMemoryBytes: Int.min),
+            0
+        )
+    }
+
+    func testCacheLimitForSmall_StaysBelowCacheLimitForLarge() {
+        // Sanity: the small-model cap must never exceed the large-model
+        // cap at the same RAM size — the 0.6B decoder's working set is
+        // smaller, so its ceiling should be tighter or equal, never looser.
+        for physicalGB in [4, 8, 16, 24, 32, 64, 128] {
+            let bytes = physicalGB * 1024 * 1024 * 1024
+            XCTAssertLessThanOrEqual(
+                Qwen3ASRMemory.cacheLimitForSmall(physicalMemoryBytes: bytes),
+                Qwen3ASRMemory.cacheLimitForLarge(physicalMemoryBytes: bytes),
+                "at \(physicalGB) GB RAM"
+            )
+        }
     }
 
     // MARK: - shouldWarnForLarge
@@ -164,65 +235,4 @@ final class Qwen3MemoryGuardTests: XCTestCase {
         XCTAssertTrue(formatted.contains("empty"))
     }
 
-    // MARK: - cacheLimit save/restore (PersonaPlex regression coverage)
-
-    /// Adversarial-review finding from the workflow: `MLX.Memory.cacheLimit`
-    /// is process-global. The original fix added a per-instance
-    /// `savedMLXCacheLimit` so `unload()` restores the prior cap and
-    /// co-loaded models (PersonaPlex loads ASR + Mimi + LM in the same
-    /// process) don't inherit our 4 GB ceiling. This test exercises the
-    /// save/restore loop directly: simulate what `fromPretrained` does for
-    /// `.large`, then call `unload()` and assert the cap is returned to
-    /// the pre-load value. No model weights touched — pure plumbing test.
-    func testUnload_RestoresPriorMLXCacheLimit() {
-        let initialCap = 8 * 1024 * 1024 * 1024  // 8 GB starting state
-        let appliedCap = 4 * 1024 * 1024 * 1024  // what .large would apply
-        let priorCap = MLX.Memory.cacheLimit
-        defer { MLX.Memory.cacheLimit = priorCap }  // never leak test state
-
-        MLX.Memory.cacheLimit = initialCap
-
-        let model = Qwen3ASRModel(
-            audioConfig: ASRModelSize.large.audioConfig,
-            textConfig: ASRModelSize.large.textConfig(bits: 8))
-
-        // Simulate `fromPretrained`'s save-then-cap step (only the global
-        // state and the instance var; we don't actually load weights).
-        model.savedMLXCacheLimit = MLX.Memory.cacheLimit
-        MLX.Memory.cacheLimit = appliedCap
-
-        XCTAssertEqual(MLX.Memory.cacheLimit, appliedCap,
-                       "precondition: cap should be applied at this point")
-        XCTAssertEqual(model.savedMLXCacheLimit, initialCap,
-                       "precondition: saved limit should match the prior value")
-
-        model.unload()
-
-        XCTAssertEqual(MLX.Memory.cacheLimit, initialCap,
-                       "unload() must restore MLX.Memory.cacheLimit to the saved value — otherwise co-loaded models (PersonaPlex) inherit our 4 GB cap")
-        XCTAssertNil(model.savedMLXCacheLimit,
-                     "unload() must clear the saved value so a re-load doesn't restore a stale limit")
-    }
-
-    /// Small variant doesn't apply a cap (savedMLXCacheLimit stays nil), so
-    /// unload() must NOT modify the global cache limit. Co-loaded models
-    /// must see exactly what they configured themselves.
-    func testUnload_DoesNotRestoreWhenNoSaveWasMade() {
-        let observableCap = 6 * 1024 * 1024 * 1024  // some non-default value
-        let priorCap = MLX.Memory.cacheLimit
-        defer { MLX.Memory.cacheLimit = priorCap }
-
-        MLX.Memory.cacheLimit = observableCap
-
-        let model = Qwen3ASRModel(
-            audioConfig: ASRModelSize.small.audioConfig,
-            textConfig: ASRModelSize.small.textConfig(bits: 4))
-        // Small variant: fromPretrained leaves savedMLXCacheLimit at nil.
-        XCTAssertNil(model.savedMLXCacheLimit)
-
-        model.unload()
-
-        XCTAssertEqual(MLX.Memory.cacheLimit, observableCap,
-                       "unload() on a non-large model must not touch MLX.Memory.cacheLimit")
-    }
 }

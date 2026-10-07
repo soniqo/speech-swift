@@ -1,0 +1,840 @@
+{
+  "firstRequestMilliseconds" : {
+    "extraction" : 48.368292,
+    "routing" : 164.496459
+  },
+  "loadMilliseconds" : 1023.146,
+  "modelDirectory" : "\/Users\/ivan\/Library\/Caches\/qwen3-speech\/gliner-decide-swift-fp32",
+  "processPeakRSSBytes" : 2085453824,
+  "rows" : [
+    {
+      "choices" : [
+        {
+          "label" : "create_reminder",
+          "probability" : 0.54544663
+        },
+        {
+          "label" : "create_calendar_event",
+          "probability" : 0.06473398
+        },
+        {
+          "label" : "send_message",
+          "probability" : 0.14394607
+        },
+        {
+          "label" : "search_notes",
+          "probability" : 0.06060148
+        },
+        {
+          "label" : "set_timer",
+          "probability" : 0.08693693
+        },
+        {
+          "label" : "other",
+          "probability" : 0.09833486
+        }
+      ],
+      "correct" : true,
+      "milliseconds" : [
+        41.219625,
+        42.32225,
+        38.085458,
+        42.260291,
+        40.56075
+      ],
+      "task" : "routing",
+      "text" : "Remind me to call Dad at six PM."
+    },
+    {
+      "choices" : [
+        {
+          "label" : "create_reminder",
+          "probability" : 0.8461719
+        },
+        {
+          "label" : "create_calendar_event",
+          "probability" : 0.021892702
+        },
+        {
+          "label" : "send_message",
+          "probability" : 0.045804568
+        },
+        {
+          "label" : "search_notes",
+          "probability" : 0.02099867
+        },
+        {
+          "label" : "set_timer",
+          "probability" : 0.02281392
+        },
+        {
+          "label" : "other",
+          "probability" : 0.042318333
+        }
+      ],
+      "correct" : true,
+      "milliseconds" : [
+        41.011042,
+        39.503042,
+        40.240584,
+        40.324958,
+        39.632375
+      ],
+      "task" : "routing",
+      "text" : "Please remind me tomorrow to buy milk."
+    },
+    {
+      "choices" : [
+        {
+          "label" : "create_reminder",
+          "probability" : 0.10668667
+        },
+        {
+          "label" : "create_calendar_event",
+          "probability" : 0.030643787
+        },
+        {
+          "label" : "send_message",
+          "probability" : 0.7460999
+        },
+        {
+          "label" : "search_notes",
+          "probability" : 0.030861096
+        },
+        {
+          "label" : "set_timer",
+          "probability" : 0.020621367
+        },
+        {
+          "label" : "other",
+          "probability" : 0.06508715
+        }
+      ],
+      "correct" : false,
+      "milliseconds" : [
+        41.065209,
+        39.245458,
+        38.674333,
+        38.323625,
+        40.392292
+      ],
+      "task" : "routing",
+      "text" : "Don't let me forget to send the invoice on Friday."
+    },
+    {
+      "choices" : [
+        {
+          "label" : "create_reminder",
+          "probability" : 0.09712742
+        },
+        {
+          "label" : "create_calendar_event",
+          "probability" : 0.44738957
+        },
+        {
+          "label" : "send_message",
+          "probability" : 0.087913826
+        },
+        {
+          "label" : "search_notes",
+          "probability" : 0.07585059
+        },
+        {
+          "label" : "set_timer",
+          "probability" : 0.15974216
+        },
+        {
+          "label" : "other",
+          "probability" : 0.13197643
+        }
+      ],
+      "correct" : true,
+      "milliseconds" : [
+        40.920167,
+        39.542291,
+        39.407292,
+        38.137792,
+        38.528917
+      ],
+      "task" : "routing",
+      "text" : "Schedule a meeting with Alice tomorrow at ten AM."
+    },
+    {
+      "choices" : [
+        {
+          "label" : "create_reminder",
+          "probability" : 0.012457103
+        },
+        {
+          "label" : "create_calendar_event",
+          "probability" : 0.92635
+        },
+        {
+          "label" : "send_message",
+          "probability" : 0.012649334
+        },
+        {
+          "label" : "search_notes",
+          "probability" : 0.008122524
+        },
+        {
+          "label" : "set_timer",
+          "probability" : 0.012885478
+        },
+        {
+          "label" : "other",
+          "probability" : 0.027535437
+        }
+      ],
+      "correct" : true,
+      "milliseconds" : [
+        38.998208,
+        37.619875,
+        38.815833,
+        37.072917,
+        37.813333
+      ],
+      "task" : "routing",
+      "text" : "Put lunch with Sam on my calendar for noon."
+    },
+    {
+      "choices" : [
+        {
+          "label" : "create_reminder",
+          "probability" : 0.040524237
+        },
+        {
+          "label" : "create_calendar_event",
+          "probability" : 0.03474714
+        },
+        {
+          "label" : "send_message",
+          "probability" : 0.7883478
+        },
+        {
+          "label" : "search_notes",
+          "probability" : 0.030482443
+        },
+        {
+          "label" : "set_timer",
+          "probability" : 0.03686957
+        },
+        {
+          "label" : "other",
+          "probability" : 0.06902875
+        }
+      ],
+      "correct" : true,
+      "milliseconds" : [
+        38.408833,
+        37.976917,
+        37.267959,
+        74.90825,
+        98.451834
+      ],
+      "task" : "routing",
+      "text" : "Text Dad that I will be late."
+    },
+    {
+      "choices" : [
+        {
+          "label" : "create_reminder",
+          "probability" : 0.00031436808
+        },
+        {
+          "label" : "create_calendar_event",
+          "probability" : 0.0003348669
+        },
+        {
+          "label" : "send_message",
+          "probability" : 0.99752086
+        },
+        {
+          "label" : "search_notes",
+          "probability" : 0.0003280566
+        },
+        {
+          "label" : "set_timer",
+          "probability" : 0.00030115494
+        },
+        {
+          "label" : "other",
+          "probability" : 0.0012006456
+        }
+      ],
+      "correct" : true,
+      "milliseconds" : [
+        133.488542,
+        112.274125,
+        124.466,
+        131.223542,
+        138.3485
+      ],
+      "task" : "routing",
+      "text" : "Send Alice a message saying I arrived."
+    },
+    {
+      "choices" : [
+        {
+          "label" : "create_reminder",
+          "probability" : 2.1777646e-06
+        },
+        {
+          "label" : "create_calendar_event",
+          "probability" : 2.1619494e-06
+        },
+        {
+          "label" : "send_message",
+          "probability" : 1.6054028e-06
+        },
+        {
+          "label" : "search_notes",
+          "probability" : 0.99996626
+        },
+        {
+          "label" : "set_timer",
+          "probability" : 1.5735735e-06
+        },
+        {
+          "label" : "other",
+          "probability" : 2.621261e-05
+        }
+      ],
+      "correct" : true,
+      "milliseconds" : [
+        118.44775,
+        141.029125,
+        149.072542,
+        126.502416,
+        38.966667
+      ],
+      "task" : "routing",
+      "text" : "Find my notes about the Berlin trip."
+    },
+    {
+      "choices" : [
+        {
+          "label" : "create_reminder",
+          "probability" : 3.5823857e-06
+        },
+        {
+          "label" : "create_calendar_event",
+          "probability" : 2.2011322e-06
+        },
+        {
+          "label" : "send_message",
+          "probability" : 1.1673332e-06
+        },
+        {
+          "label" : "search_notes",
+          "probability" : 0.99996746
+        },
+        {
+          "label" : "set_timer",
+          "probability" : 1.9534723e-06
+        },
+        {
+          "label" : "other",
+          "probability" : 2.3644503e-05
+        }
+      ],
+      "correct" : true,
+      "milliseconds" : [
+        42.459542,
+        41.950625,
+        41.956833,
+        41.884333,
+        41.023583
+      ],
+      "task" : "routing",
+      "text" : "Search my notes for the project budget."
+    },
+    {
+      "choices" : [
+        {
+          "label" : "create_reminder",
+          "probability" : 0.00070847047
+        },
+        {
+          "label" : "create_calendar_event",
+          "probability" : 0.00065587147
+        },
+        {
+          "label" : "send_message",
+          "probability" : 0.0005185129
+        },
+        {
+          "label" : "search_notes",
+          "probability" : 0.00046298452
+        },
+        {
+          "label" : "set_timer",
+          "probability" : 0.99646735
+        },
+        {
+          "label" : "other",
+          "probability" : 0.0011867591
+        }
+      ],
+      "correct" : true,
+      "milliseconds" : [
+        40.302875,
+        38.272375,
+        39.989375,
+        38.501042,
+        39.964084
+      ],
+      "task" : "routing",
+      "text" : "Set a timer for ten minutes."
+    },
+    {
+      "choices" : [
+        {
+          "label" : "create_reminder",
+          "probability" : 0.03930552
+        },
+        {
+          "label" : "create_calendar_event",
+          "probability" : 0.04835695
+        },
+        {
+          "label" : "send_message",
+          "probability" : 0.048586685
+        },
+        {
+          "label" : "search_notes",
+          "probability" : 0.027938362
+        },
+        {
+          "label" : "set_timer",
+          "probability" : 0.7627345
+        },
+        {
+          "label" : "other",
+          "probability" : 0.07307802
+        }
+      ],
+      "correct" : true,
+      "milliseconds" : [
+        37.38825,
+        37.581375,
+        37.28625,
+        37.416792,
+        37.916791
+      ],
+      "task" : "routing",
+      "text" : "Start a five minute countdown."
+    },
+    {
+      "choices" : [
+        {
+          "label" : "create_reminder",
+          "probability" : 0.07850022
+        },
+        {
+          "label" : "create_calendar_event",
+          "probability" : 0.081373625
+        },
+        {
+          "label" : "send_message",
+          "probability" : 0.12056076
+        },
+        {
+          "label" : "search_notes",
+          "probability" : 0.2718969
+        },
+        {
+          "label" : "set_timer",
+          "probability" : 0.07630455
+        },
+        {
+          "label" : "other",
+          "probability" : 0.37136388
+        }
+      ],
+      "correct" : true,
+      "milliseconds" : [
+        37.410917,
+        36.534375,
+        36.827125,
+        37.9955,
+        37.301333
+      ],
+      "task" : "routing",
+      "text" : "What is the capital of France?"
+    },
+    {
+      "choices" : [
+        {
+          "label" : "create_reminder",
+          "probability" : 0.08635894
+        },
+        {
+          "label" : "create_calendar_event",
+          "probability" : 0.10401098
+        },
+        {
+          "label" : "send_message",
+          "probability" : 0.16679142
+        },
+        {
+          "label" : "search_notes",
+          "probability" : 0.13841918
+        },
+        {
+          "label" : "set_timer",
+          "probability" : 0.16133006
+        },
+        {
+          "label" : "other",
+          "probability" : 0.34308937
+        }
+      ],
+      "correct" : true,
+      "milliseconds" : [
+        37.105042,
+        37.442167,
+        37.786709,
+        36.905791,
+        36.68025
+      ],
+      "task" : "routing",
+      "text" : "Turn on the kitchen lights."
+    },
+    {
+      "choices" : [
+        {
+          "label" : "create_reminder",
+          "probability" : 0.0047826306
+        },
+        {
+          "label" : "create_calendar_event",
+          "probability" : 0.0037682485
+        },
+        {
+          "label" : "send_message",
+          "probability" : 0.0060774796
+        },
+        {
+          "label" : "search_notes",
+          "probability" : 0.005384169
+        },
+        {
+          "label" : "set_timer",
+          "probability" : 0.93917596
+        },
+        {
+          "label" : "other",
+          "probability" : 0.040811475
+        }
+      ],
+      "correct" : false,
+      "milliseconds" : [
+        37.558417,
+        49.159542,
+        111.728542,
+        118.375084,
+        96.011666
+      ],
+      "task" : "routing",
+      "text" : "Do not set a timer."
+    },
+    {
+      "choices" : [
+        {
+          "label" : "create_reminder",
+          "probability" : 0.43384933
+        },
+        {
+          "label" : "create_calendar_event",
+          "probability" : 0.06739035
+        },
+        {
+          "label" : "send_message",
+          "probability" : 0.085000075
+        },
+        {
+          "label" : "search_notes",
+          "probability" : 0.1459146
+        },
+        {
+          "label" : "set_timer",
+          "probability" : 0.09433345
+        },
+        {
+          "label" : "other",
+          "probability" : 0.17351215
+        }
+      ],
+      "correct" : false,
+      "milliseconds" : [
+        102.948583,
+        101.697667,
+        115.093334,
+        109.79825,
+        119.278459
+      ],
+      "task" : "routing",
+      "text" : "How do reminders work?"
+    },
+    {
+      "choices" : [
+        {
+          "label" : "create_reminder",
+          "probability" : 0.37498662
+        },
+        {
+          "label" : "create_calendar_event",
+          "probability" : 0.03431458
+        },
+        {
+          "label" : "send_message",
+          "probability" : 0.43164295
+        },
+        {
+          "label" : "search_notes",
+          "probability" : 0.038001172
+        },
+        {
+          "label" : "set_timer",
+          "probability" : 0.04987075
+        },
+        {
+          "label" : "other",
+          "probability" : 0.071183845
+        }
+      ],
+      "correct" : false,
+      "milliseconds" : [
+        57.022166,
+        44.738708,
+        41.548667,
+        41.824167,
+        43.762
+      ],
+      "task" : "routing",
+      "text" : "Remind me to text Alice at noon."
+    },
+    {
+      "correct" : true,
+      "entities" : {
+        "person" : [
+          {
+            "end" : 21,
+            "score" : 0.9949339,
+            "start" : 18,
+            "text" : "Dad"
+          }
+        ],
+        "time" : [
+          {
+            "end" : 31,
+            "score" : 0.999276,
+            "start" : 25,
+            "text" : "six PM"
+          }
+        ]
+      },
+      "milliseconds" : [
+        40.966792,
+        40.310209,
+        42.139,
+        41.197416,
+        40.316041
+      ],
+      "task" : "extraction",
+      "text" : "Remind me to call Dad at six PM."
+    },
+    {
+      "correct" : true,
+      "entities" : {
+        "person" : [
+          {
+            "end" : 23,
+            "score" : 0.9992192,
+            "start" : 18,
+            "text" : "Alice"
+          }
+        ],
+        "time" : [
+          {
+            "end" : 31,
+            "score" : 0.999871,
+            "start" : 27,
+            "text" : "8 AM"
+          }
+        ]
+      },
+      "milliseconds" : [
+        41.431167,
+        40.638541,
+        41.862167,
+        41.260375,
+        40.57175
+      ],
+      "task" : "extraction",
+      "text" : "Remind me to call Alice at 8 AM."
+    },
+    {
+      "correct" : true,
+      "entities" : {
+        "person" : [
+          {
+            "end" : 8,
+            "score" : 0.9996435,
+            "start" : 5,
+            "text" : "Sam"
+          }
+        ],
+        "time" : [
+          {
+            "end" : 16,
+            "score" : 0.9999945,
+            "start" : 12,
+            "text" : "noon"
+          }
+        ]
+      },
+      "milliseconds" : [
+        42.310666,
+        39.628208,
+        40.88075,
+        40.247917,
+        40.972666
+      ],
+      "task" : "extraction",
+      "text" : "Text Sam at noon."
+    },
+    {
+      "correct" : true,
+      "entities" : {
+        "person" : [
+          {
+            "end" : 25,
+            "score" : 0.9969782,
+            "start" : 20,
+            "text" : "Maria"
+          }
+        ],
+        "time" : [
+          {
+            "end" : 34,
+            "score" : 0.9983281,
+            "start" : 29,
+            "text" : "12:30"
+          }
+        ]
+      },
+      "milliseconds" : [
+        39.394792,
+        86.09825,
+        114.349833,
+        134.633417,
+        132.592542
+      ],
+      "task" : "extraction",
+      "text" : "Schedule lunch with Maria at 12:30."
+    },
+    {
+      "correct" : true,
+      "entities" : {
+        "person" : [
+          {
+            "end" : 21,
+            "score" : 0.75826925,
+            "start" : 18,
+            "text" : "Dad"
+          }
+        ],
+        "time" : [
+
+        ]
+      },
+      "milliseconds" : [
+        148.713958,
+        134.062208,
+        139.358791,
+        138.74725,
+        124.596334
+      ],
+      "task" : "extraction",
+      "text" : "Remind me to call Dad."
+    },
+    {
+      "correct" : true,
+      "entities" : {
+        "person" : [
+
+        ],
+        "time" : [
+          {
+            "end" : 27,
+            "score" : 0.5065564,
+            "start" : 16,
+            "text" : "ten minutes"
+          }
+        ]
+      },
+      "milliseconds" : [
+        164.7305,
+        80.7665,
+        33.324583,
+        44.421625,
+        46.320875
+      ],
+      "task" : "extraction",
+      "text" : "Set a timer for ten minutes."
+    },
+    {
+      "correct" : true,
+      "entities" : {
+        "person" : [
+
+        ],
+        "time" : [
+
+        ]
+      },
+      "milliseconds" : [
+        46.564667,
+        41.993917,
+        42.376709,
+        41.836041,
+        42.396667
+      ],
+      "task" : "extraction",
+      "text" : "Find my notes."
+    },
+    {
+      "correct" : false,
+      "entities" : {
+        "person" : [
+          {
+            "end" : 10,
+            "score" : 0.9982942,
+            "start" : 5,
+            "text" : "Alice"
+          }
+        ],
+        "time" : [
+          {
+            "end" : 30,
+            "score" : 0.99982595,
+            "start" : 24,
+            "text" : "six PM"
+          }
+        ]
+      },
+      "milliseconds" : [
+        43.145583,
+        42.928583,
+        42.203708,
+        43.040333,
+        41.776
+      ],
+      "task" : "extraction",
+      "text" : "Call Alice, not Bob, at six PM."
+    }
+  ],
+  "sampledPhysicalFootprintBytes" : 2983889224
+}

@@ -60,10 +60,12 @@ struct TDTGreedyDecoder {
     /// - Parameters:
     ///   - encoded: Encoder output as MLMultiArray, shape `[1, T, encoderHidden]`
     ///   - encodedLength: Number of valid encoder frames
-    /// - Returns: Tuple of (token IDs, per-token log-probs, overall confidence 0.0–1.0)
-    func decode(encoded: MLMultiArray, encodedLength: Int) throws -> (tokens: [Int], tokenLogProbs: [Float], confidence: Float) {
+    /// - Returns: Tuple of (token IDs, per-token log-probs, per-token encoder frame index,
+    ///   overall confidence 0.0–1.0). Frame indices are relative to `encoded`.
+    func decode(encoded: MLMultiArray, encodedLength: Int) throws -> (tokens: [Int], tokenLogProbs: [Float], tokenFrames: [Int], confidence: Float) {
         var tokens = [Int]()
         var tokenLogProbs = [Float]()
+        var tokenFrames = [Int]()
 
         // Initialize LSTM state
         let hShape = [config.decoderLayers, 1, config.decoderHidden] as [NSNumber]
@@ -124,6 +126,7 @@ struct TDTGreedyDecoder {
                     // Compute log-softmax: log_prob = logit[id] - log(sum(exp(logits)))
                     let logProb = logSoftmax(tokenLogits, tokenId: tokenId, count: config.vocabSize + 1, floatBuf: argmaxBuf)
                     tokenLogProbs.append(logProb)
+                    tokenFrames.append(t)
                 }
 
                 let durationIdx = argmax(durationLogits, count: config.numDurationBins, floatBuf: nil)
@@ -152,7 +155,7 @@ struct TDTGreedyDecoder {
         } else {
             confidence = 0.0
         }
-        return (tokens, tokenLogProbs, confidence)
+        return (tokens, tokenLogProbs, tokenFrames, confidence)
     }
 
     // MARK: - Array Operations

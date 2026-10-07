@@ -24,6 +24,24 @@ public final class Gemma4Chat: @unchecked Sendable {
     private var _constraintVocabulary: JSONTokenVocabulary?
     private var _xgrammarVocabulary: XGrammarVocabulary?
 
+    /// Model state just past a system turn, most recently used last, for requests that repeat it.
+    ///
+    /// A caller running a fixed set of instructions over many inputs sends the same system turn
+    /// again and again, and prefill read it from scratch every time. Measured over one Discover run
+    /// on the built-in E4B (2026-09-27), system turns were 80% of prompt text and the same fifty or
+    /// so recurred across 2,395 requests, so resuming from a kept state skips most of what prefill
+    /// reads. Bounded by bytes: a snapshot is the K/V of every producing layer over the turn, about
+    /// 57 KB a token.
+    private var prefixSnapshots: [(tokens: [Int], state: Gemma4Model.InferenceState, bytes: Int)] = []
+    private let prefixLock = NSLock()
+
+    /// `SPEECH_SWIFT_GEMMA4_PREFIX_CACHE_MB`; 0 turns reuse off.
+    static let prefixCacheBudget: Int = {
+        let megabytes = ProcessInfo.processInfo.environment["SPEECH_SWIFT_GEMMA4_PREFIX_CACHE_MB"]
+            .flatMap { Int($0.trimmingCharacters(in: .whitespaces)) } ?? 512
+        return max(0, megabytes) * 1024 * 1024
+    }()
+
     private init(config: Gemma4DenseConfig, gemmaTokenizer: Gemma4Tokenizer,
                  tokenizer: ChatTokenizer, model: Gemma4Model) {
         self.denseConfig = config
@@ -126,6 +144,8 @@ public final class Gemma4Chat: @unchecked Sendable {
                     messages: messages, tokenizer: self.gemmaTokenizer)
                 let failure = self.decode(
                     promptTokens: promptTokens,
+                    reusablePrefix: Gemma4ChatTemplate.systemTurnLength(
+                        messages: messages, tokenizer: self.gemmaTokenizer),
                     sampling: sampling,
                     shouldContinue: shouldContinue,
                     constraint: constraint,
@@ -196,18 +216,16 @@ public final class Gemma4Chat: @unchecked Sendable {
     @discardableResult
     func decode(
         promptTokens: [Int],
+        reusablePrefix: Int = 0,
         sampling: ChatSamplingConfig,
         shouldContinue: () -> Bool = { true },
         constraint: (any TokenDecodeConstraint)? = nil,
         onToken: (Int) -> Void = { _ in },
         onText: (String) -> Void
     ) -> ChatResponseFormatError? {
-        resetState()
-
         // Prefill. Only the final position is sampled, so the lm_head runs on that row alone —
         // over a long prompt the discarded rows are gigabytes of 262k-wide logits.
-        let promptArray = MLXArray(promptTokens.map { Int32($0) }).expandedDimensions(axis: 0)
-        var logits = model.lastTokenLogits(inputIds: promptArray, state: &state)
+        var logits = prefill(promptTokens, reusablePrefix: reusablePrefix)
 
         var history = promptTokens
         var produced = false
@@ -265,6 +283,59 @@ public final class Gemma4Chat: @unchecked Sendable {
 
         if let tail = filter.flush(), !tail.isEmpty { onText(tail) }
         return failure
+    }
+
+    /// Prefill `tokens`, resuming from a kept state for their first `reusablePrefix` tokens when
+    /// one exists and keeping one when it does not. The split prefill is the whole prefill in two
+    /// passes — `testSplitPrefillMatchesWholePrefill` — so the result does not depend on a hit.
+    func prefill(_ tokens: [Int], reusablePrefix: Int) -> MLXArray {
+        let prefixLength = reusablePrefix
+        guard Self.prefixCacheBudget > 0, prefixLength > 0, prefixLength < tokens.count else {
+            resetState()
+            return model.lastTokenLogits(
+                inputIds: MLXArray(tokens.map { Int32($0) }).expandedDimensions(axis: 0),
+                state: &state)
+        }
+        let prefix = Array(tokens[0 ..< prefixLength])
+        prefixLock.lock()
+        let kept = prefixSnapshots.lastIndex { $0.tokens == prefix }.map { index in
+            let hit = prefixSnapshots.remove(at: index)
+            prefixSnapshots.append(hit)
+            return hit.state
+        }
+        prefixLock.unlock()
+        if let kept {
+            state = kept.copied()
+        } else {
+            resetState()
+            let head = model.lastTokenLogits(
+                inputIds: MLXArray(prefix.map { Int32($0) }).expandedDimensions(axis: 0),
+                state: &state)
+            eval([head] + state.arrays)
+            keepPrefix(prefix, state: state.copied())
+        }
+        let rest = tokens[prefixLength...].map { Int32($0) }
+        return model.lastTokenLogits(
+            inputIds: MLXArray(rest).expandedDimensions(axis: 0), state: &state)
+    }
+
+    private func keepPrefix(_ tokens: [Int], state kept: Gemma4Model.InferenceState) {
+        let bytes = kept.byteCount
+        guard bytes <= Self.prefixCacheBudget else { return }
+        prefixLock.lock()
+        defer { prefixLock.unlock() }
+        prefixSnapshots.append((tokens, kept, bytes))
+        var total = prefixSnapshots.reduce(0) { $0 + $1.bytes }
+        while total > Self.prefixCacheBudget, !prefixSnapshots.isEmpty {
+            total -= prefixSnapshots.removeFirst().bytes
+        }
+    }
+
+    /// Drop every kept prompt state, returning its memory.
+    public func clearPrefixCache() {
+        prefixLock.lock()
+        prefixSnapshots.removeAll()
+        prefixLock.unlock()
     }
 
     // MARK: - Parity harness (unchanged surface used by Gemma4ParityTests)
@@ -390,6 +461,14 @@ struct Gemma4AnswerFilter {
 /// `<turn|>`=106, `\n`=107, role words `system`/`user`/`model`. We render via the tokenizer's
 /// encode so a vocab change can't desync the ids.
 enum Gemma4ChatTemplate {
+    /// Tokens up to the end of a leading system turn, which `encode` writes as its own segment, or
+    /// 0 without one. Every request with the same system turn starts with exactly these tokens.
+    static func systemTurnLength(messages: [ChatMessage], tokenizer: Gemma4Tokenizer) -> Int {
+        guard let first = messages.first, first.role == .system, messages.count > 1 else { return 0 }
+        return 1 + tokenizer.encode("<|turn>system\n").count + tokenizer.encode(first.content).count
+            + tokenizer.encode("<turn|>\n").count
+    }
+
     static func encode(messages: [ChatMessage], tokenizer: Gemma4Tokenizer) -> [Int] {
         var tokens: [Int] = [tokenizer.bosTokenId]
         for m in messages {

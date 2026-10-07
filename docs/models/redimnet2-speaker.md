@@ -24,11 +24,18 @@ checkpoint trained on VoxBlink2 and VoxCeleb2.
 | Window | 6 seconds |
 | Output | 192 floats, L2-normalized |
 | Runtime | Compiled Core ML |
-| Compiled size | approximately 25 MiB |
+| Compiled size | approximately 29 MiB |
+| Export revision | `frontend-fp32-v1` |
+| Compute precision | FP32 frontend/head, FP16 backbone |
 
 The graph includes waveform normalization, pre-emphasis, mel feature
 extraction, ReDimNet2-B6, attentive statistics pooling, the embedding head, and
 final L2 normalization.
+
+The frontend, statistics pooling, projection and final normalization retain
+FP32 types. Only the learned backbone uses FP16. This avoids preprocessing
+overflow for sparse or quiet inputs while preserving the fixed input/output
+contract and the original checkpoint.
 
 ## Fixed Window
 
@@ -51,15 +58,24 @@ Inference failures throw an error. The model never substitutes a zero embedding.
 
 ## Validation
 
-The conversion compares the checksum-pinned official PyTorch checkpoint with
-the compiled Core ML bundle. The release candidate measured 0.999990 cosine
-agreement, a 0.999916 output norm, and 13.6 ms median warm inference on an Apple
-M2 Max.
+The conversion checks five deterministic waveforms under four Core ML compute
+configurations against the checksum-pinned original FP32 model. Every output
+must be finite, normalized, and reach cosine agreement >= 0.999. These are
+numerical checks, not diarization or speaker-recognition accuracy measurements.
+Matching thresholds still need microphone, language and duration calibration.
 
-On the initial recurring-speaker meeting pilot, the fixed Core ML model reduced
-equal error rate from 3.76% with standalone WeSpeaker to 1.88%. This is a small
-five-speaker pilot, not a universal quality claim. Production thresholds need
-additional accented and multilingual calibration data.
+## Cache and Offline Loading
+
+`cacheDir` is the repository cache root. The default model loads from
+`revisions/frontend-fp32-v1/` under that root, preserving earlier cached exports.
+`modelCacheDirectory(in:)` resolves this directory; `isCached(at:)` checks the
+expected export metadata and required-file presence for routing. The loader
+then verifies the pinned compiled-file SHA-256 values before inference.
+`offlineMode: true` requires this corrected generation; a retired export is not
+an offline hit. Explicit custom repositories retain their direct cache paths.
+
+The pinned compiled bytes are published at
+[revision `112dd8f4`](https://huggingface.co/aufklarer/ReDimNet2-B6-CoreML/tree/112dd8f4f836abdf8a420e66a5e2885cf8ec64ab).
 
 ## API
 

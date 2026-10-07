@@ -16,6 +16,7 @@ final class ReDimNet2SpeakerTests: XCTestCase {
             ReDimNet2SpeakerModel.minimumShortUtteranceSampleCount,
             9_600)
         XCTAssertEqual(ReDimNet2SpeakerModel.embeddingDimension, 192)
+        XCTAssertEqual(ReDimNet2SpeakerModel.defaultArtifactRevision, "frontend-fp32-v1")
     }
 
     func testDecodesPublishedModelConfiguration() throws {
@@ -122,6 +123,57 @@ final class ReDimNet2SpeakerTests: XCTestCase {
             ReDimNet2SpeakerModel.cosineSimilarity([1], [1, 0]),
             0)
     }
+
+    func testDefaultCacheDoesNotTreatTheLegacyExportAsCurrent() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let legacy = root.appendingPathComponent("config.json")
+        let original = Data("legacy export".utf8)
+        try original.write(to: legacy)
+        let current = ReDimNet2SpeakerModel.modelCacheDirectory(in: root)
+        XCTAssertNotEqual(current, root)
+        XCTAssertTrue(current.path.hasSuffix("revisions/frontend-fp32-v1"))
+        XCTAssertFalse(ReDimNet2SpeakerModel.isCached(at: root))
+        XCTAssertEqual(try Data(contentsOf: legacy), original)
+        XCTAssertEqual(
+            ReDimNet2SpeakerModel.modelCacheDirectory(in: root, modelId: "example/custom-identity"),
+            root)
+    }
+
+    func testDefaultArtifactRejectsLegacyMetadataAndCorruptedCompiledFiles() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let directory = ReDimNet2SpeakerModel.modelCacheDirectory(in: root)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        var metadata: [String: Any] = [
+            "model_type": "redimnet2-b6-speaker-coreml", "sample_rate": 16000,
+            "input_samples": 96000, "embedding_dimension": 192,
+            "input_name": "audio", "output_name": "embedding",
+            "compiled_model": "ReDimNet2B6.mlmodelc",
+        ]
+        let legacy = try ReDimNet2SpeakerModel.decodeConfiguration(
+            JSONSerialization.data(withJSONObject: metadata))
+        XCTAssertThrowsError(try ReDimNet2SpeakerModel.validateDefaultArtifact(legacy, at: directory))
+        metadata["artifact_revision"] = ReDimNet2SpeakerModel.defaultArtifactRevision
+        metadata["compute_precision"] = ReDimNet2SpeakerModel.defaultComputePrecision
+        metadata["compiled_files_sha256"] = ReDimNet2SpeakerModel.defaultArtifactChecksums
+        let encoded = try JSONSerialization.data(withJSONObject: metadata)
+        try encoded.write(to: directory.appendingPathComponent("config.json"))
+        for name in ReDimNet2SpeakerModel.defaultArtifactChecksums.keys {
+            let file = directory.appendingPathComponent("ReDimNet2B6.mlmodelc").appendingPathComponent(name)
+            try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data("corrupt".utf8).write(to: file)
+        }
+        // Presence routes the load; bytes must still pass validation before inference.
+        XCTAssertTrue(ReDimNet2SpeakerModel.isCached(at: root))
+        let configuration = try ReDimNet2SpeakerModel.decodeConfiguration(encoded)
+        XCTAssertThrowsError(try ReDimNet2SpeakerModel.validateDefaultArtifact(configuration, at: directory))
+        metadata["artifact_revision"] = "retired"
+        try JSONSerialization.data(withJSONObject: metadata).write(
+            to: directory.appendingPathComponent("config.json"))
+        XCTAssertFalse(ReDimNet2SpeakerModel.isCached(at: root))
+    }
 }
 
 final class E2EReDimNet2SpeakerTests: XCTestCase {
@@ -129,8 +181,17 @@ final class E2EReDimNet2SpeakerTests: XCTestCase {
         if let directory = ProcessInfo.processInfo.environment[
             "REDIMNET2_COREML_MODEL_DIR"]
         {
+            let source = URL(fileURLWithPath: directory, isDirectory: true)
+            let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            let target = ReDimNet2SpeakerModel.modelCacheDirectory(in: root)
+            try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+            addTeardownBlock { try? FileManager.default.removeItem(at: root) }
+            for name in ["config.json", "ReDimNet2B6.mlmodelc"] {
+                try FileManager.default.copyItem(at: source.appendingPathComponent(name),
+                                                to: target.appendingPathComponent(name))
+            }
             return try await ReDimNet2SpeakerModel.fromPretrained(
-                cacheDir: URL(fileURLWithPath: directory, isDirectory: true),
+                cacheDir: root,
                 offlineMode: true)
         }
         return try await ReDimNet2SpeakerModel.fromPretrained()
@@ -194,6 +255,34 @@ final class E2EReDimNet2SpeakerTests: XCTestCase {
             sqrt(embedding.reduce(Float(0)) { $0 + $1 * $1 }),
             1,
             accuracy: 0.002)
+    }
+
+    func testE2ESparseAndQuietWaveformsRemainFinite() async throws {
+        let model = try await loadModel()
+        var sparse = [Float](repeating: 0, count: 96_000)
+        for index in 40_000..<40_128 {
+            sparse[index] = 0.12 * sin(2 * .pi * 173 * Float(index - 40_000) / 16_000)
+        }
+        for audio in [sparse, sparse.map { $0 * 0.0001 }] {
+            let embedding = try model.embed(audio: audio, sampleRate: 16_000)
+            XCTAssertEqual(embedding.count, 192)
+            XCTAssertTrue(embedding.allSatisfy(\.isFinite))
+            XCTAssertEqual(sqrt(embedding.reduce(Float(0)) { $0 + $1 * $1 }), 1, accuracy: 0.002)
+        }
+    }
+
+    func testE2ELocalNumericalRegressionAudioRemainsFinite() async throws {
+        guard let path = ProcessInfo.processInfo.environment["REDIMNET2_REGRESSION_AUDIO_F32"] else {
+            throw XCTSkip("Set a local numerical-regression PCM path; recordings remain external")
+        }
+        let data = try Data(contentsOf: URL(fileURLWithPath: path))
+        XCTAssertEqual(data.count % 4, 0)
+        var audio = [Float](repeating: 0, count: data.count / 4)
+        _ = audio.withUnsafeMutableBytes { data.copyBytes(to: $0) }
+        let model = try await loadModel()
+        let embedding = try model.embed(audio: audio, sampleRate: 16_000)
+        XCTAssertEqual(embedding.count, 192)
+        XCTAssertTrue(embedding.allSatisfy(\.isFinite))
     }
 }
 #endif

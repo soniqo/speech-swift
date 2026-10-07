@@ -8,6 +8,10 @@ let package = Package(
         .iOS("18.0")
     ],
     products: [
+        .library(name: "GLiNER", targets: ["GLiNER"]),
+        .library(name: "Clef", targets: ["Clef"]),
+        .executable(name: "clef-decide", targets: ["ClefCLI"]),
+        .executable(name: "gliner-bench", targets: ["GLiNERBenchmark"]),
         .library(
             name: "Qwen3ASR",
             targets: ["Qwen3ASR"]
@@ -695,8 +699,28 @@ let package = Package(
                 .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "MLXNN", package: "mlx-swift"),
                 .product(name: "MLXFast", package: "mlx-swift"),
+                .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
             ]
         ),
+        .target(name: "Clef", dependencies: ["Qwen3Chat", "MLXCommon", "AudioCommon",
+            .product(name: "MLX", package: "mlx-swift"),
+            .product(name: "MLXNN", package: "mlx-swift"),
+            .product(name: "MLXFast", package: "mlx-swift"),
+            .product(name: "Hub", package: "swift-transformers"),
+            .product(name: "Tokenizers", package: "swift-transformers")], resources: [.copy("LICENSE-reference")]),
+        .executableTarget(name: "ClefCLI", dependencies: ["Clef"]),
+        .testTarget(name: "ClefTests", dependencies: ["Clef", "Qwen3Chat",
+            .product(name: "MLXNN", package: "mlx-swift"),
+            .product(name: "MLX", package: "mlx-swift")], resources: [.copy("Fixtures")]),
+        .target(name: "GLiNER", dependencies: [
+            "AudioCommon",
+            .product(name: "Hub", package: "swift-transformers"),
+            .product(name: "MLX", package: "mlx-swift"),
+            .product(name: "MLXNN", package: "mlx-swift"),
+            .product(name: "Tokenizers", package: "swift-transformers"),
+        ], resources: [.copy("LICENSE-reference")]),
+        .executableTarget(name: "GLiNERBenchmark", dependencies: ["GLiNER", .product(name: "MLX", package: "mlx-swift")]),
+        .testTarget(name: "GLiNERTests", dependencies: ["GLiNER", "GLiNERBenchmark", .product(name: "MLX", package: "mlx-swift"), .product(name: "MLXNN", package: "mlx-swift")]),
         .target(
             name: "FunctionGemma",
             dependencies: [
@@ -786,6 +810,8 @@ let package = Package(
                 "MagpieTTS",
                 "MagpieTTSCoreML",
                 "MADLADTranslation",
+                "GLiNER",
+                "Clef",
                 "SpeechWakeWord",
                 "Audio2Face3D",
                 "AudioCommon",
@@ -1219,6 +1245,7 @@ let package = Package(
             name: "AudioCLITests",
             dependencies: [
                 "AudioCLILib",
+                "GLiNER",
                 .product(name: "ArgumentParser", package: "swift-argument-parser")
             ]
         ),

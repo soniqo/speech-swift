@@ -142,6 +142,49 @@ final class E2EGemma4KVCacheTests: XCTestCase {
         }
     }
 
+    /// A kept system-turn state must produce what reading the whole prompt produces: the first
+    /// request with a system turn stores it (a miss), the second resumes from it (a hit), and the
+    /// second's own state must not have written into the kept one.
+    func testReusedSystemTurnDecodesLikeAWholePrompt() throws {
+        let chat = try loadChat()
+        let system = String(repeating: "Judge each passage against the question. Keep only a passage "
+            + "that states the answer; drop greetings and filler. ", count: 20)
+        let greedy = ChatSamplingConfig(temperature: 0, topK: 0, topP: 1.0, maxTokens: 24,
+                                        repetitionPenalty: 1.0)
+        func run(_ user: String, reuse: Bool) -> [Int] {
+            let messages = [ChatMessage(role: .system, content: system),
+                            ChatMessage(role: .user, content: user)]
+            let tokens = Gemma4ChatTemplate.encode(messages: messages, tokenizer: chat.gemmaTokenizer)
+            let prefix = reuse
+                ? Gemma4ChatTemplate.systemTurnLength(messages: messages, tokenizer: chat.gemmaTokenizer)
+                : 0
+            var ids: [Int] = []
+            chat.decode(promptTokens: tokens, reusablePrefix: prefix, sampling: greedy,
+                        onToken: { ids.append($0) }, onText: { _ in })
+            return ids
+        }
+        chat.clearPrefixCache()
+        let questions = ["Question: what price was agreed? Passage: We settled on forty thousand.",
+                         "Question: who signs? Passage: The chairman and the secretary sign it."]
+        for question in questions {
+            let whole = run(question, reuse: false)
+            let first = run(question, reuse: true)   // the first question's run is a miss
+            let again = run(question, reuse: true)   // every later one is a hit
+            print("[gemma4-kv] whole=\(whole.prefix(8)) reused=\(again.prefix(8))")
+            XCTAssertEqual(first, whole, "a split prefill changed the reply")
+            XCTAssertEqual(again, whole, "resuming from the kept system turn changed the reply")
+        }
+        // The template writes the system turn as its own leading segment.
+        let messages = [ChatMessage(role: .system, content: system),
+                        ChatMessage(role: .user, content: "x")]
+        let all = Gemma4ChatTemplate.encode(messages: messages, tokenizer: chat.gemmaTokenizer)
+        let alone = Gemma4ChatTemplate.encode(messages: [messages[0]], tokenizer: chat.gemmaTokenizer)
+        let length = Gemma4ChatTemplate.systemTurnLength(messages: messages, tokenizer: chat.gemmaTokenizer)
+        XCTAssertEqual(Array(all.prefix(length)), Array(alone.prefix(length)))
+        XCTAssertEqual(length, alone.count - chat.gemmaTokenizer.encode("<|turn>model\n").count)
+        chat.clearPrefixCache()
+    }
+
     /// Long greedy runs recorded as token ids, for comparison against another revision.
     ///
     /// `GEMMA4_KV_TOKENS` names a JSON file: written when it does not exist, asserted against when
