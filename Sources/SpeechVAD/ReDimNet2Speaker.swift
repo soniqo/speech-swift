@@ -1,6 +1,7 @@
 #if canImport(CoreML)
 import AudioCommon
 import CoreML
+import CryptoKit
 import Foundation
 
 struct ReDimNet2ModelConfiguration: Decodable, Equatable {
@@ -11,6 +12,9 @@ struct ReDimNet2ModelConfiguration: Decodable, Equatable {
     let inputName: String
     let outputName: String
     let compiledModel: String
+    let artifactRevision: String?
+    let computePrecision: String?
+    let compiledFilesSHA256: [String: String]?
 
     enum CodingKeys: String, CodingKey {
         case modelType = "model_type"
@@ -20,6 +24,9 @@ struct ReDimNet2ModelConfiguration: Decodable, Equatable {
         case inputName = "input_name"
         case outputName = "output_name"
         case compiledModel = "compiled_model"
+        case artifactRevision = "artifact_revision"
+        case computePrecision = "compute_precision"
+        case compiledFilesSHA256 = "compiled_files_sha256"
     }
 }
 
@@ -38,6 +45,13 @@ struct ReDimNet2ModelConfiguration: Decodable, Equatable {
 /// audio; it must not be used to enroll or create an identity.
 public final class ReDimNet2SpeakerModel {
     public static let defaultModelId = "aufklarer/ReDimNet2-B6-CoreML"
+    public static let defaultArtifactRevision = "frontend-fp32-v1"
+    static let defaultComputePrecision = "fp32-frontend-head-fp16-backbone"
+    static let defaultArtifactChecksums = [
+        "coremldata.bin": "8b23b5a85f79b16a5798121193254e18b43096264c63afdbed90911a64ba1294",
+        "model.mil": "8b138359651f98bcd876eab2377ed9a5ddaf5f726745775ce1670ac5103fc79d",
+        "weights/weight.bin": "780eb60151995b33d6a967deac32b9fe22ebd119e8288417f6d51ac7b856bcfc",
+    ]
     public static let inputSampleRate = 16_000
     public static let inputSampleCount = 96_000
     public static let minimumSampleCount = 32_000
@@ -50,15 +64,81 @@ public final class ReDimNet2SpeakerModel {
         self.model = model
     }
 
-    /// Download and load the compiled ReDimNet2-B6 Core ML model.
+    /// The default artifact has its own cache generation. Earlier exports stay
+    /// intact beside it; file existence in a retired generation is not a hit.
+    /// An explicitly selected custom repository retains its direct cache path.
+    public static func modelCacheDirectory(
+        in root: URL, modelId: String = defaultModelId
+    ) -> URL {
+        guard modelId == defaultModelId else { return root }
+        return root.appendingPathComponent("revisions", isDirectory: true)
+            .appendingPathComponent(defaultArtifactRevision, isDirectory: true)
+    }
+
+    /// A routing check. Content hashes are verified once before model loading.
+    public static func isCached(
+        at root: URL, modelId: String = defaultModelId
+    ) -> Bool {
+        let directory = modelCacheDirectory(in: root, modelId: modelId)
+        guard let configuration = try? loadConfiguration(
+            at: directory.appendingPathComponent("config.json"), modelId: modelId)
+        else { return false }
+        if modelId == defaultModelId,
+           !matchesDefaultArtifact(configuration) { return false }
+        return defaultArtifactChecksums.keys.allSatisfy { name in
+            let file = directory.appendingPathComponent(configuration.compiledModel)
+                .appendingPathComponent(name)
+            guard let values = try? file.resourceValues(
+                forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
+            else { return false }
+            return values.isRegularFile == true && values.isSymbolicLink != true
+                && (values.fileSize ?? 0) > 0
+        }
+    }
+
+    private static func matchesDefaultArtifact(_ configuration: ReDimNet2ModelConfiguration) -> Bool {
+        configuration.artifactRevision == defaultArtifactRevision
+            && configuration.computePrecision == defaultComputePrecision
+            && defaultArtifactChecksums.allSatisfy {
+                configuration.compiledFilesSHA256?[$0.key] == $0.value
+            }
+    }
+
+    static func validateDefaultArtifact(
+        _ configuration: ReDimNet2ModelConfiguration, at directory: URL
+    ) throws {
+        guard matchesDefaultArtifact(configuration) else {
+            throw AudioModelError.invalidConfiguration(
+                model: "ReDimNet2-B6", reason: "The cached identity export revision is incompatible")
+        }
+        let modelDirectory = directory.appendingPathComponent(configuration.compiledModel)
+        for (name, expected) in defaultArtifactChecksums {
+            let file = modelDirectory.appendingPathComponent(name)
+            let values = try file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+            guard values.isRegularFile == true && values.isSymbolicLink != true else {
+                throw AudioModelError.invalidConfiguration(
+                    model: "ReDimNet2-B6", reason: "Invalid compiled identity asset")
+            }
+            let digest = SHA256.hash(data: try Data(contentsOf: file, options: .mappedIfSafe))
+                .map { String(format: "%02x", $0) }.joined()
+            guard digest == expected else {
+                throw AudioModelError.invalidConfiguration(
+                    model: "ReDimNet2-B6", reason: "Compiled identity asset checksum mismatch")
+            }
+        }
+    }
+
+    /// Download and load the compiled ReDimNet2-B6 Core ML model. `cacheDir`
+    /// is a repository cache root; the default artifact uses a revision folder.
     public static func fromPretrained(
         modelId: String = defaultModelId,
         cacheDir: URL? = nil,
         offlineMode: Bool = false,
         progressHandler: ((Double, String) -> Void)? = nil
     ) async throws -> ReDimNet2SpeakerModel {
-        let cacheDir = try cacheDir
+        let root = try cacheDir
             ?? HuggingFaceDownloader.getCacheDirectory(for: modelId)
+        let cacheDir = modelCacheDirectory(in: root, modelId: modelId)
 
         progressHandler?(0.0, "Downloading ReDimNet2 speaker identity model...")
         try await HuggingFaceDownloader.downloadWeights(
@@ -77,6 +157,9 @@ public final class ReDimNet2SpeakerModel {
         let configuration = try loadConfiguration(
             at: cacheDir.appendingPathComponent("config.json"),
             modelId: modelId)
+        if modelId == defaultModelId {
+            try validateDefaultArtifact(configuration, at: cacheDir)
+        }
         let modelURL = cacheDir.appendingPathComponent(
             configuration.compiledModel, isDirectory: true)
         guard FileManager.default.fileExists(atPath: modelURL.path) else {

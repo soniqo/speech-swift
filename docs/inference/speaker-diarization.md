@@ -451,7 +451,7 @@ whose collar and boundary accounting are intentionally different.
 - **Segmentation**: `aufklarer/Pyannote-Segmentation-MLX` (~5.7 MB)
 - **Speaker Embedding (MLX)**: `aufklarer/WeSpeaker-ResNet34-LM-MLX` (~25 MB)
 - **Speaker Embedding (CoreML)**: `aufklarer/WeSpeaker-ResNet34-LM-CoreML` (~13 MB)
-- **Named Voice Identity (CoreML)**: `aufklarer/ReDimNet2-B6-CoreML` (~25 MiB)
+- **Named Voice Identity (CoreML)**: `aufklarer/ReDimNet2-B6-CoreML` (~29 MiB, FP32 frontend/head)
 - **Sortformer (CoreML)**: `aufklarer/Sortformer-Diarization-CoreML` (~240 MB)
 - **Nemotron 3 (Core ML/MLX INT8)**: public 100M parameter exports with
   eight-speaker, 10 ms output
