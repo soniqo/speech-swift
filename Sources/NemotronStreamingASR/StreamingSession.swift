@@ -53,7 +53,8 @@ public class StreamingSession {
         vocabulary: NemotronVocabulary,
         melPreprocessor: StreamingMelPreprocessor,
         wordBoosting: WordBoostingConfig?,
-        wordBoostingTokenizer: NemotronSentencePieceUnigramTokenizer?
+        wordBoostingTokenizer: NemotronSentencePieceUnigramTokenizer?,
+        languageGuideMask: [Float]?
     ) throws {
         self.config = config
         self.encoder = encoder
@@ -87,16 +88,24 @@ public class StreamingSession {
             shape: [1, numMelBins as NSNumber, preCacheSize as NSNumber], dataType: .float32)
         memset(preCache.dataPointer, 0, numMelBins * preCacheSize * MemoryLayout<Float>.stride)
 
-        // One-hot language mask, only allocated when the encoder accepts it.
+        // Language mask, only allocated when the encoder accepts it. Ordinary
+        // sessions use one-hot; an explicit experimental guide supplies a mix.
         // The English-only bundle's encoder takes no `language_mask` input;
         // multilingual 3.5 takes a 128-slot one-hot.
         if encoder.modelDescription.inputDescriptionsByName.keys.contains("language_mask") {
             let mask = try MLMultiArray(
                 shape: [1, numPrompts as NSNumber], dataType: .float32)
             memset(mask.dataPointer, 0, numPrompts * MemoryLayout<Float>.stride)
-            let clamped = max(0, min(numPrompts - 1, languageSlot))
             let lmPtr = mask.dataPointer.assumingMemoryBound(to: Float.self)
-            lmPtr[clamped] = 1.0
+            if let languageGuideMask {
+                guard languageGuideMask.count == numPrompts else {
+                    throw LanguageGuideError.automaticLanguageUnavailable
+                }
+                for slot in 0..<numPrompts { lmPtr[slot] = languageGuideMask[slot] }
+            } else {
+                let clamped = max(0, min(numPrompts - 1, languageSlot))
+                lmPtr[clamped] = 1.0
+            }
             languageMask = mask
         } else {
             languageMask = nil

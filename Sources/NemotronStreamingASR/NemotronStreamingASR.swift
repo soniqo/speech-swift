@@ -31,6 +31,16 @@ public class NemotronStreamingASRModel {
     private let wordBoostingTokenizer: NemotronSentencePieceUnigramTokenizer?
     public let wordBoostingTokenizerStatus: WordBoostingTokenizerStatus
 
+    /// Exact available experimental-guide locales. Availability is not a
+    /// transcription-quality guarantee or a claim of native mixture support.
+    public var supportedLanguageGuideLanguages: [String] {
+        LanguageGuideContext.supportedLanguages(
+            vocabulary: vocabulary,
+            languages: languages,
+            promptCount: config.numPrompts,
+            hasLanguageMask: encoder?.modelDescription.inputDescriptionsByName.keys.contains("language_mask") ?? false)
+    }
+
     private init(
         config: NemotronStreamingConfig,
         languages: NemotronLanguages,
@@ -68,6 +78,9 @@ public class NemotronStreamingASRModel {
     /// Create a streaming session. `language` is a BCP-47 tag (e.g. `"en-US"`,
     /// `"ja-JP"`); `nil` or unknown falls back to the model's `"auto"` slot.
     /// `wordBoosting` biases RNN-T decoding toward the provided phrases.
+    /// `languageGuide` is experimental fractional prompt conditioning in auto
+    /// mode, retaining at least 90% auto. It does not directly bias joint logits
+    /// or filter the decoding vocabulary.
     ///
     /// Sessions own independent encoder, decoder, and token state. A caller may
     /// interleave multiple sessions on one loaded model to avoid duplicating
@@ -75,11 +88,19 @@ public class NemotronStreamingASRModel {
     /// are not safe for concurrent inference.
     public func createSession(
         language: String? = nil,
-        wordBoosting: WordBoostingConfig? = nil
+        wordBoosting: WordBoostingConfig? = nil,
+        languageGuide: LanguageGuideConfig? = nil
     ) throws -> StreamingSession {
         guard _isLoaded, let encoder, let decoder, let joint else {
             throw AudioModelError.inferenceFailed(operation: "createSession", reason: "Model not loaded")
         }
+        let languageGuideMask = try LanguageGuideContext.makeMask(
+            config: languageGuide,
+            vocabulary: vocabulary,
+            languages: languages,
+            language: language,
+            hasLanguageMask: encoder.modelDescription.inputDescriptionsByName.keys.contains("language_mask"),
+            promptCount: config.numPrompts)
         let slot = languages.slot(for: language)
         return try StreamingSession(
             config: config,
@@ -91,7 +112,8 @@ public class NemotronStreamingASRModel {
             vocabulary: vocabulary,
             melPreprocessor: melPreprocessor,
             wordBoosting: wordBoosting,
-            wordBoostingTokenizer: wordBoostingTokenizer
+            wordBoostingTokenizer: wordBoostingTokenizer,
+            languageGuideMask: languageGuideMask
         )
     }
 
@@ -111,7 +133,8 @@ public class NemotronStreamingASRModel {
         sampleRate: Int,
         language: String? = nil,
         chunkDuration: Float? = nil,
-        wordBoosting: WordBoostingConfig? = nil
+        wordBoosting: WordBoostingConfig? = nil,
+        languageGuide: LanguageGuideConfig? = nil
     ) -> AsyncStream<PartialTranscript> {
         let chunkMs = chunkDuration.map { Int($0 * 1000) } ?? config.streaming.chunkMs
 
@@ -125,7 +148,8 @@ public class NemotronStreamingASRModel {
                         samples = audio
                     }
                     let actualSamplesPerChunk = chunkMs * self.config.sampleRate / 1000
-                    let session = try self.createSession(language: language, wordBoosting: wordBoosting)
+                    let session = try self.createSession(
+                        language: language, wordBoosting: wordBoosting, languageGuide: languageGuide)
                     var offset = 0
                     while offset < samples.count {
                         let end = min(offset + actualSamplesPerChunk, samples.count)
@@ -160,7 +184,8 @@ public class NemotronStreamingASRModel {
         sampleRate: Int,
         language: String? = nil,
         padSilence: Bool = true,
-        wordBoosting: WordBoostingConfig? = nil
+        wordBoosting: WordBoostingConfig? = nil,
+        languageGuide: LanguageGuideConfig? = nil
     ) throws -> String {
         var samples: [Float]
         if sampleRate != config.sampleRate {
@@ -173,7 +198,8 @@ public class NemotronStreamingASRModel {
             samples = [Float](repeating: 0, count: padSamples) + samples + [Float](repeating: 0, count: padSamples)
         }
 
-        let session = try createSession(language: language, wordBoosting: wordBoosting)
+        let session = try createSession(
+            language: language, wordBoosting: wordBoosting, languageGuide: languageGuide)
         var allPartials = try session.pushAudio(samples)
         allPartials.append(contentsOf: try session.finalize())
         if let lastFinal = allPartials.last(where: { $0.isFinal }) {

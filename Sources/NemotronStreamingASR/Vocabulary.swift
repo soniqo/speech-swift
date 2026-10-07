@@ -26,6 +26,19 @@ public struct NemotronVocabulary: Sendable {
 
     public var count: Int { idToToken.count }
 
+    /// Exact locale markers from the loaded vocabulary. Other special tokens
+    /// and ordinary angle-bracket text are not language-guide capabilities.
+    var languageTags: [Int: String] {
+        idToToken.reduce(into: [:]) { result, entry in
+            let bytes = Array(entry.value.utf8)
+            guard bytes.count == 7, bytes[0] == 60, bytes[3] == 45, bytes[6] == 62,
+                (97...122).contains(bytes[1]), (97...122).contains(bytes[2]),
+                (65...90).contains(bytes[4]), (65...90).contains(bytes[5])
+            else { return }
+            result[entry.key] = String(entry.value.dropFirst().dropLast())
+        }
+    }
+
     public init(idToToken: [Int: String]) {
         self.idToToken = idToToken
         var reverse: [String: Int] = [:]

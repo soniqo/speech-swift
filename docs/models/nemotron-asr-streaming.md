@@ -56,6 +56,50 @@ contain no CTC tensors. Native MLX currently uses unboosted greedy decoding.
 
 The implementation does not allow word boosting to replace the RNN-T blank token. Blank advances decoding to the next encoder frame; letting a boosted phrase beat blank can pin the decoder on one frame and produce repeated-token garbage. Boosting is only applied when the unboosted greedy token is non-blank.
 
+## Experimental fractional language guide
+
+Core ML and MLX accept an optional immutable `LanguageGuideConfig` on
+`createSession`, `transcribeAudio`, and `transcribeStream`:
+
+```swift
+let guide = LanguageGuideConfig(
+    expectedLanguages: ["en-US", "en-GB", "ru-RU"],
+    expectedLanguageWeight: 0.1)
+let session = try model.createSession(language: "auto", languageGuide: guide)
+```
+
+This is an opt-in package experiment, not a documented native model feature.
+[NVIDIA describes a one-hot language vector](https://huggingface.co/nvidia/nemotron-3.5-asr-streaming-0.6b#model-architecture).
+The guide instead retains `1 - expectedLanguageWeight` in the Auto slot and
+splits the remaining weight equally across unique resolved expected-language
+slots. For English US and UK this is `0.9 Auto + 0.05 en-US + 0.05 en-GB`
+when those locales use distinct prompt slots. Duplicate locales or aliases
+sharing a slot never multiply that slot's share. The default and maximum
+expected weight is `0.1`, retaining at least 90% Auto.
+
+The mask is copied once at session initialization and stays fixed for that
+session. Encoder conditioning can change joint logits and the subsequent
+RNNT trajectory. The guide does not directly add decoder logit bonuses,
+filter the vocabulary, change word boosting, or share cache state between
+sessions. Every language remains in the decoding vocabulary, but that alone
+does not guarantee accurate recognition of an unlisted language.
+
+The prompt kernel is Linear → ReLU → Linear after concatenating acoustic
+features with the language vector. Fractional conditioning is therefore not a
+probability-weighted mixture of separate transcription outputs. The weight is
+not calibrated, and no general accuracy improvement or elimination of false
+language switches is claimed. Evaluate coverage, monolingual accuracy, and
+genuine switches separately before using the guide for a particular workload.
+
+`supportedLanguageGuideLanguages` returns exact locales with loaded language
+tags and valid non-Auto prompt slots, provided the encoder supports a valid
+Auto prompt. Availability is not an out-of-the-box quality guarantee. A
+nonempty guide requires `language: "auto"` or the default nil language;
+unsupported aliases, missing tags, out-of-range slots, Auto aliases, and
+nonfinite or out-of-range weights fail before session inference. The weight
+must be in `0...0.1`. Empty guides and zero weight use the original one-hot
+path exactly; zero-weight nonempty inputs still undergo validation.
+
 ## Chunk modes (att_context_size from .nemo config)
 
 | chunk_ms | output frames | right ctx | latency target |

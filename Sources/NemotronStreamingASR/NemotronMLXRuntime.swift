@@ -210,22 +210,41 @@ public final class NemotronStreamingASRMLXModel: @unchecked Sendable {
         )
     }
 
+    /// Exact available experimental-guide locales, not a quality guarantee.
+    public var supportedLanguageGuideLanguages: [String] {
+        LanguageGuideContext.supportedLanguages(
+            vocabulary: vocabulary,
+            languages: languages,
+            promptCount: configuration.promptKernel.promptCount,
+            hasLanguageMask: true)
+    }
+
     public func createSession(
-        language: String? = nil
+        language: String? = nil,
+        languageGuide: LanguageGuideConfig? = nil
     ) throws -> NemotronMLXStreamingSession {
         inferenceLock.lock()
         defer { inferenceLock.unlock() }
+        let languageGuideMask = try LanguageGuideContext.makeMask(
+            config: languageGuide,
+            vocabulary: vocabulary,
+            languages: languages,
+            language: language,
+            hasLanguageMask: true,
+            promptCount: configuration.promptKernel.promptCount)
         return try NemotronMLXStreamingSession(
             model: self,
             languageSlot: languages.slot(for: language),
-            language: language
+            language: language,
+            languageGuideMask: languageGuideMask
         )
     }
 
     public func transcribeStream(
         audio: [Float],
         sampleRate: Int,
-        language: String? = nil
+        language: String? = nil,
+        languageGuide: LanguageGuideConfig? = nil
     ) -> AsyncStream<NemotronStreamingASRModel.PartialTranscript> {
         AsyncStream { continuation in
             Task {
@@ -238,7 +257,7 @@ public final class NemotronStreamingASRMLXModel: @unchecked Sendable {
                             from: sampleRate,
                             to: Self.inputSampleRate
                         )
-                    let session = try self.createSession(language: language)
+                    let session = try self.createSession(language: language, languageGuide: languageGuide)
                     let chunkSamples =
                         self.configuration.streaming.melFrames
                         * Int(
@@ -271,7 +290,8 @@ public final class NemotronStreamingASRMLXModel: @unchecked Sendable {
     public func transcribeAudio(
         _ audio: [Float],
         sampleRate: Int,
-        language: String? = nil
+        language: String? = nil,
+        languageGuide: LanguageGuideConfig? = nil
     ) throws -> String {
         let samples =
             sampleRate == Self.inputSampleRate
@@ -281,7 +301,7 @@ public final class NemotronStreamingASRMLXModel: @unchecked Sendable {
                 from: sampleRate,
                 to: Self.inputSampleRate
             )
-        let session = try createSession(language: language)
+        let session = try createSession(language: language, languageGuide: languageGuide)
         var results = try session.pushAudio(samples)
         results.append(contentsOf: try session.finalize())
         return results.last?.text ?? ""
@@ -332,7 +352,8 @@ public final class NemotronMLXStreamingSession {
     init(
         model: NemotronStreamingASRMLXModel,
         languageSlot: Int,
-        language: String?
+        language: String?,
+        languageGuideMask: [Float]?
     ) throws {
         self.model = model
         configuration = model.configuration
@@ -356,11 +377,17 @@ public final class NemotronMLXStreamingSession {
             ],
             dtype: .bfloat16
         )
-        var mask = [Float](
-            repeating: 0,
-            count: configuration.promptKernel.promptCount
-        )
-        mask[languageSlot] = 1
+        let mask: [Float]
+        if let languageGuideMask {
+            guard languageGuideMask.count == configuration.promptKernel.promptCount else {
+                throw LanguageGuideError.automaticLanguageUnavailable
+            }
+            mask = languageGuideMask
+        } else {
+            var oneHot = [Float](repeating: 0, count: configuration.promptKernel.promptCount)
+            oneHot[languageSlot] = 1
+            mask = oneHot
+        }
         languageMask = MLXArray(mask)
             .reshaped(1, configuration.promptKernel.promptCount)
             .asType(.bfloat16)
