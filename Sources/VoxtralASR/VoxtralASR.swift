@@ -73,10 +73,22 @@ public final class VoxtralModel: Module, SpeechRecognitionModel, @unchecked Send
         sampleRate: Int,
         options: VoxtralDecodingOptions
     ) -> String {
+        transcribeDetailed(audio: audio, sampleRate: sampleRate, options: options).text
+    }
+
+    /// `transcribe` plus how the decode ended and what each phase cost.
+    public func transcribeDetailed(
+        audio: [Float],
+        sampleRate: Int,
+        options: VoxtralDecodingOptions
+    ) -> VoxtralTranscription {
+        let encoderStarted = DispatchTime.now().uptimeNanoseconds
         let features = frontend.process(audio, inputSampleRate: sampleRate)
         let encoderOutput = audioTower(features.values)
         let audioEmbeddings = multiModalProjector(
             encoderOutput.reshaped(-1, config.audioConfig.intermediateSize))
+        eval(audioEmbeddings)
+        let prefillStarted = DispatchTime.now().uptimeNanoseconds
         let prompt = tokenizer.transcriptionPrompt(
             audioTokenCount: features.audioTokenCount,
             language: options.language)
@@ -111,13 +123,26 @@ public final class VoxtralModel: Module, SpeechRecognitionModel, @unchecked Send
         // logits for every audio/prompt position during prefill.
         var logits = languageModel.logits(prefill.0[0, -1])
         eval(logits)
+        let decodeStarted = DispatchTime.now().uptimeNanoseconds
 
+        let maxTokens = max(0, options.maxTokens)
         var generated: [Int] = []
-        generated.reserveCapacity(max(0, options.maxTokens))
-        for _ in 0..<max(0, options.maxTokens) {
+        generated.reserveCapacity(maxTokens)
+        var stopReason = VoxtralTranscription.StopReason.maximumTokens
+        while generated.count < maxTokens {
             let token = logits.argMax(axis: -1).item(Int.self)
-            if endTokenIDs.contains(token) { break }
+            if endTokenIDs.contains(token) {
+                stopReason = .endOfSequence
+                break
+            }
             generated.append(token)
+            if let shouldStop = options.shouldStop, shouldStop(generated) {
+                stopReason = .stopped
+                break
+            }
+            // The cap is reached: the next forward would only predict a token
+            // nothing may append.
+            if generated.count == maxTokens { break }
             let embedding = languageModel.model.embed(
                 MLXArray([Int32(token)]).reshaped(1, 1))
             let next = languageModel.model.forward(embeddings: embedding, state: state)
@@ -125,8 +150,19 @@ public final class VoxtralModel: Module, SpeechRecognitionModel, @unchecked Send
             logits = languageModel.logits(next.0[0, -1])
             eval(logits)
         }
+        let finished = DispatchTime.now().uptimeNanoseconds
         Memory.clearCache()
-        return tokenizer.decode(generated)
+        func seconds(_ from: UInt64, _ to: UInt64) -> Double {
+            Double(to >= from ? to - from : 0) / 1_000_000_000
+        }
+        return VoxtralTranscription(
+            text: tokenizer.decode(generated),
+            tokens: generated,
+            stopReason: stopReason,
+            audioTokenCount: features.audioTokenCount,
+            audioEncoderSeconds: seconds(encoderStarted, prefillStarted),
+            prefillSeconds: seconds(prefillStarted, decodeStarted),
+            tokenDecodeSeconds: seconds(decodeStarted, finished))
     }
 }
 

@@ -162,10 +162,49 @@ public enum VoxtralVariant: String, CaseIterable, Sendable {
 
 public struct VoxtralDecodingOptions: Sendable {
     public var maxTokens: Int
+    /// ISO code or English name of one of the checkpoint's eight transcription
+    /// languages. Any other value, or `nil`, omits the hint and leaves the
+    /// choice to the model; an unsupported code is never mapped to English.
     public var language: String?
+    /// Consulted after every generated token with the ids generated so far;
+    /// returning `true` ends the decode with `.stopped`. Greedy decoding has
+    /// no repetition penalty and cannot leave a token cycle on its own, so a
+    /// caller that recognises one installs that rule here instead of paying
+    /// the whole token cap for it.
+    public var shouldStop: (@Sendable ([Int]) -> Bool)?
 
-    public init(maxTokens: Int = 128, language: String? = nil) {
+    public init(
+        maxTokens: Int = 128,
+        language: String? = nil,
+        shouldStop: (@Sendable ([Int]) -> Bool)? = nil
+    ) {
         self.maxTokens = maxTokens
         self.language = language
+        self.shouldStop = shouldStop
     }
+}
+
+/// One decode and how it ended. `text` is what `transcribe` returns; the rest
+/// is what a caller needs to budget decodes and notice runaway ones.
+public struct VoxtralTranscription: Sendable, Equatable {
+    public enum StopReason: String, Sendable {
+        /// The decoder emitted one of the checkpoint's end-of-text ids.
+        case endOfSequence
+        /// The decode spent `maxTokens` without ending on its own.
+        case maximumTokens
+        /// `shouldStop` ended it.
+        case stopped
+    }
+
+    public let text: String
+    /// Generated token ids, end-of-text excluded.
+    public let tokens: [Int]
+    public let stopReason: StopReason
+    /// Audio embeddings the prompt carried: 375 per padded 30-second chunk.
+    public let audioTokenCount: Int
+    public let audioEncoderSeconds: Double
+    public let prefillSeconds: Double
+    public let tokenDecodeSeconds: Double
+
+    public var generatedTokens: Int { tokens.count }
 }

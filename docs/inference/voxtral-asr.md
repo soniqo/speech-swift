@@ -44,12 +44,30 @@ though greedy decoding consumes only the final row. Removing that work
 preserved every transcript in the pinned acceptance run and materially lowers
 quantized-model RTF.
 
+## Decoding options and stop reasons
+
+`transcribeDetailed(audio:sampleRate:options:)` returns a
+`VoxtralTranscription`: the text, the generated token ids, a `stopReason`
+(`endOfSequence`, `maximumTokens` or `stopped`), the audio token count and
+per-phase timing (audio encoder, prefill, token decode). `transcribe` is its
+text.
+
+`VoxtralDecodingOptions.shouldStop` is consulted after every generated token
+with the ids so far; returning `true` ends the decode with `.stopped`. Greedy
+decoding has no repetition penalty and cannot leave a token cycle by itself, so
+a caller that recognises one installs that rule here instead of spending the
+whole `maxTokens` cap on it. Size `maxTokens` from the audio: a decode may not
+say more than its own audio could hold, and a cap that only the cycle can reach
+tells nothing.
+
 ## Language handling
 
-Language may be an ISO code or English language name for en, fr, de, es, it,
-pt, nl, or hi. Passing `nil` omits the language instruction and leaves
-selection to the model. Unsupported explicit names currently fall back to
-English.
+Language may be an ISO code, a `language-REGION` tag or an English language
+name for en, fr, de, es, it, pt, nl, or hi; `VoxtralTokenizer.languageCode`
+and `supportsLanguage` expose that mapping. Passing `nil` omits the language
+instruction and leaves selection to the model. A language the prompt cannot
+name — `ru`, `zh`, `Russian` — is treated exactly like `nil`: earlier builds
+mapped it to English, which told the model a Russian utterance was English.
 
 ## Long inputs and memory
 

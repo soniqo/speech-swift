@@ -67,7 +67,144 @@ final class VoxtralASRTests: XCTestCase {
         XCTAssertEqual(VoxtralTokenizer.languagePromptTokens("en"), [9_909, 1_058, 1_262])
         XCTAssertEqual(VoxtralTokenizer.languagePromptTokens("French"), [9_909, 1_058, 7_064])
         XCTAssertEqual(VoxtralTokenizer.languagePromptTokens("nl-NL"), [9_909, 24_082, 1_108])
-        XCTAssertEqual(VoxtralTokenizer.languagePromptTokens("unsupported"), [9_909, 1_058, 1_262])
+        XCTAssertEqual(VoxtralTokenizer.languagePromptTokens("pt_BR"), [9_909, 1_058, 1_515])
+        // No silent English fallback: a language the prompt cannot name gets
+        // no hint, so the model chooses, which is the documented behaviour.
+        XCTAssertNil(VoxtralTokenizer.languagePromptTokens("unsupported"))
+        XCTAssertNil(VoxtralTokenizer.languagePromptTokens("ru"))
+        XCTAssertNil(VoxtralTokenizer.languagePromptTokens("ru-RU"))
+        XCTAssertNil(VoxtralTokenizer.languagePromptTokens(""))
+        XCTAssertTrue(VoxtralTokenizer.supportsLanguage("Hindi"))
+        XCTAssertFalse(VoxtralTokenizer.supportsLanguage("zh"))
+        XCTAssertEqual(VoxtralTokenizer.languageCode("German"), "de")
+        XCTAssertNil(VoxtralTokenizer.languageCode("Russian"))
+    }
+
+    func testPromptOmitsTheHintForAnUnsupportedLanguage() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let tekken = """
+        {"config":{"default_num_special_tokens":64},"special_tokens":[
+          {"rank":1,"token_str":"<s>"},
+          {"rank":3,"token_str":"[INST]"},
+          {"rank":4,"token_str":"[/INST]"},
+          {"rank":24,"token_str":"[AUDIO]"},
+          {"rank":25,"token_str":"[BEGIN_AUDIO]"},
+          {"rank":34,"token_str":"[TRANSCRIBE]"}
+        ],"vocab":[{"token_bytes":"eA=="}]}
+        """
+        let tekkenURL = directory.appendingPathComponent("tekken.json")
+        try Data(tekken.utf8).write(to: tekkenURL)
+        let tokenizer = try VoxtralTokenizer(tekkenURL: tekkenURL)
+
+        let unhinted = tokenizer.transcriptionPrompt(audioTokenCount: 2, language: nil)
+        XCTAssertEqual(unhinted, [1, 3, 25, 24, 24, 4, 34])
+        XCTAssertEqual(
+            tokenizer.transcriptionPrompt(audioTokenCount: 2, language: "ru"),
+            unhinted)
+        XCTAssertEqual(
+            tokenizer.transcriptionPrompt(audioTokenCount: 2, language: "fr"),
+            [1, 3, 25, 24, 24, 4, 9_909, 1_058, 7_064, 34])
+    }
+
+    /// A tiny random model exercises the decode loop end to end: the cap,
+    /// the caller's stop hook and the end-of-text ids each end a decode with
+    /// their own reason, and `transcribe` is `transcribeDetailed`'s text.
+    func testDecodeControlsReportHowADecodeEnded() throws {
+        let configJSON = """
+        {
+          "model_type": "voxtral", "audio_token_id": 24,
+          "projector_hidden_act": "gelu", "vocab_size": 64, "hidden_size": 8,
+          "audio_config": {
+            "hidden_size": 8, "num_hidden_layers": 1, "intermediate_size": 32,
+            "num_attention_heads": 2, "num_key_value_heads": 2,
+            "rms_norm_eps": 0.00001, "head_dim": 4, "rope_theta": 1000000,
+            "vocab_size": 64, "num_mel_bins": 4, "max_source_positions": 1500
+          },
+          "text_config": {
+            "vocab_size": 64, "max_position_embeddings": 4096,
+            "hidden_size": 8, "intermediate_size": 16,
+            "num_hidden_layers": 1, "num_attention_heads": 2,
+            "num_key_value_heads": 1, "rms_norm_eps": 0.00001,
+            "head_dim": 4, "tie_word_embeddings": false,
+            "bos_token_id": 1, "eos_token_id": 2, "rope_theta": 100000000
+          }
+        }
+        """.data(using: .utf8)!
+        let config = try JSONDecoder().decode(VoxtralConfig.self, from: configJSON)
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let tekken = """
+        {"config":{"default_num_special_tokens":40},"special_tokens":[
+          {"rank":1,"token_str":"<s>"},
+          {"rank":3,"token_str":"[INST]"},
+          {"rank":4,"token_str":"[/INST]"},
+          {"rank":24,"token_str":"[AUDIO]"},
+          {"rank":25,"token_str":"[BEGIN_AUDIO]"},
+          {"rank":34,"token_str":"[TRANSCRIBE]"}
+        ],"vocab":[
+          {"token_bytes":"YQ=="},{"token_bytes":"Yg=="},{"token_bytes":"Yw=="},
+          {"token_bytes":"ZA=="},{"token_bytes":"ZQ=="},{"token_bytes":"Zg=="},
+          {"token_bytes":"Zw=="},{"token_bytes":"aA=="},{"token_bytes":"aQ=="},
+          {"token_bytes":"ag=="},{"token_bytes":"aw=="},{"token_bytes":"bA=="},
+          {"token_bytes":"bQ=="},{"token_bytes":"bg=="},{"token_bytes":"bw=="},
+          {"token_bytes":"cA=="},{"token_bytes":"cQ=="},{"token_bytes":"cg=="},
+          {"token_bytes":"cw=="},{"token_bytes":"dA=="},{"token_bytes":"dQ=="},
+          {"token_bytes":"dg=="},{"token_bytes":"dw=="},{"token_bytes":"eA=="}
+        ]}
+        """
+        let tekkenURL = directory.appendingPathComponent("tekken.json")
+        try Data(tekken.utf8).write(to: tekkenURL)
+        let tokenizer = try VoxtralTokenizer(tekkenURL: tekkenURL)
+        let model = try VoxtralModel(config: config, tokenizer: tokenizer)
+        model.train(false)
+        eval(model)
+        let audio = [Float](repeating: 0, count: 8_000)
+
+        let capped = model.transcribeDetailed(
+            audio: audio, sampleRate: 16_000,
+            options: VoxtralDecodingOptions(maxTokens: 0))
+        XCTAssertEqual(capped.generatedTokens, 0)
+        XCTAssertEqual(capped.stopReason, .maximumTokens)
+        XCTAssertEqual(capped.text, "")
+        XCTAssertEqual(capped.audioTokenCount, 375)
+        XCTAssertGreaterThan(capped.audioEncoderSeconds, 0)
+
+        let bounded = model.transcribeDetailed(
+            audio: audio, sampleRate: 16_000,
+            options: VoxtralDecodingOptions(maxTokens: 3))
+        XCTAssertLessThanOrEqual(bounded.generatedTokens, 3)
+        if bounded.stopReason == .maximumTokens {
+            XCTAssertEqual(bounded.generatedTokens, 3)
+        } else {
+            XCTAssertEqual(bounded.stopReason, .endOfSequence)
+            XCTAssertLessThan(bounded.generatedTokens, 3)
+        }
+        XCTAssertEqual(
+            model.transcribe(
+                audio: audio, sampleRate: 16_000,
+                options: VoxtralDecodingOptions(maxTokens: 3)),
+            bounded.text)
+
+        var observed: [[Int]] = []
+        let stopped = model.transcribeDetailed(
+            audio: audio, sampleRate: 16_000,
+            options: VoxtralDecodingOptions(maxTokens: 12) { tokens in
+                observed.append(tokens)
+                return tokens.count >= 2
+            })
+        if stopped.stopReason == .stopped {
+            XCTAssertEqual(stopped.generatedTokens, 2)
+            XCTAssertEqual(observed, [Array(stopped.tokens.prefix(1)), stopped.tokens])
+        } else {
+            XCTAssertEqual(stopped.stopReason, .endOfSequence)
+            XCTAssertLessThan(stopped.generatedTokens, 2)
+        }
+        XCTAssertEqual(stopped.text, tokenizer.decode(stopped.tokens))
     }
 
     func testTekkenPromptAndByteDecode() throws {

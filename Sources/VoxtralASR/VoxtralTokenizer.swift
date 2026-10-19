@@ -65,20 +65,38 @@ public final class VoxtralTokenizer: @unchecked Sendable {
         var tokens = [bos, beginInstruction, beginAudio]
         tokens.append(contentsOf: repeatElement(audio, count: max(0, audioTokenCount)))
         tokens.append(endInstruction)
-        if let language {
-            tokens.append(contentsOf: Self.languagePromptTokens(language))
+        if let language, let hint = Self.languagePromptTokens(language) {
+            tokens.append(contentsOf: hint)
         }
         tokens.append(transcribe)
         return tokens
     }
 
-    public static func languagePromptTokens(_ language: String) -> [Int] {
+    /// The checkpoint's code for an ISO code, a `language-REGION` tag or an
+    /// English language name, or `nil` for a language the prompt cannot name.
+    public static func languageCode(_ language: String) -> String? {
         let aliases = [
             "english": "en", "french": "fr", "german": "de", "spanish": "es",
             "italian": "it", "portuguese": "pt", "dutch": "nl", "hindi": "hi",
         ]
-        let raw = language.lowercased().split(separator: "-").first.map(String.init) ?? "en"
+        let raw = language.lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(whereSeparator: { $0 == "-" || $0 == "_" })
+            .first.map(String.init) ?? ""
         let code = aliases[raw] ?? raw
+        return supportedLanguages.contains(code) ? code : nil
+    }
+
+    public static func supportsLanguage(_ language: String) -> Bool {
+        languageCode(language) != nil
+    }
+
+    /// The `lang:<code>` tokens for a supported language, or `nil` for any
+    /// other. Earlier builds mapped an unknown code to English, which told
+    /// the model a Russian or Chinese utterance was English; leaving the hint
+    /// out lets the model choose, which is what it does for those languages.
+    public static func languagePromptTokens(_ language: String) -> [Int]? {
+        guard let code = languageCode(language) else { return nil }
         let table: [String: [Int]] = [
             "en": [9_909, 1_058, 1_262],
             "fr": [9_909, 1_058, 7_064],
@@ -89,7 +107,7 @@ public final class VoxtralTokenizer: @unchecked Sendable {
             "nl": [9_909, 24_082, 1_108],
             "hi": [9_909, 1_058, 8_101],
         ]
-        return table[code] ?? table["en"]!
+        return table[code]
     }
 
     public func decode(_ tokenIDs: [Int]) -> String {
