@@ -279,6 +279,16 @@ The Core ML loader expects the standard bundle layout described in
 (encoder on ANE + GPU + CPU, decoder/joint on CPU) — measured about 40%
 faster RTF than `.cpuAndGPU` on M-series.
 
+### Experimental encoder export for issue 503
+
+An [iOS 17 encoder export test](nemotron-ios17-encoder-test.md) is available
+for the ANE compiler failure reported on A16 in
+[issue 503](https://github.com/soniqo/speech-swift/issues/503). Follow the guide
+to compare the published and candidate bundles with the same compute units,
+repeat loads across process restarts, and check real-speech transcription.
+Only the candidate encoder uses the iOS 17 operation set; the complete bundle
+still requires iOS 18 or later. Affected-device validation is pending.
+
 ## Streaming geometry
 
 | Param | Default |
