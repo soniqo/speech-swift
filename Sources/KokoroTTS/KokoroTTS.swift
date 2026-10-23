@@ -49,9 +49,11 @@ public final class KokoroTTSModel {
 
     /// Input slots of the end-to-end graph (`input_ids` is `[1, 128]`).
     static let inputSlots = 128
-    /// Token budget per chunk, as in speech-core's full-capacity Kokoro
-    /// profile: at speed 1 a chunk this size stays inside the 5 s graph.
-    static let chunkTokenBudget = 72
+    /// Token budget per chunk, as in speech-core's 5.0 s Kokoro profile. The
+    /// packed-LSTM models speak at upstream Kokoro's rate, about 10.5 phoneme
+    /// tokens per second, so a chunk this size stays inside the 5 s graph at
+    /// speed 1; the earlier 72 overflowed and split-and-retried.
+    static let chunkTokenBudget = 56
     /// A last chunk shorter than this merges into the previous one when the
     /// input allows it; very short utterances render unreliably.
     static let minTailTokens = 12
@@ -238,9 +240,11 @@ public final class KokoroTTSModel {
         // artifacts are often a single 10–20 ms spike with low surrounding
         // energy, so a tight short window otherwise mistakes them for
         // speech. Real speech tails consistently above ~0.03 RMS over a
-        // 50 ms span; isolated artifact spikes don't.
+        // 50 ms span; isolated artifact spikes don't. Soft word endings
+        // (German "Tisch", "Hamburg") fall under 0.030, so the floor is 0.015;
+        // lower values only keep more tail.
         let win = max(1, Int(0.050 * Double(config.sampleRate)))
-        let silenceRMS: Float = 0.030
+        let silenceRMS: Float = 0.015
         var speechEnd = validSamples
         var i = validSamples - win
         while i > 0 {
@@ -265,6 +269,9 @@ public final class KokoroTTSModel {
                 audio[start + k] *= gain
             }
         }
+        // The vocoder is not bounded to +-1: the packed-LSTM models occasionally
+        // overshoot by a few percent. Clamp so callers get valid float PCM.
+        for k in 0..<speechEnd { audio[k] = min(1, max(-1, audio[k])) }
 
         let duration = Double(validSamples) / Double(config.sampleRate)
         let elapsedMs = elapsed * 1000
