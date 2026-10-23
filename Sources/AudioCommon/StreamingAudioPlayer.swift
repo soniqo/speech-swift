@@ -430,6 +430,7 @@ public final class StreamingAudioPlayer: @unchecked Sendable {
         totalWritten = 0
         totalRead = 0
         underflowEvents = 0
+        playbackFinishedFired = false
         ringBuffer?.reset()
         lock.unlock()
         isPlaying = false
@@ -455,6 +456,7 @@ public final class StreamingAudioPlayer: @unchecked Sendable {
         totalWritten = 0
         totalRead = 0
         underflowEvents = 0
+        playbackFinishedFired = false
         ringBuffer?.reset()
         lock.unlock()
         isPlaying = false
