@@ -203,8 +203,10 @@ public final class NativeInferenceService: @unchecked Sendable {
             "whisper-large-v3": model("whisper-large-v3", "whisper", "fp16", []),
             "silero-vad": model("silero-vad", "silero", nil, ["streaming"]),
         ]
-        if agent != nil {
-            models["gemma4-12b-it"] = model("gemma4-12b-it", "gemma4-unified", "int4", ["tool_calls", "tool_history", "cancel"])
+        if let agent {
+            var features = ["tool_calls", "tool_history", "cancel"]
+            if agent.prefixCacheBudgetBytes > 0 { features.append("system_prefix_cache") }
+            models["gemma4-12b-it"] = model("gemma4-12b-it", "gemma4-unified", "int4", features)
         }
         return ["schema_version": 1, "runtime": "speech-swift", "revision": config.runtimeRevision, "models": models]
     }
@@ -242,7 +244,16 @@ public final class NativeInferenceService: @unchecked Sendable {
                     response = try gemma.generateResponse(messages: request.messages!, tools: request.tools ?? [],
                                                           sampling: sampling, cancellation: token)
                 }
-                result = try JSONEncoder().encode(response)
+                let encoded = try JSONEncoder().encode(response)
+                if request.model == "gemma4-12b-it", let agent {
+                    guard var payload = try JSONSerialization.jsonObject(with: encoded) as? [String: Any] else {
+                        throw HTTPError(.internalServerError, message: "Invalid native chat response encoding")
+                    }
+                    payload["cachedPrefixTokens"] = agent.lastCachedPrefixTokens
+                    result = try JSONSerialization.data(withJSONObject: payload)
+                } else {
+                    result = encoded
+                }
             case .speech:
                 let samples = try await vox.generateVoxCPM2(
                     text: request.text!, maxTokens: request.maxTokens ?? 1500,
@@ -268,8 +279,12 @@ public final class NativeInferenceService: @unchecked Sendable {
         router.get("/v1/inference/capabilities") { _, _ in jsonResponse(self.capabilities) }
         router.get("/v1/inference/provenance") { _, _ in
             let encoded = try JSONEncoder().encode(self.config)
+            guard var configuration = try JSONSerialization.jsonObject(with: encoded) as? [String: Any] else {
+                throw HTTPError(.internalServerError, message: "Invalid native configuration encoding")
+            }
+            configuration["gemma4_12b_prefix_cache_budget_bytes"] = self.agent?.prefixCacheBudgetBytes ?? 0
             return jsonResponse([
-                "configuration": try JSONSerialization.jsonObject(with: encoded),
+                "configuration": configuration,
                 "pid": ProcessInfo.processInfo.processIdentifier,
                 "voxcpm2_parameter_elements": self.vox.parameterDtypes,
                 "voxcpm2_audio_vae": "float32",

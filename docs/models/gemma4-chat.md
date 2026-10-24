@@ -35,7 +35,27 @@ argument strings retain their original values. For 12B, repeated adjacent
 terminators immediately after a fully validated call are consumed with that
 call. Standalone terminators, incomplete calls, and invalid arguments remain
 errors. The public codec and E4B keep strict terminator handling. Cancellation is cooperative. Prefill evaluates
-256-token batches and each request owns its KV cache. This interface provides
+KV state in batches of at most 256 tokens, then computes initial vocabulary
+logits for the final prompt token only. Intermediate prompt positions do not
+materialize discarded vocabulary projections.
+
+The instance retains one unchanged system/tool prefix in complete 256-token
+blocks, within the existing `SPEECH_SWIFT_GEMMA4_PREFIX_CACHE_MB` budget
+(1,024 MiB by default for 12B; `0` disables reuse). E4B retains its existing
+512 MiB default. Reuse requires identical prefix token
+IDs. Each request extends an independent copy of the retained cache, including
+sliding-window position metadata. User messages, assistant history, and tool
+results are never added to the retained snapshot. Working state is released
+after generation or cancellation; `clearPrefixCache()` releases the retained
+snapshot. `lastCachedPrefixTokens` reports reuse for the most recent request,
+with `0` for a cold prefill. Calls on an instance must remain serialized.
+
+The native inference HTTP response exposes the optional `cachedPrefixTokens`
+count for 12B chat. Capabilities advertise `system_prefix_cache` when enabled,
+and provenance records `gemma4_12b_prefix_cache_budget_bytes` in the effective
+configuration. The first request still pays for the full prompt prefill.
+
+This interface provides
 buffered text/tool responses; it rejects constrained response formats. Vision
 and audio input use other modules and are outside this text interface.
 
