@@ -245,13 +245,12 @@ let package = Package(
         )
     ],
     dependencies: [
-        .package(url: "https://github.com/ml-explore/mlx-swift", from: "0.30.0"),
-        // Generic LLM runtime (loads standard HF MLX models: Qwen3, Gemma, Llama, …) — backs the
-        // larger on-device chat model. The MLXLLM/MLXLMCommon libraries moved here from
-        // mlx-swift-examples. Pins mlx-swift .upToNextMinor(0.31.4), compatible with ours.
-        // Pin the stable release matched to MLX Swift 0.31.4. Tracking the upstream
-        // main branch made clean release and Homebrew builds non-reproducible.
-        .package(url: "https://github.com/ml-explore/mlx-swift-lm", exact: "3.31.4"),
+        .package(url: "https://github.com/ml-explore/mlx-swift", .upToNextMinor(from: "0.33.0")),
+        // Pin the MLX 0.33-compatible runtime until its next stable tag is published.
+        .package(
+            url: "https://github.com/ml-explore/mlx-swift-lm",
+            revision: "3d066d3a0ffdc7e70c476a3d31488ea62dfdd0ac"
+        ),
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.5.0"),
         .package(url: "https://github.com/modelcontextprotocol/swift-sdk.git", exact: "0.12.1"),
         .package(url: "https://github.com/apple/swift-system.git", from: "1.8.0"),
