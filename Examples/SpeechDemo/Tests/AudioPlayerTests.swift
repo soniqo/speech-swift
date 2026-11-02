@@ -2,6 +2,7 @@
 import AVFoundation
 import XCTest
 @testable import SpeechDemo
+import AudioCommon
 
 final class AudioPlayerTests: XCTestCase {
 
@@ -9,7 +10,7 @@ final class AudioPlayerTests: XCTestCase {
 
     /// markGenerationComplete with zero pending buffers fires callback (via main queue).
     func testMarkGenerationCompleteFiresWhenNoPendingBuffers() {
-        let player = AudioPlayer()
+        let player = StreamingAudioPlayer()
 
         let exp = expectation(description: "playback finished")
         player.onPlaybackFinished = { exp.fulfill() }
@@ -20,7 +21,7 @@ final class AudioPlayerTests: XCTestCase {
 
     /// Without markGenerationComplete, callback never fires (even with no buffers).
     func testNoCallbackWithoutMarkGenerationComplete() {
-        let player = AudioPlayer()
+        let player = StreamingAudioPlayer()
 
         var finished = false
         player.onPlaybackFinished = { finished = true }
@@ -32,7 +33,7 @@ final class AudioPlayerTests: XCTestCase {
 
     /// resetGeneration prevents stale generationComplete from firing.
     func testResetGenerationClearsFlag() {
-        let player = AudioPlayer()
+        let player = StreamingAudioPlayer()
 
         var finishCount = 0
         let exp = expectation(description: "two finishes")
@@ -57,7 +58,7 @@ final class AudioPlayerTests: XCTestCase {
 
     /// stop() resets generationComplete, allowing clean next cycle.
     func testStopResetsGenerationComplete() {
-        let player = AudioPlayer()
+        let player = StreamingAudioPlayer()
 
         var finishCount = 0
         let exp = expectation(description: "two finishes")
@@ -82,7 +83,7 @@ final class AudioPlayerTests: XCTestCase {
 
     /// Without markGenerationComplete, play() alone never triggers callback.
     func testRaceConditionPrevented() throws {
-        let player = AudioPlayer()
+        let player = StreamingAudioPlayer()
 
         var callbackFired = false
         player.onPlaybackFinished = { callbackFired = true }
@@ -105,7 +106,7 @@ final class AudioPlayerTests: XCTestCase {
 
     /// Two full cycles back-to-back (simulates two Echo responses).
     func testTwoCyclesBackToBack() {
-        let player = AudioPlayer()
+        let player = StreamingAudioPlayer()
 
         var finishCount = 0
         player.onPlaybackFinished = { finishCount += 1 }
@@ -129,7 +130,7 @@ final class AudioPlayerTests: XCTestCase {
 
     /// Interrupt during playback: stop() mid-cycle, then new cycle works.
     func testInterruptThenNewCycle() {
-        let player = AudioPlayer()
+        let player = StreamingAudioPlayer()
 
         var finishCount = 0
         player.onPlaybackFinished = { finishCount += 1 }
