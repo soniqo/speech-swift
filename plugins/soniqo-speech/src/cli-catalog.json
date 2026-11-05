@@ -1,0 +1,4079 @@
+{
+  "runtime_version": "0.0.29",
+  "binary_sha256": "ca7868cc8493809fdad2f03fc77236a81096c56e46e3b19bf44850aab1b882d9",
+  "help_sha256": "f46b6b545e739859267bacfb89945d66431b591593d38ce59f042bb080f77008",
+  "commands": [
+    {
+      "command": "transcribe",
+      "path": [
+        "transcribe"
+      ],
+      "tool": "speech_transcribe",
+      "description": "Transcribe speech to text (Qwen3-ASR, Cohere, Voxtral, MOSS, and other ASR backends)",
+      "arguments": [
+        {
+          "key": "audio_file",
+          "kind": "positional",
+          "flag": null,
+          "required": true,
+          "repeating": false,
+          "type": "string",
+          "description": "Audio file to transcribe (WAV, any sample rate)"
+        },
+        {
+          "key": "engine",
+          "kind": "option",
+          "flag": "--engine",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "ASR engine: qwen3 (default), cohere, kyutai, voxtral, moss, parakeet, nemotron, omnilingual, whisper, qwen3-coreml, or qwen3-coreml-full",
+          "default": "qwen3"
+        },
+        {
+          "key": "window",
+          "kind": "option",
+          "flag": "--window",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[omnilingual] Window size in seconds: 5 or 10 (default 10) — CoreML backend only",
+          "default": "10"
+        },
+        {
+          "key": "backend",
+          "kind": "option",
+          "flag": "--backend",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[omnilingual/moss] Backend: coreml (default) or mlx",
+          "default": "coreml"
+        },
+        {
+          "key": "variant",
+          "kind": "option",
+          "flag": "--variant",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[omnilingual mlx] Variant: 300M (default), 1B, 3B, or 7B",
+          "default": "300M"
+        },
+        {
+          "key": "bits",
+          "kind": "option",
+          "flag": "--bits",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[omnilingual mlx] Quantization bits: 4 (default) or 8",
+          "default": "4"
+        },
+        {
+          "key": "mlx_cache_limit_mb",
+          "kind": "option",
+          "flag": "--mlx-cache-limit-mb",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[kyutai] MLX's process-wide free-buffer cache limit in MiB for this command (default: 256; 0 disables caching)"
+        },
+        {
+          "key": "model",
+          "kind": "option",
+          "flag": "--model",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[qwen3] 0.6B (default), 0.6B-8bit, 1.7B, or 1.7B-4bit; [cohere/voxtral] int5 (default), int8, or fp16; [kyutai] int8 (default), int4, fp16, upstream, or 2.6b; [moss coreml] int8 (default) or fp16; [moss mlx] int5 (default) or int8; [whisper] default or turbo; alternatively a model ID or local directory",
+          "default": "0.6B"
+        },
+        {
+          "key": "max_tokens",
+          "kind": "option",
+          "flag": "--max-tokens",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[moss] Maximum generated transcript tokens (default: Core ML 512, MLX 5120)"
+        },
+        {
+          "key": "kv_cache",
+          "kind": "option",
+          "flag": "--kv-cache",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[moss mlx] KV-cache precision: fp16 (default) or int8",
+          "default": "fp16"
+        },
+        {
+          "key": "language",
+          "kind": "option",
+          "flag": "--language",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Language hint (optional)"
+        },
+        {
+          "key": "context",
+          "kind": "option",
+          "flag": "--context",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Context string to bias recognition (e.g., 'Project: Foo, participants: Alice, Bob'). Improves proper-noun accuracy."
+        },
+        {
+          "key": "stream",
+          "kind": "flag",
+          "flag": "--stream",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Enable streaming transcription (native stream for Kyutai; VAD for Qwen3)"
+        },
+        {
+          "key": "max_segment",
+          "kind": "option",
+          "flag": "--max-segment",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Maximum segment duration in seconds (default 10)",
+          "default": "10.0"
+        },
+        {
+          "key": "partial",
+          "kind": "flag",
+          "flag": "--partial",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Emit partial results during speech"
+        }
+      ]
+    },
+    {
+      "command": "transcribe-batch",
+      "path": [
+        "transcribe-batch"
+      ],
+      "tool": "speech_transcribe_batch",
+      "description": "Transcribe a directory of audio files (model loaded once)",
+      "arguments": [
+        {
+          "key": "input_dir",
+          "kind": "positional",
+          "flag": null,
+          "required": true,
+          "repeating": false,
+          "type": "string",
+          "description": "Directory containing audio files (WAV, FLAC, etc.)"
+        },
+        {
+          "key": "output_dir",
+          "kind": "option",
+          "flag": "--output-dir",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Output directory for transcriptions (one .txt per file)"
+        },
+        {
+          "key": "engine",
+          "kind": "option",
+          "flag": "--engine",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "ASR engine: qwen3 (default), parakeet",
+          "default": "qwen3"
+        },
+        {
+          "key": "model",
+          "kind": "option",
+          "flag": "--model",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[qwen3] Model: 0.6B (default), 0.6B-8bit, 1.7B, 1.7B-4bit",
+          "default": "0.6B"
+        },
+        {
+          "key": "language",
+          "kind": "option",
+          "flag": "--language",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Language hint (optional)"
+        },
+        {
+          "key": "batch_size",
+          "kind": "option",
+          "flag": "--batch-size",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[qwen3] Max files per group (default: 1). Experimental MLX batched decode requires QWEN3_ASR_EXPERIMENTAL_BATCH_DECODE=1.",
+          "default": "1"
+        },
+        {
+          "key": "extensions",
+          "kind": "option",
+          "flag": "--extensions",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Audio file extensions to process (default: wav,flac,mp3)",
+          "default": "wav,flac,mp3"
+        },
+        {
+          "key": "jsonl",
+          "kind": "flag",
+          "flag": "--jsonl",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Output results as JSON lines (one per file)"
+        }
+      ]
+    },
+    {
+      "command": "align",
+      "path": [
+        "align"
+      ],
+      "tool": "speech_align",
+      "description": "Forced alignment: align text to audio with word-level timestamps",
+      "arguments": [
+        {
+          "key": "audio_file",
+          "kind": "positional",
+          "flag": null,
+          "required": true,
+          "repeating": false,
+          "type": "string",
+          "description": "Audio file (WAV, any sample rate)"
+        },
+        {
+          "key": "text",
+          "kind": "option",
+          "flag": "--text",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Text to align (if omitted, transcribes first)"
+        },
+        {
+          "key": "model",
+          "kind": "option",
+          "flag": "--model",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "ASR model for transcription: 0.6B (default), 1.7B, or full ID",
+          "default": "0.6B"
+        },
+        {
+          "key": "engine",
+          "kind": "option",
+          "flag": "--engine",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Forced aligner backend: mlx (default) or coreml",
+          "default": "mlx"
+        },
+        {
+          "key": "aligner_model",
+          "kind": "option",
+          "flag": "--aligner-model",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Forced aligner model ID (defaults depend on --engine)"
+        },
+        {
+          "key": "language",
+          "kind": "option",
+          "flag": "--language",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Language hint (optional)"
+        },
+        {
+          "key": "max_tokens",
+          "kind": "option",
+          "flag": "--max-tokens",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Max ASR decoder tokens when transcribing (≈ 250 tokens/min)",
+          "default": "4096"
+        }
+      ]
+    },
+    {
+      "command": "speak",
+      "path": [
+        "speak"
+      ],
+      "tool": "speech_speak",
+      "description": "Text-to-speech synthesis (Qwen3-TTS, CosyVoice, VoxCPM2, Pocket TTS, Voxtral, Fish Drama 3, IndexTTS2, F5-TTS, Higgs, Breeze TTS 2, Indic-Mio, Magpie, or MOSS-TTS-Nano). For Qwen3-TTS CoreML, use the `qwen3-tts-coreml` subcommand.",
+      "arguments": [
+        {
+          "key": "text",
+          "kind": "positional",
+          "flag": null,
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Text to synthesize (omit when using --list-speakers or --batch-file)"
+        },
+        {
+          "key": "engine",
+          "kind": "option",
+          "flag": "--engine",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "TTS engine: qwen3 (default), cosyvoice, voxcpm2, pocket, voxtral, fish-drama3, indextts2, f5, higgs, breeze, indic-mio, magpie, magpie-coreml, or moss-nano",
+          "default": "qwen3"
+        },
+        {
+          "key": "output",
+          "kind": "option",
+          "flag": "--output",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Output WAV file path",
+          "default": "output.wav"
+        },
+        {
+          "key": "language",
+          "kind": "option",
+          "flag": "--language",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Language (english, hindi, chinese, german, japanese, spanish, french, korean, russian, italian, portuguese). Default: english, or hindi for --engine indic-mio. Omit to use speaker's native dialect when --speaker is set."
+        },
+        {
+          "key": "stream",
+          "kind": "flag",
+          "flag": "--stream",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Enable streaming synthesis"
+        },
+        {
+          "key": "play",
+          "kind": "flag",
+          "flag": "--play",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Play audio through default output device instead of (or in addition to) saving a file"
+        },
+        {
+          "key": "pocket_bundle_dir",
+          "kind": "option",
+          "flag": "--pocket-bundle-dir",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[pocket] Local compiled CoreML bundle directory"
+        },
+        {
+          "key": "pocket_model_id",
+          "kind": "option",
+          "flag": "--pocket-model-id",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[pocket] HuggingFace CoreML bundle ID",
+          "default": "aufklarer/Pocket-TTS-100M-CoreML-INT8"
+        },
+        {
+          "key": "pocket_seed",
+          "kind": "option",
+          "flag": "--pocket-seed",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[pocket] Deterministic noise seed (0 is valid)",
+          "default": "42"
+        },
+        {
+          "key": "pocket_max_frames",
+          "kind": "option",
+          "flag": "--pocket-max-frames",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[pocket] Maximum frames per text chunk; exceeding the limit throws",
+          "default": "350"
+        },
+        {
+          "key": "speaker",
+          "kind": "option",
+          "flag": "--speaker",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[qwen3] Speaker voice (requires --model customVoice)"
+        },
+        {
+          "key": "instruct",
+          "kind": "option",
+          "flag": "--instruct",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[qwen3/breeze] Style or voice-design instruction (Qwen3 requires CustomVoice)"
+        },
+        {
+          "key": "voice_sample",
+          "kind": "option",
+          "flag": "--voice-sample",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Reference audio file for voice cloning (qwen3 Base, cosyvoice, voxcpm2, fish-drama3, indextts2, f5, higgs, breeze, indic-mio, or moss-nano)"
+        },
+        {
+          "key": "moss_nano_model",
+          "kind": "option",
+          "flag": "--moss-nano-model",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[moss-nano] HuggingFace model ID or local compiled model directory",
+          "default": "aufklarer/MOSS-TTS-Nano-100M-CoreML"
+        },
+        {
+          "key": "moss_nano_compute_units",
+          "kind": "option",
+          "flag": "--moss-nano-compute-units",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[moss-nano] CoreML compute units: cpu (default) or gpu (CPU+GPU)",
+          "default": "cpu"
+        },
+        {
+          "key": "moss_nano_max_frames",
+          "kind": "option",
+          "flag": "--moss-nano-max-frames",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[moss-nano] Maximum 80 ms audio frames; reaching the limit raises an error",
+          "default": "300"
+        },
+        {
+          "key": "moss_nano_seed",
+          "kind": "option",
+          "flag": "--moss-nano-seed",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[moss-nano] Reproducible Swift sampling seed",
+          "default": "0"
+        },
+        {
+          "key": "clean_reference",
+          "kind": "flag",
+          "flag": "--clean-reference",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Restore (denoise + dereverb) the voice-cloning reference with Sidon before cloning. Opt-in; preserves speaker identity. Applies to qwen3/cosyvoice/voxcpm2/fish-drama3/f5/higgs/breeze/indic-mio/moss-nano references."
+        },
+        {
+          "key": "clean_reference_variant",
+          "kind": "option",
+          "flag": "--clean-reference-variant",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Sidon variant for --clean-reference: fp16 (default) or int8",
+          "default": "fp16"
+        },
+        {
+          "key": "model",
+          "kind": "option",
+          "flag": "--model",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[qwen3] Model variant: base (default), base-8bit, 1.7b (bf16), 1.7b-8bit, customVoice (bf16), or full HF model ID. Note: --speaker requires customVoice.",
+          "default": "base"
+        },
+        {
+          "key": "list_speakers",
+          "kind": "flag",
+          "flag": "--list-speakers",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "[qwen3/pocket/voxtral] List available speakers and exit"
+        },
+        {
+          "key": "temperature",
+          "kind": "option",
+          "flag": "--temperature",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[qwen3/indic-mio] Sampling temperature (default: 0.3)",
+          "default": "0.3"
+        },
+        {
+          "key": "top_k",
+          "kind": "option",
+          "flag": "--top-k",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[qwen3/indic-mio] Top-k sampling",
+          "default": "50"
+        },
+        {
+          "key": "max_tokens",
+          "kind": "option",
+          "flag": "--max-tokens",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[qwen3/indic-mio] Maximum generated tokens (500 = ~40s audio for Qwen3)",
+          "default": "500"
+        },
+        {
+          "key": "batch_file",
+          "kind": "option",
+          "flag": "--batch-file",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[qwen3] File with one text per line for batch synthesis"
+        },
+        {
+          "key": "batch_size",
+          "kind": "option",
+          "flag": "--batch-size",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[qwen3] Maximum batch size for parallel generation",
+          "default": "4"
+        },
+        {
+          "key": "first_chunk_frames",
+          "kind": "option",
+          "flag": "--first-chunk-frames",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[qwen3] Codec frames in first streamed chunk (default 3)",
+          "default": "3"
+        },
+        {
+          "key": "chunk_frames",
+          "kind": "option",
+          "flag": "--chunk-frames",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Codec frames per streamed chunk (default 25)",
+          "default": "25"
+        },
+        {
+          "key": "model_id",
+          "kind": "option",
+          "flag": "--model-id",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[cosyvoice] HuggingFace model ID. Set explicitly to bypass --cosyvoice-variant resolution."
+        },
+        {
+          "key": "cosyvoice_variant",
+          "kind": "option",
+          "flag": "--cosyvoice-variant",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[cosyvoice] Quantization variant: bf16/16bit (default), 8bit, 8bit-full. Resolves to aufklarer/CosyVoice3-0.5B-MLX-<variant>. Ignored when --model-id is set.",
+          "default": "bf16"
+        },
+        {
+          "key": "speakers",
+          "kind": "option",
+          "flag": "--speakers",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[cosyvoice] Speaker mapping: s1=alice.wav,s2=bob.wav"
+        },
+        {
+          "key": "cosy_instruct",
+          "kind": "option",
+          "flag": "--cosy-instruct",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[cosyvoice] Style instruction (overrides default)"
+        },
+        {
+          "key": "turn_gap",
+          "kind": "option",
+          "flag": "--turn-gap",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[cosyvoice] Silence gap between turns in seconds (default 0.2)",
+          "default": "0.2"
+        },
+        {
+          "key": "crossfade",
+          "kind": "option",
+          "flag": "--crossfade",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[cosyvoice] Crossfade between turns in seconds (default 0)",
+          "default": "0.0"
+        },
+        {
+          "key": "seed",
+          "kind": "option",
+          "flag": "--seed",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[fish-drama3] Request-local sampling seed (default 0). [cosyvoice] MLX seed applied before each synthesis call. Fixes the flow-matching noise + Gumbel sampling + HiFiGAN init phase, so repeated calls with the same speaker embedding produce near-identical prosody and timbre across sections. Useful for long-form narration cut into chunks."
+        },
+        {
+          "key": "cosy_speech_tokenizer",
+          "kind": "option",
+          "flag": "--cosy-speech-tokenizer",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[cosyvoice] Path to speech_tokenizer.safetensors (S3-Tokenizer-v3). When supplied, --voice-sample is upgraded from spk-only cloning (cos~0.83 cap) to upstream zero-shot conditioning with prompt_token + prompt_feat (preserves identity through emotion changes). Auto-detected in the bundle's cache dir if omitted."
+        },
+        {
+          "key": "cosy_bundle_dir",
+          "kind": "option",
+          "flag": "--cosy-bundle-dir",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[cosyvoice] Override the model cache directory. When supplied, the bundle is loaded directly from this directory instead of HuggingFace. Useful for testing locally-converted variants (e.g. an 8-bit LLM) without an HF push."
+        },
+        {
+          "key": "cosy_reference_transcript",
+          "kind": "option",
+          "flag": "--cosy-reference-transcript",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[cosyvoice] Reference transcript: the text content of --voice-sample. Required for proper zero-shot voice cloning — without it the LLM has acoustic context but no idea what was said in the reference, and emits content-incorrect speech in the right voice."
+        },
+        {
+          "key": "voxcpm2_variant",
+          "kind": "option",
+          "flag": "--voxcpm2-variant",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[voxcpm2] Quantization variant: bf16 (default), int8 (int4 was decommissioned). Resolves to aufklarer/VoxCPM2-MLX-<variant>.",
+          "default": "bf16"
+        },
+        {
+          "key": "voxcpm2_instruct",
+          "kind": "option",
+          "flag": "--voxcpm2-instruct",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[voxcpm2] Style instruction"
+        },
+        {
+          "key": "voxcpm2_ref_audio",
+          "kind": "option",
+          "flag": "--voxcpm2-ref-audio",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[voxcpm2] Reference audio file for voice cloning"
+        },
+        {
+          "key": "voxcpm2_prompt_text",
+          "kind": "option",
+          "flag": "--voxcpm2-prompt-text",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[voxcpm2] Prompt text for continuation"
+        },
+        {
+          "key": "voxcpm2_prompt_audio",
+          "kind": "option",
+          "flag": "--voxcpm2-prompt-audio",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[voxcpm2] Prompt audio file for continuation"
+        },
+        {
+          "key": "voxcpm2_cfg_value",
+          "kind": "option",
+          "flag": "--voxcpm2-cfg-value",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[voxcpm2] Classifier-free guidance scale (default 2.0)",
+          "default": "2.0"
+        },
+        {
+          "key": "voxcpm2_timesteps",
+          "kind": "option",
+          "flag": "--voxcpm2-timesteps",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[voxcpm2] Diffusion timesteps per patch",
+          "default": "10"
+        },
+        {
+          "key": "voxcpm2_max_tokens",
+          "kind": "option",
+          "flag": "--voxcpm2-max-tokens",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[voxcpm2] Maximum generated patches",
+          "default": "2000"
+        },
+        {
+          "key": "voxcpm2_min_tokens",
+          "kind": "option",
+          "flag": "--voxcpm2-min-tokens",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[voxcpm2] Minimum generated patches before early stop",
+          "default": "2"
+        },
+        {
+          "key": "voxcpm2_streaming_prefix_len",
+          "kind": "option",
+          "flag": "--voxcpm2-streaming-prefix-len",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[voxcpm2] Streaming prefix patches retained for continuation",
+          "default": "4"
+        },
+        {
+          "key": "voxcpm2_warmup_patches",
+          "kind": "option",
+          "flag": "--voxcpm2-warmup-patches",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[voxcpm2] Warmup patches to skip before emitting audio",
+          "default": "0"
+        },
+        {
+          "key": "voxtral_model_id",
+          "kind": "option",
+          "flag": "--voxtral-model-id",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[voxtral] HuggingFace MLX model ID",
+          "default": "aufklarer/Voxtral-4B-TTS-2603-MLX-4bit"
+        },
+        {
+          "key": "voxtral_bundle_dir",
+          "kind": "option",
+          "flag": "--voxtral-bundle-dir",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[voxtral] Load a local exported bundle instead of HuggingFace"
+        },
+        {
+          "key": "voxtral_voice",
+          "kind": "option",
+          "flag": "--voxtral-voice",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[voxtral] Preset voice (default casual_male, or the language's male preset); see --list-speakers"
+        },
+        {
+          "key": "voxtral_max_frames",
+          "kind": "option",
+          "flag": "--voxtral-max-frames",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[voxtral] Maximum audio frames (500 = 40 seconds); reaching the limit reports an error",
+          "default": "500"
+        },
+        {
+          "key": "voxtral_seed",
+          "kind": "option",
+          "flag": "--voxtral-seed",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[voxtral] Per-request random seed (default 0)",
+          "default": "0"
+        },
+        {
+          "key": "voxtral_chunk_frames",
+          "kind": "option",
+          "flag": "--voxtral-chunk-frames",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[voxtral] Codec frames per streaming chunk (default 3 = 240 ms of audio)",
+          "default": "3"
+        },
+        {
+          "key": "fish_drama3_model_id",
+          "kind": "option",
+          "flag": "--fish-drama3-model-id",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[fish-drama3] HuggingFace MLX model ID",
+          "default": "mlx-community/fish-audio-drama-3-4bit"
+        },
+        {
+          "key": "fish_drama3_bundle_dir",
+          "kind": "option",
+          "flag": "--fish-drama3-bundle-dir",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[fish-drama3] Load a local exported MLX bundle"
+        },
+        {
+          "key": "fish_drama3_reference_text",
+          "kind": "option",
+          "flag": "--fish-drama3-reference-text",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[fish-drama3] Exact transcript of --voice-sample"
+        },
+        {
+          "key": "fish_drama3_max_frames",
+          "kind": "option",
+          "flag": "--fish-drama3-max-frames",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[fish-drama3] Maximum generated frames; 2048 frames is about 95 seconds",
+          "default": "2048"
+        },
+        {
+          "key": "fish_drama3_temperature",
+          "kind": "option",
+          "flag": "--fish-drama3-temperature",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[fish-drama3] Sampling temperature (default 1; 0 is greedy)",
+          "default": "1.0"
+        },
+        {
+          "key": "fish_drama3_top_k",
+          "kind": "option",
+          "flag": "--fish-drama3-top-k",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[fish-drama3] Top-k sampling (default 30)",
+          "default": "30"
+        },
+        {
+          "key": "fish_drama3_top_p",
+          "kind": "option",
+          "flag": "--fish-drama3-top-p",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[fish-drama3] Nucleus sampling probability (default 0.9)",
+          "default": "0.9"
+        },
+        {
+          "key": "fish_drama3_chunk_frames",
+          "kind": "option",
+          "flag": "--fish-drama3-chunk-frames",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[fish-drama3] Codec frames per streamed chunk (1–128; default 3, about 139 ms of audio)",
+          "default": "3"
+        },
+        {
+          "key": "fish_drama3_memory_mode",
+          "kind": "option",
+          "flag": "--fish-drama3-memory-mode",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[fish-drama3] Memory policy: balanced (default) or unrestricted",
+          "default": "balanced"
+        },
+        {
+          "key": "indextts2_model_id",
+          "kind": "option",
+          "flag": "--indextts2-model-id",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[indextts2] HuggingFace model ID for the exported MLX bundle",
+          "default": "aufklarer/IndexTTS2-MLX-fp16"
+        },
+        {
+          "key": "indextts2_bundle_dir",
+          "kind": "option",
+          "flag": "--indextts2-bundle-dir",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[indextts2] Load an exported bundle from this local directory instead of HuggingFace"
+        },
+        {
+          "key": "indextts2_emotion_audio",
+          "kind": "option",
+          "flag": "--indextts2-emotion-audio",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[indextts2] Optional emotion/style reference audio. Defaults to --voice-sample when omitted."
+        },
+        {
+          "key": "indextts2_emotion",
+          "kind": "option",
+          "flag": "--indextts2-emotion",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[indextts2] Emotion preset or 8-value vector. Presets: eager, happy, excited, angry, sad, afraid, disgusted, melancholic, surprised, calm."
+        },
+        {
+          "key": "indextts2_emotion_weight",
+          "kind": "option",
+          "flag": "--indextts2-emotion-weight",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[indextts2] Strength for --indextts2-emotion, from 0.0 to 1.0 (default 1.0).",
+          "default": "1.0"
+        },
+        {
+          "key": "indextts2_speaking_rate",
+          "kind": "option",
+          "flag": "--indextts2-speaking-rate",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[indextts2] Speaking rate multiplier, from 0.5 to 1.5 (default 1.0). Values above 1.0 shorten generated speech.",
+          "default": "1.0"
+        },
+        {
+          "key": "indextts2_max_pause",
+          "kind": "option",
+          "flag": "--indextts2-max-pause",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[indextts2] Optional cap for long internal pauses, in seconds, from 0.05 to 2.0. Omit to keep raw model timing."
+        },
+        {
+          "key": "indextts2_s2mel_steps",
+          "kind": "option",
+          "flag": "--indextts2-s2mel-steps",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[indextts2] S2Mel flow steps (default 15, ear-validated; 25 matches upstream exactly)",
+          "default": "15"
+        },
+        {
+          "key": "f5_model_id",
+          "kind": "option",
+          "flag": "--f5-model-id",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[f5] HuggingFace model ID for the exported MLX bundle",
+          "default": "aufklarer/F5TTS-v1-Base-MLX-fp16"
+        },
+        {
+          "key": "f5_bundle_dir",
+          "kind": "option",
+          "flag": "--f5-bundle-dir",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[f5] Load an exported bundle from this local directory instead of HuggingFace"
+        },
+        {
+          "key": "f5_reference_text",
+          "kind": "option",
+          "flag": "--f5-reference-text",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[f5] Reference transcript: the text content of --voice-sample. Required for zero-shot cloning."
+        },
+        {
+          "key": "f5_steps",
+          "kind": "option",
+          "flag": "--f5-steps",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[f5] Flow-matching steps (default 16; use 32 for maximum fidelity)",
+          "default": "16"
+        },
+        {
+          "key": "f5_cfg_strength",
+          "kind": "option",
+          "flag": "--f5-cfg-strength",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[f5] Classifier-free guidance strength (default 2.0)",
+          "default": "2.0"
+        },
+        {
+          "key": "f5_sway",
+          "kind": "option",
+          "flag": "--f5-sway",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[f5] Sway sampling coefficient (default -1.0)",
+          "default": "-1.0"
+        },
+        {
+          "key": "f5_speed",
+          "kind": "option",
+          "flag": "--f5-speed",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[f5] Speaking rate multiplier (default 1.0). Values above 1.0 shorten generated speech.",
+          "default": "1.0"
+        },
+        {
+          "key": "f5_seed",
+          "kind": "option",
+          "flag": "--f5-seed",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[f5] MLX seed for deterministic flow sampling (default 0)",
+          "default": "0"
+        },
+        {
+          "key": "f5_target_rms",
+          "kind": "option",
+          "flag": "--f5-target-rms",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[f5] Reference RMS normalization target (default 0.1)",
+          "default": "0.1"
+        },
+        {
+          "key": "breeze_model_id",
+          "kind": "option",
+          "flag": "--breeze-model-id",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[breeze] Hugging Face MLX bundle ID",
+          "default": "aufklarer/Breeze-TTS-2-MLX-8bit"
+        },
+        {
+          "key": "breeze_bundle_dir",
+          "kind": "option",
+          "flag": "--breeze-bundle-dir",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[breeze] Load a local MLX bundle directory"
+        },
+        {
+          "key": "breeze_reference_text",
+          "kind": "option",
+          "flag": "--breeze-reference-text",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[breeze] Exact transcript of --voice-sample; required for cloning"
+        },
+        {
+          "key": "breeze_temperature",
+          "kind": "option",
+          "flag": "--breeze-temperature",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[breeze] Sampling temperature; 0 selects greedy decoding",
+          "default": "0.9"
+        },
+        {
+          "key": "breeze_top_k",
+          "kind": "option",
+          "flag": "--breeze-top-k",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[breeze] Top-k sampling; 0 disables",
+          "default": "50"
+        },
+        {
+          "key": "breeze_top_p",
+          "kind": "option",
+          "flag": "--breeze-top-p",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[breeze] Nucleus sampling threshold",
+          "default": "1.0"
+        },
+        {
+          "key": "breeze_cfg_scale",
+          "kind": "option",
+          "flag": "--breeze-cfg-scale",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[breeze] Instruction guidance scale; 1 disables CFG",
+          "default": "4.0"
+        },
+        {
+          "key": "breeze_max_frames",
+          "kind": "option",
+          "flag": "--breeze-max-frames",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[breeze] Maximum 80 ms codec frames; reaching the cap throws",
+          "default": "750"
+        },
+        {
+          "key": "breeze_seed",
+          "kind": "option",
+          "flag": "--breeze-seed",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[breeze] Reproducible sampling seed",
+          "default": "42"
+        },
+        {
+          "key": "higgs_model_id",
+          "kind": "option",
+          "flag": "--higgs-model-id",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[higgs] HuggingFace model ID for the MLX bundle",
+          "default": "aufklarer/Higgs-TTS-3-4B-MLX-bf16"
+        },
+        {
+          "key": "higgs_bundle_dir",
+          "kind": "option",
+          "flag": "--higgs-bundle-dir",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[higgs] Load a bundle from this local directory instead of HuggingFace"
+        },
+        {
+          "key": "higgs_ref_text",
+          "kind": "option",
+          "flag": "--higgs-ref-text",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[higgs] Reference transcript: the text content of --voice-sample (improves cloning)"
+        },
+        {
+          "key": "higgs_temperature",
+          "kind": "option",
+          "flag": "--higgs-temperature",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[higgs] Sampling temperature (default 0.8; the upstream default 1.0 is more variable)",
+          "default": "0.8"
+        },
+        {
+          "key": "higgs_top_p",
+          "kind": "option",
+          "flag": "--higgs-top-p",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[higgs] Nucleus sampling threshold (off by default)"
+        },
+        {
+          "key": "higgs_top_k",
+          "kind": "option",
+          "flag": "--higgs-top-k",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[higgs] Top-k sampling cutoff (off by default)"
+        },
+        {
+          "key": "higgs_max_new_tokens",
+          "kind": "option",
+          "flag": "--higgs-max-new-tokens",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[higgs] Maximum generated audio frames (default 2048, 25 frames/second)",
+          "default": "2048"
+        },
+        {
+          "key": "higgs_seed",
+          "kind": "option",
+          "flag": "--higgs-seed",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[higgs] MLX sampling seed (default 0)",
+          "default": "0"
+        },
+        {
+          "key": "indic_mio_model_id",
+          "kind": "option",
+          "flag": "--indic-mio-model-id",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[indic-mio] HuggingFace model ID",
+          "default": "aufklarer/Indic-Mio-MLX-fp16"
+        },
+        {
+          "key": "indic_mio_top_p",
+          "kind": "option",
+          "flag": "--indic-mio-top-p",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[indic-mio] Top-p sampling",
+          "default": "0.9"
+        },
+        {
+          "key": "indic_mio_repetition_penalty",
+          "kind": "option",
+          "flag": "--indic-mio-repetition-penalty",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[indic-mio] Repetition penalty",
+          "default": "1.0"
+        },
+        {
+          "key": "indic_mio_global_embedding",
+          "kind": "option",
+          "flag": "--indic-mio-global-embedding",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[indic-mio] 128-float MioCodec global speaker embedding as JSON, comma-separated, or whitespace-separated floats"
+        },
+        {
+          "key": "magpie_variant",
+          "kind": "option",
+          "flag": "--magpie-variant",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[magpie] Quantization variant: int8 (int4 was decommissioned). Resolves to aufklarer/Magpie-TTS-Multilingual-357M-MLX-int8.",
+          "default": "int8"
+        },
+        {
+          "key": "magpie_speaker",
+          "kind": "option",
+          "flag": "--magpie-speaker",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "[magpie] Baked speaker: sofia (default), aria, jason, leo, john. No voice cloning.",
+          "default": "sofia"
+        },
+        {
+          "key": "magpie_temperature",
+          "kind": "option",
+          "flag": "--magpie-temperature",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[magpie] Sampling temperature (default 0.6)",
+          "default": "0.6"
+        },
+        {
+          "key": "magpie_top_k",
+          "kind": "option",
+          "flag": "--magpie-top-k",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[magpie] Top-k sampling (default 80)",
+          "default": "80"
+        },
+        {
+          "key": "magpie_max_frames",
+          "kind": "option",
+          "flag": "--magpie-max-frames",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[magpie] Maximum codec frames (500 ≈ 23s)",
+          "default": "500"
+        },
+        {
+          "key": "magpie_min_frames",
+          "kind": "option",
+          "flag": "--magpie-min-frames",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "[magpie] Minimum frames before EOS (default 4)",
+          "default": "4"
+        },
+        {
+          "key": "magpie_prephonemized",
+          "kind": "flag",
+          "flag": "--magpie-prephonemized",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "[magpie] Treat --text input as pre-phonemised IPA (skip text normalisation)"
+        },
+        {
+          "key": "verbose",
+          "kind": "flag",
+          "flag": "--verbose",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Show detailed timing info"
+        }
+      ]
+    },
+    {
+      "command": "csm",
+      "path": [
+        "csm"
+      ],
+      "tool": "speech_csm",
+      "description": "Conversational Speech Model (CSM-1B) — text→audio with voice cloning",
+      "arguments": [
+        {
+          "key": "text",
+          "kind": "positional",
+          "flag": null,
+          "required": true,
+          "repeating": false,
+          "type": "string",
+          "description": "Text to synthesize"
+        },
+        {
+          "key": "output",
+          "kind": "option",
+          "flag": "--output",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Output WAV file path",
+          "default": "output.wav"
+        },
+        {
+          "key": "ref_audio",
+          "kind": "option",
+          "flag": "--ref-audio",
+          "required": true,
+          "repeating": false,
+          "type": "string",
+          "description": "Reference audio to clone the voice from (any sample rate)"
+        },
+        {
+          "key": "ref_text",
+          "kind": "option",
+          "flag": "--ref-text",
+          "required": true,
+          "repeating": false,
+          "type": "string",
+          "description": "Transcript of the reference audio"
+        },
+        {
+          "key": "model",
+          "kind": "option",
+          "flag": "--model",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "HuggingFace model ID",
+          "default": "aufklarer/CSM-1B-MLX-8bit"
+        },
+        {
+          "key": "temperature",
+          "kind": "option",
+          "flag": "--temperature",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Sampling temperature (0 = greedy)",
+          "default": "0.9"
+        },
+        {
+          "key": "top_k",
+          "kind": "option",
+          "flag": "--top-k",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Top-k sampling",
+          "default": "50"
+        }
+      ]
+    },
+    {
+      "command": "respond",
+      "path": [
+        "respond"
+      ],
+      "tool": "speech_respond",
+      "description": "Full-duplex speech-to-speech inference using PersonaPlex 7B",
+      "arguments": [
+        {
+          "key": "input",
+          "kind": "option",
+          "flag": "--input",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Input audio WAV file (24kHz mono)"
+        },
+        {
+          "key": "output",
+          "kind": "option",
+          "flag": "--output",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Output response WAV file",
+          "default": "response.wav"
+        },
+        {
+          "key": "voice",
+          "kind": "option",
+          "flag": "--voice",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Voice preset (e.g. NATM0, NATF1, VARF0)",
+          "default": "NATM0"
+        },
+        {
+          "key": "system_prompt",
+          "kind": "option",
+          "flag": "--system-prompt",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "System prompt preset: assistant, focused, customer-service, teacher",
+          "default": "assistant"
+        },
+        {
+          "key": "system_prompt_text",
+          "kind": "option",
+          "flag": "--system-prompt-text",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Custom system prompt text (overrides --system-prompt preset)"
+        },
+        {
+          "key": "max_steps",
+          "kind": "option",
+          "flag": "--max-steps",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Maximum generation steps at 12.5Hz (default: 200 = ~16s)",
+          "default": "200"
+        },
+        {
+          "key": "model_id",
+          "kind": "option",
+          "flag": "--model-id",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "HuggingFace model ID (e.g. aufklarer/PersonaPlex-7B-MLX-4bit or aufklarer/PersonaPlex-7B-MLX-8bit)",
+          "default": "aufklarer/PersonaPlex-7B-MLX-4bit"
+        },
+        {
+          "key": "stream",
+          "kind": "flag",
+          "flag": "--stream",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Enable streaming output (emit audio chunks during generation)"
+        },
+        {
+          "key": "chunk_frames",
+          "kind": "option",
+          "flag": "--chunk-frames",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Frames per streaming chunk (default: 25 = ~2s)",
+          "default": "25"
+        },
+        {
+          "key": "compile",
+          "kind": "flag",
+          "flag": "--compile",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Enable compiled temporal transformer (warmup + kernel fusion)"
+        },
+        {
+          "key": "list_voices",
+          "kind": "flag",
+          "flag": "--list-voices",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "List available voices and exit"
+        },
+        {
+          "key": "list_prompts",
+          "kind": "flag",
+          "flag": "--list-prompts",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "List available system prompt presets and exit"
+        },
+        {
+          "key": "verbose",
+          "kind": "flag",
+          "flag": "--verbose",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Show detailed timing info"
+        },
+        {
+          "key": "transcript",
+          "kind": "flag",
+          "flag": "--transcript",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Decode and print the model's inner monologue text"
+        },
+        {
+          "key": "json",
+          "kind": "flag",
+          "flag": "--json",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Output results as JSON (includes transcript, latency, audio path)"
+        },
+        {
+          "key": "audio_temp",
+          "kind": "option",
+          "flag": "--audio-temp",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Audio sampling temperature (default: 0.8)"
+        },
+        {
+          "key": "text_temp",
+          "kind": "option",
+          "flag": "--text-temp",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Text sampling temperature (default: 0.7)"
+        },
+        {
+          "key": "audio_top_k",
+          "kind": "option",
+          "flag": "--audio-top-k",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Audio top-k candidates (default: 250)"
+        },
+        {
+          "key": "repetition_penalty",
+          "kind": "option",
+          "flag": "--repetition-penalty",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Audio repetition penalty (default: 1.2, 1.0 = disabled)"
+        },
+        {
+          "key": "text_repetition_penalty",
+          "kind": "option",
+          "flag": "--text-repetition-penalty",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Text repetition penalty (default: 1.2, 1.0 = disabled)"
+        },
+        {
+          "key": "repetition_window",
+          "kind": "option",
+          "flag": "--repetition-window",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Repetition penalty window in frames (default: 30)"
+        },
+        {
+          "key": "silence_early_stop",
+          "kind": "option",
+          "flag": "--silence-early-stop",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Silence frames before early stop (default: 15, 0 = disabled)"
+        },
+        {
+          "key": "entropy_threshold",
+          "kind": "option",
+          "flag": "--entropy-threshold",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Text entropy threshold for early stop (default: 0 = disabled, try 1.0)"
+        },
+        {
+          "key": "entropy_window",
+          "kind": "option",
+          "flag": "--entropy-window",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Consecutive low-entropy steps before early stop (default: 10)"
+        },
+        {
+          "key": "full_duplex",
+          "kind": "flag",
+          "flag": "--full-duplex",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Full-duplex mode: feed input WAV into ring buffer, record response. Saves input + output WAVs for offline analysis."
+        },
+        {
+          "key": "debug_dir",
+          "kind": "option",
+          "flag": "--debug-dir",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Full-duplex debug output directory (default: /tmp/personaplex_debug)",
+          "default": "/tmp/personaplex_debug"
+        }
+      ]
+    },
+    {
+      "command": "voice-chat",
+      "path": [
+        "voice-chat"
+      ],
+      "tool": "speech_voice_chat",
+      "description": "Talk with Soniqo using the full-duplex Nemotron VoiceChat 11B model.",
+      "arguments": [
+        {
+          "key": "model",
+          "kind": "option",
+          "flag": "--model",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Hugging Face model ID or local complete VoiceChat bundle.",
+          "default": "aufklarer/VoiceChat-11B-Perception-MLX-int5"
+        },
+        {
+          "key": "revision",
+          "kind": "option",
+          "flag": "--revision",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Hugging Face revision to download.",
+          "default": "main"
+        },
+        {
+          "key": "system_prompt",
+          "kind": "option",
+          "flag": "--system-prompt",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Override the VoiceChat system prompt."
+        },
+        {
+          "key": "mcp_config",
+          "kind": "option",
+          "flag": "--mcp-config",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "JSON configuration for provider-neutral MCP tool servers."
+        },
+        {
+          "key": "mcp_server",
+          "kind": "option",
+          "flag": "--mcp-server",
+          "required": false,
+          "repeating": true,
+          "type": "string",
+          "description": "Enable one named server from --mcp-config; repeat for more than one."
+        },
+        {
+          "key": "mcp_write_policy",
+          "kind": "option",
+          "flag": "--mcp-write-policy",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Policy for MCP tools marked as writes: allow (default), confirm, or deny.",
+          "default": "allow",
+          "choices": [
+            "deny",
+            "confirm",
+            "allow"
+          ]
+        },
+        {
+          "key": "mcp_timeout_seconds",
+          "kind": "option",
+          "flag": "--mcp-timeout-seconds",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "MCP tool-call timeout in seconds; startup allows at least 60 seconds.",
+          "default": "15.0"
+        },
+        {
+          "key": "greet",
+          "kind": "flag",
+          "flag": "--greet",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Ask the model to greet before the user speaks."
+        },
+        {
+          "key": "no_aec",
+          "kind": "flag",
+          "flag": "--no-aec",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Disable Apple acoustic echo cancellation."
+        },
+        {
+          "key": "no_transcript",
+          "kind": "flag",
+          "flag": "--no-transcript",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Hide the bundle's streaming RNN-T user captions."
+        },
+        {
+          "key": "no_rnnt_turn_taking",
+          "kind": "flag",
+          "flag": "--no-rnnt-turn-taking",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Disable NVIDIA RNN-T turn-taking safety fallbacks."
+        },
+        {
+          "key": "prebuffer_frames",
+          "kind": "option",
+          "flag": "--prebuffer-frames",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Model-audio frames buffered before speaker playback (80 ms each).",
+          "default": "3"
+        },
+        {
+          "key": "max_buffered_frames",
+          "kind": "option",
+          "flag": "--max-buffered-frames",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Maximum queued 80 ms microphone frames before stale audio is dropped.",
+          "default": "8"
+        },
+        {
+          "key": "max_seconds",
+          "kind": "option",
+          "flag": "--max-seconds",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Stop live capture after this many seconds."
+        },
+        {
+          "key": "input",
+          "kind": "option",
+          "flag": "--input",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Use an audio file instead of the microphone, then exit."
+        },
+        {
+          "key": "output",
+          "kind": "option",
+          "flag": "--output",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Write exact full-context 22.05 kHz response audio to WAV."
+        },
+        {
+          "key": "tail_seconds",
+          "kind": "option",
+          "flag": "--tail-seconds",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Silent tail after finite-file input, in seconds.",
+          "default": "6.0"
+        },
+        {
+          "key": "force_turn_at_end",
+          "kind": "flag",
+          "flag": "--force-turn-at-end",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Force the model turn at file EOF (controlled regression only)."
+        },
+        {
+          "key": "plain",
+          "kind": "flag",
+          "flag": "--plain",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Disable the updating terminal display."
+        },
+        {
+          "key": "debug_timeline",
+          "kind": "flag",
+          "flag": "--debug-timeline",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Show phrase/pronunciation timestamps and tool lifecycle events."
+        },
+        {
+          "key": "terminal_width",
+          "kind": "option",
+          "flag": "--terminal-width",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Terminal display width.",
+          "default": "120"
+        },
+        {
+          "key": "temperature",
+          "kind": "option",
+          "flag": "--temperature",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Text sampling temperature (zero is greedy).",
+          "default": "0.0"
+        },
+        {
+          "key": "text_top_p",
+          "kind": "option",
+          "flag": "--text-top-p",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Text nucleus-sampling probability.",
+          "default": "1.0"
+        },
+        {
+          "key": "guidance",
+          "kind": "option",
+          "flag": "--guidance",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "EAR-TTS classifier-free guidance strength.",
+          "default": "0.2"
+        },
+        {
+          "key": "speech_top_p",
+          "kind": "option",
+          "flag": "--speech-top-p",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "EAR-TTS nucleus-sampling probability.",
+          "default": "0.95"
+        },
+        {
+          "key": "speech_noise",
+          "kind": "option",
+          "flag": "--speech-noise",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "EAR-TTS sampling noise.",
+          "default": "0.001"
+        },
+        {
+          "key": "speech_iterations",
+          "kind": "option",
+          "flag": "--speech-iterations",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "EAR-TTS MaskGIT iterations per frame.",
+          "default": "8"
+        },
+        {
+          "key": "realtime_speech_iterations",
+          "kind": "option",
+          "flag": "--realtime-speech-iterations",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Voice refinement steps used temporarily to protect realtime speed.",
+          "default": "2"
+        },
+        {
+          "key": "live_speech_context_seconds",
+          "kind": "option",
+          "flag": "--live-speech-context-seconds",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Recent EAR-TTS history retained in live mode, in seconds; zero keeps all history.",
+          "default": "20.0"
+        }
+      ]
+    },
+    {
+      "command": "audio-translate",
+      "path": [
+        "audio-translate"
+      ],
+      "tool": "speech_audio_translate",
+      "description": "Translate speech with Hibiki Zero-3B (FR/ES/PT/DE → EN, on-device, MLX)",
+      "arguments": [
+        {
+          "key": "input",
+          "kind": "positional",
+          "flag": null,
+          "required": true,
+          "repeating": false,
+          "type": "string",
+          "description": "Input audio WAV file (mono; resampled to 24 kHz internally)."
+        },
+        {
+          "key": "output",
+          "kind": "option",
+          "flag": "--output",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Output WAV file path.",
+          "default": "translated.wav"
+        },
+        {
+          "key": "source_lang",
+          "kind": "option",
+          "flag": "--source-lang",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Source language hint (fr, es, pt, de). Hibiki Zero auto-detects; this is metadata only. Default: fr. FR and ES are strict E2E canaries; PT/DE outputs are content-faithful but lower keyword recall.",
+          "default": "fr"
+        },
+        {
+          "key": "quantization",
+          "kind": "option",
+          "flag": "--quantization",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Quantization variant: 4bit (default) or 8bit.",
+          "default": "4bit"
+        },
+        {
+          "key": "model_id",
+          "kind": "option",
+          "flag": "--model-id",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "HuggingFace model id (overrides --quantization)."
+        },
+        {
+          "key": "compile",
+          "kind": "flag",
+          "flag": "--compile",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Run the temporal transformer warm-up pass before translating (one-time JIT/cache priming)."
+        },
+        {
+          "key": "verbose",
+          "kind": "flag",
+          "flag": "--verbose",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Print per-phase timings."
+        },
+        {
+          "key": "transcript",
+          "kind": "flag",
+          "flag": "--transcript",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Print model's inner monologue (raw SPM token IDs; SPM decode wiring is a follow-up)."
+        }
+      ]
+    },
+    {
+      "command": "vad",
+      "path": [
+        "vad"
+      ],
+      "tool": "speech_vad",
+      "description": "Detect speech segments using Voice Activity Detection",
+      "arguments": [
+        {
+          "key": "audio_file",
+          "kind": "positional",
+          "flag": null,
+          "required": true,
+          "repeating": false,
+          "type": "string",
+          "description": "Audio file to analyze (WAV, any sample rate)"
+        },
+        {
+          "key": "engine",
+          "kind": "option",
+          "flag": "--engine",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "VAD engine: pyannote (default) or firered",
+          "default": "pyannote"
+        },
+        {
+          "key": "model",
+          "kind": "option",
+          "flag": "--model",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Model ID on HuggingFace (or local path for firered)"
+        },
+        {
+          "key": "onset",
+          "kind": "option",
+          "flag": "--onset",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Onset threshold (speech start)",
+          "default": "0.767"
+        },
+        {
+          "key": "offset",
+          "kind": "option",
+          "flag": "--offset",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Offset threshold (speech end)",
+          "default": "0.377"
+        },
+        {
+          "key": "min_speech",
+          "kind": "option",
+          "flag": "--min-speech",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Minimum speech duration in seconds",
+          "default": "0.136"
+        },
+        {
+          "key": "min_silence",
+          "kind": "option",
+          "flag": "--min-silence",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Minimum silence duration in seconds",
+          "default": "0.067"
+        },
+        {
+          "key": "threshold",
+          "kind": "option",
+          "flag": "--threshold",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "FireRedVAD: speech probability threshold (default 0.4)",
+          "default": "0.4"
+        },
+        {
+          "key": "smooth_window",
+          "kind": "option",
+          "flag": "--smooth-window",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "FireRedVAD: smoothing window size in frames (default 5)",
+          "default": "5"
+        },
+        {
+          "key": "json",
+          "kind": "flag",
+          "flag": "--json",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Output as JSON"
+        }
+      ]
+    },
+    {
+      "command": "vad-stream",
+      "path": [
+        "vad-stream"
+      ],
+      "tool": "speech_vad_stream",
+      "description": "Detect speech segments using streaming Silero VAD (32ms chunks)",
+      "arguments": [
+        {
+          "key": "audio_file",
+          "kind": "positional",
+          "flag": null,
+          "required": true,
+          "repeating": false,
+          "type": "string",
+          "description": "Audio file to analyze (WAV, any sample rate)"
+        },
+        {
+          "key": "model",
+          "kind": "option",
+          "flag": "--model",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Model ID on HuggingFace (auto-selected by engine if omitted)"
+        },
+        {
+          "key": "engine",
+          "kind": "option",
+          "flag": "--engine",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "VAD engine: mlx (default) or coreml",
+          "default": "mlx"
+        },
+        {
+          "key": "onset",
+          "kind": "option",
+          "flag": "--onset",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Onset threshold (speech start)",
+          "default": "0.5"
+        },
+        {
+          "key": "offset",
+          "kind": "option",
+          "flag": "--offset",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Offset threshold (speech end)",
+          "default": "0.35"
+        },
+        {
+          "key": "min_speech",
+          "kind": "option",
+          "flag": "--min-speech",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Minimum speech duration in seconds",
+          "default": "0.25"
+        },
+        {
+          "key": "min_silence",
+          "kind": "option",
+          "flag": "--min-silence",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Minimum silence duration in seconds",
+          "default": "0.1"
+        },
+        {
+          "key": "smart_turn",
+          "kind": "flag",
+          "flag": "--smart-turn",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Confirm each pause with Smart Turn before ending a segment"
+        },
+        {
+          "key": "turn_threshold",
+          "kind": "option",
+          "flag": "--turn-threshold",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Smart Turn completion threshold",
+          "default": "0.5"
+        },
+        {
+          "key": "turn_max_silence",
+          "kind": "option",
+          "flag": "--turn-max-silence",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Seconds of silence after a vetoed pause that end the segment anyway",
+          "default": "2.0"
+        },
+        {
+          "key": "json",
+          "kind": "flag",
+          "flag": "--json",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Output as JSON"
+        }
+      ]
+    },
+    {
+      "command": "turn",
+      "path": [
+        "turn"
+      ],
+      "tool": "speech_turn",
+      "description": "Estimate whether a recorded utterance is a finished turn (Smart Turn v3.2)",
+      "arguments": [
+        {
+          "key": "audio_file",
+          "kind": "positional",
+          "flag": null,
+          "required": true,
+          "repeating": false,
+          "type": "string",
+          "description": "Audio file with one user turn (WAV, any sample rate); the last 8 s are used"
+        },
+        {
+          "key": "model",
+          "kind": "option",
+          "flag": "--model",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Model ID on HuggingFace",
+          "default": "aufklarer/Smart-Turn-v3.2-CoreML"
+        },
+        {
+          "key": "model_dir",
+          "kind": "option",
+          "flag": "--model-dir",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Local directory holding smart_turn.mlmodelc and config.json (offline; skips the download)"
+        },
+        {
+          "key": "threshold",
+          "kind": "option",
+          "flag": "--threshold",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Probability at or above which the turn counts as complete",
+          "default": "0.5"
+        },
+        {
+          "key": "json",
+          "kind": "flag",
+          "flag": "--json",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Output as JSON"
+        }
+      ]
+    },
+    {
+      "command": "diarize",
+      "path": [
+        "diarize"
+      ],
+      "tool": "speech_diarize",
+      "description": "Identify speakers and their speech segments in audio",
+      "arguments": [
+        {
+          "key": "audio_file",
+          "kind": "positional",
+          "flag": null,
+          "required": true,
+          "repeating": false,
+          "type": "string",
+          "description": "Audio file to analyze (WAV, any sample rate)"
+        },
+        {
+          "key": "target_speaker",
+          "kind": "option",
+          "flag": "--target-speaker",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Enrollment audio for target speaker extraction"
+        },
+        {
+          "key": "engine",
+          "kind": "option",
+          "flag": "--engine",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Diarization engine: pyannote (default), community1, sortformer, or nemotron3",
+          "default": "pyannote"
+        },
+        {
+          "key": "nemotron3_backend",
+          "kind": "option",
+          "flag": "--nemotron3-backend",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Nemotron 3 backend: coreml (default) or mlx",
+          "default": "coreml"
+        },
+        {
+          "key": "nemotron3_directory",
+          "kind": "option",
+          "flag": "--nemotron3-directory",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Optional local Nemotron 3 bundle directory"
+        },
+        {
+          "key": "nemotron3_compute_units",
+          "kind": "option",
+          "flag": "--nemotron3-compute-units",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Nemotron 3 Core ML compute units: ane (default), cpu, gpu, or all",
+          "default": "ane"
+        },
+        {
+          "key": "sortformer_variant",
+          "kind": "option",
+          "flag": "--sortformer-variant",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Sortformer variant: default (offline, ~125x RTF), balanced (faster first-load, ~hundreds-x RTF), or streaming (low-latency)",
+          "default": "default"
+        },
+        {
+          "key": "sortformer_compute_units",
+          "kind": "option",
+          "flag": "--sortformer-compute-units",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Sortformer CoreML compute units: ane (default, ANE+CPU), cpu (instant first-load, ~20x RTF), gpu (cpu+gpu), all (every backend; rarely needed)",
+          "default": "ane"
+        },
+        {
+          "key": "community1_compute_units",
+          "kind": "option",
+          "flag": "--community1-compute-units",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Community-1 CoreML compute units: ane (default), cpu, gpu, or all",
+          "default": "ane"
+        },
+        {
+          "key": "num_speakers",
+          "kind": "option",
+          "flag": "--num-speakers",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Known exact speaker count for Community-1"
+        },
+        {
+          "key": "min_speakers",
+          "kind": "option",
+          "flag": "--min-speakers",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Minimum speaker count for Community-1 (default 1)",
+          "default": "1"
+        },
+        {
+          "key": "max_speakers",
+          "kind": "option",
+          "flag": "--max-speakers",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Maximum speaker count for Community-1"
+        },
+        {
+          "key": "embedding_engine",
+          "kind": "option",
+          "flag": "--embedding-engine",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Speaker embedding engine: mlx (default) or coreml",
+          "default": "mlx"
+        },
+        {
+          "key": "json",
+          "kind": "flag",
+          "flag": "--json",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Output as JSON"
+        },
+        {
+          "key": "rttm",
+          "kind": "flag",
+          "flag": "--rttm",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Output as RTTM (standard diarization evaluation format)"
+        },
+        {
+          "key": "vad_filter",
+          "kind": "flag",
+          "flag": "--vad-filter",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Pre-filter with Silero VAD to reduce false alarms"
+        },
+        {
+          "key": "score_against",
+          "kind": "option",
+          "flag": "--score-against",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Reference RTTM file to score against (computes DER)"
+        },
+        {
+          "key": "min_silence",
+          "kind": "option",
+          "flag": "--min-silence",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Minimum silence between segments in seconds (default 0.15)",
+          "default": "0.15"
+        },
+        {
+          "key": "min_speech",
+          "kind": "option",
+          "flag": "--min-speech",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Minimum speech segment duration in seconds (default 0.3)",
+          "default": "0.3"
+        },
+        {
+          "key": "onset",
+          "kind": "option",
+          "flag": "--onset",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Speaker activity onset threshold (default 0.5)",
+          "default": "0.5"
+        },
+        {
+          "key": "offset",
+          "kind": "option",
+          "flag": "--offset",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Speaker activity offset threshold (default: 0.5 for Sortformer and Nemotron 3; 0.3 for pyannote)"
+        },
+        {
+          "key": "cluster_threshold",
+          "kind": "option",
+          "flag": "--cluster-threshold",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Cosine distance threshold for speaker clustering (default 0.715, lower = fewer speakers)",
+          "default": "0.715"
+        }
+      ]
+    },
+    {
+      "command": "embed-speaker",
+      "path": [
+        "embed-speaker"
+      ],
+      "tool": "speech_embed_speaker",
+      "description": "Extract a speaker embedding from audio",
+      "arguments": [
+        {
+          "key": "audio_file",
+          "kind": "positional",
+          "flag": null,
+          "required": true,
+          "repeating": false,
+          "type": "string",
+          "description": "Audio file containing speaker voice (WAV, any sample rate)"
+        },
+        {
+          "key": "engine",
+          "kind": "option",
+          "flag": "--engine",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Inference engine: mlx, coreml (WeSpeaker), redimnet2 (identity CoreML), or camplusplus (CAM++ CoreML)",
+          "default": "mlx"
+        },
+        {
+          "key": "json",
+          "kind": "flag",
+          "flag": "--json",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Output as JSON"
+        }
+      ]
+    },
+    {
+      "command": "language-id",
+      "path": [
+        "language-id"
+      ],
+      "tool": "speech_language_id",
+      "description": "Identify the spoken language in an audio file",
+      "arguments": [
+        {
+          "key": "audio_file",
+          "kind": "positional",
+          "flag": null,
+          "required": true,
+          "repeating": false,
+          "type": "string",
+          "description": "Audio file to classify (WAV, FLAC, or another supported format)"
+        },
+        {
+          "key": "engine",
+          "kind": "option",
+          "flag": "--engine",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Inference engine: mlx or coreml",
+          "default": "mlx"
+        },
+        {
+          "key": "model",
+          "kind": "option",
+          "flag": "--model",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Override the Hugging Face model ID"
+        },
+        {
+          "key": "top",
+          "kind": "option",
+          "flag": "--top",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Number of ranked language candidates to show",
+          "default": "5"
+        },
+        {
+          "key": "json",
+          "kind": "flag",
+          "flag": "--json",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Emit the result as JSON"
+        }
+      ]
+    },
+    {
+      "command": "denoise",
+      "path": [
+        "denoise"
+      ],
+      "tool": "speech_denoise",
+      "description": "Remove background noise from speech audio using DeepFilterNet3",
+      "arguments": [
+        {
+          "key": "audio_file",
+          "kind": "positional",
+          "flag": null,
+          "required": true,
+          "repeating": false,
+          "type": "string",
+          "description": "Input audio file (WAV, any sample rate)"
+        },
+        {
+          "key": "output",
+          "kind": "option",
+          "flag": "--output",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Output file path (default: input_clean.wav)"
+        },
+        {
+          "key": "model",
+          "kind": "option",
+          "flag": "--model",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Model ID on HuggingFace (default: per --engine)"
+        },
+        {
+          "key": "engine",
+          "kind": "option",
+          "flag": "--engine",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Inference engine: coreml (Neural Engine) or mlx (GPU)",
+          "default": "coreml"
+        },
+        {
+          "key": "chunk_seconds",
+          "kind": "option",
+          "flag": "--chunk-seconds",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Window size in seconds when auto-chunking long inputs (default: 45.0)",
+          "default": "45.0"
+        },
+        {
+          "key": "overlap_ms",
+          "kind": "option",
+          "flag": "--overlap-ms",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Crossfade overlap between chunks in milliseconds (default: 500)",
+          "default": "500"
+        },
+        {
+          "key": "no_chunk",
+          "kind": "flag",
+          "flag": "--no-chunk",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Disable auto-chunking; error if input exceeds the model's 60s cap"
+        }
+      ]
+    },
+    {
+      "command": "restore",
+      "path": [
+        "restore"
+      ],
+      "tool": "speech_restore",
+      "description": "Restore (denoise + dereverb) speech with Sidon — CoreML, 48 kHz output",
+      "arguments": [
+        {
+          "key": "audio_file",
+          "kind": "positional",
+          "flag": null,
+          "required": true,
+          "repeating": false,
+          "type": "string",
+          "description": "Input audio file (WAV, any sample rate — resampled to 16 kHz internally)"
+        },
+        {
+          "key": "output",
+          "kind": "option",
+          "flag": "--output",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Output file path (default: input_restored.wav, 48 kHz)"
+        },
+        {
+          "key": "variant",
+          "kind": "option",
+          "flag": "--variant",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Precision variant: fp16 (default) or int8",
+          "default": "fp16"
+        },
+        {
+          "key": "model",
+          "kind": "option",
+          "flag": "--model",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Model repo id on HuggingFace",
+          "default": "aufklarer/Sidon-CoreML"
+        },
+        {
+          "key": "compute_units",
+          "kind": "option",
+          "flag": "--compute-units",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Core ML compute units for both stages: ane, gpu, cpu, or all. Default: predictor 'all', vocoder 'gpu' — the vocoder's Neural Engine compile takes minutes and can fail, so it stays on the GPU unless asked."
+        }
+      ]
+    },
+    {
+      "command": "separate",
+      "path": [
+        "separate"
+      ],
+      "tool": "speech_separate",
+      "description": "Separate a music track into stems (vocals, drums, bass, other)",
+      "arguments": [
+        {
+          "key": "input",
+          "kind": "positional",
+          "flag": null,
+          "required": true,
+          "repeating": false,
+          "type": "string",
+          "description": "Input audio file (WAV, stereo 44.1kHz)"
+        },
+        {
+          "key": "output_dir",
+          "kind": "option",
+          "flag": "--output-dir",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Output directory (default: <input>_stems/)"
+        },
+        {
+          "key": "stems",
+          "kind": "option",
+          "flag": "--stems",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Stems to extract: vocals,drums,bass,other (default: all)"
+        },
+        {
+          "key": "engine",
+          "kind": "option",
+          "flag": "--engine",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Engine: umx (default) or htdemucs (Demucs v4, higher quality)",
+          "default": "umx"
+        },
+        {
+          "key": "model",
+          "kind": "option",
+          "flag": "--model",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Model variant: hq (default, 8.9M/stem) or l (28.3M/stem)",
+          "default": "hq"
+        },
+        {
+          "key": "htdemucs_dir",
+          "kind": "option",
+          "flag": "--htdemucs-dir",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Local htdemucs weights dir (htdemucs_ft.safetensors + _config.json)"
+        },
+        {
+          "key": "htdemucs_precision",
+          "kind": "option",
+          "flag": "--htdemucs-precision",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "HTDemucs precision: fp16 (default) or int8 (smaller download)",
+          "default": "fp16"
+        },
+        {
+          "key": "verbose",
+          "kind": "flag",
+          "flag": "--verbose",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Show timing info"
+        }
+      ]
+    },
+    {
+      "command": "compose",
+      "path": [
+        "compose"
+      ],
+      "tool": "speech_compose",
+      "description": "Generate music from a text prompt (Stable Audio 3 by default; MAGNeT also available, MLX, on-device)",
+      "arguments": [
+        {
+          "key": "prompt",
+          "kind": "positional",
+          "flag": null,
+          "required": true,
+          "repeating": false,
+          "type": "string",
+          "description": "Text prompt describing the music to generate (e.g. \"lofi house loop\")"
+        },
+        {
+          "key": "output",
+          "kind": "option",
+          "flag": "--output",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Output WAV path (44.1 kHz stereo for sa3, 32 kHz mono for magnet)",
+          "default": "music.wav"
+        },
+        {
+          "key": "engine",
+          "kind": "option",
+          "flag": "--engine",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Music engine: sa3 (default — Stable Audio 3 Medium INT8, 44.1 kHz stereo, variable length) | magnet (MAGNeT, 32 kHz mono, fixed 30 s)",
+          "default": "sa3"
+        },
+        {
+          "key": "sa3_variant",
+          "kind": "option",
+          "flag": "--sa3-variant",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "SA3 variant: medium-int8 (default, 1.4 B) | small-music-int4 (50 M)",
+          "default": "medium-int8"
+        },
+        {
+          "key": "seconds",
+          "kind": "option",
+          "flag": "--seconds",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "SA3 output length in seconds (1.0–384.0)",
+          "default": "30.0"
+        },
+        {
+          "key": "sa3_steps",
+          "kind": "option",
+          "flag": "--sa3-steps",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "SA3 pingpong sampler steps (default 8 — distilled sweet spot)",
+          "default": "8"
+        },
+        {
+          "key": "sa3_cfg",
+          "kind": "option",
+          "flag": "--sa3-cfg",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "SA3 classifier-free guidance (1.0 = off, >1 toward prompt)",
+          "default": "1.0"
+        },
+        {
+          "key": "sigma_max",
+          "kind": "option",
+          "flag": "--sigma-max",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "SA3 σmax — initial noise level (default 1.0)",
+          "default": "1.0"
+        },
+        {
+          "key": "sa3_bundle_dir",
+          "kind": "option",
+          "flag": "--sa3-bundle-dir",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "SA3 local bundle override path — skip HF download and load from this directory (smoke-test / offline)"
+        },
+        {
+          "key": "magnet_variant",
+          "kind": "option",
+          "flag": "--magnet-variant",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "MAGNeT variant: small-int4 | small-int8 | medium-int4 | medium-int8",
+          "default": "small-int4"
+        },
+        {
+          "key": "temperature",
+          "kind": "option",
+          "flag": "--temperature",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "MAGNeT sampling temperature (annealed linearly per stage)",
+          "default": "3.0"
+        },
+        {
+          "key": "top_p",
+          "kind": "option",
+          "flag": "--top-p",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "MAGNeT top-p (nucleus) sampling threshold",
+          "default": "0.9"
+        },
+        {
+          "key": "cfg_max",
+          "kind": "option",
+          "flag": "--cfg-max",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "MAGNeT max classifier-free guidance coefficient",
+          "default": "10.0"
+        },
+        {
+          "key": "cfg_min",
+          "kind": "option",
+          "flag": "--cfg-min",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "MAGNeT min classifier-free guidance coefficient",
+          "default": "1.0"
+        },
+        {
+          "key": "magnet_steps",
+          "kind": "option",
+          "flag": "--magnet-steps",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "MAGNeT comma-separated decoding steps per codebook (default: 20,10,10,10)",
+          "default": "20,10,10,10"
+        },
+        {
+          "key": "seed",
+          "kind": "option",
+          "flag": "--seed",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Random seed for reproducibility"
+        }
+      ]
+    },
+    {
+      "command": "sa3-parity",
+      "path": [
+        "sa3-parity"
+      ],
+      "tool": "speech_sa3_parity",
+      "description": "Compare Swift SA3 outputs to a Python reference dump (per stage).",
+      "arguments": [
+        {
+          "key": "ref",
+          "kind": "option",
+          "flag": "--ref",
+          "required": true,
+          "repeating": false,
+          "type": "string",
+          "description": "Reference .safetensors dumped by scripts/dump_parity_ref.py"
+        },
+        {
+          "key": "bundle",
+          "kind": "option",
+          "flag": "--bundle",
+          "required": true,
+          "repeating": false,
+          "type": "string",
+          "description": "Local SA3 bundle directory (skip HF download)."
+        },
+        {
+          "key": "prompt",
+          "kind": "option",
+          "flag": "--prompt",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Prompt to run through Swift T5Gemma (must match Python dump).",
+          "default": "lofi house loop"
+        },
+        {
+          "key": "seconds",
+          "kind": "option",
+          "flag": "--seconds",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Seconds to use when computing T_lat (must match Python).",
+          "default": "4.0"
+        }
+      ]
+    },
+    {
+      "command": "upsample",
+      "path": [
+        "upsample"
+      ],
+      "tool": "speech_upsample",
+      "description": "Audio super-resolution with FlashSR (one-step distilled AudioSR, MLX, 48 kHz)",
+      "arguments": [
+        {
+          "key": "audio_file",
+          "kind": "positional",
+          "flag": null,
+          "required": true,
+          "repeating": false,
+          "type": "string",
+          "description": "Input audio file (WAV, any sample rate — resampled internally to 48 kHz)"
+        },
+        {
+          "key": "output",
+          "kind": "option",
+          "flag": "--output",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Output WAV path (48 kHz mono)",
+          "default": "hr.wav"
+        },
+        {
+          "key": "variant",
+          "kind": "option",
+          "flag": "--variant",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Bundle variant: int4 or int8",
+          "default": "int4"
+        },
+        {
+          "key": "timestep",
+          "kind": "option",
+          "flag": "--timestep",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Diffusion timestep (default 999 for the 1-step distilled student)",
+          "default": "999"
+        },
+        {
+          "key": "seed",
+          "kind": "option",
+          "flag": "--seed",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Random seed for reproducible noise initialisation"
+        }
+      ]
+    },
+    {
+      "command": "kokoro",
+      "path": [
+        "kokoro"
+      ],
+      "tool": "speech_kokoro",
+      "description": "Text-to-speech synthesis using Kokoro-82M (CoreML, Neural Engine)",
+      "arguments": [
+        {
+          "key": "text",
+          "kind": "positional",
+          "flag": null,
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Text to synthesize (omit when using --list-voices)"
+        },
+        {
+          "key": "output",
+          "kind": "option",
+          "flag": "--output",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Output WAV file path",
+          "default": "output.wav"
+        },
+        {
+          "key": "voice",
+          "kind": "option",
+          "flag": "--voice",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Voice preset (default: af_heart; the bundle's only voice for single-voice bundles)"
+        },
+        {
+          "key": "language",
+          "kind": "option",
+          "flag": "--language",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Language code: en, fr, es, ja, zh, hi, pt, ko, de (de needs a German bundle)",
+          "default": "en"
+        },
+        {
+          "key": "model",
+          "kind": "option",
+          "flag": "--model",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "HuggingFace model ID (German: aufklarer/Kokoro-82M-German-Martin-CoreML or aufklarer/Kokoro-82M-German-Victoria-CoreML)",
+          "default": "aufklarer/Kokoro-82M-CoreML"
+        },
+        {
+          "key": "list_voices",
+          "kind": "flag",
+          "flag": "--list-voices",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "List available voice presets and exit"
+        },
+        {
+          "key": "verbose",
+          "kind": "flag",
+          "flag": "--verbose",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Show detailed timing info"
+        }
+      ]
+    },
+    {
+      "command": "qwen3-tts-coreml",
+      "path": [
+        "qwen3-tts-coreml"
+      ],
+      "tool": "speech_qwen3_tts_coreml",
+      "description": "Text-to-speech using Qwen3-TTS (CoreML)",
+      "arguments": [
+        {
+          "key": "text",
+          "kind": "positional",
+          "flag": null,
+          "required": true,
+          "repeating": false,
+          "type": "string",
+          "description": "Text to synthesize"
+        },
+        {
+          "key": "output",
+          "kind": "option",
+          "flag": "--output",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Output WAV file path",
+          "default": "output.wav"
+        },
+        {
+          "key": "language",
+          "kind": "option",
+          "flag": "--language",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Language: english, chinese, japanese, korean, german, french, russian, spanish",
+          "default": "english"
+        },
+        {
+          "key": "max_tokens",
+          "kind": "option",
+          "flag": "--max-tokens",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Maximum codec tokens (1 token ≈ 80ms)",
+          "default": "125"
+        },
+        {
+          "key": "temperature",
+          "kind": "option",
+          "flag": "--temperature",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Sampling temperature",
+          "default": "0.8"
+        },
+        {
+          "key": "top_k",
+          "kind": "option",
+          "flag": "--top-k",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Top-K sampling",
+          "default": "50"
+        },
+        {
+          "key": "model",
+          "kind": "option",
+          "flag": "--model",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "HuggingFace model ID",
+          "default": "aufklarer/Qwen3-TTS-CoreML"
+        },
+        {
+          "key": "speaker_embedding",
+          "kind": "option",
+          "flag": "--speaker-embedding",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Prepared Float32 speaker embedding (.npy); must match the model width"
+        },
+        {
+          "key": "model_directory",
+          "kind": "option",
+          "flag": "--model-directory",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Load a local compiled model bundle"
+        }
+      ]
+    },
+    {
+      "command": "vibevoice",
+      "path": [
+        "vibevoice"
+      ],
+      "tool": "speech_vibevoice",
+      "description": "Text-to-speech synthesis using Microsoft VibeVoice (MLX).",
+      "arguments": [
+        {
+          "key": "text",
+          "kind": "positional",
+          "flag": null,
+          "required": true,
+          "repeating": false,
+          "type": "string",
+          "description": "Text to synthesize"
+        },
+        {
+          "key": "voice_cache",
+          "kind": "option",
+          "flag": "--voice-cache",
+          "required": true,
+          "repeating": false,
+          "type": "string",
+          "description": "Path to a .safetensors voice cache (required)"
+        },
+        {
+          "key": "output",
+          "kind": "option",
+          "flag": "--output",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Output WAV file path",
+          "default": "vibevoice.wav"
+        },
+        {
+          "key": "model",
+          "kind": "option",
+          "flag": "--model",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "HuggingFace model ID (defaults: aufklarer/VibeVoice-Realtime-0.5B-MLX-INT4 normally, aufklarer/VibeVoice-1.5B-MLX-INT4 with --long-form)"
+        },
+        {
+          "key": "tokenizer",
+          "kind": "option",
+          "flag": "--tokenizer",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Qwen2.5 tokenizer model ID (defaults: Qwen/Qwen2.5-0.5B normally, Qwen/Qwen2.5-1.5B with --long-form)"
+        },
+        {
+          "key": "steps",
+          "kind": "option",
+          "flag": "--steps",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "DPM-Solver inference steps (higher = better quality, slower)",
+          "default": "20"
+        },
+        {
+          "key": "cfg",
+          "kind": "option",
+          "flag": "--cfg",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Classifier-free guidance scale",
+          "default": "1.3"
+        },
+        {
+          "key": "max_tokens",
+          "kind": "option",
+          "flag": "--max-tokens",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Cap on generated speech tokens",
+          "default": "500"
+        },
+        {
+          "key": "long_form",
+          "kind": "flag",
+          "flag": "--long-form",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Use the long-form 1.5B variant preset"
+        },
+        {
+          "key": "reference_audio",
+          "kind": "option",
+          "flag": "--reference-audio",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "1.5B-only: reference audio file for the structured-prompt single-shot path"
+        },
+        {
+          "key": "reference_transcript",
+          "kind": "option",
+          "flag": "--reference-transcript",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "1.5B-only: transcript of --reference-audio"
+        },
+        {
+          "key": "verbose",
+          "kind": "flag",
+          "flag": "--verbose",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Show detailed timing info"
+        }
+      ]
+    },
+    {
+      "command": "vibevoice-encode-voice",
+      "path": [
+        "vibevoice-encode-voice"
+      ],
+      "tool": "speech_vibevoice_encode_voice",
+      "description": "Mint a VibeVoice voice cache from a reference audio recording + transcript (Realtime-0.5B path; English only).",
+      "arguments": [
+        {
+          "key": "input",
+          "kind": "positional",
+          "flag": null,
+          "required": true,
+          "repeating": false,
+          "type": "string",
+          "description": "Reference audio file (WAV / m4a / etc.)"
+        },
+        {
+          "key": "transcript",
+          "kind": "positional",
+          "flag": null,
+          "required": true,
+          "repeating": false,
+          "type": "string",
+          "description": "Transcript of --input audio (English; Realtime-0.5B is EN-only)"
+        },
+        {
+          "key": "output",
+          "kind": "option",
+          "flag": "--output",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Output voice cache (.safetensors)",
+          "default": "voice.safetensors"
+        },
+        {
+          "key": "model",
+          "kind": "option",
+          "flag": "--model",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "HuggingFace model ID (default: aufklarer/VibeVoice-Realtime-0.5B-MLX-INT4)"
+        },
+        {
+          "key": "tokenizer",
+          "kind": "option",
+          "flag": "--tokenizer",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Qwen2.5 tokenizer model ID (default: Qwen/Qwen2.5-0.5B)"
+        }
+      ]
+    },
+    {
+      "command": "translate",
+      "path": [
+        "translate"
+      ],
+      "tool": "speech_translate",
+      "description": "Translate text into a target language using MADLAD-400 (MLX, Apple Silicon)",
+      "arguments": [
+        {
+          "key": "text",
+          "kind": "positional",
+          "flag": null,
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Text to translate. Omit to read from stdin (e.g. `speech transcribe x.wav | speech translate --to es`)."
+        },
+        {
+          "key": "to",
+          "kind": "option",
+          "flag": "--to",
+          "required": true,
+          "repeating": false,
+          "type": "string",
+          "description": "Target language code (ISO 639-1, e.g. es, zh, fr, ja, de)."
+        },
+        {
+          "key": "model",
+          "kind": "option",
+          "flag": "--model",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "HuggingFace model id.",
+          "default": "aufklarer/MADLAD400-3B-MT-MLX"
+        },
+        {
+          "key": "quantization",
+          "kind": "option",
+          "flag": "--quantization",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Quantization variant: int4 (default, smaller) or int8 (higher quality).",
+          "default": "int4"
+        },
+        {
+          "key": "max_tokens",
+          "kind": "option",
+          "flag": "--max-tokens",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Maximum tokens to generate.",
+          "default": "256"
+        },
+        {
+          "key": "temperature",
+          "kind": "option",
+          "flag": "--temperature",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Sampling temperature (0 = greedy, recommended for translation).",
+          "default": "0.0"
+        },
+        {
+          "key": "top_k",
+          "kind": "option",
+          "flag": "--top-k",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Top-K sampling cutoff (0 = disabled).",
+          "default": "0"
+        },
+        {
+          "key": "top_p",
+          "kind": "option",
+          "flag": "--top-p",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Top-P (nucleus) sampling cutoff.",
+          "default": "1.0"
+        },
+        {
+          "key": "stream",
+          "kind": "flag",
+          "flag": "--stream",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Stream translated tokens as they are produced."
+        },
+        {
+          "key": "json",
+          "kind": "flag",
+          "flag": "--json",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Output JSON with translation + metrics."
+        }
+      ]
+    },
+    {
+      "command": "gliner",
+      "path": [
+        "gliner"
+      ],
+      "tool": "speech_gliner",
+      "description": "Schema-conditioned text classification and entity spans (GLiNER2, MLX)",
+      "arguments": [],
+      "subcommands": [
+        "gliner classify",
+        "gliner extract"
+      ]
+    },
+    {
+      "command": "gliner classify",
+      "path": [
+        "gliner",
+        "classify"
+      ],
+      "tool": "speech_gliner_classify",
+      "description": "Pick one label for the text and report every label's probability",
+      "arguments": [
+        {
+          "key": "text",
+          "kind": "positional",
+          "flag": null,
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Input text. Omit to read from stdin."
+        },
+        {
+          "key": "variant",
+          "kind": "option",
+          "flag": "--variant",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Published variant to download: int8 (default), fp16 or fp32.",
+          "default": "int8"
+        },
+        {
+          "key": "model",
+          "kind": "option",
+          "flag": "--model",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Hugging Face repository override for the chosen variant's file layout."
+        },
+        {
+          "key": "model_dir",
+          "kind": "option",
+          "flag": "--model-dir",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Local GLiNER export directory; skips downloading."
+        },
+        {
+          "key": "labels",
+          "kind": "option",
+          "flag": "--labels",
+          "required": true,
+          "repeating": false,
+          "type": "string",
+          "description": "Comma-separated candidate labels, e.g. create_reminder,send_message,other."
+        },
+        {
+          "key": "description",
+          "kind": "option",
+          "flag": "--description",
+          "required": false,
+          "repeating": true,
+          "type": "string",
+          "description": "Label description as label=text. Repeatable; the label must be listed in --labels."
+        },
+        {
+          "key": "evaluate_layers",
+          "kind": "flag",
+          "flag": "--evaluate-layers",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Materialize each encoder layer before building the next (lower peak allocations, may be slower)."
+        },
+        {
+          "key": "json",
+          "kind": "flag",
+          "flag": "--json",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Output JSON with results and timings."
+        },
+        {
+          "key": "task",
+          "kind": "option",
+          "flag": "--task",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Task name placed in the schema prompt.",
+          "default": "action"
+        }
+      ]
+    },
+    {
+      "command": "gliner extract",
+      "path": [
+        "gliner",
+        "extract"
+      ],
+      "tool": "speech_gliner_extract",
+      "description": "Extract entity mentions for each label, with scores and UTF-16 offsets",
+      "arguments": [
+        {
+          "key": "text",
+          "kind": "positional",
+          "flag": null,
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Input text. Omit to read from stdin."
+        },
+        {
+          "key": "variant",
+          "kind": "option",
+          "flag": "--variant",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Published variant to download: int8 (default), fp16 or fp32.",
+          "default": "int8"
+        },
+        {
+          "key": "model",
+          "kind": "option",
+          "flag": "--model",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Hugging Face repository override for the chosen variant's file layout."
+        },
+        {
+          "key": "model_dir",
+          "kind": "option",
+          "flag": "--model-dir",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Local GLiNER export directory; skips downloading."
+        },
+        {
+          "key": "labels",
+          "kind": "option",
+          "flag": "--labels",
+          "required": true,
+          "repeating": false,
+          "type": "string",
+          "description": "Comma-separated candidate labels, e.g. create_reminder,send_message,other."
+        },
+        {
+          "key": "description",
+          "kind": "option",
+          "flag": "--description",
+          "required": false,
+          "repeating": true,
+          "type": "string",
+          "description": "Label description as label=text. Repeatable; the label must be listed in --labels."
+        },
+        {
+          "key": "evaluate_layers",
+          "kind": "flag",
+          "flag": "--evaluate-layers",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Materialize each encoder layer before building the next (lower peak allocations, may be slower)."
+        },
+        {
+          "key": "json",
+          "kind": "flag",
+          "flag": "--json",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Output JSON with results and timings."
+        },
+        {
+          "key": "threshold",
+          "kind": "option",
+          "flag": "--threshold",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Minimum span score, 0...1.",
+          "default": "0.5"
+        }
+      ]
+    },
+    {
+      "command": "clef",
+      "path": [
+        "clef"
+      ],
+      "tool": "speech_clef",
+      "description": "Choose from allowed answers with local Clef-flash (MLX)",
+      "arguments": [],
+      "subcommands": [
+        "clef decide"
+      ]
+    },
+    {
+      "command": "clef decide",
+      "path": [
+        "clef",
+        "decide"
+      ],
+      "tool": "speech_clef_decide",
+      "description": "Score every field in a JSON request",
+      "arguments": [
+        {
+          "key": "request",
+          "kind": "positional",
+          "flag": null,
+          "required": true,
+          "repeating": false,
+          "type": "string",
+          "description": "JSON file containing state and an ordered questions array."
+        },
+        {
+          "key": "model_dir",
+          "kind": "option",
+          "flag": "--model-dir",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Local model directory; skips downloading."
+        },
+        {
+          "key": "offline",
+          "kind": "flag",
+          "flag": "--offline",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Use cached model files without network access."
+        },
+        {
+          "key": "max_tokens",
+          "kind": "option",
+          "flag": "--max-tokens",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Maximum encoded input tokens (1–16384).",
+          "default": "4096"
+        }
+      ]
+    },
+    {
+      "command": "wake",
+      "path": [
+        "wake"
+      ],
+      "tool": "speech_wake",
+      "description": "Detect wake words / keyword phrases (KWS Zipformer)",
+      "arguments": [
+        {
+          "key": "audio_file",
+          "kind": "positional",
+          "flag": null,
+          "required": true,
+          "repeating": false,
+          "type": "string",
+          "description": "Audio file to analyze (WAV, any sample rate)"
+        },
+        {
+          "key": "keywords",
+          "kind": "option",
+          "flag": "--keywords",
+          "required": false,
+          "repeating": true,
+          "type": "string",
+          "description": "One or more keywords. Formats:\n  'hey soniqo' — greedy BPE over the phrase\n  'hey soniqo:0.15:0.5' — phrase with threshold and boost\n  'LIGHT UP|▁ L IGHT ▁UP:0.25:2.0' — phrase | explicit BPE pieces (space-separated, sherpa-onnx style) : threshold : boost"
+        },
+        {
+          "key": "keywords_file",
+          "kind": "option",
+          "flag": "--keywords-file",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Path to a keywords file (one `phrase[|pieces][:threshold:boost]` per line)."
+        },
+        {
+          "key": "model",
+          "kind": "option",
+          "flag": "--model",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Model ID on HuggingFace"
+        },
+        {
+          "key": "json",
+          "kind": "flag",
+          "flag": "--json",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Output as JSON"
+        },
+        {
+          "key": "beam",
+          "kind": "option",
+          "flag": "--beam",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Number of active transducer hypotheses",
+          "default": "4"
+        },
+        {
+          "key": "trailing_blanks",
+          "kind": "option",
+          "flag": "--trailing-blanks",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Blank frames required after a matched keyword"
+        },
+        {
+          "key": "auto_reset_seconds",
+          "kind": "option",
+          "flag": "--auto-reset-seconds",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Seconds without a keyword emission before resetting search"
+        },
+        {
+          "key": "blank_penalty",
+          "kind": "option",
+          "flag": "--blank-penalty",
+          "required": false,
+          "repeating": false,
+          "type": "number",
+          "description": "Penalty subtracted from the blank-token logit",
+          "default": "0.0"
+        }
+      ]
+    },
+    {
+      "command": "avatar-motion",
+      "path": [
+        "avatar-motion"
+      ],
+      "tool": "speech_avatar_motion",
+      "description": "Generate NVIDIA Audio2Face-3D coefficient frames from speech audio",
+      "arguments": [
+        {
+          "key": "input",
+          "kind": "positional",
+          "flag": null,
+          "required": true,
+          "repeating": false,
+          "type": "string",
+          "description": "Input audio file (WAV, m4a, etc.; resampled to 16 kHz)"
+        },
+        {
+          "key": "output",
+          "kind": "option",
+          "flag": "--output",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Output JSONL file path",
+          "default": "avatar-motion.jsonl"
+        },
+        {
+          "key": "backend",
+          "kind": "option",
+          "flag": "--backend",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Backend: mlx",
+          "default": "mlx"
+        },
+        {
+          "key": "model",
+          "kind": "option",
+          "flag": "--model",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Hugging Face model ID for the exported MLX bundle",
+          "default": "aufklarer/Audio2Face-3D-v2.3.1-James-MLX"
+        },
+        {
+          "key": "model_dir",
+          "kind": "option",
+          "flag": "--model-dir",
+          "required": false,
+          "repeating": false,
+          "type": "string",
+          "description": "Local exported model directory for --backend mlx"
+        },
+        {
+          "key": "verbose",
+          "kind": "flag",
+          "flag": "--verbose",
+          "required": false,
+          "repeating": false,
+          "type": "boolean",
+          "description": "Print timing and frame count"
+        }
+      ]
+    },
+    {
+      "command": "help",
+      "path": [
+        "help"
+      ],
+      "tool": "speech_help",
+      "description": "Show subcommand help information.",
+      "arguments": [
+        {
+          "key": "subcommands",
+          "kind": "positional",
+          "flag": null,
+          "required": false,
+          "repeating": true,
+          "type": "string",
+          "description": ""
+        }
+      ]
+    }
+  ]
+}
