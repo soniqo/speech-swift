@@ -34,11 +34,19 @@ or host audio playback.
 
 ## Desktop evaluation
 
+On 2026-11-06, a local host session using the installed 0.7.0 package exposed all
+34 tools, including speech_speak and speech_transcribe_batch. Readiness reported
+runtime 0.0.29. A direct plugin call generated the known sentence with Kokoro
+(af_heart, English), then passed its returned WAV path to Parakeet. Both calls
+returned exit code 0, and the transcript matched the sentence exactly. This
+confirms host discovery and the audio workflow; it does not complete the unrun
+directory-review cases or verify playback.
+
 The local desktop host version 26.1029.70936 was tested with the plugin installed
 and selected in local Work conversations. The results below are from package
 0.6.0. A reload and fresh conversations resolved the earlier transcription
-discovery blocker. No native transcription engine change was required. Repeat
-the host checks with 0.7.0 before public submission.
+discovery blocker. No native transcription engine change was required. Complete
+the remaining review cases with the final package before public submission.
 
 | Case | Observed result |
 | --- | --- |
@@ -51,7 +59,7 @@ the host checks with 0.7.0 before public submission.
 
 The 0.6.0 desktop inventory contained 23 of 34 tools. The host hides definitions
 that exceed either its per-tool or combined metadata budget. Version 0.7.0 fixes
-that size regression; complete desktop discovery still needs a host recheck.
+that size regression; the subsequent local host session discovered all 34 tools.
 Earlier conversations also retained server names from older development packages.
 Restart the desktop app after updating, start a new local conversation, and
 select the plugin before checking command availability. Do not mark the package

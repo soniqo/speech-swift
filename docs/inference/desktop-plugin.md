@@ -1,10 +1,10 @@
 # Desktop speech plugin
 
 This is a development package. Version 0.7.0 keeps all 34 tool definitions below
-the desktop discovery limits while preserving every typed CLI argument. Readiness,
-Kokoro narration, Parakeet transcription, and a generated-audio round trip passed
-in desktop conversations with version 0.6.0. Complete host evaluation of 0.7.0 is
-still required. See plugins/soniqo-speech/review/validation.md for results.
+the desktop discovery limits while preserving every typed CLI argument. A local
+host session with 0.7.0 exposed all 34 tools and passed readiness and a
+Kokoro-to-Parakeet round trip. The complete directory-review cases still need to
+be finished. See plugins/soniqo-speech/review/validation.md for results.
 
 Soniqo Speech 0.7.0 mirrors the bundled Homebrew speech CLI through 33 separate
 MCP tools: 30 operational commands and three help tools, preserving 392 CLI argument
