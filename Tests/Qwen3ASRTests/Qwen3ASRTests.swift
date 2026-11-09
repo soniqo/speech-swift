@@ -132,6 +132,26 @@ final class Qwen3ASRTests: XCTestCase {
         XCTAssertGreaterThan(features.dim(1), 0) // time frames
     }
 
+    /// Values from HuggingFace's WhisperFeatureExtractor (Qwen3-ASR preprocessor config: 128 mels,
+    /// n_fft 400, hop 160) for 1 s of a 440 Hz sine at amplitude 0.5, frame 50, mel bins 14...22.
+    func testFeatureExtractorMatchesHuggingFace() throws {
+        let extractor = WhisperFeatureExtractor()
+        let audio = (0..<16000).map { Float(sin(2 * Double.pi * 440 * Double($0) / 16000) * 0.5) }
+        let expected: [Float] = [-0.514645, -0.514645, 1.344505, 1.337491, 1.485354, 1.275244, 1.287393, -0.514645, -0.514645]
+
+        let raw = extractor.extractFeaturesRaw(audio)
+        XCTAssertEqual(raw.melBins, 128)
+        XCTAssertEqual(raw.timeFrames, 100)
+        for (offset, value) in expected.enumerated() {
+            XCTAssertEqual(raw.data[(14 + offset) * raw.timeFrames + 50], value, accuracy: 1e-3, "raw mel bin \(14 + offset)")
+        }
+
+        let mlx = extractor.extractFeatures(audio)
+        for (offset, value) in expected.enumerated() {
+            XCTAssertEqual(mlx[14 + offset, 50].item(Float.self), value, accuracy: 1e-3, "mel bin \(14 + offset)")
+        }
+    }
+
     func testFeatureExtractorWithSineWave() throws {
         let extractor = WhisperFeatureExtractor()
 
