@@ -8,7 +8,7 @@ import AudioCommon
 /// + embedding + text_decoder + classify head). Loads the published
 /// ``aufklarer/Qwen3-ForcedAligner-0.6B-CoreML-FP16`` bundle and verifies
 /// that the produced alignment is finite, monotonic, lands inside the clip,
-/// and matches reference word starts within three 80 ms timestamp classes.
+/// and matches reference word starts and ends within three 80 ms timestamp classes.
 ///
 /// Set `ALIGNER_COREML_PUBLISHED_E2E=1` to enable these tests. To reuse
 /// compiled bundle copies offline, set `ALIGNER_COREML_PUBLISHED_CACHE_ROOT`
@@ -158,9 +158,14 @@ final class E2ECoreMLForcedAlignerTests: XCTestCase {
         // monotonicity alone also accept the incorrect 16–18 s alignment.
         let referenceStarts: [Float] = [5.28, 5.52, 5.52, 6.16, 6.80, 6.88,
                                         7.04, 7.36, 7.44, 8.00, 8.40]
-        for (word, expected) in zip(aligned, referenceStarts) {
-            XCTAssertEqual(word.startTime, expected, accuracy: 0.24,
+        let referenceEnds: [Float] = [5.44, 5.52, 6.16, 6.32, 6.88, 7.04,
+                                      7.36, 7.44, 8.00, 8.40, 8.96]
+        XCTAssertEqual(aligned.map(\.text), Self.referenceText.split(separator: " ").map(String.init))
+        for (word, expected) in zip(aligned, zip(referenceStarts, referenceEnds)) {
+            XCTAssertEqual(word.startTime, expected.0, accuracy: 0.24,
                            "[\(variantLabel)] Incorrect start time for '\(word.text)'")
+            XCTAssertEqual(word.endTime, expected.1, accuracy: 0.24,
+                           "[\(variantLabel)] Incorrect end time for '\(word.text)'")
         }
     }
 }

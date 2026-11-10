@@ -341,20 +341,19 @@ public class Qwen3ForcedAligner {
 
         // 8. Apply LIS monotonicity correction.
         //
-        // First cap indices to the audio's actual extent. The classify head
-        // addresses classifyNum slots (400s) regardless of input length, and on
+        // Exclude indices beyond the audio's actual extent from the anchors.
+        // The classify head addresses classifyNum slots (400s) regardless of input length, and on
         // hard audio it emits confident indices far past the end of the file.
         // Those are not timestamps, and worse, a slow upward drift of garbage
         // is monotonic -- fed to LIS uncapped it becomes the anchor set and the
-        // genuine indices get interpolated away. Capping first keeps impossible
-        // values out of the anchor competition entirely.
+        // genuine indices get interpolated away. Clamping first would make an
+        // invalid run count as repeated anchors, so retain only in-range candidates.
         let durationSec = Float(audio.count) / Float(sampleRate)
         let maxIndex = min(
             config.classifyNum - 1,
             Int((durationSec / config.timestampSegmentTime).rounded(.up))
         )
-        let cappedIndices = rawIndices.map { min($0, maxIndex) }
-        let correctedIndices = TimestampCorrection.enforceMonotonicity(cappedIndices)
+        let correctedIndices = TimestampCorrection.enforceMonotonicity(rawIndices, maxIndex: maxIndex)
 
         // Optional raw/corrected dump for bug-triage of misaligned timestamps.
         if ProcessInfo.processInfo.environment["ALIGN_DEBUG"] == "1" {

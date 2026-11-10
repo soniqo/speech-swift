@@ -28,7 +28,7 @@ Audio (16kHz) + Text
                         |
                         v
 +------------------------------------------------+
-|  LIS Monotonicity Correction                   |
+|  Nondecreasing Timestamp Correction            |
 |  Index × 80ms → timestamps in seconds          |
 +-----------------------+------------------------+
                         |
@@ -130,13 +130,17 @@ One forward pass through the decoder (no cache, no loop). Apply classify head to
 3. Multiply by 80ms → raw timestamps in seconds
 4. Pair consecutive timestamps as (start, end) per word
 
-### 5. LIS Monotonicity Correction (TimestampCorrection.swift)
+### 5. Nondecreasing Timestamp Correction (TimestampCorrection.swift)
 
-Raw timestamps may not be monotonic. Fix via:
-1. Find Longest Increasing Subsequence (O(n log n))
+Raw timestamps may not be monotonic. Correction uses the nondecreasing form of LIS:
+1. Find a longest nondecreasing subsequence (O(n log n) anchor search), retaining equal timestamp classes. Equal-length chains choose the earliest predecessor and endpoint, matching the [Qwen reference](https://github.com/QwenLM/Qwen3-ASR/blob/c17a131fe028b2e428b6e80a33d30bb4fa57b8df/qwen_asr/inference/qwen3_forced_aligner.py#L147).
 2. Small gaps (≤2 positions): nearest-neighbor correction
-3. Larger gaps: linear interpolation between LIS anchors
+3. Larger gaps: linear interpolation between anchors
 4. Final pass: enforce non-decreasing order
+
+Valid repeated boundaries remain unchanged, including zero-duration words and adjacent words that share a boundary. A strictly increasing subsequence would discard these valid anchors and can shorten a word's end time. Both MLX and CoreML use the same correction helper.
+
+The MLX path excludes predictions beyond the audio's actual extent from anchor selection. Clamping those predictions first would create a repeated plateau that can outvote genuine word boundaries. Invalid positions are repaired from in-range anchors; when none exist, values are clamped to the audio extent.
 
 ## Long-audio handling
 

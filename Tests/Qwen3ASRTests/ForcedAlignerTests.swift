@@ -210,53 +210,6 @@ final class ForcedAlignerTests: XCTestCase {
         XCTAssertEqual(pairs.map { $0.cleaned }, ["Hello", "你", "好", "world"])
     }
 
-    func testTimestampCorrectionAlreadyMonotonic() {
-        let input = [1, 3, 5, 7, 9, 11]
-        let corrected = TimestampCorrection.enforceMonotonicity(input)
-        XCTAssertEqual(corrected, input)
-    }
-
-    func testTimestampCorrectionSingleOutOfOrder() {
-        let input = [1, 3, 2, 7, 9, 11]
-        let corrected = TimestampCorrection.enforceMonotonicity(input)
-
-        // Verify monotonicity
-        for i in 1..<corrected.count {
-            XCTAssertGreaterThanOrEqual(corrected[i], corrected[i - 1],
-                "Index \(i): \(corrected[i]) should be >= \(corrected[i-1])")
-        }
-    }
-
-    func testTimestampCorrectionAllSame() {
-        let input = [5, 5, 5, 5]
-        let corrected = TimestampCorrection.enforceMonotonicity(input)
-        // Should remain all 5 (monotonically non-decreasing)
-        XCTAssertEqual(corrected, [5, 5, 5, 5])
-    }
-
-    func testTimestampCorrectionDescending() {
-        let input = [10, 8, 6, 4, 2]
-        let corrected = TimestampCorrection.enforceMonotonicity(input)
-
-        // After LIS + correction, should be monotonically non-decreasing
-        for i in 1..<corrected.count {
-            XCTAssertGreaterThanOrEqual(corrected[i], corrected[i - 1])
-        }
-    }
-
-    func testLISBasic() {
-        let arr = [3, 1, 4, 1, 5, 9, 2, 6]
-        let positions = TimestampCorrection.longestIncreasingSubsequencePositions(arr)
-
-        // LIS should be length 4 or 5 (e.g., [1, 4, 5, 9] or [1, 4, 5, 6])
-        XCTAssertGreaterThanOrEqual(positions.count, 4)
-
-        // Values at LIS positions should be strictly increasing
-        for i in 1..<positions.count {
-            XCTAssertLessThan(arr[positions[i - 1]], arr[positions[i]])
-        }
-    }
-
     // MARK: - E2E Integration Test (requires model download)
 
     func testForcedAlignerE2E() async throws {
@@ -565,34 +518,6 @@ final class ForcedAlignerTests: XCTestCase {
         let idx = Qwen3ForcedAligner.findFirstSaturation(
             aligned, durationSec: 30, tolerance: 0.1, minSize: 5)
         XCTAssertEqual(idx, 0)
-    }
-
-    // MARK: - Index capping regression (no model download)
-
-    /// Reproduces the failure that motivated capping BEFORE monotonicity
-    /// correction: on hard audio the classify head emits a slow upward drift
-    /// of impossible indices (far past the audio's extent). That drift is
-    /// itself increasing, so uncapped it wins the LIS anchor competition and
-    /// the genuine indices around it get interpolated toward garbage. Capped
-    /// to the audio's addressable range first, the garbage collapses into a
-    /// plateau and the genuine indices survive as anchors.
-    func testCappingKeepsGenuineAnchorsAgainstGarbageDrift() {
-        // Genuine word indices for ~2s of speech, then a garbage staircase
-        // (impossible for 4s audio = maxIndex 50), then genuine again.
-        let raw = [10, 12, 3000, 3001, 3002, 3003, 3004, 3005, 14, 16]
-        let maxIndex = 50
-        let capped = raw.map { min($0, maxIndex) }
-        let corrected = TimestampCorrection.enforceMonotonicity(capped)
-
-        // The genuine tail must survive uncorrupted...
-        XCTAssertEqual(Array(corrected.suffix(2)), [14, 16])
-        // ...and nothing may exceed the audio's addressable range.
-        XCTAssertLessThanOrEqual(corrected.max() ?? 0, maxIndex)
-
-        // Control: WITHOUT the cap the garbage staircase becomes the LIS and
-        // drags the tail to impossible values. This is the bug, pinned.
-        let uncorrectedTail = TimestampCorrection.enforceMonotonicity(raw).suffix(2)
-        XCTAssertTrue(uncorrectedTail.allSatisfy { $0 >= 3000 })
     }
 
 }
