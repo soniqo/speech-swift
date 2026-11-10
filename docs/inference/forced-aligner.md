@@ -299,11 +299,13 @@ let aligned = try aligner.align(
 
 The CoreML aligner runs the audio encoder + token embedding + 28-layer non-autoregressive text decoder + classify head from two `.mlmodelc` bundles and a raw fp16 token-embedding binary. The audio encoder is fixed to a 30 s mel input and reports the real (un-padded) audio-token count; the text decoder runs at a fixed prompt length of 768 tokens — enough to cover the 9-token chat-template prefix + up to 390 audio tokens + 6-token suffix + ~120 word slots. The causal mask is `-1e4` (finite) so the fp16 softmax stays numerically stable.
 
-The text decoder defaults to `.cpuAndGPU`; the encoder retains `.cpuAndNeuralEngine`. The published decoder bundles can produce incorrect timestamp classes on the Neural Engine or all-zero timestamps with CPU-only execution. INT8 and FP16 GPU paths have been checked against reference word-start times. Loader defaults still honor `SPEECH_COREML_COMPUTE_UNITS`. This changes compute placement rather than the converted model graph; CPU-only compatibility and iOS GPU speed and power remain separate validation work.
+The text decoder defaults to `.cpuAndGPU`; the encoder retains `.cpuAndNeuralEngine`. The original decoder graph can produce incorrect timestamp classes on the Neural Engine or all-zero timestamps on older CPU runtimes. GPU execution keeps the original `text_decoder` bundle. Explicit `.cpuOnly` loads of the published INT8 and FP16 models request the separate `text_decoder_cpu_v1` bundle, whose 113 RMS-normalization calculations use Float32 while learned weights and model input/output types remain unchanged. Loader defaults still honor `SPEECH_COREML_COMPUTE_UNITS`.
 
 ### CPU-only compatibility checks
 
-CPU-only behavior depends on the runtime and device. Explicit `.cpuOnly` encoder and decoder calls pass the reference word-boundary checks for INT8 and FP16 on an M5 Pro running macOS 26.6.2. A separate iOS 26.5 simulator probe also passes the CoreML encoder, decoder and correction stages with the fixture's mel features and token embeddings. However, pinned INT8 bundles return zero for all 22 timestamp slots on a macOS 15.8.2 hosted runner, reproducing the reported symptom. CPU-only compatibility on that runtime remains unresolved.
+The pinned legacy INT8 decoder returns zero for all 22 timestamp slots on macOS 15.8.2. Recompilation, Float32 output, and preallocated output buffers do not repair it. Promoting RMS normalization to Float32 restores all 22 corrected reference boundaries exactly on that runtime. INT8 and FP16 CPU/GPU checks also pass on an M5 Pro running macOS 26.6.2. Physical-iPhone coverage remains separate.
+
+Run one online `.cpuOnly` load to fetch the versioned CPU bundle. An old offline cache still contains the legacy decoder; it cannot receive the repair without updated assets. When both are cached, CPU execution prefers `text_decoder_cpu_v1`, while GPU execution selects `text_decoder`. Local/custom directories keep legacy compatibility and can provide the versioned CPU bundle explicitly. A source-only CPU `.mlpackage` is compiled before loading. Future graph revisions require a new bundle version rather than replacing cached files in place.
 
 The published-bundle E2E suite includes explicit CPU-only tests that fail on load errors instead of skipping them:
 
@@ -314,9 +316,9 @@ ALIGNER_COREML_PUBLISHED_E2E=1 swift test --no-parallel --disable-sandbox \
   --filter E2ECoreMLForcedAlignerTests/testFP16CPUOnlyMatchesReferenceBoundaries
 ```
 
-`ALIGNER_COREML_PUBLISHED_CACHE_ROOT` can point to an offline cache containing `int8/` and `fp16/` directories. The Nightly E2E workflow also has a manual `coreml-aligner-cpu-compat` selector: it runs one explicit CPU-only INT8 check on macOS 15, using pinned compiled bundles with verified file hashes. It is not included in scheduled model runs.
+`ALIGNER_COREML_PUBLISHED_CACHE_ROOT` can point to an offline cache containing `int8/` and `fp16/` directories. The Nightly E2E workflow also has a manual `coreml-aligner-cpu-compat` selector: its default `published` mode checks the versioned INT8 and FP16 CPU bundles in separate processes on macOS 15, with a 30-minute cap and verified file hashes. The optional `cpu_aligner_int8_revision` and `cpu_aligner_fp16_revision` inputs pin immutable 40-character model commits; otherwise the resolved commits are recorded in the log. It is not included in scheduled model runs.
 
-The optional `cpu_aligner_mode=candidates` input compares the published decoder with three diagnostic graphs: an unchanged source recompile, Float32 logits output, and Float32 RMS normalization. Each retains the pinned original weights and runs in a separate process against the same word-boundary assertions. A standalone numeric probe also reports finite/nonzero logits with default and preallocated output buffers. These are experiments, not published model updates; local CPU/GPU passes do not establish a repair for macOS 15.
+The optional `cpu_aligner_mode=candidates` input compares the pinned legacy decoder with three diagnostic graphs: an unchanged source recompile, Float32 logits output, and Float32 RMS normalization. Each retains the original weights and runs in a separate process against the same word-boundary assertions. The `legacy` mode reproduces the old INT8 CPU failure. A standalone numeric probe also reports finite/nonzero logits with default and preallocated output buffers.
 
 ## Model bundle layout
 
@@ -326,6 +328,7 @@ Each CoreML repo on HuggingFace contains:
 |---|---|
 | `audio_encoder.mlmodelc` (+ `.mlpackage`) | 24-layer block-attention audio encoder |
 | `text_decoder.mlmodelc` (+ `.mlpackage`) | 28-layer non-AR decoder + 5000-class classify head, fixed T=768 |
+| `text_decoder_cpu_v1.mlmodelc` (+ `.mlpackage`) | CPU-compatible decoder with Float32 RMS normalization and the original weights |
 | `embed_tokens.fp16.bin` | Raw little-endian fp16 token embedding table, `[152 064, 1024]` |
 | `config.json` | Variant + classify_num + timestamp_segment_time + fixed shapes |
 | `vocab.json`, `merges.txt`, `tokenizer_config.json` | Qwen3 BPE tokenizer files |
