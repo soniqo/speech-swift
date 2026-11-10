@@ -11,11 +11,15 @@ Audio (16kHz) → [Preprocessing] → [Audio Encoding] → [Text Generation] →
 
 Converts raw audio to a mel spectrogram `[128, T]` using Accelerate framework.
 
-- STFT via `vDSP_fft_zrip` (in-place real FFT, zero-padded 400→512)
-- Mel filterbank via `vDSP_mmul`, bin frequencies use padded FFT size (`k * fs / 512`)
+- Exact 400-point STFT at 16 kHz with a periodic Hann window and a 160-sample hop
+- Real and imaginary DFT components via two batched `vDSP_mmul` products; the Hann window is folded into cached `[400, 201]` matrices
+- Reusable scratch buffers cover at most 256 frames, bounding temporary STFT storage on long recordings
+- Slaney-normalized mel filterbank via `vDSP_mmul`, using 201 frequencies (`k * fs / 400`)
 - Log-mel via `vDSP_vclip` + `vvlog10f` (vForce vectorized)
-- Hann window and FFT setup precomputed once in `init()`
-- All temporary buffers preallocated outside the frame loop
+- Windowed DFT matrices and mel filters precomputed once in `init()`
+- The raw (`MelFeatures`) and MLX (`MLXArray`) paths share the same power-spectrum helper
+
+The exact transform corrects the previous 512-point zero-padding and power-scaling error. These features feed Qwen3-ASR and both forced-aligner runtimes, so correcting them can change transcripts and word times.
 
 ## Stage 2: Audio Encoding (AudioEncoder.swift)
 

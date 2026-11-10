@@ -61,6 +61,8 @@ Audio (16kHz) + Text
 ### 1. Audio Encoding
 Same as ASR: mel spectrogram → chunked Conv2D → transformer → projector.
 
+Both runtimes use the exact 400-point STFT, periodic Hann window, 160-sample hop, and 128 Slaney-normalized mel bins at 16 kHz described in the [ASR preprocessing pipeline](qwen3-asr-inference.md#stage-1-preprocessing-audiopreprocessingswift). Zero-padding the transform to 512 points changes the model's input features and can shift timestamp predictions.
+
 ### 2. Text Preprocessing (TextPreprocessing.swift)
 
 Language dispatch:
