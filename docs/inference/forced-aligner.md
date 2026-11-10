@@ -301,6 +301,23 @@ The CoreML aligner runs the audio encoder + token embedding + 28-layer non-autor
 
 The text decoder defaults to `.cpuAndGPU`; the encoder retains `.cpuAndNeuralEngine`. The published decoder bundles can produce incorrect timestamp classes on the Neural Engine or all-zero timestamps with CPU-only execution. INT8 and FP16 GPU paths have been checked against reference word-start times. Loader defaults still honor `SPEECH_COREML_COMPUTE_UNITS`. This changes compute placement rather than the converted model graph; CPU-only compatibility and iOS GPU speed and power remain separate validation work.
 
+### CPU-only compatibility checks
+
+CPU-only behavior depends on the runtime and device. Explicit `.cpuOnly` encoder and decoder calls pass the reference word-boundary checks for INT8 and FP16 on an M5 Pro running macOS 26.6.2. A separate iOS 26.5 simulator probe also passes the CoreML encoder, decoder and correction stages with the fixture's mel features and token embeddings. However, pinned INT8 bundles return zero for all 22 timestamp slots on a macOS 15.8.2 hosted runner, reproducing the reported symptom. CPU-only compatibility on that runtime remains unresolved.
+
+The published-bundle E2E suite includes explicit CPU-only tests that fail on load errors instead of skipping them:
+
+```bash
+ALIGNER_COREML_PUBLISHED_E2E=1 swift test --no-parallel --disable-sandbox \
+  --filter E2ECoreMLForcedAlignerTests/testINT8CPUOnlyMatchesReferenceBoundaries
+ALIGNER_COREML_PUBLISHED_E2E=1 swift test --no-parallel --disable-sandbox \
+  --filter E2ECoreMLForcedAlignerTests/testFP16CPUOnlyMatchesReferenceBoundaries
+```
+
+`ALIGNER_COREML_PUBLISHED_CACHE_ROOT` can point to an offline cache containing `int8/` and `fp16/` directories. The Nightly E2E workflow also has a manual `coreml-aligner-cpu-compat` selector: it runs one explicit CPU-only INT8 check on macOS 15, using pinned compiled bundles with verified file hashes. It is not included in scheduled model runs.
+
+The optional `cpu_aligner_mode=candidates` input compares the published decoder with three diagnostic graphs: an unchanged source recompile, Float32 logits output, and Float32 RMS normalization. Each retains the pinned original weights and runs in a separate process against the same word-boundary assertions. A standalone numeric probe also reports finite/nonzero logits with default and preallocated output buffers. These are experiments, not published model updates; local CPU/GPU passes do not establish a repair for macOS 15.
+
 ## Model bundle layout
 
 Each CoreML repo on HuggingFace contains:

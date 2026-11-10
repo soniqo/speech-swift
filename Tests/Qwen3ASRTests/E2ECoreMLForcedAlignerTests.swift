@@ -1,6 +1,7 @@
 #if canImport(CoreML)
 import XCTest
 import Foundation
+import CoreML
 import AudioCommon
 @testable import Qwen3ASR
 
@@ -49,9 +50,23 @@ final class E2ECoreMLForcedAlignerTests: XCTestCase {
         )
     }
 
+    func testFP16CPUOnlyMatchesReferenceBoundaries() async throws {
+        try await runAligner(
+            modelId: "aufklarer/Qwen3-ForcedAligner-0.6B-CoreML-FP16",
+            variantLabel: "FP16", computeUnits: .cpuOnly)
+    }
+
+    func testINT8CPUOnlyMatchesReferenceBoundaries() async throws {
+        try await runAligner(
+            modelId: "aufklarer/Qwen3-ForcedAligner-0.6B-CoreML-INT8",
+            variantLabel: "INT8", computeUnits: .cpuOnly)
+    }
+
     // MARK: - Shared body
 
-    private func runAligner(modelId: String, variantLabel: String) async throws {
+    private func runAligner(
+        modelId: String, variantLabel: String, computeUnits: MLComputeUnits? = nil
+    ) async throws {
         guard let wavURL = Bundle.module.url(forResource: "test_audio", withExtension: "wav") else {
             throw XCTSkip("test_audio.wav not found in Qwen3ASRTests resources")
         }
@@ -61,22 +76,33 @@ final class E2ECoreMLForcedAlignerTests: XCTestCase {
             .map { URL(fileURLWithPath: $0, isDirectory: true)
                 .appendingPathComponent(variantLabel.lowercased(), isDirectory: true) }
         do {
-            aligner = try await CoreMLForcedAligner.fromPretrained(
-                modelId: modelId,
-                cacheDir: cacheDirectory,
-                offlineMode: cacheDirectory != nil
-            ) { progress, status in
+            let progressHandler: (Double, String) -> Void = { progress, status in
                 if Int(progress * 100) % 25 == 0 {
                     print(String(format: "  [%@] loading: %.0f%% — %@",
                                  variantLabel, progress * 100, status))
                 }
             }
+            if let computeUnits {
+                aligner = try await CoreMLForcedAligner.fromPretrained(
+                    modelId: modelId,
+                    encoderComputeUnits: computeUnits, decoderComputeUnits: computeUnits,
+                    cacheDir: cacheDirectory, offlineMode: cacheDirectory != nil,
+                    progressHandler: progressHandler)
+            } else {
+                // Exercise the loader's real defaults in the existing GPU checks.
+                aligner = try await CoreMLForcedAligner.fromPretrained(
+                    modelId: modelId, cacheDir: cacheDirectory,
+                    offlineMode: cacheDirectory != nil, progressHandler: progressHandler)
+            }
         } catch {
-            // An explicitly supplied local bundle must fail visibly rather
-            // than turn a loader regression into a skipped test.
-            if cacheDirectory != nil { throw error }
+            // Explicit CPU compatibility checks and supplied local bundles
+            // must fail visibly rather than turn a loader failure into a skip.
+            if cacheDirectory != nil || computeUnits != nil { throw error }
             throw XCTSkip("CoreML aligner \(variantLabel) bundle unavailable: \(error)")
         }
+
+        let execution = computeUnits.map(CoreMLComputeUnitsResolver.shortName) ?? "default"
+        print("[COREML-ALIGN-COMPAT] variant=\(variantLabel) execution=\(execution) os=\(ProcessInfo.processInfo.operatingSystemVersionString)")
 
         let (samples, sampleRate) = try AudioFileLoader.loadWAV(url: wavURL)
         let targetSampleRate = 16000
