@@ -1,31 +1,47 @@
 import Foundation
 
-/// Monotonicity correction for forced alignment timestamps using LIS
+/// Monotonicity correction for forced alignment timestamps.
 public enum TimestampCorrection {
 
-    /// Enforce monotonically increasing timestamps via LIS + interpolation.
+    /// Enforce nondecreasing timestamps while preserving equal word boundaries.
     ///
-    /// 1. Find Longest Increasing Subsequence of raw timestamp indices (O(n log n))
-    /// 2. For positions not in LIS:
+    /// 1. Find a longest nondecreasing subsequence (O(n log n)), choosing the
+    ///    earliest predecessor and endpoint when lengths tie.
+    /// 2. For positions outside that subsequence:
     ///    - Small gaps (<=2): nearest-neighbor correction
     ///    - Larger gaps: linear interpolation between LIS anchors
     ///
     /// - Parameter rawIndices: Raw timestamp class indices from argmax
-    /// - Returns: Corrected monotonically increasing indices
+    /// - Returns: Corrected nondecreasing indices
     public static func enforceMonotonicity(_ rawIndices: [Int]) -> [Int] {
         guard rawIndices.count > 1 else { return rawIndices }
 
-        // Find LIS positions
-        let lisPositions = longestIncreasingSubsequencePositions(rawIndices)
-        let lisSet = Set(lisPositions)
+        return correct(rawIndices, anchorPositions: longestNondecreasingSubsequencePositions(rawIndices))
+    }
+
+    /// Predictions beyond the audio extent must not compete as anchors.
+    /// Clamping them first would turn an invalid run into a valid repeated plateau.
+    static func enforceMonotonicity(_ rawIndices: [Int], maxIndex: Int) -> [Int] {
+        let inRangePositions = rawIndices.indices.filter { rawIndices[$0] <= maxIndex }
+        guard !inRangePositions.isEmpty else {
+            return rawIndices.map { min($0, maxIndex) }
+        }
+        let inRangeValues = inRangePositions.map { rawIndices[$0] }
+        let anchors = longestNondecreasingSubsequencePositions(inRangeValues)
+            .map { inRangePositions[$0] }
+        return correct(rawIndices, anchorPositions: anchors)
+    }
+
+    private static func correct(_ rawIndices: [Int], anchorPositions: [Int]) -> [Int] {
+        let anchorSet = Set(anchorPositions)
 
         // Build anchor points: (position_in_array, value)
         var anchors: [(pos: Int, val: Int)] = []
-        for pos in lisPositions {
+        for pos in anchorPositions {
             anchors.append((pos, rawIndices[pos]))
         }
 
-        // If LIS covers everything, already monotonic
+        // If every position is an anchor, the input is already nondecreasing.
         if anchors.count == rawIndices.count {
             return rawIndices
         }
@@ -36,7 +52,7 @@ public enum TimestampCorrection {
         var anchorIdx = 0
         var i = 0
         while i < corrected.count {
-            if lisSet.contains(i) {
+            if anchorSet.contains(i) {
                 // This position is an anchor, keep it
                 anchorIdx = anchors.firstIndex(where: { $0.pos == i }) ?? anchorIdx
                 i += 1
@@ -86,7 +102,7 @@ public enum TimestampCorrection {
             i += 1
         }
 
-        // Final pass: ensure strict monotonicity
+        // Final pass: ensure nondecreasing order.
         for i in 1..<corrected.count {
             if corrected[i] < corrected[i - 1] {
                 corrected[i] = corrected[i - 1]
@@ -96,44 +112,43 @@ public enum TimestampCorrection {
         return corrected
     }
 
-    /// Find positions of the Longest Increasing Subsequence (O(n log n))
-    static func longestIncreasingSubsequencePositions(_ arr: [Int]) -> [Int] {
+    /// Find a longest nondecreasing subsequence with Qwen's earliest-index ties.
+    /// Prefix maxima over timestamp ranks keep the search O(n log n).
+    static func longestNondecreasingSubsequencePositions(_ arr: [Int]) -> [Int] {
         guard !arr.isEmpty else { return [] }
 
-        let n = arr.count
-        // tails[i] = smallest tail element for increasing subsequence of length i+1
-        var tails: [Int] = []
-        // tailIndices[i] = index in arr where tails[i] comes from
-        var tailIndices: [Int] = []
-        // parent[i] = index of previous element in LIS ending at arr[i]
-        var parent = [Int](repeating: -1, count: n)
+        let values = Set(arr).sorted()
+        let ranks = Dictionary(uniqueKeysWithValues: values.enumerated().map { ($0.element, $0.offset + 1) })
+        var tree = [(length: Int, index: Int)](repeating: (0, -1), count: values.count + 1)
+        var parent = [Int](repeating: -1, count: arr.count)
+        var longest = (length: 0, index: -1)
 
-        for i in 0..<n {
-            // Binary search for position to insert arr[i]
-            var lo = 0, hi = tails.count
-            while lo < hi {
-                let mid = (lo + hi) / 2
-                if tails[mid] < arr[i] {
-                    lo = mid + 1
-                } else {
-                    hi = mid
+        for (i, value) in arr.enumerated() {
+            let rank = ranks[value]!
+            var predecessor = (length: 0, index: -1)
+            var query = rank
+            while query > 0 {
+                let candidate = tree[query]
+                if candidate.length > predecessor.length
+                    || (candidate.length == predecessor.length && candidate.index < predecessor.index) {
+                    predecessor = candidate
                 }
+                query -= query & -query
             }
+            parent[i] = predecessor.index
+            let length = predecessor.length + 1
 
-            if lo == tails.count {
-                tails.append(arr[i])
-                tailIndices.append(i)
-            } else {
-                tails[lo] = arr[i]
-                tailIndices[lo] = i
+            var update = rank
+            while update < tree.count {
+                // Input order already makes the stored index earliest on a tie.
+                if length > tree[update].length { tree[update] = (length, i) }
+                update += update & -update
             }
-
-            parent[i] = lo > 0 ? tailIndices[lo - 1] : -1
+            if length > longest.length { longest = (length, i) }
         }
 
-        // Reconstruct LIS positions
         var positions: [Int] = []
-        var idx = tailIndices[tails.count - 1]
+        var idx = longest.index
         while idx != -1 {
             positions.append(idx)
             idx = parent[idx]
