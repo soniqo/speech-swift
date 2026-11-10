@@ -20,6 +20,13 @@ on:
         description: 'Run a shard by name; coreml-aligner-cpu-compat runs only the CPU compatibility probe'
         required: false
         default: ''
+      cpu_aligner_mode:
+        description: 'CPU compatibility probe: published bundles or graph candidate comparison'
+        type: choice
+        options:
+          - published
+          - candidates
+        default: published
 
 concurrency:
   group: nightly-e2e
@@ -321,10 +328,57 @@ jobs:
               env.write(f'ALIGNER_COREML_PUBLISHED_CACHE_ROOT={cache}\n')
           print(f'Prepared {len(files)} pinned files ({sum(entry["size"] for entry in files)} bytes)')
           PY
+      - uses: actions/setup-python@v6
+        if: github.event.inputs.cpu_aligner_mode == 'candidates'
+        with:
+          python-version: '3.11'
+      - name: Prepare diagnostic graph candidates
+        if: github.event.inputs.cpu_aligner_mode == 'candidates'
+        run: |
+          python3 -m venv "$RUNNER_TEMP/coreml-probe-tools"
+          "$RUNNER_TEMP/coreml-probe-tools/bin/pip" install 'coremltools==9.0'
+          "$RUNNER_TEMP/coreml-probe-tools/bin/python" -m unittest discover \
+            -s scripts/tests -p test_prepare_coreml_aligner_cpu_probe.py -v
+          "$RUNNER_TEMP/coreml-probe-tools/bin/python" scripts/prepare_coreml_aligner_cpu_probe.py \
+            --cache-root "$ALIGNER_COREML_PUBLISHED_CACHE_ROOT" \
+            --output-root "$RUNNER_TEMP/aligner-cpu-candidates"
+          swiftc -O scripts/probe_coreml_aligner_cpu.swift -o "$RUNNER_TEMP/probe-coreml-aligner-cpu"
       - name: Check explicit CPU-only word boundaries
+        if: github.event.inputs.cpu_aligner_mode != 'candidates'
         run: >
           swift test --skip-build --no-parallel
           --filter E2ECoreMLForcedAlignerTests/testINT8CPUOnlyMatchesReferenceBoundaries
+      - name: Compare CPU decoder candidates in separate processes
+        if: github.event.inputs.cpu_aligner_mode == 'candidates'
+        run: |
+          published_cache="$ALIGNER_COREML_PUBLISHED_CACHE_ROOT"
+          candidate_passes=0
+          echo '| Decoder | Reference word boundaries |' >> "$GITHUB_STEP_SUMMARY"
+          echo '| --- | --- |' >> "$GITHUB_STEP_SUMMARY"
+          for candidate in published recompile output32 norm32; do
+            if [ "$candidate" = published ]; then
+              export ALIGNER_COREML_PUBLISHED_CACHE_ROOT="$published_cache"
+            else
+              export ALIGNER_COREML_PUBLISHED_CACHE_ROOT="$RUNNER_TEMP/aligner-cpu-candidates/$candidate"
+            fi
+            echo "::group::CPU compatibility: $candidate"
+            "$RUNNER_TEMP/probe-coreml-aligner-cpu" \
+              "$ALIGNER_COREML_PUBLISHED_CACHE_ROOT/int8/text_decoder.mlmodelc"
+            if swift test --skip-build --no-parallel \
+              --filter E2ECoreMLForcedAlignerTests/testINT8CPUOnlyMatchesReferenceBoundaries; then
+              outcome=PASS
+              if [ "$candidate" != published ]; then
+                candidate_passes=$((candidate_passes + 1))
+              fi
+            else
+              outcome=FAIL
+            fi
+            echo "| $candidate | $outcome |" >> "$GITHUB_STEP_SUMMARY"
+            echo "::endgroup::"
+          done
+          # The published model is the known failing control. A comparison is
+          # successful only if a candidate passes the unchanged boundary test.
+          test "$candidate_passes" -gt 0
 
   notify:
     name: Discord notify (on failure)
