@@ -163,24 +163,35 @@ public class WhisperFeatureExtractor {
     /// Power spectrum of every frame, [nFrames, nFFT / 2 + 1] row-major: |rfft(frame * window)|^2.
     private func powerSpectrum(_ paddedAudio: [Float], nFrames: Int) -> [Float] {
         let nBins = nFFT / 2 + 1
-        // Frames as rows of a [nFrames, nFFT] matrix, then one matrix product per component.
-        var frames = [Float](repeating: 0, count: nFrames * nFFT)
-        paddedAudio.withUnsafeBufferPointer { audio in
-            frames.withUnsafeMutableBufferPointer { rows in
-                for frame in 0..<nFrames {
-                    (rows.baseAddress! + frame * nFFT).update(
-                        from: audio.baseAddress! + frame * hopLength, count: nFFT)
+        // Bound scratch storage for long recordings; only the returned spectrum
+        // grows with duration. Reuse the same frame/DFT buffers for each batch.
+        let batchCapacity = min(nFrames, 256)
+        var frames = [Float](repeating: 0, count: batchCapacity * nFFT)
+        var real = [Float](repeating: 0, count: batchCapacity * nBins)
+        var imag = [Float](repeating: 0, count: batchCapacity * nBins)
+        var power = [Float](repeating: 0, count: nFrames * nBins)
+
+        for firstFrame in stride(from: 0, to: nFrames, by: batchCapacity) {
+            let batchFrames = min(batchCapacity, nFrames - firstFrame)
+            paddedAudio.withUnsafeBufferPointer { audio in
+                frames.withUnsafeMutableBufferPointer { rows in
+                    for frame in 0..<batchFrames {
+                        (rows.baseAddress! + frame * nFFT).update(
+                            from: audio.baseAddress! + (firstFrame + frame) * hopLength,
+                            count: nFFT)
+                    }
                 }
             }
+            vDSP_mmul(frames, 1, dftCos, 1, &real, 1,
+                      vDSP_Length(batchFrames), vDSP_Length(nBins), vDSP_Length(nFFT))
+            vDSP_mmul(frames, 1, dftSin, 1, &imag, 1,
+                      vDSP_Length(batchFrames), vDSP_Length(nBins), vDSP_Length(nFFT))
+            power.withUnsafeMutableBufferPointer { output in
+                vDSP_vmma(real, 1, real, 1, imag, 1, imag, 1,
+                          output.baseAddress! + firstFrame * nBins, 1,
+                          vDSP_Length(batchFrames * nBins))
+            }
         }
-        var real = [Float](repeating: 0, count: nFrames * nBins)
-        var imag = [Float](repeating: 0, count: nFrames * nBins)
-        vDSP_mmul(frames, 1, dftCos, 1, &real, 1,
-                  vDSP_Length(nFrames), vDSP_Length(nBins), vDSP_Length(nFFT))
-        vDSP_mmul(frames, 1, dftSin, 1, &imag, 1,
-                  vDSP_Length(nFrames), vDSP_Length(nBins), vDSP_Length(nFFT))
-        var power = [Float](repeating: 0, count: nFrames * nBins)
-        vDSP_vmma(real, 1, real, 1, imag, 1, imag, 1, &power, 1, vDSP_Length(power.count))
         return power
     }
 
