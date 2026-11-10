@@ -4,7 +4,7 @@ import AudioCommon
 
 /// Result of preprocessing text for forced alignment
 public struct SlottedText: Sendable {
-    /// Token IDs with timestamp tokens inserted around each word
+    /// Token IDs with two timestamp tokens after each word (start, then end)
     public let tokenIds: [Int]
     /// Indices within tokenIds that are timestamp tokens
     public let timestampPositions: [Int]
