@@ -10,7 +10,7 @@ import AudioCommon
 /// MLX dependency at runtime):
 ///
 ///   audio → mel (Accelerate) → audio_encoder.mlpackage → audio embeddings
-///   text  → tokenizer → <ts> word <ts> slots
+///   text  → tokenizer → word <ts> <ts> slots (start, then end)
 ///   tokens → embedding.mlpackage → token embeddings
 ///   embeddings (token slots + audio slot) → text_decoder.mlpackage (single pass)
 ///   logits at <ts> positions → argmax → LIS correction → ``[AlignedWord]``

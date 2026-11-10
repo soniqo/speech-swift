@@ -29,31 +29,29 @@ public class WhisperFeatureExtractor {
 
     private var melFilterbank: [Float]?
 
-    // Cached Hann window and FFT setup for Accelerate
-    private var hannWindow: [Float]
-    // Power-of-2 FFT: zero-pad nFFT=400 to paddedFFT=512 for vDSP compatibility
-    private let paddedFFT: Int = 512
-    private let log2PaddedFFT: vDSP_Length = 9  // log2(512) = 9
-    private var fftSetup: FFTSetup
+    // Windowed 400-point DFT as two [nFFT, nBins] matrices (Hann window folded in), so each
+    // frame's spectrum is exactly HuggingFace's `np.fft.rfft(frame * window, n=400)`.
+    // vDSP has no 400-point FFT, and zero-padding to 512 changes both the bin grid and the
+    // power (vDSP's real FFT also returns 2x the DFT), which shifted every log-mel value.
+    private var dftCos: [Float]
+    private var dftSin: [Float]
 
     public init() {
-        // Precompute periodic Hann window
-        hannWindow = [Float](repeating: 0, count: 400) // nFFT
-        for i in 0..<400 {
-            hannWindow[i] = 0.5 * (1.0 - cos(2.0 * Float.pi * Float(i) / Float(400)))
+        // Periodic Hann window, as HuggingFace's window_function(400, "hann")
+        let nBins = nFFT / 2 + 1
+        var cosTable = [Float](repeating: 0, count: nFFT * nBins)
+        var sinTable = [Float](repeating: 0, count: nFFT * nBins)
+        for n in 0..<nFFT {
+            let window = 0.5 * (1.0 - cos(2.0 * Double.pi * Double(n) / Double(nFFT)))
+            for k in 0..<nBins {
+                let angle = 2.0 * Double.pi * Double(k * n % nFFT) / Double(nFFT)
+                cosTable[n * nBins + k] = Float(window * cos(angle))
+                sinTable[n * nBins + k] = Float(window * sin(angle))
+            }
         }
-
-        // Create power-of-2 FFT setup (512-point)
-        guard let setup = vDSP_create_fftsetup(9, FFTRadix(kFFTRadix2)) else {
-            fatalError("Failed to create vDSP FFT setup for paddedFFT=512")
-        }
-        fftSetup = setup
-
+        dftCos = cosTable
+        dftSin = sinTable
         setupMelFilterbank()
-    }
-
-    deinit {
-        vDSP_destroy_fftsetup(fftSetup)
     }
 
     /// Setup mel filterbank matrix with slaney normalization
@@ -85,13 +83,12 @@ public class WhisperFeatureExtractor {
             }
         }
 
-        // Use paddedFFT for bin count since we zero-pad to 512 for FFT
-        let nBins = paddedFFT / 2 + 1  // 257 for paddedFFT=512
+        let nBins = nFFT / 2 + 1  // 201
 
-        // FFT bin frequencies: k * fs / paddedFFT (not nFFT, since we zero-pad)
+        // FFT bin frequencies: k * fs / nFFT
         var fftFreqs = [Float](repeating: 0, count: nBins)
         for i in 0..<nBins {
-            fftFreqs[i] = Float(i) * Float(sampleRate) / Float(paddedFFT)
+            fftFreqs[i] = Float(i) * Float(sampleRate) / Float(nFFT)
         }
 
         // Create mel filter center frequencies
@@ -163,12 +160,46 @@ public class WhisperFeatureExtractor {
         self.melFilterbank = filterbankTransposed
     }
 
+    /// Power spectrum of every frame, [nFrames, nFFT / 2 + 1] row-major: |rfft(frame * window)|^2.
+    private func powerSpectrum(_ paddedAudio: [Float], nFrames: Int) -> [Float] {
+        let nBins = nFFT / 2 + 1
+        // Bound scratch storage for long recordings; only the returned spectrum
+        // grows with duration. Reuse the same frame/DFT buffers for each batch.
+        let batchCapacity = min(nFrames, 256)
+        var frames = [Float](repeating: 0, count: batchCapacity * nFFT)
+        var real = [Float](repeating: 0, count: batchCapacity * nBins)
+        var imag = [Float](repeating: 0, count: batchCapacity * nBins)
+        var power = [Float](repeating: 0, count: nFrames * nBins)
+
+        for firstFrame in stride(from: 0, to: nFrames, by: batchCapacity) {
+            let batchFrames = min(batchCapacity, nFrames - firstFrame)
+            paddedAudio.withUnsafeBufferPointer { audio in
+                frames.withUnsafeMutableBufferPointer { rows in
+                    for frame in 0..<batchFrames {
+                        (rows.baseAddress! + frame * nFFT).update(
+                            from: audio.baseAddress! + (firstFrame + frame) * hopLength,
+                            count: nFFT)
+                    }
+                }
+            }
+            vDSP_mmul(frames, 1, dftCos, 1, &real, 1,
+                      vDSP_Length(batchFrames), vDSP_Length(nBins), vDSP_Length(nFFT))
+            vDSP_mmul(frames, 1, dftSin, 1, &imag, 1,
+                      vDSP_Length(batchFrames), vDSP_Length(nBins), vDSP_Length(nFFT))
+            power.withUnsafeMutableBufferPointer { output in
+                vDSP_vmma(real, 1, real, 1, imag, 1, imag, 1,
+                          output.baseAddress! + firstFrame * nBins, 1,
+                          vDSP_Length(batchFrames * nBins))
+            }
+        }
+        return power
+    }
+
     /// Extract mel spectrogram features from audio samples
     /// - Parameter audio: Raw audio samples (Float array, mono, at sampleRate)
     /// - Returns: Mel spectrogram [mel_bins, time_frames]
     public func extractFeatures(_ audio: [Float]) -> MLXArray {
-        let nBins = paddedFFT / 2 + 1  // 257 bins for 512-point FFT
-        let halfPadded = paddedFFT / 2  // 256
+        let nBins = nFFT / 2 + 1  // 201
 
         // Pad audio with reflect padding (like Whisper/librosa)
         let padLength = nFFT / 2
@@ -194,60 +225,7 @@ public class WhisperFeatureExtractor {
         // Calculate number of frames
         let nFrames = (paddedAudio.count - nFFT) / hopLength + 1
 
-        // --- Accelerate FFT-based STFT using vDSP_fft_zrip ---
-        // Zero-pad nFFT=400 samples to paddedFFT=512 for power-of-2 FFT
-        // vDSP_fft_zrip uses split-complex in-place: even-indexed in realp, odd-indexed in imagp
-        // Output packing: DC in realp[0], Nyquist in imagp[0], bins 1..N/2-1 in realp[k]+j*imagp[k]
-
-        // Preallocate buffers outside the frame loop
-        var splitReal = [Float](repeating: 0, count: halfPadded)
-        var splitImag = [Float](repeating: 0, count: halfPadded)
-        var paddedFrame = [Float](repeating: 0, count: paddedFFT)
-
-        var magnitude = [Float](repeating: 0, count: nFrames * nBins)
-
-        for frame in 0..<nFrames {
-            let start = frame * hopLength
-
-            // Apply window and write into paddedFrame (first nFFT elements)
-            paddedAudio.withUnsafeBufferPointer { buf in
-                vDSP_vmul(buf.baseAddress! + start, 1, hannWindow, 1, &paddedFrame, 1, vDSP_Length(nFFT))
-            }
-            // Zero-pad the rest (nFFT..<paddedFFT)
-            for i in nFFT..<paddedFFT {
-                paddedFrame[i] = 0
-            }
-
-            // Pack into split-complex: realp[i] = frame[2*i], imagp[i] = frame[2*i+1]
-            for i in 0..<halfPadded {
-                splitReal[i] = paddedFrame[2 * i]
-                splitImag[i] = paddedFrame[2 * i + 1]
-            }
-
-            // Execute in-place real FFT
-            splitReal.withUnsafeMutableBufferPointer { realBuf in
-                splitImag.withUnsafeMutableBufferPointer { imagBuf in
-                    var splitComplex = DSPSplitComplex(
-                        realp: realBuf.baseAddress!,
-                        imagp: imagBuf.baseAddress!)
-                    vDSP_fft_zrip(fftSetup, &splitComplex, 1, log2PaddedFFT, FFTDirection(kFFTDirection_Forward))
-                }
-            }
-
-            // Extract power spectrum
-            let baseIdx = frame * nBins
-
-            // DC component: realp[0]^2 (DC is purely real, stored in realp[0])
-            magnitude[baseIdx] = splitReal[0] * splitReal[0]
-
-            // Nyquist component: imagp[0]^2 (Nyquist is purely real, packed in imagp[0])
-            magnitude[baseIdx + halfPadded] = splitImag[0] * splitImag[0]
-
-            // Bins 1 to N/2-1: realp[k]^2 + imagp[k]^2
-            for k in 1..<halfPadded {
-                magnitude[baseIdx + k] = splitReal[k] * splitReal[k] + splitImag[k] * splitImag[k]
-            }
-        }
+        let magnitude = powerSpectrum(paddedAudio, nFrames: nFrames)
 
         // --- BLAS sgemm for mel filterbank ---
         guard let filterbank = melFilterbank else {
@@ -345,8 +323,7 @@ public class WhisperFeatureExtractor {
     /// All mel computation uses the same Accelerate/vDSP pipeline; only the final
     /// transpose is done with a pure-Swift loop instead of `MLXArray.transposed`.
     public func extractFeaturesRaw(_ audio: [Float]) -> MelFeatures {
-        let nBins = paddedFFT / 2 + 1  // 257 bins for 512-point FFT
-        let halfPadded = paddedFFT / 2  // 256
+        let nBins = nFFT / 2 + 1  // 201
 
         // Pad audio with reflect padding (like Whisper/librosa)
         let padLength = nFFT / 2
@@ -372,44 +349,7 @@ public class WhisperFeatureExtractor {
         // Calculate number of frames
         let nFrames = (paddedAudio.count - nFFT) / hopLength + 1
 
-        // --- Accelerate FFT-based STFT using vDSP_fft_zrip ---
-        var splitReal = [Float](repeating: 0, count: halfPadded)
-        var splitImag = [Float](repeating: 0, count: halfPadded)
-        var paddedFrame = [Float](repeating: 0, count: paddedFFT)
-
-        var magnitude = [Float](repeating: 0, count: nFrames * nBins)
-
-        for frame in 0..<nFrames {
-            let start = frame * hopLength
-
-            paddedAudio.withUnsafeBufferPointer { buf in
-                vDSP_vmul(buf.baseAddress! + start, 1, hannWindow, 1, &paddedFrame, 1, vDSP_Length(nFFT))
-            }
-            for i in nFFT..<paddedFFT {
-                paddedFrame[i] = 0
-            }
-
-            for i in 0..<halfPadded {
-                splitReal[i] = paddedFrame[2 * i]
-                splitImag[i] = paddedFrame[2 * i + 1]
-            }
-
-            splitReal.withUnsafeMutableBufferPointer { realBuf in
-                splitImag.withUnsafeMutableBufferPointer { imagBuf in
-                    var splitComplex = DSPSplitComplex(
-                        realp: realBuf.baseAddress!,
-                        imagp: imagBuf.baseAddress!)
-                    vDSP_fft_zrip(fftSetup, &splitComplex, 1, log2PaddedFFT, FFTDirection(kFFTDirection_Forward))
-                }
-            }
-
-            let baseIdx = frame * nBins
-            magnitude[baseIdx] = splitReal[0] * splitReal[0]
-            magnitude[baseIdx + halfPadded] = splitImag[0] * splitImag[0]
-            for k in 1..<halfPadded {
-                magnitude[baseIdx + k] = splitReal[k] * splitReal[k] + splitImag[k] * splitImag[k]
-            }
-        }
+        let magnitude = powerSpectrum(paddedAudio, nFrames: nFrames)
 
         // --- BLAS sgemm for mel filterbank ---
         guard let filterbank = melFilterbank else {

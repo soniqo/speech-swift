@@ -61,6 +61,8 @@ Audio (16kHz) + Text
 ### 1. Audio Encoding
 Same as ASR: mel spectrogram → chunked Conv2D → transformer → projector.
 
+Both runtimes use the exact 400-point STFT, periodic Hann window, 160-sample hop, and 128 Slaney-normalized mel bins at 16 kHz described in the [ASR preprocessing pipeline](qwen3-asr-inference.md#stage-1-preprocessing-audiopreprocessingswift). Zero-padding the transform to 512 points changes the model's input features and can shift timestamp predictions.
+
 ### 2. Text Preprocessing (TextPreprocessing.swift)
 
 Language dispatch:
@@ -104,9 +106,9 @@ A universal token filter keeps Unicode Letters (`L*`), Numbers (`N*`), combining
 
 `NLTokenizer` is built into the OS — zero extra binary size, on-device, and produces morpheme-level Japanese and word-level Korean output suitable for the aligner. The model's timestamp head only cares about morpheme **boundaries**, not exact morpheme identity, so small differences (e.g. NLTokenizer splits `"5G"` → `"5", "G"`) don't affect timestamp quality.
 
-Each token gets `<timestamp>` pairs:
+Each word's tokens are followed by two `<timestamp>` slots: start, then end. This order matches the model's reference inference and is shared by the MLX and CoreML runtimes. Placing a slot before the word shifts the timestamp predictions onto the preceding word.
 ```
-<ts>Can<ts> <ts>you<ts> <ts>guarantee<ts>
+Can<ts><ts>you<ts><ts>guarantee<ts><ts>
 ```
 
 ### 3. Single Forward Pass
@@ -116,7 +118,7 @@ Build the full sequence with chat template:
 <|im_start|>system\n<|im_end|>\n
 <|im_start|>user\n<|audio_start|>[audio_pad × N]<|audio_end|><|im_end|>\n
 <|im_start|>assistant\n
-<ts>word1_tokens<ts> <ts>word2_tokens<ts> ...
+word1_tokens<ts><ts>word2_tokens<ts><ts>...
 ```
 
 One forward pass through the decoder (no cache, no loop). Apply classify head to all hidden states → logits `[1, seqLen, 5000]`.

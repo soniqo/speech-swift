@@ -4,7 +4,7 @@ import AudioCommon
 
 /// Result of preprocessing text for forced alignment
 public struct SlottedText: Sendable {
-    /// Token IDs with timestamp tokens inserted around each word
+    /// Token IDs with two timestamp tokens after each word (start, then end)
     public let tokenIds: [Int]
     /// Indices within tokenIds that are timestamp tokens
     public let timestampPositions: [Int]
@@ -43,8 +43,10 @@ public enum TextPreprocessor {
 
     /// Split text into words and insert timestamp slots for alignment.
     ///
-    /// For each word, inserts `<timestamp><timestamp>` pairs so the model
-    /// can predict start/end timestamps at those positions.
+    /// Each word is followed by a `<timestamp><timestamp>` pair, as the model
+    /// was trained (`word<timestamp><timestamp>word<timestamp><timestamp>...`
+    /// in Qwen3-ASR's reference inference): the first slot predicts the word's
+    /// start, the second its end.
     public static func prepareForAlignment(
         text: String,
         tokenizer: Qwen3Tokenizer,
@@ -68,11 +70,10 @@ public enum TextPreprocessor {
                 continue
             }
 
-            timestampPositions.append(tokenIds.count)
-            tokenIds.append(tsId)
-
             tokenIds.append(contentsOf: wordTokens)
 
+            timestampPositions.append(tokenIds.count)
+            tokenIds.append(tsId)
             timestampPositions.append(tokenIds.count)
             tokenIds.append(tsId)
 
