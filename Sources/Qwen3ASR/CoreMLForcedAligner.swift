@@ -54,7 +54,7 @@ public final class CoreMLForcedAligner {
     public static func fromDirectory(
         _ directory: URL,
         encoderComputeUnits: MLComputeUnits = CoreMLComputeUnitsResolver.resolved(default: .cpuAndNeuralEngine),
-        decoderComputeUnits: MLComputeUnits = CoreMLComputeUnitsResolver.resolved(default: .all)
+        decoderComputeUnits: MLComputeUnits = CoreMLComputeUnitsResolver.resolved(default: .cpuAndGPU)
     ) throws -> CoreMLForcedAligner {
         let enc = try CoreMLForcedAlignerEncoder.load(
             from: directory, computeUnits: encoderComputeUnits)
@@ -89,7 +89,7 @@ public final class CoreMLForcedAligner {
     public static func fromPretrained(
         modelId: String = "aufklarer/Qwen3-ForcedAligner-0.6B-CoreML-FP16",
         encoderComputeUnits: MLComputeUnits = CoreMLComputeUnitsResolver.resolved(default: .cpuAndNeuralEngine),
-        decoderComputeUnits: MLComputeUnits = CoreMLComputeUnitsResolver.resolved(default: .all),
+        decoderComputeUnits: MLComputeUnits = CoreMLComputeUnitsResolver.resolved(default: .cpuAndGPU),
         cacheDir: URL? = nil,
         offlineMode: Bool = false,
         downloadOptions: DownloadOptions = .init(),
@@ -614,6 +614,9 @@ public final class CoreMLForcedAlignerEmbedding {
 
 // MARK: - Text decoder + classify head bundle
 
+/// Defaults to `.cpuAndGPU` to avoid the Neural Engine path that `.all` can select.
+/// The published decoder bundles have produced incorrect timestamp classes on the Neural Engine
+/// and all-zero logits with CPU-only execution. GPU execution is validated with INT8 and FP16 bundles.
 public final class CoreMLForcedAlignerDecoder {
     private let model: MLModel
     public let fixedT: Int
@@ -625,7 +628,7 @@ public final class CoreMLForcedAlignerDecoder {
 
     public static func load(
         from directory: URL,
-        computeUnits: MLComputeUnits = CoreMLComputeUnitsResolver.resolved(default: .all)
+        computeUnits: MLComputeUnits = CoreMLComputeUnitsResolver.resolved(default: .cpuAndGPU)
     ) throws -> CoreMLForcedAlignerDecoder {
         let url = try CoreMLForcedAlignerEncoder.resolveURL(in: directory, name: "text_decoder")
         let cfg = MLModelConfiguration()

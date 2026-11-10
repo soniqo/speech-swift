@@ -295,6 +295,8 @@ let aligned = try aligner.align(
 
 The CoreML aligner runs the audio encoder + token embedding + 28-layer non-autoregressive text decoder + classify head from two `.mlmodelc` bundles and a raw fp16 token-embedding binary. The audio encoder is fixed to a 30 s mel input and reports the real (un-padded) audio-token count; the text decoder runs at a fixed prompt length of 768 tokens — enough to cover the 9-token chat-template prefix + up to 390 audio tokens + 6-token suffix + ~120 word slots. The causal mask is `-1e4` (finite) so the fp16 softmax stays numerically stable.
 
+The text decoder defaults to `.cpuAndGPU`; the encoder retains `.cpuAndNeuralEngine`. The published decoder bundles can produce incorrect timestamp classes on the Neural Engine or all-zero timestamps with CPU-only execution. INT8 and FP16 GPU paths have been checked against reference word-start times. Loader defaults still honor `SPEECH_COREML_COMPUTE_UNITS`. This changes compute placement rather than the converted model graph; CPU-only compatibility and iOS GPU speed and power remain separate validation work.
+
 ## Model bundle layout
 
 Each CoreML repo on HuggingFace contains:

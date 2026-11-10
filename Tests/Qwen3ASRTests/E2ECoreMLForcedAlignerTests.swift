@@ -7,8 +7,12 @@ import AudioCommon
 /// End-to-end tests for the CoreML forced aligner pipeline (audio_encoder
 /// + embedding + text_decoder + classify head). Loads the published
 /// ``aufklarer/Qwen3-ForcedAligner-0.6B-CoreML-FP16`` bundle and verifies
-/// that the produced alignment is finite, monotonic, and lands inside the
-/// audio clip's duration window.
+/// that the produced alignment is finite, monotonic, lands inside the clip,
+/// and matches reference word starts within three 80 ms timestamp classes.
+///
+/// Set `ALIGNER_COREML_PUBLISHED_E2E=1` to enable these tests. To reuse
+/// compiled bundle copies offline, set `ALIGNER_COREML_PUBLISHED_CACHE_ROOT`
+/// to a directory containing `fp16/` and `int8/` bundle directories.
 ///
 /// Regression coverage:
 /// - Catches the prior NaN bug in the text decoder (the upstream fp16
@@ -53,9 +57,14 @@ final class E2ECoreMLForcedAlignerTests: XCTestCase {
         }
 
         let aligner: CoreMLForcedAligner
+        let cacheDirectory = ProcessInfo.processInfo.environment["ALIGNER_COREML_PUBLISHED_CACHE_ROOT"]
+            .map { URL(fileURLWithPath: $0, isDirectory: true)
+                .appendingPathComponent(variantLabel.lowercased(), isDirectory: true) }
         do {
             aligner = try await CoreMLForcedAligner.fromPretrained(
-                modelId: modelId
+                modelId: modelId,
+                cacheDir: cacheDirectory,
+                offlineMode: cacheDirectory != nil
             ) { progress, status in
                 if Int(progress * 100) % 25 == 0 {
                     print(String(format: "  [%@] loading: %.0f%% — %@",
@@ -63,6 +72,9 @@ final class E2ECoreMLForcedAlignerTests: XCTestCase {
                 }
             }
         } catch {
+            // An explicitly supplied local bundle must fail visibly rather
+            // than turn a loader regression into a skipped test.
+            if cacheDirectory != nil { throw error }
             throw XCTSkip("CoreML aligner \(variantLabel) bundle unavailable: \(error)")
         }
 
@@ -141,6 +153,15 @@ final class E2ECoreMLForcedAlignerTests: XCTestCase {
             span, 0.5,
             "[\(variantLabel)] Alignment span \(span)s is too small — "
             + "suggests NaN/argmax-0 collapse")
+
+        // PyTorch reference for this fixture (issue #546). Shape, span and
+        // monotonicity alone also accept the incorrect 16–18 s alignment.
+        let referenceStarts: [Float] = [5.28, 5.52, 5.52, 6.16, 6.80, 6.88,
+                                        7.04, 7.36, 7.44, 8.00, 8.40]
+        for (word, expected) in zip(aligned, referenceStarts) {
+            XCTAssertEqual(word.startTime, expected, accuracy: 0.24,
+                           "[\(variantLabel)] Incorrect start time for '\(word.text)'")
+        }
     }
 }
 #endif
