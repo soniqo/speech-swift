@@ -81,5 +81,11 @@ final class CoreMLComputeUnitsResolverTests: XCTestCase {
             XCTAssertEqual(CoreMLComputeUnitsResolver.resolved(default: .cpuAndGPU), .cpuAndGPU)
         }
     }
+
+    func testCpuOnlyOverrideWinsOverGpuFallback() {
+        withEnv("cpuOnly") {
+            XCTAssertEqual(CoreMLComputeUnitsResolver.resolved(default: .cpuAndGPU), .cpuOnly)
+        }
+    }
 }
 #endif

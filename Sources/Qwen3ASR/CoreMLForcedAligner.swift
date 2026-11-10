@@ -614,9 +614,9 @@ public final class CoreMLForcedAlignerEmbedding {
 
 // MARK: - Text decoder + classify head bundle
 
-/// Defaults to `.cpuAndGPU`. The published decoder bundles (INT8 and FP16) give wrong timestamps on
-/// the Neural Engine, which `.all` picks, and all-zero logits on the CPU alone, which collapses every
-/// word to 0 s. On the GPU the INT8 bundle matches the PyTorch reference.
+/// Defaults to `.cpuAndGPU` to avoid the Neural Engine path that `.all` can select.
+/// The published decoder bundles have produced incorrect timestamp classes on the Neural Engine
+/// and all-zero logits with CPU-only execution. GPU execution is validated with INT8 and FP16 bundles.
 public final class CoreMLForcedAlignerDecoder {
     private let model: MLModel
     public let fixedT: Int
