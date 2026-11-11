@@ -23,6 +23,8 @@ REPO = "aufklarer/Qwen3-ForcedAligner-0.6B-CoreML-INT8"
 REVISION = "ac27c13a9dae935e7d478b996d89d94ff617e3ca"
 WEIGHT_SHA256 = "083cfeabb070794b7745694564f0154aa4329020c7eb344aff3406f348b25e3f"
 MODES = ("recompile", "output32", "norm32")
+# mulsquare is a transform only: prepare_candidates builds every mode in MODES.
+TRANSFORM_MODES = MODES + ("mulsquare",)
 
 
 def sha256(path):
@@ -50,7 +52,7 @@ def reference(operation, key):
 
 def transform(specification, mode, expected_norms=113):
     """Strict, graph-only experiment. Leave the input specification untouched."""
-    if mode not in MODES:
+    if mode not in TRANSFORM_MODES:
         raise ValueError(f"Unknown candidate: {mode}")
     result = deepcopy(specification)
     if mode == "recompile":
@@ -118,6 +120,8 @@ def transform(specification, mode, expected_norms=113):
 
     new_operations = [dtype("cpu_compat_dtype_fp32", "fp32"),
                       dtype("cpu_compat_dtype_fp16", "fp16")]
+    if mode == "mulsquare":
+        new_operations = []
     if mode == "output32":
         last = operations[-1]
         if (len(last.outputs) != 1 or last.outputs[0].name != "logits"
@@ -155,6 +159,18 @@ def transform(specification, mode, expected_norms=113):
                 raise ValueError("Expected one unweighted RMS normalization product")
             norm_index = matches[0]
             norm = operations[norm_index]
+            if mode == "mulsquare":
+                # On the Neural Engine pow(x, 2) returned 1 for every negative x
+                # (measured on an M1 Pro), so write the square as mul(x, x).
+                if power_index in edited or power.outputs[0].type.tensorType.dataType != mil.FLOAT16:
+                    raise ValueError("Overlapping or non-FP16 normalization chain")
+                if immediate_scalar(reference(power, "y")) != 2:
+                    raise ValueError("Expected a square in the normalization chain")
+                edited[power_index] = deepcopy(power)
+                edited[power_index].type = "mul"
+                edited[power_index].inputs["y"].arguments[0].name = x
+                count += 1
+                continue
             old_output = norm.outputs[0].name
             prefix = f"cpu_norm_{count}"
             input32, power32, epsilon32 = (prefix + suffix for suffix in ("_input", "_power", "_epsilon"))
