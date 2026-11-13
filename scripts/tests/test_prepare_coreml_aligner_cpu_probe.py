@@ -1,4 +1,4 @@
-"""Small graph fixtures and mocked downloads; no inference or model files."""
+"""Small graph fixtures and mocked downloads; no Core ML inference or model files."""
 import hashlib
 import importlib.util
 import io
@@ -64,6 +64,39 @@ def graph_fixture():
 def operations(spec):
     block = spec.mlProgram.functions["main"].block_specializations["CoreML7"]
     return {op.outputs[0].name: op for op in block.operations}
+
+
+def evaluate(spec, x, pow_fault=False):
+    """Run the fixture graph with numpy in FP16.
+
+    With pow_fault, pow(x, 2) returns 1 for a negative x, as measured on the
+    Neural Engine of an M1 Pro. The CPU and the GPU compute it correctly.
+    """
+    block = spec.mlProgram.functions["main"].block_specializations["CoreML7"]
+    math = {
+        "cast": lambda a: a["x"].astype(np.float16),
+        "pow": lambda a: (np.where(a["x"] < 0, np.float16(1), a["x"] ** a["y"]) if pow_fault
+                          else a["x"] ** a["y"]),
+        "reduce_mean": lambda a: a["x"].mean(axis=-1, keepdims=True, dtype=np.float16),
+        "add": lambda a: a["x"] + a["y"],
+        "rsqrt": lambda a: np.float16(1) / np.sqrt(a["x"]),
+        "mul": lambda a: a["x"] * a["y"],
+    }
+    values = {"inputs_embeds": x}
+    for op in block.operations:
+        if op.type == "const":
+            tensor = op.attributes["val"].immediateValue.tensor
+            kind = tensor.WhichOneof("value")
+            if kind == "bytes":
+                value = np.frombuffer(tensor.bytes.values, dtype="<f2")[0]
+            else:
+                value = getattr(tensor, kind).values[0]
+                if kind == "floats":
+                    value = np.float16(value)
+        else:
+            value = math[op.type]({key: values[probe.reference(op, key)] for key in op.inputs})
+        values[op.outputs[0].name] = value
+    return values["logits"]
 
 
 class GraphCandidateTests(unittest.TestCase):
@@ -132,6 +165,49 @@ class GraphCandidateTests(unittest.TestCase):
     def test_unknown_candidate_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "Unknown candidate"):
             probe.transform(self.source, "invalid")
+
+    def test_mulsquare_writes_the_square_as_a_product_and_adds_nothing(self):
+        result = probe.transform(self.source, "mulsquare", expected_norms=1)
+        changed, source = operations(result), operations(self.source)
+        self.assertEqual(result.description, self.source.description)
+        self.assertEqual(set(changed), set(source))
+        self.assertEqual(changed["square"].type, "mul")
+        self.assertEqual([probe.reference(changed["square"], key) for key in ("x", "y")], ["x", "x"])
+        self.assertEqual(changed["square"].outputs[0], source["square"].outputs[0])
+        for name in set(source) - {"square"}:
+            self.assertEqual(changed[name], source[name])
+
+    def test_mulsquare_fails_closed(self):
+        with self.assertRaisesRegex(ValueError, "Expected 113 normalization chains, found 1"):
+            probe.transform(self.source, "mulsquare")
+        modified = graph_fixture()
+        operations(modified)["variance"].type = "sub"
+        with self.assertRaisesRegex(ValueError, "Unrecognized RMS"):
+            probe.transform(modified, "mulsquare", expected_norms=1)
+        modified = graph_fixture()
+        exponent = operations(modified)["two"].attributes["val"].immediateValue.tensor
+        exponent.bytes.values = np.array([3], dtype="<f2").tobytes()
+        with self.assertRaisesRegex(ValueError, "Expected a square in the normalization chain"):
+            probe.transform(modified, "mulsquare", expected_norms=1)
+        modified = graph_fixture()
+        operations(modified)["square"].outputs[0].type.tensorType.dataType = mil.FLOAT32
+        with self.assertRaisesRegex(ValueError, "Overlapping or non-FP16 normalization chain"):
+            probe.transform(modified, "mulsquare", expected_norms=1)
+
+    def test_mulsquare_is_not_a_nightly_candidate(self):
+        self.assertEqual(probe.MODES, ("recompile", "output32", "norm32"))
+
+    def test_mulsquare_is_right_where_pow_returns_one_for_negative_inputs(self):
+        rows = np.random.default_rng(0).standard_normal((2, 1024)).astype(np.float32) * 0.02
+        rows[1] = 0
+        wide = rows.astype(np.float64)
+        expected = wide / np.sqrt((wide * wide).mean(-1, keepdims=True) + 1e-6) * 0.5
+
+        def close(spec):
+            return np.allclose(evaluate(spec, rows, pow_fault=True), expected, rtol=0.01, atol=1e-3)
+
+        self.assertFalse(close(self.source))  # Control: the published chain is wrong.
+        self.assertTrue(close(probe.transform(self.source, "mulsquare", expected_norms=1)))
 
 
 class PinnedSourceTests(unittest.TestCase):
