@@ -1,0 +1,22 @@
+{
+  "name": "soniqo-speech-plugin",
+  "version": "0.7.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test --test-concurrency=1 ../../Tests/SpeechPluginTests/*.test.mjs",
+    "test:e2e": "SPEECH_PLUGIN_E2E=1 node --test --test-concurrency=1 ../../Tests/SpeechPluginTests/e2e.test.mjs",
+    "package": "npm run build && python3 scripts/package.py"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}
