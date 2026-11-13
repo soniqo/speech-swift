@@ -121,9 +121,12 @@ public final class CoreMLForcedAligner {
         }
 
         progressHandler?(0.8, "Loading CoreML models...")
+        let decoderURL = try CoreMLForcedAlignerDecoder.resolveDownloadedBundleURL(
+            in: dir, modelId: modelId, computeUnits: decoderComputeUnits)
         let enc = try CoreMLForcedAlignerEncoder.load(from: dir, computeUnits: encoderComputeUnits)
         let emb = try CoreMLForcedAlignerEmbedding.load(from: dir)
-        let dec = try CoreMLForcedAlignerDecoder.load(from: dir, computeUnits: decoderComputeUnits)
+        let dec = try CoreMLForcedAlignerDecoder.loadBundle(
+            at: decoderURL, computeUnits: decoderComputeUnits)
 
         // Read config.json for classify_num + segment time if available.
         var classifyNum = 5000
@@ -620,10 +623,13 @@ public final class CoreMLForcedAlignerEmbedding {
 /// GPU execution retains the original decoder graph. Explicit `.cpuOnly`
 /// execution prefers `text_decoder_cpu_v1`, whose RMS normalization uses
 /// Float32 to avoid the legacy graph's all-zero output on older CPU runtimes.
+/// Explicit `.cpuAndNeuralEngine` and `.all` prefer `text_decoder_ane_v1`,
+/// which squares with `mul(x, x)` to avoid incorrect ANE `pow` results.
 public final class CoreMLForcedAlignerDecoder {
     /// A separate, immutable bundle name prevents an older cached decoder
     /// from masking the Float32-normalization CPU repair.
     static let cpuCompatibleBundleName = "text_decoder_cpu_v1"
+    static let aneCompatibleBundleName = "text_decoder_ane_v1"
 
     private static let publishedModelIds: Set<String> = [
         "aufklarer/Qwen3-ForcedAligner-0.6B-CoreML-INT8",
@@ -650,6 +656,12 @@ public final class CoreMLForcedAlignerDecoder {
         computeUnits: MLComputeUnits = CoreMLComputeUnitsResolver.resolved(default: .cpuAndGPU)
     ) throws -> CoreMLForcedAlignerDecoder {
         let url = try resolveBundleURL(in: directory, computeUnits: computeUnits)
+        return try loadBundle(at: url, computeUnits: computeUnits)
+    }
+
+    static func loadBundle(
+        at url: URL, computeUnits: MLComputeUnits
+    ) throws -> CoreMLForcedAlignerDecoder {
         let compiledURL = url.pathExtension == "mlpackage"
             ? try MLModel.compileModel(at: url) : url
         let cfg = MLModelConfiguration()
@@ -675,20 +687,40 @@ public final class CoreMLForcedAlignerDecoder {
     }
 
     static func downloadedBundleName(modelId: String, computeUnits: MLComputeUnits) -> String {
-        computeUnits == .cpuOnly && publishedModelIds.contains(modelId)
-            ? cpuCompatibleBundleName : "text_decoder"
+        guard publishedModelIds.contains(modelId) else { return "text_decoder" }
+        return compatibleBundleName(computeUnits: computeUnits) ?? "text_decoder"
+    }
+
+    private static func compatibleBundleName(computeUnits: MLComputeUnits) -> String? {
+        switch computeUnits {
+        case .cpuOnly: return cpuCompatibleBundleName
+        case .cpuAndNeuralEngine, .all: return aneCompatibleBundleName
+        default: return nil
+        }
+    }
+
+    static func resolveDownloadedBundleURL(
+        in directory: URL, modelId: String, computeUnits: MLComputeUnits
+    ) throws -> URL {
+        let name = downloadedBundleName(modelId: modelId, computeUnits: computeUnits)
+        if name == aneCompatibleBundleName {
+            // An offline legacy cache must not silently execute the faulty ANE
+            // graph. Local/custom exports retain their explicit compatibility path.
+            return try CoreMLForcedAlignerEncoder.resolveURL(in: directory, name: name)
+        }
+        return try resolveBundleURL(in: directory, computeUnits: computeUnits)
     }
 
     static func resolveBundleURL(in directory: URL, computeUnits: MLComputeUnits) throws -> URL {
-        if computeUnits == .cpuOnly {
+        if let name = compatibleBundleName(computeUnits: computeUnits) {
             let fm = FileManager.default
             let hasCompatibleBundle = ["mlmodelc", "mlpackage"].contains { suffix in
                 fm.fileExists(atPath: directory.appendingPathComponent(
-                    "\(cpuCompatibleBundleName).\(suffix)", isDirectory: true).path)
+                    "\(name).\(suffix)", isDirectory: true).path)
             }
             if hasCompatibleBundle {
                 return try CoreMLForcedAlignerEncoder.resolveURL(
-                    in: directory, name: cpuCompatibleBundleName)
+                    in: directory, name: name)
             }
         }
         // Preserve local/custom bundles, including the pinned legacy controls

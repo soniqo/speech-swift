@@ -19,7 +19,7 @@ import prepare_coreml_aligner_cpu_release as release
 from prepare_coreml_aligner_cpu_probe import transform
 
 
-class CPUReleaseTests(unittest.TestCase):
+class ReleaseFixture(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
@@ -45,7 +45,7 @@ class CPUReleaseTests(unittest.TestCase):
     def tearDown(self):
         self.temporary.cleanup()
 
-    def prepare(self, corrupt_compile=False):
+    def prepare(self, corrupt_compile=False, target="cpu"):
         compiled = self.root / "compiler-output.mlmodelc"
 
         def compile_model(package):
@@ -58,11 +58,15 @@ class CPUReleaseTests(unittest.TestCase):
 
         with patch.dict(release.VARIANTS, {"int8": self.metadata}), \
              patch.object(release, "pinned_model_card", return_value="Original model card\n"), \
+             patch.object(release, "current_model_card", return_value=(
+                 "Original model card\n\n## CPU-compatible decoder\nExisting CPU instructions.\n", "b" * 40)), \
              patch.object(release, "transform", side_effect=lambda spec, mode: transform(spec, mode, expected_norms=1)), \
              patch.object(release.ct.models.utils, "compile_model", side_effect=compile_model):
             return release.prepare_variant("int8", self.root / "source", self.root / "cache",
-                                           self.root / "release")
+                                           self.root / "release", target=target)
 
+
+class CPUReleaseTests(ReleaseFixture):
     def test_release_is_additive_and_validation_inputs_cannot_be_uploaded(self):
         manifest = self.prepare()
         root = self.root / "release/int8"

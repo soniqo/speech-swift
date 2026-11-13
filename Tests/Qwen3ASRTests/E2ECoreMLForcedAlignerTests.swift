@@ -62,6 +62,30 @@ final class E2ECoreMLForcedAlignerTests: XCTestCase {
             variantLabel: "INT8", computeUnits: .cpuOnly)
     }
 
+    func testFP16NeuralEngineMatchesReferenceBoundaries() async throws {
+        try await runAligner(
+            modelId: "aufklarer/Qwen3-ForcedAligner-0.6B-CoreML-FP16",
+            variantLabel: "FP16", computeUnits: .cpuAndNeuralEngine)
+    }
+
+    func testINT8NeuralEngineMatchesReferenceBoundaries() async throws {
+        try await runAligner(
+            modelId: "aufklarer/Qwen3-ForcedAligner-0.6B-CoreML-INT8",
+            variantLabel: "INT8", computeUnits: .cpuAndNeuralEngine)
+    }
+
+    func testFP16AllComputeUnitsMatchesReferenceBoundaries() async throws {
+        try await runAligner(
+            modelId: "aufklarer/Qwen3-ForcedAligner-0.6B-CoreML-FP16",
+            variantLabel: "FP16", computeUnits: .all)
+    }
+
+    func testINT8AllComputeUnitsMatchesReferenceBoundaries() async throws {
+        try await runAligner(
+            modelId: "aufklarer/Qwen3-ForcedAligner-0.6B-CoreML-INT8",
+            variantLabel: "INT8", computeUnits: .all)
+    }
+
     // MARK: - Shared body
 
     private func runAligner(
