@@ -402,7 +402,7 @@ jobs:
           python3 -m venv "$RUNNER_TEMP/coreml-probe-tools"
           "$RUNNER_TEMP/coreml-probe-tools/bin/pip" install 'coremltools==9.0'
           "$RUNNER_TEMP/coreml-probe-tools/bin/python" -m unittest discover \
-            -s scripts/tests -p 'test_prepare_coreml_aligner_cpu*.py' -v
+            -s scripts/tests -p 'test_prepare_coreml_aligner_*.py' -v
           swiftc -O scripts/probe_coreml_aligner_cpu.swift -o "$RUNNER_TEMP/probe-coreml-aligner-cpu"
       - name: Prepare diagnostic graph candidates
         if: github.event.inputs.cpu_aligner_mode == 'candidates'

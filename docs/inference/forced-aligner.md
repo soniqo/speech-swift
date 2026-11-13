@@ -299,7 +299,7 @@ let aligned = try aligner.align(
 
 The CoreML aligner runs the audio encoder + token embedding + 28-layer non-autoregressive text decoder + classify head from two `.mlmodelc` bundles and a raw fp16 token-embedding binary. The audio encoder is fixed to a 30 s mel input and reports the real (un-padded) audio-token count; the text decoder runs at a fixed prompt length of 768 tokens — enough to cover the 9-token chat-template prefix + up to 390 audio tokens + 6-token suffix + ~120 word slots. The causal mask is `-1e4` (finite) so the fp16 softmax stays numerically stable.
 
-The text decoder defaults to `.cpuAndGPU`; the encoder retains `.cpuAndNeuralEngine`. The original decoder graph can produce incorrect timestamp classes on the Neural Engine or all-zero timestamps on older CPU runtimes. GPU execution keeps the original `text_decoder` bundle. Explicit `.cpuOnly` loads of the published INT8 and FP16 models request the separate `text_decoder_cpu_v1` bundle, whose 113 RMS-normalization calculations use Float32 while learned weights and model input/output types remain unchanged. Loader defaults still honor `SPEECH_COREML_COMPUTE_UNITS`.
+The text decoder defaults to `.cpuAndGPU`; the encoder retains `.cpuAndNeuralEngine`. The original decoder graph can produce incorrect timestamp classes on the Neural Engine or all-zero timestamps on older CPU runtimes. GPU execution keeps the original `text_decoder` bundle. Explicit `.cpuOnly` loads of the published INT8 and FP16 models request the separate `text_decoder_cpu_v1` bundle, whose 113 RMS-normalization calculations use Float32 while learned weights and model input/output types remain unchanged. Explicit `.cpuAndNeuralEngine` and `.all` request `text_decoder_ane_v1`, which replaces normalization squares with `mul(x, x)`. Loader defaults still honor `SPEECH_COREML_COMPUTE_UNITS`.
 
 ### CPU-only compatibility checks
 
@@ -318,6 +318,41 @@ ALIGNER_COREML_PUBLISHED_E2E=1 swift test --no-parallel --disable-sandbox \
 
 `ALIGNER_COREML_PUBLISHED_CACHE_ROOT` can point to an offline cache containing `int8/` and `fp16/` directories. The Nightly E2E workflow also has a manual `coreml-aligner-cpu-compat` selector: its default `published` mode checks the versioned INT8 and FP16 CPU bundles in separate processes on macOS 15, with a 30-minute cap and verified file hashes. The optional `cpu_aligner_int8_revision` and `cpu_aligner_fp16_revision` inputs pin immutable 40-character model commits; otherwise the resolved commits are recorded in the log. It is not included in scheduled model runs.
 
+### Neural Engine compatibility
+
+The `mulsquare` transform replaces `pow(x, 2)` with `mul(x, x)` in all 113 RMS-normalization chains. The ANE implementation of `pow` on affected older devices can return 1 for negative inputs, corrupting timestamp predictions. The repair retains FP16 precision, learned weights, operation count, and model input/output types. The CPU repair remains separate because it addresses a different precision problem.
+
+| Decoder compute units | Published INT8/FP16 bundle |
+|---|---|
+| `.cpuAndGPU` (default) | `text_decoder` |
+| `.cpuOnly` | `text_decoder_cpu_v1` |
+| `.cpuAndNeuralEngine`, `.all` | `text_decoder_ane_v1` |
+
+Run one online `fromPretrained` load with the requested units to fetch the ANE bundle. An old offline cache containing only `text_decoder` fails with a missing `text_decoder_ane_v1` error before loading the encoder. It does not silently reuse the faulty graph. Publish the ANE assets before releasing the loader change; default GPU execution and CPU assets remain independent of that publication.
+
+Local/custom directories prefer the versioned ANE bundle when present, including a source-only `.mlpackage` beside an older compiled `text_decoder`. The loader compiles source packages and removes temporary compiled files when the decoder is released. Legacy local/custom `text_decoder` exports remain supported; use Neural Engine compute units only with a graph whose normalization squares are compatible.
+
+The published E2E suite covers INT8 and FP16 with `.cpuAndNeuralEngine` and `.all`, checking text and reference word starts/ends. Run each case in a separate process to bound memory:
+
+```bash
+ALIGNER_COREML_PUBLISHED_E2E=1 swift test --no-parallel --disable-sandbox \
+  --filter E2ECoreMLForcedAlignerTests/testINT8NeuralEngineMatchesReferenceBoundaries
+ALIGNER_COREML_PUBLISHED_E2E=1 swift test --no-parallel --disable-sandbox \
+  --filter E2ECoreMLForcedAlignerTests/testFP16NeuralEngineMatchesReferenceBoundaries
+```
+
+Use `testINT8AllComputeUnitsMatchesReferenceBoundaries` and `testFP16AllComputeUnitsMatchesReferenceBoundaries` for `.all`. A passing result on a newer Mac does not reproduce the original fault on older runtimes or replace physical-iPhone validation.
+
+Prepare additive release assets locally with pinned source packages and verified cached weights:
+
+```bash
+python scripts/prepare_coreml_aligner_cpu_release.py --target ane \
+  --source-root /path/to/source-packages --cache-root /path/to/cached-bundles \
+  --output-root /path/to/new-ane-release
+```
+
+The helper prepares source and compiled `text_decoder_ane_v1` bundles for both variants, a model card that preserves existing CPU instructions, and an `ane_decoder_v1.json` manifest with weight hashes and the publication base revision. It keeps inference inputs outside `upload/` and never uploads files. It rejects changed weights, existing output directories, and an already published `text_decoder_ane_v1`; future graph changes require a new bundle version.
+
 The optional `cpu_aligner_mode=candidates` input compares the pinned legacy decoder with three diagnostic graphs: an unchanged source recompile, Float32 logits output, and Float32 RMS normalization. Each retains the original weights and runs in a separate process against the same word-boundary assertions. The `legacy` mode reproduces the old INT8 CPU failure. A standalone numeric probe also reports finite/nonzero logits with default and preallocated output buffers.
 
 ## Model bundle layout
@@ -329,6 +364,7 @@ Each CoreML repo on HuggingFace contains:
 | `audio_encoder.mlmodelc` (+ `.mlpackage`) | 24-layer block-attention audio encoder |
 | `text_decoder.mlmodelc` (+ `.mlpackage`) | 28-layer non-AR decoder + 5000-class classify head, fixed T=768 |
 | `text_decoder_cpu_v1.mlmodelc` (+ `.mlpackage`) | CPU-compatible decoder with Float32 RMS normalization and the original weights |
+| `text_decoder_ane_v1.mlmodelc` (+ `.mlpackage`) | Neural Engine-compatible decoder with FP16 `mul(x, x)` normalization squares and the original weights |
 | `embed_tokens.fp16.bin` | Raw little-endian fp16 token embedding table, `[152 064, 1024]` |
 | `config.json` | Variant + classify_num + timestamp_segment_time + fixed shapes |
 | `vocab.json`, `merges.txt`, `tokenizer_config.json` | Qwen3 BPE tokenizer files |
