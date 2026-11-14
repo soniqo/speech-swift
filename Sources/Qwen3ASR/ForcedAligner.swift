@@ -396,36 +396,19 @@ public class Qwen3ForcedAligner {
         tokenizer: Qwen3Tokenizer,
         language: String
     ) -> [Int] {
-        let imStartId = Qwen3ASRTokens.imStartTokenId
-        let imEndId = Qwen3ASRTokens.imEndTokenId
         let audioStartId = Qwen3ASRTokens.audioStartTokenId
         let audioEndId = Qwen3ASRTokens.audioEndTokenId
         let audioPadId = Qwen3ASRTokens.audioTokenId
-        let newlineId = 198
 
-        // Token IDs for role names
-        let systemId = 8948
-        let userId = 872
-        let assistantId = 77091
-
-        var ids: [Int] = []
-
-        // <|im_start|>system\n<|im_end|>\n
-        ids.append(contentsOf: [imStartId, systemId, newlineId, imEndId, newlineId])
-
-        // <|im_start|>user\n<|audio_start|>
-        ids.append(contentsOf: [imStartId, userId, newlineId, audioStartId])
+        // Qwen's aligner prompt has no chat roles (qwen_asr encode_timestamp).
+        var ids: [Int] = [audioStartId]
 
         // <|audio_pad|> * numAudioTokens
         for _ in 0..<numAudioTokens {
             ids.append(audioPadId)
         }
 
-        // <|audio_end|><|im_end|>\n
-        ids.append(contentsOf: [audioEndId, imEndId, newlineId])
-
-        // <|im_start|>assistant\n
-        ids.append(contentsOf: [imStartId, assistantId, newlineId])
+        ids.append(audioEndId)
 
         // Slotted text with timestamp tokens
         ids.append(contentsOf: slottedTokenIds)

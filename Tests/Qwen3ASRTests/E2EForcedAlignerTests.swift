@@ -19,6 +19,6 @@ final class E2EForcedAlignerTests: XCTestCase {
         XCTAssertEqual(aligned.count, 11)
         let first = try XCTUnwrap(aligned.first)
         XCTAssertEqual(first.text, "Can")
-        XCTAssertEqual(first.startTime, 5.28, accuracy: 0.24)
+        XCTAssertEqual(first.startTime, 5.20, accuracy: 0.24)
     }
 }

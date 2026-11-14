@@ -16,10 +16,15 @@ extension E2EForcedAlignerTests {
 
         // PyTorch Qwen3-ForcedAligner reference for this fixture (issue #546).
         // Allow three 80 ms classes for quantization and resampling differences.
-        let words = ["Can", "you", "guarantee", "that", "the", "replacement",
-                     "part", "will", "be", "shipped", "tomorrow?"]
-        let starts: [Float] = [5.28, 5.52, 5.52, 6.16, 6.80, 6.88, 7.04, 7.36, 7.44, 8.00, 8.40]
-        let ends: [Float] = [5.44, 5.52, 6.16, 6.32, 6.88, 7.04, 7.36, 7.44, 8.00, 8.40, 8.96]
+        let words = [
+            "Can", "you", "guarantee", "that", "the", "replacement", "part", "will", "be", "shipped", "tomorrow?"
+        ]
+        let starts: [Float] = [
+            5.20, 5.36, 5.44, 6.08, 6.24, 6.32, 6.96, 7.28, 7.36, 7.44, 7.84
+        ]
+        let ends: [Float] = [
+            5.36, 5.44, 6.08, 6.24, 6.32, 6.96, 7.28, 7.36, 7.44, 7.84, 8.32
+        ]
         XCTAssertEqual(aligned.map(\.text), words)
         for (word, expected) in zip(aligned, zip(starts, ends)) {
             print("[ALIGNMENT-REFERENCE] \(word.text) \(word.startTime)-\(word.endTime) expected=\(expected)")
