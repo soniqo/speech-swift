@@ -118,33 +118,36 @@ public struct ParakeetVocabulary: Sendable {
     ///
     /// Groups consecutive tokens into words using SentencePiece `▁` boundaries.
     /// Each word's confidence is exp(mean log-prob of its tokens), clamped to 0–1.
-    /// When `tokenStartTimes` (one absolute start time in seconds per token) and
-    /// `frameDuration` (seconds one token's emission frame spans) are given, each
-    /// word also carries `startTime` (its first token's start) and `endTime` (its
-    /// last token's start plus `frameDuration`). If either is missing, or the
-    /// start times do not match the tokens one to one, all times are nil.
+    /// When `tokenStartTimes` and `tokenEndTimes` (absolute seconds, one per token)
+    /// are given, each word also carries `startTime` (its first token's start) and
+    /// `endTime` (its last token's end). As in NeMo, a token that starts with a
+    /// punctuation mark ends where the token before it ends, so "shipped?" ends with
+    /// "shipped". If either is missing, or the times do not match the tokens one to
+    /// one, all times are nil.
     public func decodeWords(
         _ tokenIds: [Int], logProbs: [Float],
-        tokenStartTimes: [Double]? = nil, frameDuration: Double? = nil
+        tokenStartTimes: [Double]? = nil, tokenEndTimes: [Double]? = nil
     ) -> [WordConfidence] {
         guard tokenIds.count == logProbs.count else {
             return [WordConfidence(word: decode(tokenIds), confidence: 0)]
         }
-        let starts = tokenStartTimes?.count == tokenIds.count ? tokenStartTimes : nil
+        let timed = tokenStartTimes?.count == tokenIds.count && tokenEndTimes?.count == tokenIds.count
+        let starts = timed ? tokenStartTimes : nil
+        let ends = timed ? tokenEndTimes : nil
 
         var words = [WordConfidence]()
         var currentWord = ""
         var currentLogProbs = [Float]()
         var firstStart: Double?
-        var lastStart: Double?
+        var lastEnd: Double?
 
         func flush() {
             let meanLP = currentLogProbs.reduce(0, +) / Float(currentLogProbs.count)
             var startTime: Double?
             var endTime: Double?
-            if let frameDuration, let firstStart, let lastStart {
+            if let firstStart, let lastEnd {
                 startTime = firstStart
-                endTime = lastStart + frameDuration
+                endTime = lastEnd
             }
             words.append(WordConfidence(
                 word: currentWord, confidence: min(1.0, exp(meanLP)),
@@ -152,7 +155,7 @@ public struct ParakeetVocabulary: Sendable {
             currentWord = ""
             currentLogProbs = []
             firstStart = nil
-            lastStart = nil
+            lastEnd = nil
         }
 
         for (i, id) in tokenIds.enumerated() {
@@ -167,9 +170,11 @@ public struct ParakeetVocabulary: Sendable {
 
             currentWord += text
             currentLogProbs.append(logProbs[i])
-            if let starts {
+            if let starts, let ends {
                 if firstStart == nil { firstStart = starts[i] }
-                lastStart = starts[i]
+                let isPunctuation = !startsNewWord && lastEnd != nil
+                    && text.unicodeScalars.first.map(CharacterSet.punctuationCharacters.contains) == true
+                if !isPunctuation { lastEnd = ends[i] }
             }
         }
 

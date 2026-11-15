@@ -24,9 +24,10 @@ private class ReusableFeatureProvider: MLFeatureProvider {
 /// Greedy decoder for Token-and-Duration Transducer (TDT) models.
 ///
 /// TDT extends standard transducers with a duration prediction head.
-/// When a non-blank token is emitted, the duration head predicts how many
-/// encoder frames to advance (from `durationBins`), enabling variable-rate
-/// alignment between audio and text.
+/// Every joint step also predicts how many encoder frames to advance (from
+/// `durationBins`), enabling variable-rate alignment between audio and text.
+/// A token with duration 0 stays on its frame, so the next token can come from
+/// the same frame; a blank always advances at least one frame.
 ///
 /// Standard greedy decoding: starts with blank token to initialize the LSTM,
 /// then runs the encoder-joint-decoder loop. The v3 multilingual model handles
@@ -40,6 +41,8 @@ struct TDTGreedyDecoder {
     /// Language-tag token IDs to suppress during argmax, so the decoder can only emit an allowed
     /// language and the transcription follows it. Empty = no steering (native auto-detect).
     let maskedTokenIds: Set<Int>
+    /// Tokens allowed on one encoder frame before the decoder must advance (NeMo `max_symbols`).
+    private let maxSymbolsPerFrame = 10
 
     init(
         config: ParakeetConfig,
@@ -61,11 +64,13 @@ struct TDTGreedyDecoder {
     ///   - encoded: Encoder output as MLMultiArray, shape `[1, T, encoderHidden]`
     ///   - encodedLength: Number of valid encoder frames
     /// - Returns: Tuple of (token IDs, per-token log-probs, per-token encoder frame index,
-    ///   overall confidence 0.0–1.0). Frame indices are relative to `encoded`.
-    func decode(encoded: MLMultiArray, encodedLength: Int) throws -> (tokens: [Int], tokenLogProbs: [Float], tokenFrames: [Int], confidence: Float) {
+    ///   per-token predicted duration in encoder frames, overall confidence 0.0–1.0).
+    ///   Frame indices are relative to `encoded`.
+    func decode(encoded: MLMultiArray, encodedLength: Int) throws -> (tokens: [Int], tokenLogProbs: [Float], tokenFrames: [Int], tokenDurations: [Int], confidence: Float) {
         var tokens = [Int]()
         var tokenLogProbs = [Float]()
         var tokenFrames = [Int]()
+        var tokenDurations = [Int]()
 
         // Initialize LSTM state
         let hShape = [config.decoderLayers, 1, config.decoderHidden] as [NSNumber]
@@ -103,9 +108,15 @@ struct TDTGreedyDecoder {
         decoderProvider.update("c", cState)
 
         var t = 0
+        var loadedFrame = -1
+        var symbolsOnFrame = 0
         while t < encodedLength {
-            // Extract encoder frame at position t (mutates encSlice data in-place)
-            copyEncoderFrame(from: encoded, at: t, to: encSlice)
+            if t != loadedFrame {
+                // Extract encoder frame at position t (mutates encSlice data in-place)
+                copyEncoderFrame(from: encoded, at: t, to: encSlice)
+                loadedFrame = t
+                symbolsOnFrame = 0
+            }
 
             // Joint network: (encoder_slice, decoder_output) → (token_logits, duration_logits)
             let jointOut = try joint.prediction(from: jointProvider)
@@ -114,9 +125,11 @@ struct TDTGreedyDecoder {
             let durationLogits = jointOut.featureValue(for: "duration_logits")!.multiArrayValue!
 
             let tokenId = argmax(tokenLogits, count: config.vocabSize + 1, floatBuf: argmaxBuf, masked: maskedTokenIds)
+            let durationIdx = argmax(durationLogits, count: config.numDurationBins, floatBuf: nil)
+            let duration = config.durationBins[durationIdx]
 
             if tokenId == config.blankTokenId {
-                t += 1
+                t += max(duration, 1)
             } else {
                 // Keep model-control emissions out of the transcript, but still feed them into
                 // the decoder state below. Token ordering is not a valid classifier: plain digit
@@ -127,11 +140,11 @@ struct TDTGreedyDecoder {
                     let logProb = logSoftmax(tokenLogits, tokenId: tokenId, count: config.vocabSize + 1, floatBuf: argmaxBuf)
                     tokenLogProbs.append(logProb)
                     tokenFrames.append(t)
+                    tokenDurations.append(duration)
                 }
 
-                let durationIdx = argmax(durationLogits, count: config.numDurationBins, floatBuf: nil)
-                let duration = config.durationBins[durationIdx]
-                t += max(duration, 1)
+                symbolsOnFrame += 1
+                t += duration == 0 && symbolsOnFrame >= maxSymbolsPerFrame ? 1 : duration
 
                 // Update decoder state with the emitted token
                 tokenPtr.pointee = Int32(tokenId)
@@ -155,7 +168,7 @@ struct TDTGreedyDecoder {
         } else {
             confidence = 0.0
         }
-        return (tokens, tokenLogProbs, tokenFrames, confidence)
+        return (tokens, tokenLogProbs, tokenFrames, tokenDurations, confidence)
     }
 
     // MARK: - Array Operations

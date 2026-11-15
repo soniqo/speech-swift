@@ -486,21 +486,31 @@ final class ParakeetASRUnitTests: XCTestCase {
             0: "\u{2581}hel", 1: "lo", 2: "\u{2581}world",
         ])
         // "hello" tokens start at 0.24 s and 0.32 s, and "world" at 0.80 s.
-        // Each token's emission frame spans 80 ms.
+        // "lo" has duration 0, so it ends where it starts.
         let words = vocab.decodeWords(
             [0, 1, 2], logProbs: [-0.1, -0.1, -0.1],
-            tokenStartTimes: [0.24, 0.32, 0.80], frameDuration: 0.08)
+            tokenStartTimes: [0.24, 0.32, 0.80], tokenEndTimes: [0.32, 0.32, 0.88])
         XCTAssertEqual(words.map(\.word), ["hello", "world"])
         XCTAssertEqual(words[0].startTime ?? -1, 0.24, accuracy: 1e-9)
-        XCTAssertEqual(words[0].endTime ?? -1, 0.40, accuracy: 1e-9)
+        XCTAssertEqual(words[0].endTime ?? -1, 0.32, accuracy: 1e-9)
         XCTAssertEqual(words[1].startTime ?? -1, 0.80, accuracy: 1e-9)
         XCTAssertEqual(words[1].endTime ?? -1, 0.88, accuracy: 1e-9)
+    }
+
+    func testDecodeWordsEndsPunctuatedWordAtItsLastLetter() {
+        let vocab = ParakeetVocabulary(idToToken: [0: "\u{2581}shipped", 1: "?"])
+        // "?" comes 0.48 s after "shipped" ends; the word still ends at 7.48 s.
+        let words = vocab.decodeWords(
+            [0, 1], logProbs: [-0.1, -0.1],
+            tokenStartTimes: [7.24, 7.88], tokenEndTimes: [7.48, 7.96])
+        XCTAssertEqual(words.map(\.word), ["shipped?"])
+        XCTAssertEqual(words[0].endTime ?? -1, 7.48, accuracy: 1e-9)
     }
 
     func testDecodeWordsOmitsTimesWhenTimesMismatch() {
         let vocab = ParakeetVocabulary(idToToken: [0: "\u{2581}hi", 1: "\u{2581}there"])
         let words = vocab.decodeWords(
-            [0, 1], logProbs: [-0.1, -0.1], tokenStartTimes: [0.16], frameDuration: 0.08)
+            [0, 1], logProbs: [-0.1, -0.1], tokenStartTimes: [0.16], tokenEndTimes: [0.24])
         XCTAssertEqual(words.map(\.word), ["hi", "there"])
         XCTAssertNil(words[0].startTime)
         XCTAssertNil(words[0].endTime)
