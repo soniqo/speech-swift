@@ -262,7 +262,9 @@ jobs:
             echo "===================== $f ====================="
             cat "$f"
           done
-          [ "$found" = 0 ] && echo "(no crash reports — process exited cleanly or was killed by timeout)"
+          if [ "$found" = 0 ]; then
+            echo "(no crash reports — process exited cleanly or was killed by timeout)"
+          fi
 
       - name: Disk space after tests
         if: always() && steps.shard-filter.outputs.selected == 'true'
