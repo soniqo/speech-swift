@@ -61,9 +61,12 @@ coefficient, speaking-rate scaling, deterministic seed, and target RMS.
 
 The native tokenizer supports English/ASCII plus Mandarin (and mixed EN/ZH)
 text, preserving F5's character/pinyin ids from the published `vocab.txt`. The
-loader normalizes CRLF vocab files before splitting; without that, every ASCII
-symbol misses the vocab and collapses to token `0` (space), producing fluent
-but content-incorrect speech.
+loader normalizes CRLF and CR vocab files with literal matching before
+splitting. Canonical newline matching can leave extra rows before standalone
+combining marks, shifting the IDs of later symbols, including Cyrillic letters.
+Literal matching preserves the published vocabulary's row numbers. Leaving
+CRLF unnormalized instead causes ASCII symbols to miss the vocabulary and
+collapse to token `0` (space); both cases can produce content-incorrect speech.
 
 Mandarin goes through `F5TTSPinyinConverter`, which replaces upstream's
 rjieba + pypinyin frontend with longest-match lookup over the bundle's

@@ -19,9 +19,11 @@ public struct F5TTSTokenizer: Sendable {
         let text = try String(contentsOf: vocabURL, encoding: .utf8)
         var vocab: [String: Int32] = [:]
         var symbols: [String] = []
+        // Canonical matching can skip a CRLF before a combining-mark token,
+        // leaving an extra row that shifts every subsequent token ID.
         let normalizedNewlines = text
-            .replacingOccurrences(of: "\r\n", with: "\n")
-            .replacingOccurrences(of: "\r", with: "\n")
+            .replacingOccurrences(of: "\r\n", with: "\n", options: .literal)
+            .replacingOccurrences(of: "\r", with: "\n", options: .literal)
         var lines = normalizedNewlines
             .split(separator: "\n", omittingEmptySubsequences: false)
             .map(String.init)
