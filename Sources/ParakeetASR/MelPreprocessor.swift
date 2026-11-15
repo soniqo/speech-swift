@@ -120,15 +120,16 @@ struct MelPreprocessor {
                 }
             }
 
-            // Power spectrum: |X[k]|^2 = real^2 + imag^2
+            // Power spectrum: |X[k]|^2 = real^2 + imag^2, scaled by 1/4 because
+            // vDSP_fft_zrip returns 2x the DFT that torch.stft returns.
             let base = frame * nBins
             // DC component (packed in realp[0])
-            powerSpec[base] = splitReal[0] * splitReal[0]
+            powerSpec[base] = splitReal[0] * splitReal[0] * 0.25
             // Nyquist component (packed in imagp[0])
-            powerSpec[base + halfPadded] = splitImag[0] * splitImag[0]
+            powerSpec[base + halfPadded] = splitImag[0] * splitImag[0] * 0.25
             // Other bins
             for k in 1..<halfPadded {
-                powerSpec[base + k] = splitReal[k] * splitReal[k] + splitImag[k] * splitImag[k]
+                powerSpec[base + k] = (splitReal[k] * splitReal[k] + splitImag[k] * splitImag[k]) * 0.25
             }
         }
 

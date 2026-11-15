@@ -5,7 +5,7 @@ import XCTest
 /// Holds the mel front end to NeMo's `AudioToMelSpectrogramPreprocessor`, which
 /// is what the Parakeet and Canary checkpoints were trained with.
 ///
-/// The reference in `Resources/nemo_mel_reference.json` was produced by running
+/// The references in `Resources/nemo_mel_reference*.json` were produced by running
 /// that preprocessor directly on a deterministic signal — a linear congruential
 /// generator, reproduced bit-for-bit below, so no audio fixture is involved and
 /// nothing resamples in between.
@@ -26,27 +26,38 @@ final class MelContractTests: XCTestCase {
     }
 
     /// The exact samples the reference was generated from.
-    private func referenceSignal(count: Int) -> [Float] {
+    private func referenceSignal(count: Int, amplitude: Float) -> [Float] {
         var state: UInt32 = 12345
         var samples = [Float](repeating: 0, count: count)
         for i in 0..<count {
             state = state &* 1664525 &+ 1013904223
-            samples[i] = (Float(state) / 2147483648.0 - 1.0) * 0.3
+            samples[i] = (Float(state) / 2147483648.0 - 1.0) * amplitude
         }
         return samples
     }
 
-    private func loadReference() throws -> Reference {
-        guard let url = Bundle.module.url(forResource: "nemo_mel_reference", withExtension: "json") else {
-            throw XCTSkip("nemo_mel_reference.json not in test resources")
+    private func loadReference(_ name: String) throws -> Reference {
+        guard let url = Bundle.module.url(forResource: name, withExtension: "json") else {
+            throw XCTSkip("\(name).json not in test resources")
         }
         return try JSONDecoder().decode(Reference.self, from: Data(contentsOf: url))
     }
 
     func testMelMatchesTheTrainingPreprocessor() throws {
-        let reference = try loadReference()
+        try assertMelMatches(reference: "nemo_mel_reference", amplitude: 0.3)
+    }
+
+    /// At -60 dBFS the mel energy sits near the 2^-24 log guard, so the power
+    /// scale shows through the per-feature normalization. A power spectrum 4x
+    /// too large passes the loud signal above but misses this one by 0.66.
+    func testQuietMelMatchesTheTrainingPreprocessor() throws {
+        try assertMelMatches(reference: "nemo_mel_reference_quiet", amplitude: 0.001)
+    }
+
+    private func assertMelMatches(reference name: String, amplitude: Float) throws {
+        let reference = try loadReference(name)
         let preprocessor = MelPreprocessor(config: .default)
-        let audio = referenceSignal(count: 16000 * 2)
+        let audio = referenceSignal(count: 16000 * 2, amplitude: amplitude)
 
         let (mel, melLength) = try preprocessor.extract(audio)
         XCTAssertEqual(melLength, reference.validFrames,
@@ -76,7 +87,7 @@ final class MelContractTests: XCTestCase {
             }
         }
         let rms = sqrt(sumSquared / Double(frames * bins))
-        print("mel vs NeMo — worst \(worst), RMS \(rms)")
+        print("mel vs NeMo (\(name)) — worst \(worst), RMS \(rms)")
 
         // Float32 signal processing against a float32 reference: differences
         // should sit in rounding, not in the third decimal place.

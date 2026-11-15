@@ -1229,7 +1229,8 @@ let package = Package(
             resources: [
                 .copy("Resources/test_audio.wav"),
                 .copy("Resources/test_audio_german.wav"),
-                .copy("Resources/nemo_mel_reference.json")
+                .copy("Resources/nemo_mel_reference.json"),
+                .copy("Resources/nemo_mel_reference_quiet.json")
             ]
         ),
         .testTarget(
