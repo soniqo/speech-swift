@@ -124,7 +124,12 @@ public class ParakeetASRModel {
         var tokenTimes: [Double] = []
 
         if melLength <= maxWindow {
-            let r = try encodeAndDecodeWindow(mel: mel, actualLength: melLength, maskedTokenIds: masked)
+            // extract pads one zero frame past melLength; drop it so a full window is not truncated.
+            let bufferFrames = mel.shape[2].intValue
+            let windowMel = try bufferFrames > maxWindow
+                ? sliceMel(mel: mel, start: 0, length: melLength, totalFrames: bufferFrames)
+                : mel
+            let r = try encodeAndDecodeWindow(mel: windowMel, actualLength: melLength, maskedTokenIds: masked)
             tokenIds = r.tokens; tokenLogProbs = r.tokenLogProbs
             tokenTimes = Self.absoluteTokenTimes(windowStartMelFrame: 0, tokenFrames: r.tokenFrames, config: config)
         } else {
