@@ -298,7 +298,7 @@ public class Qwen3ForcedAligner {
             return []
         }
 
-        // 3. Build input_ids with chat template
+        // 3. Build the audio prompt followed by timestamp-slotted text
         let inputIds = buildInputIds(
             slottedTokenIds: slotted.tokenIds,
             numAudioTokens: numAudioTokens,
@@ -329,7 +329,7 @@ public class Qwen3ForcedAligner {
         let logits = classifyHead(hiddenStates)
 
         // 7. Extract logits at timestamp positions → argmax → raw indices
-        // Adjust timestamp positions to account for the chat template prefix
+        // Offset timestamp positions past the audio prompt
         let absoluteTimestampPositions = slotted.timestampPositions.map { $0 + slottedTextStart }
 
         var rawIndices: [Int] = []
@@ -389,7 +389,7 @@ public class Qwen3ForcedAligner {
 
     // MARK: - Private Helpers
 
-    /// Build full input_ids sequence with chat template
+    /// Build Qwen's audio prompt followed by timestamp-slotted text
     private func buildInputIds(
         slottedTokenIds: [Int],
         numAudioTokens: Int,
