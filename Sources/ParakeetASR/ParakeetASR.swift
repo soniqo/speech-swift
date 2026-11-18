@@ -26,6 +26,9 @@ public class ParakeetASRModel {
     /// Whether the model is loaded and ready for inference.
     var _isLoaded = true
 
+    private typealias DecodedWindow = (
+        tokens: [Int], tokenLogProbs: [Float], tokenFrames: [Int], tokenDurations: [Int], confidence: Float)
+
     private let melPreprocessor: MelPreprocessor
     var encoder: MLModel?
     var decoder: MLModel?
@@ -99,79 +102,144 @@ public class ParakeetASRModel {
             samples = audio
         }
 
-        // Step 1: Mel spectrogram extraction (Swift/Accelerate)
-        AudioLog.inference.debug("Parakeet: preprocessing \(samples.count) samples")
-        let tMel0 = CFAbsoluteTimeGetCurrent()
-        let (mel, melLength) = try melPreprocessor.extract(samples)
-        let tMel1 = CFAbsoluteTimeGetCurrent()
-
-        // Steps 2-3: encode + TDT greedy decode. Audio longer than the
-        // encoder's largest supported window is split into consecutive
-        // windows and the per-window token streams are concatenated. This
-        // lets a fixed-shape export (e.g. the 500-frame iOS-5s model, which
-        // has no EnumeratedShapes) transcribe arbitrarily long audio instead
-        // of truncating to the tail.
-        let maxWindow = supportedMelLengths.last ?? melLength
-        // Language steering: a per-call language wins; otherwise fall back to the persistent
-        // override. Empty/nil both mean auto-detect.
+        guard !samples.isEmpty else {
+            throw AudioModelError.inferenceFailed(operation: "mel extraction", reason: "Audio is empty")
+        }
+        let maxWindow = supportedMelLengths.last ?? max(samples.count / config.hopLength, 1)
+        let samplesPerWindow = maxWindow * config.hopLength
+        let validFrames = samples.count / config.hopLength
+        // Keep the original short-encoder cuts while adding enough context
+        // to repair incomplete words at their joins.
+        let overlapping = maxWindow <= 500 && validFrames > maxWindow
+        let windowStarts = ParakeetWindowPlan.starts(
+            validFrames: validFrames, maxWindow: maxWindow, overlap: overlapping)
+        let minimumRetryFrames = max(1, (config.durationBins.max() ?? 1) * config.subsamplingFactor)
         let effectiveLanguage = Self.effectiveLanguageHint(
-            perCall: language,
-            override: languageOverride)
+            perCall: language, override: languageOverride)
         let masked = vocabulary.maskedLanguageTokenIds(allowing: effectiveLanguage)
-        let tInfer0 = CFAbsoluteTimeGetCurrent()
         var tokenIds: [Int] = []
         var tokenLogProbs: [Float] = []
         var tokenTimes: [Double] = []
+        var tokenEndTimes: [Double] = []
+        var melSeconds = 0.0
+        var inferenceSeconds = 0.0
+        var windows = 0
+        var retries = 0
+        var normalizationContext: (frames: Range<Int>, mel: MLMultiArray)?
+        let edgeContext = Double((config.durationBins.max() ?? 1) * config.hopLength * config.subsamplingFactor)
+            / Double(config.sampleRate)
+        var stitcher = ParakeetWindowStitcher(edgeContext: edgeContext)
 
-        if melLength <= maxWindow {
-            let r = try encodeAndDecodeWindow(mel: mel, actualLength: melLength, maskedTokenIds: masked)
-            tokenIds = r.tokens; tokenLogProbs = r.tokenLogProbs
-            tokenTimes = Self.absoluteTokenTimes(windowStartMelFrame: 0, tokenFrames: r.tokenFrames, config: config)
-        } else {
-            // The mel buffer is [1, 128, bufferFrames] where bufferFrames
-            // (mel.shape[2]) can exceed the valid melLength — extract zero-pads
-            // the tail. Slice with the buffer's real per-bin stride, but only
-            // iterate over valid frames.
-            let bufferFrames = mel.shape[2].intValue
-            var start = 0
-            var windows = 0
-            while start < melLength {
-                let win = min(maxWindow, melLength - start)
-                let windowMel = try sliceMel(mel: mel, start: start, length: win, totalFrames: bufferFrames)
-                let r = try encodeAndDecodeWindow(mel: windowMel, actualLength: win, maskedTokenIds: masked)
-                // Decoder frames are window-relative and are converted to absolute seconds.
-                tokenIds += r.tokens; tokenLogProbs += r.tokenLogProbs
-                tokenTimes += Self.absoluteTokenTimes(windowStartMelFrame: start, tokenFrames: r.tokenFrames, config: config)
-                start += maxWindow; windows += 1
+        // Each encoder input gets its own complete training preprocessor,
+        // including pre-emphasis, centered STFT boundary padding and statistics.
+        for startFrame in windowStarts {
+            let startSample = startFrame * config.hopLength
+            let endSample = min(startSample + samplesPerWindow, samples.count)
+            let windowEnd = Double(endSample) / Double(config.sampleRate)
+            if overlapping, let coveredEnd = stitcher.coveredEnd, windowEnd <= coveredEnd {
+                continue
             }
-            AudioLog.inference.debug(
-                "Parakeet: split \(melLength) mel frames into \(windows) windows of \(maxWindow)")
+            let chunk = startSample == 0 && endSample == samples.count
+                ? samples : Array(samples[startSample..<endSample])
+            // Release CoreML prediction temporaries after each window, including
+            // long recordings whose caller has no surrounding autorelease pool.
+            let decoded = try autoreleasepool { () -> DecodedWindow? in
+                let melStart = CFAbsoluteTimeGetCurrent()
+                let (mel, melLength) = try self.melPreprocessor.extract(
+                    chunk, normalizationWindowLength: maxWindow)
+                if melLength == 0 { return nil }
+                // The extra STFT frame is padding; it must not displace the
+                // first audio frame or change the selected encoder shape.
+                let windowMel = try MelPreprocessor.validPrefix(mel, length: melLength)
+                melSeconds += CFAbsoluteTimeGetCurrent() - melStart
+                var inferenceStart = CFAbsoluteTimeGetCurrent()
+                var result = try self.encodeAndDecodeWindow(
+                    mel: windowMel, actualLength: melLength, maskedTokenIds: masked)
+                if overlapping && startFrame % maxWindow == 0 && melLength >= minimumRetryFrames && result.tokens.isEmpty
+                    && chunk.contains(where: { $0 != 0 }) {
+                    let target = startFrame..<(startFrame + melLength)
+                    if normalizationContext == nil ||
+                        normalizationContext!.frames.lowerBound > target.lowerBound ||
+                        normalizationContext!.frames.upperBound < target.upperBound {
+                        let frames = ParakeetWindowPlan.normalizationContext(
+                            start: startFrame, length: melLength, total: validFrames,
+                            limit: max(maxWindow, self.config.sampleRate * 30 / self.config.hopLength))
+                        let first = frames.lowerBound * self.config.hopLength
+                        let last = frames.upperBound == validFrames ? samples.count
+                            : frames.upperBound * self.config.hopLength
+                        let contextStart = CFAbsoluteTimeGetCurrent()
+                        let contextAudio = Array(samples[first..<last])
+                        let context = try self.melPreprocessor.extract(contextAudio)
+                        normalizationContext = (frames, context.mel)
+                        let contextSeconds = CFAbsoluteTimeGetCurrent() - contextStart
+                        melSeconds += contextSeconds
+                        inferenceStart += contextSeconds
+                    }
+                    let context = normalizationContext!
+                    let retry = try MelPreprocessor.slice(context.mel,
+                        start: startFrame - context.frames.lowerBound, length: melLength)
+                    result = try self.encodeAndDecodeWindow(
+                        mel: retry, actualLength: melLength, maskedTokenIds: masked)
+                    retries += 1
+                }
+                inferenceSeconds += CFAbsoluteTimeGetCurrent() - inferenceStart
+                return result
+            }
+            guard let result = decoded else { break }
+            let starts = Self.absoluteTokenTimes(
+                windowStartMelFrame: startFrame, tokenFrames: result.tokenFrames, config: config)
+            let ends = Self.absoluteTokenTimes(
+                windowStartMelFrame: startFrame,
+                tokenFrames: zip(result.tokenFrames, result.tokenDurations).map { $0.0 + $0.1 }, config: config)
+            if overlapping {
+                let words = vocabulary.decodeWordDetailsWithTokenTimes(
+                    result.tokens, logProbs: result.tokenLogProbs,
+                    tokenStartTimes: starts, tokenEndTimes: ends)
+                stitcher.append(words, start: Double(startSample) / Double(config.sampleRate), end: windowEnd,
+                    primary: startFrame % maxWindow == 0)
+            } else {
+                tokenIds += result.tokens
+                tokenLogProbs += result.tokenLogProbs
+                tokenTimes += starts
+                tokenEndTimes += ends
+            }
+            windows += 1
         }
-        let tInfer1 = CFAbsoluteTimeGetCurrent()
+        AudioLog.inference.debug("Parakeet: decoded \(windows) audio windows of at most \(maxWindow) mel frames with \(retries) normalization retries")
 
         // Step 4: Vocabulary decode + overall confidence. Compute confidence
         // from the emitted token log-probs (the decoder's own formula) rather
         // than averaging per-window — otherwise silent windows in chunked long
         // audio would dilute it toward zero.
-        let text = vocabulary.decode(tokenIds)
-        lastConfidence = tokenLogProbs.isEmpty
+        let text: String
+        let retainedLogProbs: [Float]
+        if overlapping {
+            let words = stitcher.finalized(audioDuration: Double(samples.count) / Double(config.sampleRate))
+            text = words.map { $0.value.word }.joined(separator: " ")
+            lastWordConfidences = words.map(\.value)
+            retainedLogProbs = words.flatMap(\.tokenLogProbs)
+        } else {
+            text = vocabulary.decode(tokenIds)
+            lastWordConfidences = vocabulary.decodeWordsWithTokenTimes(
+                tokenIds, logProbs: tokenLogProbs,
+                tokenStartTimes: tokenTimes, tokenEndTimes: tokenEndTimes)
+            retainedLogProbs = tokenLogProbs
+        }
+        lastConfidence = retainedLogProbs.isEmpty
             ? 0
-            : min(1.0, exp(tokenLogProbs.reduce(0, +) / Float(tokenLogProbs.count)))
-        let secondsPerEncoderFrame = Double(config.hopLength * config.subsamplingFactor) / Double(config.sampleRate)
-        lastWordConfidences = vocabulary.decodeWords(
-            tokenIds, logProbs: tokenLogProbs,
-            tokenStartTimes: tokenTimes, frameDuration: secondsPerEncoderFrame)
+            : min(1.0, exp(retainedLogProbs.reduce(0, +) / Float(retainedLogProbs.count)))
 
-        let melMs = (tMel1 - tMel0) * 1000
-        let inferMs = (tInfer1 - tInfer0) * 1000
-        AudioLog.inference.info("Parakeet: mel=\(String(format: "%.1f", melMs))ms infer=\(String(format: "%.1f", inferMs))ms (\(tokenIds.count) tokens, \(melLength) mel frames)")
+        let totalMelFrames = samples.count / config.hopLength
+        let melMs = melSeconds * 1000
+        let inferMs = inferenceSeconds * 1000
+        AudioLog.inference.info("Parakeet: mel=\(String(format: "%.1f", melMs))ms infer=\(String(format: "%.1f", inferMs))ms (\(retainedLogProbs.count) tokens, \(totalMelFrames) mel frames)")
 
         return text
     }
 
     /// Encode one mel window and run TDT greedy decode on it.
     private func encodeAndDecodeWindow(mel: MLMultiArray, actualLength: Int, maskedTokenIds: Set<Int> = [])
-        throws -> (tokens: [Int], tokenLogProbs: [Float], tokenFrames: [Int], confidence: Float)
+        throws -> DecodedWindow
     {
         let (paddedMel, effectiveLength) = try padMelToSupportedShape(mel: mel, actualLength: actualLength)
         let encoderOutput = try runEncoder(mel: paddedMel, length: effectiveLength)
@@ -206,19 +274,6 @@ public class ParakeetASRModel {
             Double(windowStartMelFrame + $0 * config.subsamplingFactor)
                 * Double(config.hopLength) / Double(config.sampleRate)
         }
-    }
-
-    /// Copy frames `[start, start+length)` out of a `[1, 128, totalFrames]`
-    /// mel into a fresh `[1, 128, length]` array (bin-major Float16 layout).
-    private func sliceMel(mel: MLMultiArray, start: Int, length: Int, totalFrames: Int) throws -> MLMultiArray {
-        let sub = try MLMultiArray(shape: [1, 128, length as NSNumber], dataType: mel.dataType)
-        let srcPtr = mel.dataPointer.assumingMemoryBound(to: Float16.self)
-        let dstPtr = sub.dataPointer.assumingMemoryBound(to: Float16.self)
-        for bin in 0..<config.numMelBins {
-            dstPtr.advanced(by: bin * length)
-                .update(from: srcPtr.advanced(by: bin * totalFrames + start), count: length)
-        }
-        return sub
     }
 
     // MARK: - CoreML Inference Helpers

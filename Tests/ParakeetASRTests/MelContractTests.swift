@@ -2,8 +2,9 @@ import CoreML
 import XCTest
 @testable import ParakeetASR
 
-/// Holds the mel front end to NeMo's `AudioToMelSpectrogramPreprocessor`, which
-/// is what the Parakeet and Canary checkpoints were trained with.
+/// Checks the explicit NeMo calibration against its training preprocessor.
+/// The runtime default retains the package's legacy power-to-floor ratio and
+/// is covered separately by `MelCalibrationTests`.
 ///
 /// The references in `Resources/nemo_mel_reference*.json` were produced by running
 /// that preprocessor directly on a deterministic signal — a linear congruential
@@ -37,9 +38,8 @@ final class MelContractTests: XCTestCase {
     }
 
     private func loadReference(_ name: String) throws -> Reference {
-        guard let url = Bundle.module.url(forResource: name, withExtension: "json") else {
-            throw XCTSkip("\(name).json not in test resources")
-        }
+        let url = try XCTUnwrap(Bundle.module.url(forResource: name, withExtension: "json"),
+            "\(name).json must be included in the test resources")
         return try JSONDecoder().decode(Reference.self, from: Data(contentsOf: url))
     }
 
@@ -56,7 +56,7 @@ final class MelContractTests: XCTestCase {
 
     private func assertMelMatches(reference name: String, amplitude: Float) throws {
         let reference = try loadReference(name)
-        let preprocessor = MelPreprocessor(config: .default)
+        let preprocessor = MelPreprocessor(config: .default, calibration: .nemo)
         let audio = referenceSignal(count: 16000 * 2, amplitude: amplitude)
 
         let (mel, melLength) = try preprocessor.extract(audio)

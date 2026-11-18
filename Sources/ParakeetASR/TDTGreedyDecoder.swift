@@ -61,11 +61,15 @@ struct TDTGreedyDecoder {
     ///   - encoded: Encoder output as MLMultiArray, shape `[1, T, encoderHidden]`
     ///   - encodedLength: Number of valid encoder frames
     /// - Returns: Tuple of (token IDs, per-token log-probs, per-token encoder frame index,
-    ///   overall confidence 0.0–1.0). Frame indices are relative to `encoded`.
-    func decode(encoded: MLMultiArray, encodedLength: Int) throws -> (tokens: [Int], tokenLogProbs: [Float], tokenFrames: [Int], confidence: Float) {
+    ///   predicted token durations, overall confidence 0.0–1.0).
+    ///   Frame indices are relative to `encoded`.
+    func decode(encoded: MLMultiArray, encodedLength: Int) throws
+        -> (tokens: [Int], tokenLogProbs: [Float], tokenFrames: [Int], tokenDurations: [Int], confidence: Float)
+    {
         var tokens = [Int]()
         var tokenLogProbs = [Float]()
         var tokenFrames = [Int]()
+        var tokenDurations = [Int]()
 
         // Initialize LSTM state
         let hShape = [config.decoderLayers, 1, config.decoderHidden] as [NSNumber]
@@ -102,10 +106,14 @@ struct TDTGreedyDecoder {
         decoderProvider.update("h", hState)
         decoderProvider.update("c", cState)
 
-        var t = 0
-        while t < encodedLength {
-            // Extract encoder frame at position t (mutates encSlice data in-place)
-            copyEncoderFrame(from: encoded, at: t, to: encSlice)
+        var cursor = TDTFrameCursor()
+        var loadedFrame = -1
+        while cursor.frame < encodedLength {
+            let t = cursor.frame
+            if t != loadedFrame {
+                copyEncoderFrame(from: encoded, at: t, to: encSlice)
+                loadedFrame = t
+            }
 
             // Joint network: (encoder_slice, decoder_output) → (token_logits, duration_logits)
             let jointOut = try joint.prediction(from: jointProvider)
@@ -115,9 +123,10 @@ struct TDTGreedyDecoder {
 
             let tokenId = argmax(tokenLogits, count: config.vocabSize + 1, floatBuf: argmaxBuf, masked: maskedTokenIds)
 
-            if tokenId == config.blankTokenId {
-                t += 1
-            } else {
+            let durationIndex = argmax(durationLogits, count: config.numDurationBins, floatBuf: nil)
+            let duration = config.durationBins[durationIndex]
+            let isBlank = tokenId == config.blankTokenId
+            if !isBlank {
                 // Keep model-control emissions out of the transcript, but still feed them into
                 // the decoder state below. Token ordering is not a valid classifier: plain digit
                 // tokens 0...9 occupy IDs 234...243 between special-token ranges.
@@ -127,11 +136,8 @@ struct TDTGreedyDecoder {
                     let logProb = logSoftmax(tokenLogits, tokenId: tokenId, count: config.vocabSize + 1, floatBuf: argmaxBuf)
                     tokenLogProbs.append(logProb)
                     tokenFrames.append(t)
+                    tokenDurations.append(duration)
                 }
-
-                let durationIdx = argmax(durationLogits, count: config.numDurationBins, floatBuf: nil)
-                let duration = config.durationBins[durationIdx]
-                t += max(duration, 1)
 
                 // Update decoder state with the emitted token
                 tokenPtr.pointee = Int32(tokenId)
@@ -145,6 +151,7 @@ struct TDTGreedyDecoder {
                 // Update joint provider with new decoder output
                 jointProvider.update("decoder_output", decoderOutput)
             }
+            cursor.advance(isBlank: isBlank, duration: duration)
         }
 
         // Overall confidence: exp(mean log-prob) maps to 0–1
@@ -155,7 +162,7 @@ struct TDTGreedyDecoder {
         } else {
             confidence = 0.0
         }
-        return (tokens, tokenLogProbs, tokenFrames, confidence)
+        return (tokens, tokenLogProbs, tokenFrames, tokenDurations, confidence)
     }
 
     // MARK: - Array Operations
@@ -228,5 +235,28 @@ struct TDTGreedyDecoder {
     /// Zero-fill an MLMultiArray using memset.
     private func zeroFill(_ array: MLMultiArray) {
         memset(array.dataPointer, 0, array.count * MemoryLayout<Float16>.stride)
+    }
+}
+
+/// NeMo TDT frame movement, separate from model inference so zero-duration
+/// emissions and the per-frame symbol limit have deterministic regression tests.
+struct TDTFrameCursor {
+    static let maxSymbolsPerFrame = 10
+    private(set) var frame = 0
+    private(set) var symbolsOnFrame = 0
+
+    mutating func advance(isBlank: Bool, duration: Int) {
+        precondition(duration >= 0)
+        let step: Int
+        if isBlank {
+            step = max(duration, 1)
+        } else {
+            symbolsOnFrame += 1
+            step = duration == 0 && symbolsOnFrame >= Self.maxSymbolsPerFrame ? 1 : duration
+        }
+        if step > 0 {
+            frame += step
+            symbolsOnFrame = 0
+        }
     }
 }

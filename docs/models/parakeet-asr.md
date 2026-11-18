@@ -83,8 +83,14 @@ Mel preprocessing (pre-emphasis, STFT, mel filterbank, normalization) is done in
 - Sample rate: 16kHz
 - Mel bins: 128
 - n_fft: 512, hop: 160, win: 400
-- Window: Hanning
+- Window: symmetric Hann, centered within the FFT frame
 - Pre-emphasis: 0.97 (applied in Swift via vDSP)
+- Power spectrum: scaled by `0.25` to compensate for vDSP's real-forward FFT amplitude factor of 2
+- Log features: `log(mel + 2^-26)`, retaining the package's legacy power-to-floor ratio after the FFT correction; the explicit internal NeMo reference calibration uses `2^-24`
+- Normalization: per-feature statistics over each primary window's valid frames; constant windows and padding are zeroed. An empty original short-encoder window can retry with feature statistics from a bounded 30-second context.
+- Long recordings: PCM windows are preprocessed independently. Five-second encoders retain the original cuts and add overlapping context; `WindowStitcher.swift` joins matching words using absolute emission times and preserves their token probabilities. Conflicting phrases are compared using mean log word confidence, so a later match cannot discard a stronger primary phrase; stronger context can still repair uncertain primary text. Confidence checks are limited to the overlap. Primary buffers are bounded by the encoder window, and retry features are bounded by 30 seconds. All inference passes run sequentially. Longer encoders retain consecutive windows.
+- TDT movement: duration-zero non-blank tokens retain the frame; blanks move by at least one frame, with a ten-symbol per-frame limit
+- Word timing: token starts plus predicted durations, with attached punctuation ending at the preceding text token
 
 ## CLI Usage
 

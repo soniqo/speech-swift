@@ -1,0 +1,15 @@
+Source: google/fleurs test split.
+Dataset revision: 168de341b3db6859a9bac1c50a2ef5e3b47647e0 (converted Parquet snapshot).
+License: CC BY 4.0. Attribution: FLEURS dataset contributors (Google).
+https://huggingface.co/datasets/google/fleurs
+
+join_earlier_anchor.wav: fr_fr/0133-13410809334721746732.wav; 15.9 seconds, mono 16 kHz.
+Reference: Au cours de la fin du Moyen Âge, l'Europe occidentale a commencé à développer son propre style. Un des plus grands progrès de l'époque, suite aux croisades, fut l'utilisation de boutons pour la fermeture des vêtements.
+
+join_late_anchor.wav: fr_fr/0073-1206682315590486480.wav; 10.98 seconds, mono 16 kHz.
+Reference: Les Trois Royaumes ont été l'une des époques les plus sanguinaires de l'histoire de l'Antiquité Chinoise. Des milliers de personnes sont mort au combat pour s'asseoir sur le trône du grand palais de XI'an.
+
+join_french_continuation.wav: fr_fr/0207-15185734872770239170.wav; 8.28 seconds, mono 16 kHz.
+Reference: Une civilisation est une culture singulière partagée par un groupe important de personnes qui vivent et travaillent en coopération, une société.
+
+Tests attenuate these recordings to a peak of 0.001. They protect a confident primary phrase from a conflicting overlap aligned only at a later word, and prevent duplicated text at the join.

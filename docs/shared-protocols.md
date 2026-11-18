@@ -390,7 +390,7 @@ public struct WordConfidence: Sendable {
 }
 ```
 
-`startTime` and `endTime` are emission-aligned, not forced-aligned: they mark the encoder frame at which the decoder emitted the word's tokens, and an offline encoder can stamp a word before its onset. `ParakeetASRModel` fills them; other models leave them nil. Use `Qwen3ForcedAligner` when you need acoustic word boundaries.
+`startTime` and `endTime` are emission-aligned, not forced-aligned. `ParakeetASRModel` starts a word at its first token's emission frame and ends it using the last text token's predicted duration; attached punctuation retains that end. A duration-zero word can have equal start and end times. Times stay absolute across audio windows. For merged short-encoder output, starts are monotonic and timestamps are clamped to the recording duration; confidence uses only the retained tokens. An offline encoder can stamp a word before its acoustic onset. Other models leave these fields nil. Use `Qwen3ForcedAligner` when you need acoustic word boundaries.
 
 ### SpeechSegment
 

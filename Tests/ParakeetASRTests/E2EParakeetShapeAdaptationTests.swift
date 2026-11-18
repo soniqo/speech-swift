@@ -46,11 +46,9 @@ final class E2EParakeetShapeAdaptationTests: XCTestCase {
         // Bundled clip is 20 s of "Can you guarantee that the replacement
         // part will be shipped tomorrow?" with ~3 s silence at the start.
         // We slice 4 s starting at +5 s so the chunk fits the iOS-5s
-        // single-shape encoder *and* contains the spoken sentence. We use
-        // 4 s rather than 5 s because mel extraction emits
-        // `audio.count/hop + 1` frames (one extra over the masked length)
-        // and exactly 5 s of audio overflows the model's 500-frame limit
-        // by one frame.
+        // single-shape encoder and contains the spoken sentence. This
+        // isolates short-input padding; E2EParakeetWindowDurationTests
+        // separately covers the extra STFT frame at a full 5 s boundary.
         let (samples, sampleRate) = try AudioFileLoader.loadWAV(url: wavURL)
         let resampled = sampleRate == 16000
             ? samples

@@ -1229,6 +1229,20 @@ let package = Package(
             resources: [
                 .copy("Resources/test_audio.wav"),
                 .copy("Resources/test_audio_german.wav"),
+                .copy("Resources/tdt_duration_zero.wav"),
+                .copy("Resources/tdt_duration_zero.txt"),
+                .copy("Resources/quiet_window_calibration.wav"),
+                .copy("Resources/quiet_window_calibration.txt"),
+                .copy("Resources/legacy_mel_reference.json"),
+                .copy("Resources/context_french.wav"),
+                .copy("Resources/context_english.wav"),
+                .copy("Resources/context_phase.wav"),
+                .copy("Resources/context_regressions.txt"),
+                .copy("Resources/context_empty_window.wav"),
+                .copy("Resources/join_earlier_anchor.wav"),
+                .copy("Resources/join_late_anchor.wav"),
+                .copy("Resources/join_french_continuation.wav"),
+                .copy("Resources/join_regressions.txt"),
                 .copy("Resources/nemo_mel_reference.json"),
                 .copy("Resources/nemo_mel_reference_quiet.json")
             ]

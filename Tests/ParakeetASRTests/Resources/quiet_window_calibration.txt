@@ -1,0 +1,9 @@
+Source: google/fleurs, en_us test split, row 26.
+Dataset revision: 168de341b3db6859a9bac1c50a2ef5e3b47647e0 (converted Parquet snapshot).
+Original audio: 10622204403793540766.wav, 11.4 seconds, mono 16 kHz.
+License: CC BY 4.0. Attribution: FLEURS dataset contributors (Google).
+https://huggingface.co/datasets/google/fleurs
+
+Reference: For example, each year students from Bennet School in North Carolina design a website about their trip to the State Capital, each year the website gets remodeled, but old versions are kept online to serve as a scrapbook.
+
+The regression test attenuates this recording to a peak of 0.001. With the corrected FFT power and an unchanged log floor, the middle five-second window can become blank.

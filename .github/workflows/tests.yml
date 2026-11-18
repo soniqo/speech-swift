@@ -61,7 +61,6 @@ jobs:
           --skip WeSpeakerTests
           --skip SortformerTests
           --skip PersonaPlexTests
-          --skip ParakeetASRTests
           --skip CosyVoiceTTSTests
           --skip KokoroTTSTests
           --skip StreamingAudioPlayerTests

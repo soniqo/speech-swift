@@ -1,0 +1,15 @@
+LibriSpeech test-other: 7975-280057-0012
+Target phrase: WHY DON'T YOU CALL ON COLE YOUNGER
+
+Source: https://www.openslr.org/12/
+Archive: https://openslr.elda.org/resources/12/test-other.tar.gz
+Original member: LibriSpeech/test-other/7975/280057/7975-280057-0012.flac
+License: Creative Commons Attribution 4.0 International
+https://creativecommons.org/licenses/by/4.0/
+
+Attribution: Vassil Panayotov, Guoguo Chen, Daniel Povey and Sanjeev Khudanpur.
+LibriSpeech: An ASR corpus based on public domain audio books, ICASSP 2015.
+The audio derives from the LibriVox project.
+
+The original 16 kHz mono FLAC was decoded losslessly to 16-bit PCM WAV.
+No samples were cropped, resampled or level-adjusted.
