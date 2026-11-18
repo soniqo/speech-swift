@@ -113,13 +113,12 @@ Can<ts><ts>you<ts><ts>guarantee<ts><ts>
 
 ### 3. Single Forward Pass
 
-Build the full sequence with chat template:
+Both runtimes use the [Qwen reference prompt](https://github.com/QwenLM/Qwen3-ASR/blob/c17a131fe028b2e428b6e80a33d30bb4fa57b8df/qwen_asr/inference/qwen3_forced_aligner.py#L249-L250): audio start, audio pads, audio end, then the words and their timestamp slots.
 ```
-<|im_start|>system\n<|im_end|>\n
-<|im_start|>user\n<|audio_start|>[audio_pad × N]<|audio_end|><|im_end|>\n
-<|im_start|>assistant\n
-word1_tokens<ts><ts>word2_tokens<ts><ts>...
+<|audio_start|>[<|audio_pad|> × N]<|audio_end|>word1_tokens<ts><ts>word2_tokens<ts><ts>...
 ```
+
+Audio embeddings replace the `N` audio pads. Each word has two trailing timestamp slots, and their absolute positions follow the assembled prompt length. This replaces the chat wrapper that shifted some word boundaries late.
 
 One forward pass through the decoder (no cache, no loop). Apply classify head to all hidden states → logits `[1, seqLen, 5000]`.
 
@@ -297,7 +296,7 @@ let aligned = try aligner.align(
 )
 ```
 
-The CoreML aligner runs the audio encoder + token embedding + 28-layer non-autoregressive text decoder + classify head from two `.mlmodelc` bundles and a raw fp16 token-embedding binary. The audio encoder is fixed to a 30 s mel input and reports the real (un-padded) audio-token count; the text decoder runs at a fixed prompt length of 768 tokens — enough to cover the 9-token chat-template prefix + up to 390 audio tokens + 6-token suffix + ~120 word slots. The causal mask is `-1e4` (finite) so the fp16 softmax stays numerically stable.
+The CoreML aligner runs the audio encoder + token embedding + 28-layer non-autoregressive text decoder + classify head from two `.mlmodelc` bundles and a raw fp16 token-embedding binary. The audio encoder is fixed to a 30 s mel input and reports the real (un-padded) audio-token count. The text decoder runs at a fixed prompt length of 768 tokens: one `<|audio_start|>` token, up to 390 audio tokens, one `<|audio_end|>` token, and the word tokens plus two timestamp slots per word. The causal mask is `-1e4` (finite) so the fp16 softmax stays numerically stable.
 
 The text decoder defaults to `.cpuAndGPU`; the encoder retains `.cpuAndNeuralEngine`. The original decoder graph can produce incorrect timestamp classes on the Neural Engine or all-zero timestamps on older CPU runtimes. GPU execution keeps the original `text_decoder` bundle. Explicit `.cpuOnly` loads of the published INT8 and FP16 models request the separate `text_decoder_cpu_v1` bundle, whose 113 RMS-normalization calculations use Float32 while learned weights and model input/output types remain unchanged. Explicit `.cpuAndNeuralEngine` and `.all` request `text_decoder_ane_v1`, which replaces normalization squares with `mul(x, x)`. Loader defaults still honor `SPEECH_COREML_COMPUTE_UNITS`.
 

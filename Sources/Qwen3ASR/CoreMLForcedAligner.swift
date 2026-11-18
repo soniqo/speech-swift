@@ -279,21 +279,13 @@ public final class CoreMLForcedAligner {
 
     // MARK: - Token sequence construction (matches MLX path)
 
+    // Qwen's aligner prompt has no chat roles (qwen_asr encode_timestamp).
     private func buildPrefixTokens() -> [Int] {
-        let imStart = Qwen3ASRTokens.imStartTokenId
-        let imEnd = Qwen3ASRTokens.imEndTokenId
-        let audioStart = Qwen3ASRTokens.audioStartTokenId
-        let newline = 198, systemId = 8948, userId = 872
-        return [imStart, systemId, newline, imEnd, newline,
-                imStart, userId, newline, audioStart]
+        [Qwen3ASRTokens.audioStartTokenId]
     }
 
     private func buildSuffixTokens() -> [Int] {
-        let imStart = Qwen3ASRTokens.imStartTokenId
-        let imEnd = Qwen3ASRTokens.imEndTokenId
-        let audioEnd = Qwen3ASRTokens.audioEndTokenId
-        let newline = 198, assistantId = 77091
-        return [audioEnd, imEnd, newline, imStart, assistantId, newline]
+        [Qwen3ASRTokens.audioEndTokenId]
     }
 
     // MARK: - MLMultiArray helpers

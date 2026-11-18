@@ -304,23 +304,35 @@ docs/
   shared-protocols.md       Protocol reference (cross-cutting)
 ```
 
-**Keep local docs in sync when making code changes.**
+**Keep local docs accurate when the behavior or architecture they describe changes.**
 
 ### Documentation site (soniqo.audio)
 
 The public documentation is hosted at **https://soniqo.audio** and maintained outside this repository.
 
-**Whenever code changes are made in this repo, both local docs AND the documentation site must be updated.**
+Update the affected guides and website pages when a change affects how someone
+installs, configures, calls, or uses this package, or makes published guidance
+inaccurate.
+
+Internal bug fixes and refactors that restore or preserve documented behavior
+do not require README, guide, or website edits. Record the rationale and
+validation in the PR and regression tests; add release notes when useful to
+users. Do not add implementation-fix notes to stable user guides solely because
+code changed.
+
+Evaluate internal architecture docs separately and update them when their
+documented design or contracts change. Test-only and repository-instruction
+changes do not by themselves require website updates.
 
 ### What requires a docs update
 
-- New features or capabilities added
+- User-facing features or documented behavior change
 - CLI commands added, removed, or flags changed
 - Public API changes (protocols, types, function signatures)
-- New models or model variants added
-- Performance characteristics changed
-- Build requirements or installation steps changed
-- New modules or source structure changes
+- Supported models, variants, formats, or defaults change
+- Published performance characteristics or documented limitations change
+- Build/runtime requirements or installation steps change
+- Public modules or documented architecture change
 
 ### Documentation site structure
 
@@ -356,9 +368,9 @@ Translated READMEs live in the repo root: `README_zh.md`, `README_ja.md`, `READM
 | Code change | Local docs | soniqo.audio page(s) |
 |---|---|---|
 | CLI flag added/changed | Relevant inference doc | `/cli/index.html` + relevant guide |
-| New model/module | New model + inference doc | Landing page + new guide + architecture |
-| Protocol change | `shared-protocols.md` | `/api/index.html` |
-| Performance improvement | `benchmarks/` | Landing page perf section + relevant guide |
+| New model or public module | New model + inference doc | Landing page + new guide + architecture |
+| Public protocol change | `shared-protocols.md` | `/api/index.html` |
+| Published performance characteristics changed | `benchmarks/` | Landing page perf section + relevant guide |
 | Build/install change | — | `/getting-started/index.html` |
 | New CLI command | Relevant inference doc | `/cli/index.html` + new guide + landing page |
 | Build/dependency change in demo | `Examples/<Demo>/README.md` | — |

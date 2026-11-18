@@ -206,10 +206,12 @@ final class E2ECoreMLForcedAlignerTests: XCTestCase {
 
         // PyTorch reference for this fixture (issue #546). Shape, span and
         // monotonicity alone also accept the incorrect 16–18 s alignment.
-        let referenceStarts: [Float] = [5.28, 5.52, 5.52, 6.16, 6.80, 6.88,
-                                        7.04, 7.36, 7.44, 8.00, 8.40]
-        let referenceEnds: [Float] = [5.44, 5.52, 6.16, 6.32, 6.88, 7.04,
-                                      7.36, 7.44, 8.00, 8.40, 8.96]
+        let referenceStarts: [Float] = [
+            5.20, 5.36, 5.44, 6.08, 6.24, 6.32, 6.96, 7.28, 7.36, 7.44, 7.84
+        ]
+        let referenceEnds: [Float] = [
+            5.36, 5.44, 6.08, 6.24, 6.32, 6.96, 7.28, 7.36, 7.44, 7.84, 8.32
+        ]
         XCTAssertEqual(aligned.map(\.text), Self.referenceText.split(separator: " ").map(String.init))
         for (word, expected) in zip(aligned, zip(referenceStarts, referenceEnds)) {
             XCTAssertEqual(word.startTime, expected.0, accuracy: 0.24,

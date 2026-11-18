@@ -298,7 +298,7 @@ public class Qwen3ForcedAligner {
             return []
         }
 
-        // 3. Build input_ids with chat template
+        // 3. Build the audio prompt followed by timestamp-slotted text
         let inputIds = buildInputIds(
             slottedTokenIds: slotted.tokenIds,
             numAudioTokens: numAudioTokens,
@@ -329,7 +329,7 @@ public class Qwen3ForcedAligner {
         let logits = classifyHead(hiddenStates)
 
         // 7. Extract logits at timestamp positions → argmax → raw indices
-        // Adjust timestamp positions to account for the chat template prefix
+        // Offset timestamp positions past the audio prompt
         let absoluteTimestampPositions = slotted.timestampPositions.map { $0 + slottedTextStart }
 
         var rawIndices: [Int] = []
@@ -389,43 +389,26 @@ public class Qwen3ForcedAligner {
 
     // MARK: - Private Helpers
 
-    /// Build full input_ids sequence with chat template
+    /// Build Qwen's audio prompt followed by timestamp-slotted text
     private func buildInputIds(
         slottedTokenIds: [Int],
         numAudioTokens: Int,
         tokenizer: Qwen3Tokenizer,
         language: String
     ) -> [Int] {
-        let imStartId = Qwen3ASRTokens.imStartTokenId
-        let imEndId = Qwen3ASRTokens.imEndTokenId
         let audioStartId = Qwen3ASRTokens.audioStartTokenId
         let audioEndId = Qwen3ASRTokens.audioEndTokenId
         let audioPadId = Qwen3ASRTokens.audioTokenId
-        let newlineId = 198
 
-        // Token IDs for role names
-        let systemId = 8948
-        let userId = 872
-        let assistantId = 77091
-
-        var ids: [Int] = []
-
-        // <|im_start|>system\n<|im_end|>\n
-        ids.append(contentsOf: [imStartId, systemId, newlineId, imEndId, newlineId])
-
-        // <|im_start|>user\n<|audio_start|>
-        ids.append(contentsOf: [imStartId, userId, newlineId, audioStartId])
+        // Qwen's aligner prompt has no chat roles (qwen_asr encode_timestamp).
+        var ids: [Int] = [audioStartId]
 
         // <|audio_pad|> * numAudioTokens
         for _ in 0..<numAudioTokens {
             ids.append(audioPadId)
         }
 
-        // <|audio_end|><|im_end|>\n
-        ids.append(contentsOf: [audioEndId, imEndId, newlineId])
-
-        // <|im_start|>assistant\n
-        ids.append(contentsOf: [imStartId, assistantId, newlineId])
+        ids.append(audioEndId)
 
         // Slotted text with timestamp tokens
         ids.append(contentsOf: slottedTokenIds)
