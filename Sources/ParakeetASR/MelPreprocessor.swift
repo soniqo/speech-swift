@@ -1,15 +1,27 @@
 import Accelerate
+import AudioCommon
 import CoreML
 import Foundation
 
 /// Mel spectrogram preprocessor for Parakeet TDT models.
 ///
-/// Implements the NeMo `AudioToMelSpectrogramPreprocessor` pipeline in Swift:
+/// Implements the NeMo `AudioToMelSpectrogramPreprocessor` operations in Swift:
 /// pre-emphasis → STFT → power spectrum → mel filterbank → log → per-feature normalization.
+/// The default log floor retains this package's existing feature calibration.
 ///
 /// Uses vDSP/Accelerate for performance. No CoreML model needed — pure signal processing.
 struct MelPreprocessor {
+    enum Calibration {
+        /// Preserve the power-to-floor ratio used before the FFT correction.
+        case legacy
+        /// Use NeMo's absolute log floor with mathematically scaled FFT power.
+        case nemo
+    }
+
     let config: ParakeetConfig
+
+    private static let powerCorrection: Float = 0.25
+    private static let nemoLogGuard: Float = 0x1p-24
 
     private let paddedFFT: Int = 512      // n_fft (already power of 2)
     private let log2PaddedFFT: vDSP_Length = 9
@@ -17,14 +29,23 @@ struct MelPreprocessor {
     private let centrePad: Int = 256      // n_fft / 2
     /// torch.stft centres a window shorter than n_fft inside the frame.
     private let windowOffset: Int = 56    // (512 - 400) / 2
-    private let logGuard: Float = 5.960464477539063e-08  // 2^{-24}
+    private let logGuard: Float
 
     private let fftSetup: FFTSetup
     private let hannWindow: [Float]       // win_length = 400
     private let melFilterbank: [Float]    // [nMels, nBins] = [128, 257]
 
-    init(config: ParakeetConfig) {
+    init(config: ParakeetConfig, calibration: Calibration = .legacy) {
         self.config = config
+        switch calibration {
+        case .legacy:
+            // log(4E + ε) = log(4) + log(E + ε/4). Centering removes the
+            // constant, so scaling the floor with power retains the previous
+            // normalized features, subject to Float32 rounding.
+            self.logGuard = Self.nemoLogGuard * Self.powerCorrection
+        case .nemo:
+            self.logGuard = Self.nemoLogGuard
+        }
 
         // Hann window, symmetric: 0.5 * (1 - cos(2π*i/(N-1))).
         // The NeMo featurizer builds it with torch.hann_window(periodic: false);
@@ -52,8 +73,19 @@ struct MelPreprocessor {
     ///
     /// - Parameters:
     ///   - audio: PCM Float32 samples at 16kHz
+    ///   - normalizationWindowLength: Normalize each encoder window independently.
+    ///     Nil uses all valid frames, as in NeMo's utterance preprocessor.
     /// - Returns: Tuple of (mel MLMultiArray [1, 128, T], melLength Int)
-    func extract(_ audio: [Float]) throws -> (mel: MLMultiArray, melLength: Int) {
+    func extract(_ audio: [Float], normalizationWindowLength: Int? = nil) throws
+        -> (mel: MLMultiArray, melLength: Int)
+    {
+        guard !audio.isEmpty else {
+            throw AudioModelError.inferenceFailed(operation: "mel extraction", reason: "Audio is empty")
+        }
+        if let normalizationWindowLength, normalizationWindowLength <= 0 {
+            throw AudioModelError.invalidConfiguration(
+                model: "Parakeet", reason: "Normalization window must contain at least one frame")
+        }
         // Pre-emphasis: x[n] = audio[n] - 0.97 * audio[n-1]
         var preemphasized = [Float](repeating: 0, count: audio.count)
         preemphasized[0] = audio[0]
@@ -120,15 +152,16 @@ struct MelPreprocessor {
                 }
             }
 
-            // Power spectrum: |X[k]|^2 = real^2 + imag^2
+            // Power spectrum: |X[k]|^2 = real^2 + imag^2, scaled by 1/4 because
+            // vDSP_fft_zrip returns 2x the DFT that torch.stft returns.
             let base = frame * nBins
             // DC component (packed in realp[0])
-            powerSpec[base] = splitReal[0] * splitReal[0]
+            powerSpec[base] = splitReal[0] * splitReal[0] * Self.powerCorrection
             // Nyquist component (packed in imagp[0])
-            powerSpec[base + halfPadded] = splitImag[0] * splitImag[0]
+            powerSpec[base + halfPadded] = splitImag[0] * splitImag[0] * Self.powerCorrection
             // Other bins
             for k in 1..<halfPadded {
-                powerSpec[base + k] = splitReal[k] * splitReal[k] + splitImag[k] * splitImag[k]
+                powerSpec[base + k] = (splitReal[k] * splitReal[k] + splitImag[k] * splitImag[k]) * Self.powerCorrection
             }
         }
 
@@ -149,31 +182,11 @@ struct MelPreprocessor {
         var countN = Int32(count)
         vvlogf(&melSpec, melSpec, &countN)
 
-        // Per-feature normalization: for each mel bin, normalize over valid frames
-        // NeMo: mean = x[:, :melLength].mean(dim=1), std = x[:, :melLength].std(dim=1)
-        melSpec.withUnsafeMutableBufferPointer { buf in
-            for bin in 0..<config.numMelBins {
-                let base = buf.baseAddress! + bin * nFrames
-
-                // Mean
-                var mean: Float = 0
-                vDSP_meanv(base, 1, &mean, vDSP_Length(melLength))
-
-                // Subtract mean in-place
-                var negMean = -mean
-                vDSP_vsadd(base, 1, &negMean, base, 1, vDSP_Length(melLength))
-
-                // Bessel-corrected std from zero-centered data
-                var meanSq: Float = 0
-                vDSP_measqv(base, 1, &meanSq, vDSP_Length(melLength))
-                let std = sqrt(Float(melLength) * meanSq / Float(melLength - 1))
-                var invStd = 1.0 / (std + 1e-5)
-                vDSP_vsmul(base, 1, &invStd, base, 1, vDSP_Length(melLength))
-
-                // Zero pad frames beyond melLength
-                memset(base + melLength, 0, (nFrames - melLength) * MemoryLayout<Float>.stride)
-            }
-        }
+        // Match the encoder's context: a later window must not inherit statistics
+        // dominated by louder speech or silence elsewhere in the recording.
+        Self.normalizeLogMel(
+            &melSpec, bins: config.numMelBins, bufferFrames: nFrames,
+            validFrames: melLength, windowLength: normalizationWindowLength ?? max(melLength, 1))
 
         // Create MLMultiArray [1, numMelBins, nFrames] in float16
         let mel = try MLMultiArray(
@@ -187,6 +200,64 @@ struct MelPreprocessor {
         }
 
         return (mel, melLength)
+    }
+
+    /// NeMo per-feature normalization over the valid frames of each window.
+    /// The centered STFT can emit an extra frame, which remains zero padding.
+    static func normalizeLogMel(
+        _ features: inout [Float], bins: Int, bufferFrames: Int,
+        validFrames: Int, windowLength: Int
+    ) {
+        precondition(windowLength > 0 && validFrames >= 0 && validFrames <= bufferFrames)
+        precondition(features.count == bins * bufferFrames)
+        features.withUnsafeMutableBufferPointer { buffer in
+            for bin in 0..<bins {
+                let row = buffer.baseAddress! + bin * bufferFrames
+                for start in stride(from: 0, to: validFrames, by: windowLength) {
+                    let count = min(windowLength, validFrames - start)
+                    let values = row + start
+                    // A one-frame tail has no sample variance. NeMo replaces its
+                    // undefined standard deviation with zero; centering yields zero.
+                    let first = values.pointee
+                    let constant = UnsafeBufferPointer(start: values, count: count).allSatisfy { $0 == first }
+                    if count == 1 || constant {
+                        // Avoid magnifying mean-rounding error in silent windows.
+                        values.update(repeating: 0, count: count)
+                        continue
+                    }
+                    var mean: Float = 0
+                    vDSP_meanv(values, 1, &mean, vDSP_Length(count))
+                    var negativeMean = -mean
+                    vDSP_vsadd(values, 1, &negativeMean, values, 1, vDSP_Length(count))
+                    var meanSquare: Float = 0
+                    vDSP_measqv(values, 1, &meanSquare, vDSP_Length(count))
+                    let standardDeviation = sqrt(Float(count) * meanSquare / Float(count - 1))
+                    var inverseDeviation = 1 / (standardDeviation + 1e-5)
+                    vDSP_vsmul(values, 1, &inverseDeviation, values, 1, vDSP_Length(count))
+                }
+                row.advanced(by: validFrames).update(repeating: 0, count: bufferFrames - validFrames)
+            }
+        }
+    }
+
+    /// Remove STFT padding by retaining the valid prefix, before encoder shape selection.
+    static func validPrefix(_ mel: MLMultiArray, length: Int) throws -> MLMultiArray {
+        try slice(mel, start: 0, length: length)
+    }
+
+    /// Copy a valid frame range using the source's bin-major buffer stride.
+    static func slice(_ mel: MLMultiArray, start: Int, length: Int) throws -> MLMultiArray {
+        let frames = mel.shape[2].intValue
+        precondition(start >= 0 && length > 0 && start + length <= frames && mel.dataType == .float16)
+        if start == 0 && length == frames { return mel }
+        let bins = mel.shape[1].intValue
+        let result = try MLMultiArray(shape: [1, bins as NSNumber, length as NSNumber], dataType: .float16)
+        let source = mel.dataPointer.assumingMemoryBound(to: Float16.self)
+        let destination = result.dataPointer.assumingMemoryBound(to: Float16.self)
+        for bin in 0..<bins {
+            destination.advanced(by: bin * length).update(from: source.advanced(by: bin * frames + start), count: length)
+        }
+        return result
     }
 
     // MARK: - Mel Filterbank Construction

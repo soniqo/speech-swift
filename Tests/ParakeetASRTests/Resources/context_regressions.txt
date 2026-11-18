@@ -1,0 +1,19 @@
+Source: google/fleurs test split.
+Dataset revision: 168de341b3db6859a9bac1c50a2ef5e3b47647e0 (converted Parquet snapshot).
+License: CC BY 4.0. Attribution: FLEURS dataset contributors (Google).
+https://huggingface.co/datasets/google/fleurs
+
+context_french.wav: fr_fr/0013-10496509281839367149.wav; 11.64 seconds, mono 16 kHz.
+Reference: Les troupes de lions agissent comme des meutes de loups ou de chiens, des animaux étonnamment semblables aux lions (mais pas aux autres grands félins) dans leur comportement, et aussi très mortels pour leurs proies.
+
+context_english.wav: en_us/0078-12156117084384995618.wav; 10.98 seconds, mono 16 kHz.
+Reference: Only mutations in germ-line cells can be passed on to children, while mutations elsewhere can cause cell-death or cancer.
+
+context_phase.wav: en_us/0089-1242235796224521830.wav; 14.28 seconds, mono 16 kHz.
+Reference: The parade of buildings that make the Hong Kong skyline has been likened to a glittering bar chart that is made apparent by the presence of the waters of Victoria Harbour.
+
+Tests attenuate each recording to a peak of 0.001. They protect a missing French passage, an invented English continuation at a hard cut, and a passage lost when all original window positions were replaced.
+
+context_empty_window.wav: en_us/0023-1054805305879816018.wav; 9.6 seconds, mono 16 kHz.
+Reference: It was ruled by the "Vichy" French. These were French people who had made peace with the Germans in 1940 and worked with the invaders instead of fighting them.
+The test uses original volume and protects the final passage lost when a primary window returns no words.

@@ -105,6 +105,23 @@ final class IsolatedTestRunnerTests: XCTestCase {
         XCTAssertEqual(classes, ["Fixture.E2EModelTests", "Fixture.LegacyModelE2ETests"])
     }
 
+    func testParakeetMelContractRunsInUnitPhaseWhileModelTestsStayExcluded() throws {
+        let unit = try XCTUnwrap(recordedCalls().first { $0.contains("--skip") })
+        let skipPatterns = unit.indices.compactMap { index in
+            unit[index] == "--skip" && index + 1 < unit.count ? unit[index + 1] : nil
+        }
+        func isSkipped(_ test: String) -> Bool {
+            skipPatterns.contains { test.range(of: $0, options: .regularExpression) != nil }
+        }
+
+        XCTAssertFalse(isSkipped(
+            "ParakeetASRTests.MelContractTests/testQuietMelMatchesTheTrainingPreprocessor"),
+            "The quiet-audio mel regression must run without model downloads")
+        XCTAssertTrue(isSkipped(
+            "ParakeetASRTests.E2EParakeetASRTests/testTranscription"),
+            "Model-loading Parakeet tests must stay outside the unit phase")
+    }
+
     func testSuccessfulProcessWithNoCasesIsNotReportedAsPassing() throws {
         let calls = try recordedCalls(emptyClass: "Fixture.E2EModelTests", expectedExitStatus: 1)
         XCTAssertEqual(calls.filter { $0.contains("--filter") }.count, 2)

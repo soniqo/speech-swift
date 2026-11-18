@@ -44,7 +44,7 @@ if [[ -z "$ONLY_FILTER" && "${E2E_SKIP_UNIT:-0}" != "1" ]]; then
   # model-loading suites do not use the E2E naming convention.
   UNIT_SKIPS=(
     E2E StreamingASRTests ForcedAlignerTests SileroVADTests SpeechVADTests
-    WeSpeakerTests SortformerTests PersonaPlexTests ParakeetASRTests
+    WeSpeakerTests SortformerTests PersonaPlexTests
     CosyVoiceTTSTests KokoroTTSTests StreamingAudioPlayerTests
   )
   UNIT_ARGS=()

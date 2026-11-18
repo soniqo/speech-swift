@@ -127,32 +127,70 @@ public struct ParakeetVocabulary: Sendable {
         _ tokenIds: [Int], logProbs: [Float],
         tokenStartTimes: [Double]? = nil, frameDuration: Double? = nil
     ) -> [WordConfidence] {
-        guard tokenIds.count == logProbs.count else {
-            return [WordConfidence(word: decode(tokenIds), confidence: 0)]
-        }
-        let starts = tokenStartTimes?.count == tokenIds.count ? tokenStartTimes : nil
+        let ends = frameDuration.flatMap { duration in tokenStartTimes?.map { $0 + duration } }
+        return decodeTimedWords(
+            tokenIds, logProbs: logProbs, starts: tokenStartTimes, ends: ends,
+            punctuationUsesPreviousEnd: false).map(\.value)
+    }
 
-        var words = [WordConfidence]()
+    /// Decode words with absolute token start and predicted end times.
+    /// Punctuation attached to a word keeps the preceding text token's end.
+    /// Missing or mismatched timing arrays omit all word times.
+    func decodeWordsWithTokenTimes(
+        _ tokenIds: [Int], logProbs: [Float],
+        tokenStartTimes: [Double]?, tokenEndTimes: [Double]?
+    ) -> [WordConfidence] {
+        decodeWordDetailsWithTokenTimes(
+            tokenIds, logProbs: logProbs,
+            tokenStartTimes: tokenStartTimes, tokenEndTimes: tokenEndTimes).map(\.value)
+    }
+
+    /// Keep the emitted token probabilities with each word so window merging
+    /// can calculate confidence from the retained transcript alone.
+    func decodeWordDetailsWithTokenTimes(
+        _ tokenIds: [Int], logProbs: [Float],
+        tokenStartTimes: [Double]?, tokenEndTimes: [Double]?
+    ) -> [ParakeetDecodedWord] {
+        decodeTimedWords(
+            tokenIds, logProbs: logProbs, starts: tokenStartTimes, ends: tokenEndTimes,
+            punctuationUsesPreviousEnd: true)
+    }
+
+    private func decodeTimedWords(
+        _ tokenIds: [Int], logProbs: [Float], starts: [Double]?, ends: [Double]?,
+        punctuationUsesPreviousEnd: Bool
+    ) -> [ParakeetDecodedWord] {
+        guard tokenIds.count == logProbs.count else {
+            return [ParakeetDecodedWord(
+                value: WordConfidence(word: decode(tokenIds), confidence: 0), tokenLogProbs: [])]
+        }
+        let timed = starts?.count == tokenIds.count && ends?.count == tokenIds.count
+        let starts = timed ? starts : nil
+        let ends = timed ? ends : nil
+
+        var words = [ParakeetDecodedWord]()
         var currentWord = ""
         var currentLogProbs = [Float]()
         var firstStart: Double?
-        var lastStart: Double?
+        var lastEnd: Double?
 
         func flush() {
             let meanLP = currentLogProbs.reduce(0, +) / Float(currentLogProbs.count)
             var startTime: Double?
             var endTime: Double?
-            if let frameDuration, let firstStart, let lastStart {
+            if let firstStart, let lastEnd {
                 startTime = firstStart
-                endTime = lastStart + frameDuration
+                endTime = lastEnd
             }
-            words.append(WordConfidence(
-                word: currentWord, confidence: min(1.0, exp(meanLP)),
-                startTime: startTime, endTime: endTime))
+            words.append(ParakeetDecodedWord(
+                value: WordConfidence(
+                    word: currentWord, confidence: min(1.0, exp(meanLP)),
+                    startTime: startTime, endTime: endTime),
+                tokenLogProbs: currentLogProbs))
             currentWord = ""
             currentLogProbs = []
             firstStart = nil
-            lastStart = nil
+            lastEnd = nil
         }
 
         for (i, id) in tokenIds.enumerated() {
@@ -167,9 +205,11 @@ public struct ParakeetVocabulary: Sendable {
 
             currentWord += text
             currentLogProbs.append(logProbs[i])
-            if let starts {
+            if let starts, let ends {
                 if firstStart == nil { firstStart = starts[i] }
-                lastStart = starts[i]
+                let attachedPunctuation = punctuationUsesPreviousEnd && !startsNewWord && lastEnd != nil
+                    && text.unicodeScalars.first.map(CharacterSet.punctuationCharacters.contains) == true
+                if !attachedPunctuation { lastEnd = ends[i] }
             }
         }
 
@@ -178,5 +218,15 @@ public struct ParakeetVocabulary: Sendable {
         }
 
         return words
+    }
+}
+
+struct ParakeetDecodedWord {
+    let value: WordConfidence
+    let tokenLogProbs: [Float]
+
+    var midpoint: Double {
+        let start = value.startTime ?? 0
+        return (start + (value.endTime ?? start)) / 2
     }
 }

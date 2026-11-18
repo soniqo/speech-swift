@@ -149,11 +149,9 @@ final class ParakeetASRTests: XCTestCase {
 
 final class E2EParakeetASRTests: XCTestCase {
 
-    /// E2E model id, overridable via `PARAKEET_TEST_MODEL_ID`. CI points this
-    /// at the fixed-shape iOS-5s variant because the default EnumeratedShapes
-    /// encoder crashes CoreML's cpuOnly loader on the virtualized runner;
-    /// `transcribeAudio` window-chunks long audio so the 5 s model still
-    /// transcribes the multi-second fixtures.
+    /// Override `PARAKEET_TEST_MODEL_ID` to run these checks against another
+    /// export, including the fixed iOS-5s model. Long fixtures are split
+    /// according to the loaded encoder's supported window length.
     static var modelId: String {
         let env = ProcessInfo.processInfo.environment["PARAKEET_TEST_MODEL_ID"]
         if let env, !env.isEmpty { return env }
