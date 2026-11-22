@@ -3,7 +3,7 @@ import XCTest
 
 /// End-to-end generation through the hand-written Qwen3 dense backend: chat template + tokenizer +
 /// the optimised sampler must produce coherent text (the forward pass is already parity-verified).
-final class Qwen3DenseGenTests: XCTestCase {
+final class E2EQwen3DenseGenTests: XCTestCase {
     func testGeneratesCoherentReply() async throws {
         let chat: Qwen3DenseChat
         do {

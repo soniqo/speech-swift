@@ -76,6 +76,7 @@ Reconhecimento, sintese e compreensao de fala no dispositivo para Mac e iOS. Exe
 **LLMs e tradução**
 
 - **[Qwen3Chat](https://soniqo.audio/pt/guides/chat)** — Chat LLM no dispositivo (Qwen3.5-0.8B MLX/CoreML mais backends MLX dense Qwen3 4B e Gemma 4 E2B/E4B, tokens em streaming)
+- **[Inkling2Chat](docs/models/inkling2-mini.md)** — Raciocínio local sobre texto e imagens estáticas com Inkling 2 Mini (26.4B MoE, MLX INT4/INT5, streaming; parte do Qwen3Chat)
 - **[FunctionGemma](https://soniqo.audio/pt/guides/function-calls)** — LLM no dispositivo para chamadas estruturadas de funcoes / ferramentas (Gemma 3 270M, CoreML paletizado de 8 bits, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/pt/guides/translate)** — Tradução multidirecional entre 400+ idiomas (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
 - **[GLiNER2.5-Decide](https://soniqo.audio/pt/guides/gliner)** - Classificação de texto por rótulos e extração de entidades localmente (codificador DeBERTa-v3-large, MLX, INT8/FP16/FP32; prévia de desenvolvimento, Apache 2.0)
@@ -215,6 +216,7 @@ Vista compacta abaixo. **[Catalogo completo de modelos com tamanhos, quantizacoe
 | [Fish Audio S2 Pro](docs/models/fish-audio-s2-pro.md) | Texto → Fala (clonagem zero-shot, marcadores de estilo explicitos) | MLX | 0.5B-class (fp16) | Multilingue |
 | [CSM](docs/models/csm.md) | Texto → Fala (conversacional, clonagem zero-shot) | MLX | 1B (int8 / fp16) | EN |
 | [Qwen3.5 Chat](docs/models/qwen35-chat.md) | Text → Text (LLM) | MLX, CoreML | 0.8B | Multi |
+| [Inkling 2 Mini](docs/models/inkling2-mini.md) | Texto + Imagem → Texto | MLX | 26.4B MoE (INT4/INT5) | EN + exemplos em 5 idiomas |
 | [Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md) | Text → Text (LLM) | MLX | 4B | Multi |
 | [Gemma 4 Chat](docs/models/gemma4-chat.md) | Text → Text (LLM) | MLX | E2B / E4B (4-bit) | Multi |
 | [FunctionGemma](https://soniqo.audio/pt/guides/function-calls) | Texto → Chamadas de ferramentas (LLM) | CoreML | 270M | EN |

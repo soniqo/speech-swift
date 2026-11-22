@@ -7,7 +7,7 @@ import XCTest
 ///
 /// Reference (mlx_lm, Qwen3-4B-Instruct-2507 MLX int4, tokens [9707, 11, 1879, 0]):
 ///   argmax 358 (logit 11.31), top5 [358, 220, 320, 1096, 11162].
-final class Qwen3DenseParityTests: XCTestCase {
+final class E2EQwen3DenseParityTests: XCTestCase {
     func testNextTokenArgmaxMatchesReference() async throws {
         let chat: Qwen3DenseChat
         do {

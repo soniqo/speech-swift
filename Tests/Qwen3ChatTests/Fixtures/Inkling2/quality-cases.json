@@ -1,0 +1,273 @@
+[
+  {
+    "id": "passage-facts",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Read this note: The museum opens on Tuesday at 10 AM and closes at 6 PM. On Thursday it stays open until 8 PM. What time does it close on Thursday? Answer with just the time."
+      }
+    ],
+    "pattern": "(?i)8\\s*(?:p\\.?m\\.?|:00)|20:00"
+  },
+  {
+    "id": "inventory",
+    "messages": [
+      {
+        "role": "user",
+        "content": "A shop starts with 23 notebooks, sells 7 and receives 12 more. How many notebooks does it have? Reply with only the number."
+      }
+    ],
+    "pattern": "\\b28\\b"
+  },
+  {
+    "id": "negation",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Of copper, wood, and iron, which material is NOT a metal? Reply with one word."
+      }
+    ],
+    "pattern": "(?i)\\bwood\\b"
+  },
+  {
+    "id": "conversion",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Convert 2.5 kilometers to meters. Reply with only the number."
+      }
+    ],
+    "pattern": "2[,.]?500"
+  },
+  {
+    "id": "sorting",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Sort these numbers in ascending order: 17, -2, 8, 0. Reply with just the sorted list."
+      }
+    ],
+    "pattern": "-2\\s*,\\s*0\\s*,\\s*8\\s*,\\s*17"
+  },
+  {
+    "id": "conversation-memory",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Remember that the project code is ORCHID."
+      },
+      {
+        "role": "assistant",
+        "content": "The project code is ORCHID."
+      },
+      {
+        "role": "user",
+        "content": "We also considered LILY, but did not select it. What is the project code? Reply with just the code."
+      }
+    ],
+    "pattern": "(?i)\\borchid\\b"
+  },
+  {
+    "id": "code-reading",
+    "messages": [
+      {
+        "role": "user",
+        "content": "What does this Python code print?\nx = [1, 2, 3, 4]\nprint(x[1:3])\nReply with only the printed value."
+      }
+    ],
+    "pattern": "\\[2,\\s*3\\]"
+  },
+  {
+    "id": "code-fix",
+    "messages": [
+      {
+        "role": "user",
+        "content": "A Python function should include every integer from 1 through n. Its current loop is range(1, n). Give only the corrected range expression."
+      }
+    ],
+    "pattern": "range\\(1,\\s*n\\s*\\+\\s*1\\)"
+  },
+  {
+    "id": "json-format",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Return only a JSON object with exactly these fields: name is Mira and count is the integer 3. Do not use a Markdown code fence."
+      }
+    ],
+    "json_expected": {
+      "name": "Mira",
+      "count": 3
+    }
+  },
+  {
+    "id": "entity-extraction",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Ava left Boston on Monday and arrived in Berlin on Tuesday. Which city did she leave, and on which day? Reply in the format city, day."
+      }
+    ],
+    "pattern": "(?i)Boston\\s*,\\s*Monday"
+  },
+  {
+    "id": "explanation",
+    "messages": [
+      {
+        "role": "user",
+        "content": "In two short sentences, explain why Earth has seasons. Mention the cause and how it changes sunlight. Avoid a list."
+      }
+    ],
+    "max_words": 70,
+    "pattern": "(?i)tilt"
+  },
+  {
+    "id": "rate-reasoning",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Five printers print five pages in five minutes. At the same rate, how many minutes do 100 printers need to print 100 pages? Reply with only the number."
+      }
+    ],
+    "pattern": "\\b5\\b"
+  },
+  {
+    "id": "missing-information",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Use only this passage: Eva is a baker who lives in Oslo. Her bakery opens at 7 AM. What is Eva's birthday? Say if the passage does not tell you."
+      }
+    ],
+    "pattern": "(?i)(not|no|unknown|unspecified|doesn.t).*(?:specif|mention|provid|tell|birthday|given)|birthday.*(?:not|unknown)"
+  },
+  {
+    "id": "short-message",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Write a friendly reminder to a colleague to send the slides by Friday. Use at most 35 words and include the word Friday. Do not use the word urgent."
+      }
+    ],
+    "max_words": 35,
+    "forbidden": [
+      "urgent"
+    ],
+    "pattern": "(?i)Friday"
+  },
+  {
+    "id": "german-translation",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Translate to English, with no explanation: Der Zug fährt um acht Uhr ab."
+      }
+    ],
+    "pattern": "(?i)train.*(?:leave|depart).*eight|train.*(?:leave|depart).*8"
+  },
+  {
+    "id": "spanish-reading",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Si llueve, Marta lleva un paraguas. Hoy llueve. ¿Qué lleva Marta? Responde en español con una frase corta."
+      }
+    ],
+    "pattern": "(?i)paraguas"
+  },
+  {
+    "id": "french-reading",
+    "messages": [
+      {
+        "role": "user",
+        "content": "La réunion prévue lundi est reportée à mercredi. Quel jour aura lieu la réunion ? Répondez en français, en un mot."
+      }
+    ],
+    "pattern": "(?i)mercredi"
+  },
+  {
+    "id": "chinese-reading",
+    "messages": [
+      {
+        "role": "user",
+        "content": "小明有九个苹果，又买了三个苹果。现在他一共有几个苹果？只回答数字。"
+      }
+    ],
+    "pattern": "12|十二"
+  },
+  {
+    "id": "japanese-translation",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Translate \"The library is closed today\" into Japanese. Reply only in Japanese."
+      }
+    ],
+    "review": "Check that the Japanese says the library is closed today, without language mixing.",
+    "pattern": "[\\u3040-\\u30ff\\u4e00-\\u9fff]"
+  },
+  {
+    "id": "sql",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Write one SQL query, without a code fence, to select the name column from users where active = 1, sorted by name in ascending order."
+      }
+    ],
+    "pattern": "(?is)select\\s+name\\s+from\\s+users\\s+where\\s+active\\s*=\\s*1\\s+order\\s+by\\s+name"
+  },
+  {
+    "id": "image-count",
+    "messages": [
+      {
+        "role": "user",
+        "content": "How many blue circles are in the image? Reply with only the number."
+      }
+    ],
+    "image": "quality-count.png",
+    "pattern": "\\b3\\b|(?i:three)"
+  },
+  {
+    "id": "image-spatial",
+    "messages": [
+      {
+        "role": "user",
+        "content": "What shape is to the left of the blue circle? Reply with its color and shape."
+      }
+    ],
+    "image": "quality-spatial.png",
+    "pattern": "(?i)red.*square"
+  },
+  {
+    "id": "image-ocr",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Transcribe the printed words in this image. Reply with only the text."
+      }
+    ],
+    "image": "quality-ocr.png",
+    "pattern": "(?i)MEET\\s+AT\\s+4\\s*PM"
+  },
+  {
+    "id": "image-chart",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Which bar is tallest: A, B, or C? Reply with only its letter."
+      }
+    ],
+    "image": "quality-chart.png",
+    "pattern": "\\bB\\b"
+  },
+  {
+    "id": "long-context",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Use these records. Project Harbor will launch in Oslo.\nEntry 1: routine inventory checked.\nEntry 2: routine inventory checked.\nEntry 3: routine inventory checked.\nEntry 4: routine inventory checked.\nEntry 5: routine inventory checked.\nEntry 6: routine inventory checked.\nEntry 7: routine inventory checked.\nEntry 8: routine inventory checked.\nEntry 9: routine inventory checked.\nEntry 10: routine inventory checked.\nEntry 11: routine inventory checked.\nEntry 12: routine inventory checked.\nEntry 13: routine inventory checked.\nEntry 14: routine inventory checked.\nEntry 15: routine inventory checked.\nEntry 16: routine inventory checked.\nEntry 17: routine inventory checked.\nEntry 18: routine inventory checked.\nEntry 19: routine inventory checked.\nEntry 20: routine inventory checked.\nEntry 21: routine inventory checked.\nEntry 22: routine inventory checked.\nEntry 23: routine inventory checked.\nEntry 24: routine inventory checked.\nEntry 25: routine inventory checked.\nEntry 26: routine inventory checked.\nEntry 27: routine inventory checked.\nEntry 28: routine inventory checked.\nEntry 29: routine inventory checked.\nEntry 30: routine inventory checked.\nEntry 31: routine inventory checked.\nEntry 32: routine inventory checked.\nEntry 33: routine inventory checked.\nEntry 34: routine inventory checked.\nEntry 35: routine inventory checked.\nEntry 36: routine inventory checked.\nEntry 37: routine inventory checked.\nEntry 38: routine inventory checked.\nEntry 39: routine inventory checked.\nEntry 40: routine inventory checked.\nEntry 41: routine inventory checked.\nEntry 42: routine inventory checked.\nEntry 43: routine inventory checked.\nEntry 44: routine inventory checked.\nEntry 45: routine inventory checked.\nEntry 46: routine inventory checked.\nEntry 47: routine inventory checked.\nEntry 48: routine inventory checked.\nEntry 49: routine inventory checked.\nEntry 50: routine inventory checked.\nEntry 51: routine inventory checked.\nEntry 52: routine inventory checked.\nEntry 53: routine inventory checked.\nEntry 54: routine inventory checked.\nEntry 55: routine inventory checked.\nEntry 56: routine inventory checked.\nEntry 57: routine inventory checked.\nEntry 58: routine inventory checked.\nEntry 59: routine inventory checked.\nEntry 60: routine inventory checked.\nEntry 61: routine inventory checked.\nEntry 62: routine inventory checked.\nEntry 63: routine inventory checked.\nEntry 64: routine inventory checked.\nEntry 65: routine inventory checked.\nEntry 66: routine inventory checked.\nEntry 67: routine inventory checked.\nEntry 68: routine inventory checked.\nEntry 69: routine inventory checked.\nEntry 70: routine inventory checked.\nEntry 71: routine inventory checked.\nEntry 72: routine inventory checked.\nEntry 73: routine inventory checked.\nEntry 74: routine inventory checked.\nEntry 75: routine inventory checked.\nEntry 76: routine inventory checked.\nEntry 77: routine inventory checked.\nEntry 78: routine inventory checked.\nEntry 79: routine inventory checked.\nEntry 80: routine inventory checked.\nEntry 81: routine inventory checked.\nEntry 82: routine inventory checked.\nEntry 83: routine inventory checked.\nEntry 84: routine inventory checked.\nEntry 85: routine inventory checked.\nEntry 86: routine inventory checked.\nEntry 87: routine inventory checked.\nEntry 88: routine inventory checked.\nEntry 89: routine inventory checked.\nEntry 90: routine inventory checked.\nEntry 91: routine inventory checked.\nEntry 92: routine inventory checked.\nEntry 93: routine inventory checked.\nEntry 94: routine inventory checked.\nEntry 95: routine inventory checked.\nEntry 96: routine inventory checked.\nEntry 97: routine inventory checked.\nEntry 98: routine inventory checked.\nEntry 99: routine inventory checked.\nEntry 100: routine inventory checked.\nEntry 101: routine inventory checked.\nEntry 102: routine inventory checked.\nEntry 103: routine inventory checked.\nEntry 104: routine inventory checked.\nEntry 105: routine inventory checked.\nEntry 106: routine inventory checked.\nEntry 107: routine inventory checked.\nEntry 108: routine inventory checked.\nEntry 109: routine inventory checked.\nEntry 110: routine inventory checked.\nEntry 111: routine inventory checked.\nEntry 112: routine inventory checked.\nEntry 113: routine inventory checked.\nEntry 114: routine inventory checked.\nEntry 115: routine inventory checked.\nEntry 116: routine inventory checked.\nEntry 117: routine inventory checked.\nEntry 118: routine inventory checked.\nEntry 119: routine inventory checked.\nEntry 120: routine inventory checked.\nEntry 121: routine inventory checked.\nEntry 122: routine inventory checked.\nEntry 123: routine inventory checked.\nEntry 124: routine inventory checked.\nEntry 125: routine inventory checked.\nEntry 126: routine inventory checked.\nEntry 127: routine inventory checked.\nEntry 128: routine inventory checked.\nEntry 129: routine inventory checked.\nEntry 130: routine inventory checked.\nEntry 131: routine inventory checked.\nEntry 132: routine inventory checked.\nEntry 133: routine inventory checked.\nEntry 134: routine inventory checked.\nEntry 135: routine inventory checked.\nEntry 136: routine inventory checked.\nEntry 137: routine inventory checked.\nEntry 138: routine inventory checked.\nEntry 139: routine inventory checked.\nEntry 140: routine inventory checked.\nEntry 141: routine inventory checked.\nEntry 142: routine inventory checked.\nEntry 143: routine inventory checked.\nEntry 144: routine inventory checked.\nEntry 145: routine inventory checked.\nEntry 146: routine inventory checked.\nEntry 147: routine inventory checked.\nEntry 148: routine inventory checked.\nEntry 149: routine inventory checked.\nEntry 150: routine inventory checked.\nEntry 151: routine inventory checked.\nEntry 152: routine inventory checked.\nEntry 153: routine inventory checked.\nEntry 154: routine inventory checked.\nEntry 155: routine inventory checked.\nEntry 156: routine inventory checked.\nEntry 157: routine inventory checked.\nEntry 158: routine inventory checked.\nEntry 159: routine inventory checked.\nEntry 160: routine inventory checked.\nEntry 161: routine inventory checked.\nEntry 162: routine inventory checked.\nEntry 163: routine inventory checked.\nEntry 164: routine inventory checked.\nEntry 165: routine inventory checked.\nEntry 166: routine inventory checked.\nEntry 167: routine inventory checked.\nEntry 168: routine inventory checked.\nEntry 169: routine inventory checked.\nEntry 170: routine inventory checked.\nEntry 171: routine inventory checked.\nEntry 172: routine inventory checked.\nEntry 173: routine inventory checked.\nEntry 174: routine inventory checked.\nEntry 175: routine inventory checked.\nEntry 176: routine inventory checked.\nEntry 177: routine inventory checked.\nEntry 178: routine inventory checked.\nEntry 179: routine inventory checked.\nEntry 180: routine inventory checked.\nEntry 181: routine inventory checked.\nEntry 182: routine inventory checked.\nEntry 183: routine inventory checked.\nEntry 184: routine inventory checked.\nEntry 185: routine inventory checked.\nEntry 186: routine inventory checked.\nEntry 187: routine inventory checked.\nEntry 188: routine inventory checked.\nEntry 189: routine inventory checked.\nEntry 190: routine inventory checked.\nEntry 191: routine inventory checked.\nEntry 192: routine inventory checked.\nEntry 193: routine inventory checked.\nEntry 194: routine inventory checked.\nEntry 195: routine inventory checked.\nEntry 196: routine inventory checked.\nEntry 197: routine inventory checked.\nEntry 198: routine inventory checked.\nEntry 199: routine inventory checked.\nEntry 200: routine inventory checked.\nEntry 201: routine inventory checked.\nEntry 202: routine inventory checked.\nEntry 203: routine inventory checked.\nEntry 204: routine inventory checked.\nEntry 205: routine inventory checked.\nEntry 206: routine inventory checked.\nEntry 207: routine inventory checked.\nEntry 208: routine inventory checked.\nEntry 209: routine inventory checked.\nEntry 210: routine inventory checked.\nEntry 211: routine inventory checked.\nEntry 212: routine inventory checked.\nEntry 213: routine inventory checked.\nEntry 214: routine inventory checked.\nEntry 215: routine inventory checked.\nEntry 216: routine inventory checked.\nEntry 217: routine inventory checked.\nEntry 218: routine inventory checked.\nEntry 219: routine inventory checked.\nEntry 220: routine inventory checked.\nFinal record: the launch year is 2028.\nWhat are the project launch city and year? Reply city, year."
+      }
+    ],
+    "pattern": "(?i)Oslo\\s*,\\s*2028"
+  }
+]

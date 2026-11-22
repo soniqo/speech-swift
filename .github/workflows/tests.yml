@@ -11,6 +11,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  inkling-export-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install CPU test dependency
+        run: python -m pip install 'numpy>=1.26,<3'
+      - name: Test Inkling export logic (no model downloads)
+        run: python -m unittest discover -s scripts/tests -p 'test_export_inkling_mlx.py' -v
+      - name: Test local decision validation (no model downloads)
+        run: python -m unittest discover -s scripts/tests -p 'test_inkling2_decision.py' -v
+
   build-and-test:
     runs-on: macos-15
     timeout-minutes: 45
