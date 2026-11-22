@@ -799,6 +799,8 @@ let package = Package(
                 "AudioCommon",
                 "MLXCommon",
                 "CXGrammarBridge",
+                .product(name: "Hub", package: "swift-transformers"),
+                .product(name: "Tokenizers", package: "swift-transformers"),
                 .product(name: "MLXLLM", package: "mlx-swift-lm"),
                 .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "MLXNN", package: "mlx-swift"),
@@ -1402,7 +1404,8 @@ let package = Package(
                 // Gemma4AttentionBlockTests imports MLXRandom; without it the
                 // whole test bundle fails to build.
                 .product(name: "MLXRandom", package: "mlx-swift"),
-            ]
+            ],
+            resources: [.copy("Fixtures/Inkling2")]
         ),
         .testTarget(
             name: "FunctionGemmaTests",

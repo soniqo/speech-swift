@@ -34,6 +34,7 @@ public struct AudioCLI: ParsableCommand {
             TranslateCommand.self,
             GLiNERCommand.self,
             ClefCommand.self,
+            InklingCommand.self,
             WakeCommand.self,
             AvatarMotionCommand.self,
         ]

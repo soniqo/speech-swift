@@ -110,7 +110,7 @@ assistant header is appended for generation.
 
 The forward pass is validated against the Python `mlx_lm` reference: for a fixed prompt
 it produces the **same next-token argmax and top-5 logits** before any generation is trusted
-(`Tests/Qwen3ChatTests/Qwen3DenseParityTests`). Each quant has its own reference (int4 → argmax 358,
+(`Tests/Qwen3ChatTests/E2EQwen3DenseParityTests`). Each quant has its own reference (int4 → argmax 358,
 int5 → argmax 1096 for tokens `[9707, 11, 1879, 0]`).
 
 ## Conversion

@@ -86,6 +86,7 @@
 **نماذج LLM والترجمة**
 
 - **[Qwen3Chat](https://soniqo.audio/ar/guides/chat)** — محادثة LLM على الجهاز (Qwen3.5-0.8B عبر MLX/CoreML، إضافة إلى خلفيات MLX لـ Qwen3 dense بحجم 4B و Gemma 4 E2B/E4B، رموز تدفقية)
+- **[Inkling2Chat](docs/models/inkling2-mini.md)** — استدلال محلي على النصوص والصور الثابتة باستخدام Inkling 2 Mini ‏(26.4B MoE، ‏MLX INT4/INT5، خرج متدفق؛ ضمن Qwen3Chat)
 - **[FunctionGemma](https://soniqo.audio/ar/guides/function-calls)** — نموذج لغوي على الجهاز للاستدعاءات المنظمة للدوال / الأدوات (Gemma 3 270M، CoreML بترميز 8-بت، Neural Engine، حوالي 252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/ar/guides/translate)** — ترجمة متعددة الاتجاهات عبر أكثر من 400 لغة (3B، MLX INT4 + INT8، T5 v1.1، Apache 2.0)
 - **[GLiNER2.5-Decide](https://soniqo.audio/ar/guides/gliner)** - تصنيف النص وفق تسميات محددة واستخراج الكيانات محليًا (مُرمِّز DeBERTa-v3-large، MLX، INT8/FP16/FP32؛ معاينة للتطوير، Apache 2.0)
@@ -259,6 +260,7 @@ struct DictateView: View {
 | [VibeVoice 1.5B](https://soniqo.audio/ar/guides/vibevoice) | نص → كلام (بودكاست حتى 90 دقيقة) | MLX | 1.5B | EN/ZH |
 | [Magpie-TTS Multilingual](https://soniqo.audio/ar/guides/magpie) | نص → كلام (5 متحدثين جاهزين، تدفق) | MLX / CoreML | 357M (MLX INT8, CoreML INT8) | 9 (CoreML يستثني JA) |
 | [Qwen3.5 Chat](docs/models/qwen35-chat.md) | Text → Text (LLM) | MLX, CoreML | 0.8B | Multi |
+| [Inkling 2 Mini](docs/models/inkling2-mini.md) | نص + صورة → نص | MLX | 26.4B MoE (INT4/INT5) | EN + أمثلة من 5 لغات |
 | [Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md) | Text → Text (LLM) | MLX | 4B | Multi |
 | [Gemma 4 Chat](docs/models/gemma4-chat.md) | Text → Text (LLM) | MLX | E2B / E4B (4-bit) | Multi |
 | [FunctionGemma](https://soniqo.audio/ar/guides/function-calls) | نص → استدعاءات الأدوات (LLM) | CoreML | 270M | EN |

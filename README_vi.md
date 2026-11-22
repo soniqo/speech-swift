@@ -76,6 +76,7 @@ Nhận dạng, tổng hợp và hiểu giọng nói trên thiết bị cho Mac v
 **LLM và dịch thuật**
 
 - **[Qwen3Chat](https://soniqo.audio/guides/chat)** — Chat LLM trên thiết bị (Qwen3.5-0.8B MLX/CoreML cùng các backend MLX dense Qwen3 4B và Gemma 4 E2B/E4B, token streaming)
+- **[Inkling2Chat](docs/models/inkling2-mini.md)** — Suy luận cục bộ từ văn bản và ảnh tĩnh với Inkling 2 Mini (26.4B MoE, MLX INT4/INT5, streaming; thuộc Qwen3Chat)
 - **[FunctionGemma](https://soniqo.audio/guides/function-calls)** — LLM trên thiết bị cho các lệnh gọi hàm / công cụ có cấu trúc (Gemma 3 270M, CoreML palette hóa 8-bit, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/guides/translate)** — Dịch nhiều-sang-nhiều giữa hơn 400 ngôn ngữ (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
 - **[GLiNER2.5-Decide](https://soniqo.audio/guides/gliner)** - Phân loại văn bản theo nhãn và trích xuất thực thể cục bộ (bộ mã hóa DeBERTa-v3-large, MLX, INT8/FP16/FP32; bản xem trước, Apache 2.0)
@@ -215,6 +216,7 @@ Xem tổng quan gọn bên dưới. **[Danh mục mô hình đầy đủ với k
 | [Fish Audio S2 Pro](docs/models/fish-audio-s2-pro.md) | Văn bản → Giọng nói (nhân bản zero-shot, marker phong cách tường minh) | MLX | 0.5B-class (fp16) | Đa ngôn ngữ |
 | [CSM](docs/models/csm.md) | Văn bản → Giọng nói (hội thoại, nhân bản zero-shot) | MLX | 1B (int8 / fp16) | EN |
 | [Qwen3.5 Chat](docs/models/qwen35-chat.md) | Text → Text (LLM) | MLX, CoreML | 0.8B | Multi |
+| [Inkling 2 Mini](docs/models/inkling2-mini.md) | Văn bản + Hình ảnh → Văn bản | MLX | 26.4B MoE (INT4/INT5) | EN + ví dụ từ 5 ngôn ngữ |
 | [Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md) | Text → Text (LLM) | MLX | 4B | Multi |
 | [Gemma 4 Chat](docs/models/gemma4-chat.md) | Text → Text (LLM) | MLX | E2B / E4B (4-bit) | Multi |
 | [FunctionGemma](docs/models/function-gemma.md) | Văn bản → Lệnh gọi công cụ (LLM) | CoreML | 270M | EN |
