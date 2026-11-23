@@ -109,9 +109,30 @@ macOS was historically pinned to `.cpuAndGPU` because the iOS17-target **Enumera
 # Transcribe with Parakeet
 .build/release/speech transcribe --engine parakeet recording.wav
 
+# Select Parakeet Ultra
+.build/release/speech transcribe --engine parakeet --model ultra recording.wav
+.build/release/speech transcribe-batch --engine parakeet --model ultra recordings/
+
+# Use a local compiled Parakeet bundle
+.build/release/speech transcribe --engine parakeet --model /path/to/bundle recording.wav
+
 # Default engine (Qwen3-ASR)
 .build/release/speech transcribe recording.wav
 ```
+
+For both transcription commands, `--model` accepts `v3` (the platform default), `ultra`, a Hugging Face model ID, or an existing directory containing a compiled Parakeet bundle. Local directories are loaded offline.
+
+## Parakeet Ultra in Swift
+
+Select Ultra explicitly when loading the model. It supports the same 25 languages as v3 and processes long recordings in consecutive 30-second windows.
+
+```swift
+let model = try await ParakeetASRModel.fromPretrained(
+    modelId: ParakeetASRModel.ultraModelId)
+let text = try model.transcribeAudio(samples, sampleRate: 16000, language: "de")
+```
+
+For a local compiled bundle, pass its directory as `cacheDir` and set `offlineMode: true`. See the [M5 Pro benchmark](../benchmarks/parakeet-ultra.md) for a side-by-side comparison with v3.
 
 ## Performance (M5 Pro, macOS 26.5)
 

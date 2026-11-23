@@ -19,7 +19,7 @@ public struct TranscribeBatchCommand: ParsableCommand {
     @Option(name: .long, help: "ASR engine: qwen3 (default), parakeet")
     public var engine: String = "qwen3"
 
-    @Option(name: .shortAndLong, help: "[qwen3] Model: 0.6B (default), 0.6B-8bit, 1.7B, 1.7B-4bit")
+    @Option(name: .shortAndLong, help: "[qwen3] 0.6B (default), 0.6B-8bit, 1.7B, 1.7B-4bit; [parakeet] v3 (default), ultra, a model ID, or a local bundle")
     public var model: String = "0.6B"
 
     @Option(name: .long, help: "Language hint (optional)")
@@ -37,6 +37,12 @@ public struct TranscribeBatchCommand: ParsableCommand {
     public var jsonl: Bool = false
 
     public init() {}
+
+    public func validate() throws {
+        if engine.lowercased() == "parakeet" {
+            _ = try resolveParakeetModel(model)
+        }
+    }
 
     public func run() throws {
         switch engine.lowercased() {
@@ -182,6 +188,7 @@ public struct TranscribeBatchCommand: ParsableCommand {
     }
 
     private func runParakeetBatch() throws {
+        let (modelId, directory) = try resolveParakeetModel(model)
         try runAsync {
             let files = findAudioFiles()
             guard !files.isEmpty else {
@@ -190,9 +197,10 @@ public struct TranscribeBatchCommand: ParsableCommand {
             }
             print("Found \(files.count) audio files")
 
-            print("Loading Parakeet-TDT model: \(ParakeetASRModel.defaultModelId)")
+            print("Loading Parakeet-TDT model: \(directory?.path ?? modelId ?? ParakeetASRModel.defaultModelId)")
             let loadStart = CFAbsoluteTimeGetCurrent()
             let parakeet = try await ParakeetASRModel.fromPretrained(
+                modelId: modelId, cacheDir: directory, offlineMode: directory != nil,
                 progressHandler: reportProgress)
             let loadTime = CFAbsoluteTimeGetCurrent() - loadStart
 

@@ -19,6 +19,9 @@ public class ParakeetASRModel {
     /// is window-chunked in `transcribeAudio`.
     public static let defaultModelId = "aufklarer/Parakeet-TDT-v3-CoreML-INT8-30s"
 
+    /// Parakeet Ultra: Moondream's post-trained v3 weights in a fixed 30-second Core ML bundle.
+    public static let ultraModelId = "aufklarer/Parakeet-Ultra-CoreML-INT8-30s"
+
     /// iOS-optimized model: single 500-frame shape (5s max), lower runtime
     /// memory than the 30s default. Long audio is window-chunked.
     public static let iosModelId = "aufklarer/Parakeet-TDT-v3-CoreML-INT8-iOS-5s"

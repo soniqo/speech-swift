@@ -54,6 +54,8 @@ Default model (`aufklarer/Parakeet-TDT-v3-CoreML-INT8-30s`):
 
 The `-30s` and `-iOS-5s` builds target iOS17 and ANE-compile cleanly on M5 — single-shape sidesteps the BNNS validator issue that hit the older EnumeratedShapes builds. New builds from this converter use `ct.target.iOS18`, since iOS18 is needed for the multi-encoder repo (below) to avoid the same validator path on EnumeratedShapes-style dynamic `tile` ops.
 
+Parakeet Ultra is an opt-in variant with Moondream's post-trained v3 encoder, predictor, and joint weights. Its Core ML bundle uses a fixed 3,000-frame input, an 8-bit palettized encoder, and FP16 decoder and joint. It produces the same 8,193 token logits and five duration logits as v3. Swift computes the mel features and splits long recordings into 30-second windows. [Moondream model card](https://huggingface.co/moondream/parakeet-ultra)
+
 The legacy multi-encoder repo `aufklarer/Parakeet-TDT-v3-CoreML-INT8` ships three single-shape encoders in one directory:
 
 | File | Shape | Use |
@@ -125,6 +127,7 @@ Implementation notes:
 ## Model Weights
 
 - [aufklarer/Parakeet-TDT-v3-CoreML-INT8-30s](https://huggingface.co/aufklarer/Parakeet-TDT-v3-CoreML-INT8-30s) — default (single fixed 30s shape)
+- [aufklarer/Parakeet-Ultra-CoreML-INT8-30s](https://huggingface.co/aufklarer/Parakeet-Ultra-CoreML-INT8-30s) — opt-in Ultra variant (single fixed 30s shape)
 - [aufklarer/Parakeet-TDT-v3-CoreML-INT8-iOS-5s](https://huggingface.co/aufklarer/Parakeet-TDT-v3-CoreML-INT8-iOS-5s) — iOS (single fixed 5s shape, lower memory)
 - [aufklarer/Parakeet-TDT-v3-CoreML-INT8](https://huggingface.co/aufklarer/Parakeet-TDT-v3-CoreML-INT8) — multi-encoder repo (`encoder.mlmodelc` 30s, `encoder_5s.mlmodelc`, `encoder_15s.mlmodelc`)
 
