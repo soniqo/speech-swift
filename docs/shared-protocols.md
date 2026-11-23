@@ -552,7 +552,6 @@ Sources/
 │   ├── StreamingVADProcessor.swift  Event-driven streaming wrapper
 │   ├── SmartTurn.swift        SmartTurnModel: TurnCompletionProvider (Smart Turn v3.2 end-of-turn classifier, CoreML)
 │   ├── P99Turn.swift          P99TurnModel / P99TurnSession: streaming end-of-turn probabilities (CoreML)
-│   ├── VAP.swift              VAPModel: two-channel speech-activity forecasts (CoreML)
 │   ├── DiarizationPipeline.swift  PyannoteDiarizationPipeline: SpeakerDiarizationModel, SpeakerExtractionCapable
 │   ├── DiarizationHelpers.swift   Shared helpers (merge, compact IDs, resample)
 │   ├── SortformerDiarizer.swift   SortformerDiarizer: SpeakerDiarizationModel (CoreML)

@@ -230,7 +230,6 @@ Xem tổng quan gọn bên dưới. **[Danh mục mô hình đầy đủ với k
 | [Silero VAD](https://soniqo.audio/guides/vad) | Phát hiện hoạt động giọng nói | MLX, CoreML | 309K | Không phụ thuộc ngôn ngữ |
 | [Smart Turn v3.2](https://huggingface.co/aufklarer/Smart-Turn-v3.2-CoreML) | Phát hiện kết thúc lượt nói | CoreML | 8M | 23 ngôn ngữ |
 | [p99 turn-1-mini](docs/models/p99-turn-mini.md) | Dự đoán kết thúc lượt lời trực tuyến | CoreML | 5.3M | Tiếng Anh |
-| [VAP (otoSpeech)](docs/models/vap.md) | Dự đoán hoạt động giọng nói hai kênh | CoreML | 5.8M | Tiếng Anh |
 | [KWS Zipformer](docs/models/kws-zipformer.md) | Audio → Wake word | CoreML (ANE) | 3M | EN/custom keywords |
 | [Pyannote](https://soniqo.audio/guides/diarize) | VAD + Phân tách người nói | MLX | 1.5M | Không phụ thuộc ngôn ngữ |
 | [Pyannote Community-1](https://huggingface.co/aufklarer/Pyannote-Community-1-CoreML) | Phân tách người nói + embedding người nói | CoreML (ANE) + Swift VBx | 8.35M | Không phụ thuộc ngôn ngữ |

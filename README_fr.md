@@ -230,7 +230,6 @@ Vue compacte ci-dessous. **[Catalogue complet des modeles avec tailles, quantifi
 | [Silero VAD](https://soniqo.audio/fr/guides/vad) | Detection d'activite vocale | MLX, CoreML | 309K | Agnostique |
 | [Smart Turn v3.2](https://huggingface.co/aufklarer/Smart-Turn-v3.2-CoreML) | Detection de fin de tour | CoreML | 8M | 23 langues |
 | [p99 turn-1-mini](docs/models/p99-turn-mini.md) | Fin de tour en streaming | CoreML | 5.3M | Anglais |
-| [VAP (otoSpeech)](docs/models/vap.md) | Prévision vocale sur deux canaux | CoreML | 5.8M | Anglais |
 | [KWS Zipformer](docs/models/kws-zipformer.md) | Audio → Wake word | CoreML (ANE) | 3M | EN/custom keywords |
 | [Pyannote](https://soniqo.audio/fr/guides/diarize) | VAD + Diarisation | MLX | 1.5M | Agnostique |
 | [Pyannote Community-1](https://huggingface.co/aufklarer/Pyannote-Community-1-CoreML) | Diarisation + empreintes de locuteur | CoreML (ANE) + Swift VBx | 8.35M | Agnostique |

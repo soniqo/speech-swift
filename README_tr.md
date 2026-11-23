@@ -230,7 +230,6 @@ Aşağıda kompakt bir görünüm. **[Boyutlar, kuantizasyonlar, indirme URL'ler
 | [Silero VAD](https://soniqo.audio/guides/vad) | Ses Etkinlik Algılama | MLX, CoreML | 309K | Bağımsız |
 | [Smart Turn v3.2](https://huggingface.co/aufklarer/Smart-Turn-v3.2-CoreML) | Konuşma Sırası Sonu Algılama | CoreML | 8M | 23 dil |
 | [p99 turn-1-mini](docs/models/p99-turn-mini.md) | Akışta konuşma sırasının bitişini tahmin etme | CoreML | 5.3M | İngilizce |
-| [VAP (otoSpeech)](docs/models/vap.md) | İki kanallı konuşma tahmini | CoreML | 5.8M | İngilizce |
 | [KWS Zipformer](docs/models/kws-zipformer.md) | Audio → Wake word | CoreML (ANE) | 3M | EN/custom keywords |
 | [Pyannote](https://soniqo.audio/guides/diarize) | VAD + Konuşmacı Ayrımı | MLX | 1.5M | Bağımsız |
 | [Pyannote Community-1](https://huggingface.co/aufklarer/Pyannote-Community-1-CoreML) | Konuşmacı ayrıştırma + konuşmacı gömmeleri | CoreML (ANE) + Swift VBx | 8.35M | Bağımsız |

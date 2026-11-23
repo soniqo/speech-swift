@@ -274,7 +274,6 @@ struct DictateView: View {
 | [Silero VAD](https://soniqo.audio/ar/guides/vad) | اكتشاف النشاط الصوتي | MLX, CoreML | 309K | محايد للغة |
 | [Smart Turn v3.2](https://huggingface.co/aufklarer/Smart-Turn-v3.2-CoreML) | اكتشاف نهاية الدور | CoreML | 8M | 23 لغة |
 | [p99 turn-1-mini](docs/models/p99-turn-mini.md) | توقع نهاية الدور أثناء البث | CoreML | 5.3M | الإنجليزية |
-| [VAP (otoSpeech)](docs/models/vap.md) | توقع النشاط الصوتي لقناتين | CoreML | 5.8M | الإنجليزية |
 | [KWS Zipformer](docs/models/kws-zipformer.md) | Audio → Wake word | CoreML (ANE) | 3M | EN/custom keywords |
 | [Pyannote](https://soniqo.audio/ar/guides/diarize) | VAD + تمييز | MLX | 1.5M | محايد للغة |
 | [Pyannote Community-1](https://huggingface.co/aufklarer/Pyannote-Community-1-CoreML) | فرز المتحدثين + تضمينات المتحدث | CoreML (ANE) + Swift VBx | 8.35M | محايد للغة |
