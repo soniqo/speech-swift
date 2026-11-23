@@ -76,7 +76,7 @@ Reconnaissance, synthese et comprehension vocale embarquees pour Mac et iOS. S'e
 **LLM et traduction**
 
 - **[Qwen3Chat](https://soniqo.audio/fr/guides/chat)** -- Chat LLM embarque (Qwen3.5-0.8B MLX/CoreML plus backends MLX Qwen3 dense 4B et Gemma 4 E2B/E4B, tokens en streaming)
-- **[Inkling2Chat](docs/models/inkling2-mini.md)** — Raisonnement local sur texte et images fixes avec Inkling 2 Mini (26.4B MoE, MLX INT4/INT5, streaming ; inclus dans Qwen3Chat)
+- **[Inkling2Chat](docs/models/inkling2-mini.md) / [Inkling2CoreMLChat](docs/inference/inkling2-mini-coreml.md)** — Raisonnement local sur texte et images fixes avec Inkling 2 Mini (26.4B MoE, MLX INT4/INT5 + CoreML INT8, streaming ; inclus dans Qwen3Chat)
 - **[FunctionGemma](https://soniqo.audio/fr/guides/function-calls)** — LLM embarque pour les appels structures de fonctions / outils (Gemma 3 270M, CoreML palettisation 8 bits, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/fr/guides/translate)** — Traduction multidirectionnelle entre 400+ langues (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
 - **[GLiNER2.5-Decide](https://soniqo.audio/fr/guides/gliner)** - Classification de texte selon des étiquettes et extraction d’entités en local (encodeur DeBERTa-v3-large, MLX, INT8/FP16/FP32 ; préversion, Apache 2.0)
@@ -216,7 +216,7 @@ Vue compacte ci-dessous. **[Catalogue complet des modeles avec tailles, quantifi
 | [VibeVoice 1.5B](https://soniqo.audio/fr/guides/vibevoice) | Texte → Parole (podcast jusqu'a 90 min) | MLX | 1.5B | EN/ZH |
 | [Magpie-TTS Multilingual](https://soniqo.audio/fr/guides/magpie) | Texte → Voix (5 voix prédéfinies, streaming) | MLX / CoreML | 357M (MLX INT8, CoreML INT8) | 9 (CoreML sans JA) |
 | [Qwen3.5 Chat](docs/models/qwen35-chat.md) | Text → Text (LLM) | MLX, CoreML | 0.8B | Multi |
-| [Inkling 2 Mini](docs/models/inkling2-mini.md) | Texte + Image → Texte | MLX | 26.4B MoE (INT4/INT5) | EN + exemples en 5 langues |
+| [Inkling 2 Mini](docs/models/inkling2-mini.md) | Texte + Image → Texte | MLX / CoreML | 26.4B MoE (INT4/INT5/INT8) | EN + exemples en 5 langues |
 | [Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md) | Text → Text (LLM) | MLX | 4B | Multi |
 | [Gemma 4 Chat](docs/models/gemma4-chat.md) | Text → Text (LLM) | MLX | E2B / E4B (4-bit) | Multi |
 | [FunctionGemma](https://soniqo.audio/fr/guides/function-calls) | Texte → Appels d'outils (LLM) | CoreML | 270M | EN |

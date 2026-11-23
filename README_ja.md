@@ -76,7 +76,7 @@ Speech Swift パッケージへの参照を公開ソースで確認できる 16 
 **LLM と翻訳**
 
 - **[Qwen3Chat](https://soniqo.audio/ja/guides/chat)** — オンデバイスLLMチャット（Qwen3.5-0.8BのMLX/CoreMLに加え、dense Qwen3 4BとGemma 4 E2B/E4BのMLXバックエンド、ストリーミングトークン）
-- **[Inkling2Chat](docs/models/inkling2-mini.md)** — Inkling 2 Mini によるローカルのテキスト・静止画像推論（26.4B MoE、MLX INT4/INT5、ストリーミング、Qwen3Chat に含まれます）
+- **[Inkling2Chat](docs/models/inkling2-mini.md) / [Inkling2CoreMLChat](docs/inference/inkling2-mini-coreml.md)** — Inkling 2 Mini によるローカルのテキスト・静止画像推論（26.4B MoE、MLX INT4/INT5 + CoreML INT8、ストリーミング、Qwen3Chat に含まれます）
 - **[FunctionGemma](https://soniqo.audio/ja/guides/function-calls)** — オンデバイスの構造化された関数 / ツール呼び出し用 LLM（Gemma 3 270M、CoreML 8-bit パレタイズ、Neural Engine、約 252 tok/s）
 - **[MADLAD-400](https://soniqo.audio/ja/guides/translate)** — 400+言語間の多対多翻訳（3B、MLX INT4 + INT8、T5 v1.1、Apache 2.0）
 - **[GLiNER2.5-Decide](https://soniqo.audio/ja/guides/gliner)** - 指定ラベルによるローカルのテキスト分類とエンティティ抽出（DeBERTa-v3-large エンコーダ、MLX、INT8/FP16/FP32、開発プレビュー、Apache 2.0）
@@ -216,7 +216,7 @@ struct DictateView: View {
 | [Fish Audio S2 Pro](docs/models/fish-audio-s2-pro.md) | テキスト → 音声（ゼロショットクローン、明示的スタイルマーカー） | MLX | 0.5B-class (fp16) | 多言語 |
 | [CSM](docs/models/csm.md) | テキスト → 音声（対話型、ゼロショットクローン） | MLX | 1B (int8 / fp16) | EN |
 | [Qwen3.5 Chat](docs/models/qwen35-chat.md) | Text → Text (LLM) | MLX, CoreML | 0.8B | Multi |
-| [Inkling 2 Mini](docs/models/inkling2-mini.md) | テキスト + 画像 → テキスト | MLX | 26.4B MoE (INT4/INT5) | EN + 5 言語のサンプル |
+| [Inkling 2 Mini](docs/models/inkling2-mini.md) | テキスト + 画像 → テキスト | MLX / CoreML | 26.4B MoE (INT4/INT5/INT8) | EN + 5 言語のサンプル |
 | [Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md) | Text → Text (LLM) | MLX | 4B | Multi |
 | [Gemma 4 Chat](docs/models/gemma4-chat.md) | Text → Text (LLM) | MLX | E2B / E4B (4-bit) | Multi |
 | [FunctionGemma](https://soniqo.audio/ja/guides/function-calls) | テキスト → ツール呼び出し（LLM） | CoreML | 270M | 英語主体 |

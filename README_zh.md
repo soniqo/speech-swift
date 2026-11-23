@@ -76,7 +76,7 @@
 **LLM 与翻译**
 
 - **[Qwen3Chat](https://soniqo.audio/zh/guides/chat)** — 端侧 LLM 对话（Qwen3.5-0.8B MLX/CoreML，加 dense Qwen3 4B 与 Gemma 4 E2B/E4B 的 MLX 后端，流式 token）
-- **[Inkling2Chat](docs/models/inkling2-mini.md)** — Inkling 2 Mini 本地文本与静态图像推理（26.4B MoE、MLX INT4/INT5、流式输出；属于 Qwen3Chat）
+- **[Inkling2Chat](docs/models/inkling2-mini.md) / [Inkling2CoreMLChat](docs/inference/inkling2-mini-coreml.md)** — Inkling 2 Mini 本地文本与静态图像推理（26.4B MoE、MLX INT4/INT5 + CoreML INT8、流式输出；属于 Qwen3Chat）
 - **[FunctionGemma](https://soniqo.audio/zh/guides/function-calls)** — 端侧结构化函数 / 工具调用 LLM（Gemma 3 270M，CoreML 8 位调色板量化，Neural Engine，约 252 tok/s）
 - **[MADLAD-400](https://soniqo.audio/zh/guides/translate)** — 400+ 语言间的多对多翻译（3B，MLX INT4 + INT8，T5 v1.1，Apache 2.0）
 - **[GLiNER2.5-Decide](https://soniqo.audio/zh/guides/gliner)** - 本地按给定标签进行文本分类和实体片段抽取（DeBERTa-v3-large 编码器，MLX，INT8/FP16/FP32；开发预览版，Apache 2.0）
@@ -216,7 +216,7 @@ struct DictateView: View {
 | [Fish Audio S2 Pro](docs/models/fish-audio-s2-pro.md) | 文本 → 语音（零样本克隆，显式风格标记） | MLX | 0.5B-class (fp16) | 多语言 |
 | [CSM](docs/models/csm.md) | 文本 → 语音（对话式，零样本克隆） | MLX | 1B (int8 / fp16) | EN |
 | [Qwen3.5 Chat](docs/models/qwen35-chat.md) | Text → Text (LLM) | MLX, CoreML | 0.8B | Multi |
-| [Inkling 2 Mini](docs/models/inkling2-mini.md) | 文本 + 图像 → 文本 | MLX | 26.4B MoE (INT4/INT5) | EN + 5 种语言样例 |
+| [Inkling 2 Mini](docs/models/inkling2-mini.md) | 文本 + 图像 → 文本 | MLX / CoreML | 26.4B MoE (INT4/INT5/INT8) | EN + 5 种语言样例 |
 | [Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md) | Text → Text (LLM) | MLX | 4B | Multi |
 | [Gemma 4 Chat](docs/models/gemma4-chat.md) | Text → Text (LLM) | MLX | E2B / E4B (4-bit) | Multi |
 | [FunctionGemma](https://soniqo.audio/zh/guides/function-calls) | 文本 → 工具调用（LLM） | CoreML | 270M | 主英语 |

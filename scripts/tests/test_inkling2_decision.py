@@ -68,6 +68,35 @@ class DecisionInvocationTests(unittest.TestCase):
         self.assertEqual(command[command.index("--max-tokens") + 1], "512")
 
     @patch.object(example.subprocess, "run")
+    def test_selects_coreml_with_requested_compute_units(self, run):
+        run.return_value = subprocess.CompletedProcess([], 0, '{"action":"answer"}', "")
+        self.assertTrue(self.invoke(backend="coreml", coreml_compute_units="gpu").validated)
+        command = run.call_args.args[0]
+        self.assertEqual(command[command.index("--backend") + 1], "coreml")
+        self.assertEqual(command[command.index("--coreml-compute-units") + 1], "gpu")
+
+    @patch.object(example.subprocess, "run")
+    def test_backend_deadlines_allow_cpu_initialization(self, run):
+        run.return_value = subprocess.CompletedProcess([], 0, '{"action":"answer"}', "")
+        for backend, expected in [("mlx", 120), ("coreml", 900)]:
+            self.assertTrue(self.invoke(backend=backend).validated)
+            self.assertEqual(run.call_args.kwargs["timeout"], expected)
+        self.assertTrue(self.invoke(backend="coreml", timeout=45).validated)
+        self.assertEqual(run.call_args.kwargs["timeout"], 45)
+
+    @patch.object(example.subprocess, "run")
+    def test_invalid_deadline_does_not_start_inference(self, run):
+        for value in [0, -1, 1801, float("inf"), float("nan")]:
+            self.assertEqual(self.invoke(timeout=value).fallback_reason, "invalid_timeout")
+        run.assert_not_called()
+
+    @patch.object(example.subprocess, "run")
+    def test_invalid_backend_does_not_start_inference(self, run):
+        self.assertEqual(self.invoke(backend="unknown").fallback_reason, "invalid_backend")
+        self.assertEqual(self.invoke(coreml_compute_units="unknown").fallback_reason, "invalid_compute_units")
+        run.assert_not_called()
+
+    @patch.object(example.subprocess, "run")
     def test_fails_closed_for_inference_errors(self, run):
         for failure in [FileNotFoundError(), UnicodeError(), subprocess.TimeoutExpired("speech", 1)]:
             with self.subTest(failure=type(failure).__name__):
@@ -88,6 +117,11 @@ class DecisionInvocationTests(unittest.TestCase):
         args = example.parser().parse_args(["hello", "--model-dir", "/model", "--speech", "/speech"])
         self.assertEqual(args.model_dir, Path("/model"))
         self.assertEqual(args.speech, Path("/speech"))
+        self.assertEqual(args.backend, "mlx")
+        args = example.parser().parse_args(["hello", "--model-dir", "/model", "--backend", "coreml",
+                                           "--coreml-compute-units", "gpu"])
+        self.assertEqual(args.backend, "coreml")
+        self.assertEqual(args.coreml_compute_units, "gpu")
 
 
 if __name__ == "__main__":
