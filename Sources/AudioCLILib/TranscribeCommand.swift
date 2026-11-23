@@ -44,7 +44,7 @@ public struct TranscribeCommand: ParsableCommand {
 
     var effectiveKyutaiCacheLimitMB: Int { mlxCacheLimitMB ?? 256 }
 
-    @Option(name: .shortAndLong, help: "[qwen3] 0.6B (default), 0.6B-8bit, 1.7B, or 1.7B-4bit; [cohere/voxtral] int5 (default), int8, or fp16; [kyutai] int8 (default), int4, fp16, upstream, or 2.6b; [moss coreml] int8 (default) or fp16; [moss mlx] int5 (default) or int8; [whisper] default or turbo; alternatively a model ID or local directory")
+    @Option(name: .shortAndLong, help: "[qwen3] 0.6B (default), 0.6B-8bit, 1.7B, or 1.7B-4bit; [parakeet] v3 (default) or ultra; [cohere/voxtral] int5 (default), int8, or fp16; [kyutai] int8 (default), int4, fp16, upstream, or 2.6b; [moss coreml] int8 (default) or fp16; [moss mlx] int5 (default) or int8; [whisper] default or turbo; alternatively a model ID or local directory")
     public var model: String = "0.6B"
 
     @Option(name: .long, help: "[moss] Maximum generated transcript tokens (default: Core ML 512, MLX 5120)")
@@ -87,6 +87,9 @@ public struct TranscribeCommand: ParsableCommand {
         }
         if ["cohere", "voxtral"].contains(eng), stream {
             throw ValidationError("--stream is not supported by the \(eng) engine")
+        }
+        if eng == "parakeet" {
+            _ = try resolveParakeetModel(model)
         }
         if eng == "kyutai" {
             _ = try resolveKyutaiModelId(model)
@@ -504,6 +507,7 @@ public struct TranscribeCommand: ParsableCommand {
     }
 
     private func runParakeetTranscription() throws {
+        let (modelId, directory) = try resolveParakeetModel(model)
         try runAsync {
             print("Loading audio: \(audioFile)")
             let audio = try AudioFileLoader.load(
@@ -511,8 +515,9 @@ public struct TranscribeCommand: ParsableCommand {
             let duration = Float(audio.count) / 16000.0
             print("  Loaded \(audio.count) samples (\(String(format: "%.2f", duration))s)")
 
-            print("Loading Parakeet-TDT model: \(ParakeetASRModel.defaultModelId)")
+            print("Loading Parakeet-TDT model: \(directory?.path ?? modelId ?? ParakeetASRModel.defaultModelId)")
             let parakeetModel = try await ParakeetASRModel.fromPretrained(
+                modelId: modelId, cacheDir: directory, offlineMode: directory != nil,
                 progressHandler: reportProgress)
 
             print("Warming up CoreML...")
@@ -770,6 +775,25 @@ public func resolveMossModelId(
         }
     default:
         throw ValidationError("[moss] --backend must be 'coreml' or 'mlx'")
+    }
+}
+
+/// Resolve Parakeet aliases, Hub model IDs and local Core ML bundles.
+func resolveParakeetModel(_ value: String) throws -> (modelId: String?, directory: URL?) {
+    switch value.lowercased() {
+    case "0.6b", "default", "v3": return (nil, nil)
+    case "ultra": return (ParakeetASRModel.ultraModelId, nil)
+    default:
+        let path = (value as NSString).expandingTildeInPath
+        var isDirectory: ObjCBool = false
+        if FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory), isDirectory.boolValue {
+            return (nil, URL(fileURLWithPath: path, isDirectory: true))
+        }
+        let parts = value.split(separator: "/", omittingEmptySubsequences: false)
+        if parts.count == 2, parts.allSatisfy({ !$0.isEmpty && !$0.hasPrefix(".") }), !value.hasPrefix("~") {
+            return (value, nil)
+        }
+        throw ValidationError("Parakeet --model must be v3, ultra, a Hugging Face model ID, or an existing local bundle directory")
     }
 }
 
