@@ -76,7 +76,7 @@
 **LLM и перевод**
 
 - **[Qwen3Chat](https://soniqo.audio/ru/guides/chat)** — Локальный чат на базе LLM (Qwen3.5-0.8B MLX/CoreML плюс MLX-бэкенды dense Qwen3 4B и Gemma 4 E2B/E4B, потоковая генерация токенов)
-- **[Inkling2Chat](docs/models/inkling2-mini.md)** — Локальное рассуждение по тексту и изображениям с Inkling 2 Mini (26.4B MoE, MLX INT4/INT5, потоковый вывод; часть Qwen3Chat)
+- **[Inkling2Chat](docs/models/inkling2-mini.md) / [Inkling2CoreMLChat](docs/inference/inkling2-mini-coreml.md)** — Локальное рассуждение по тексту и изображениям с Inkling 2 Mini (26.4B MoE, MLX INT4/INT5 + CoreML INT8, потоковый вывод; часть Qwen3Chat)
 - **[FunctionGemma](https://soniqo.audio/ru/guides/function-calls)** — Локальный LLM для структурированных вызовов функций / инструментов (Gemma 3 270M, CoreML 8-битная палитризация, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/ru/guides/translate)** — Многоязычный перевод между 400+ языками (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
 - **[GLiNER2.5-Decide](https://soniqo.audio/ru/guides/gliner)** - Локальная классификация текста по заданным меткам и извлечение сущностей (энкодер DeBERTa-v3-large, MLX, INT8/FP16/FP32; предварительная версия, Apache 2.0)
@@ -216,7 +216,7 @@ struct DictateView: View {
 | [Fish Audio S2 Pro](docs/models/fish-audio-s2-pro.md) | Текст → Речь (zero-shot клонирование, явные маркеры стиля) | MLX | 0.5B-class (fp16) | Многоязычный |
 | [CSM](docs/models/csm.md) | Текст → Речь (диалоговый, zero-shot клонирование) | MLX | 1B (int8 / fp16) | EN |
 | [Qwen3.5 Chat](docs/models/qwen35-chat.md) | Text → Text (LLM) | MLX, CoreML | 0.8B | Multi |
-| [Inkling 2 Mini](docs/models/inkling2-mini.md) | Текст + Изображение → Текст | MLX | 26.4B MoE (INT4/INT5) | EN + примеры на 5 языках |
+| [Inkling 2 Mini](docs/models/inkling2-mini.md) | Текст + Изображение → Текст | MLX / CoreML | 26.4B MoE (INT4/INT5/INT8) | EN + примеры на 5 языках |
 | [Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md) | Text → Text (LLM) | MLX | 4B | Multi |
 | [Gemma 4 Chat](docs/models/gemma4-chat.md) | Text → Text (LLM) | MLX | E2B / E4B (4-bit) | Multi |
 | [FunctionGemma](https://soniqo.audio/ru/guides/function-calls) | Текст → Вызовы инструментов (LLM) | CoreML | 270M | EN |

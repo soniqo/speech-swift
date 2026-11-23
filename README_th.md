@@ -76,7 +76,7 @@
 **LLM และการแปล**
 
 - **[Qwen3Chat](https://soniqo.audio/guides/chat)** — แชท LLM บนอุปกรณ์ (Qwen3.5-0.8B MLX/CoreML พร้อมแบ็กเอนด์ MLX ของ dense Qwen3 4B และ Gemma 4 E2B/E4B, สตรีมมิ่งโทเค็น)
-- **[Inkling2Chat](docs/models/inkling2-mini.md)** — การให้เหตุผลจากข้อความและภาพนิ่งภายในเครื่องด้วย Inkling 2 Mini (26.4B MoE, MLX INT4/INT5, สตรีมผลลัพธ์; อยู่ใน Qwen3Chat)
+- **[Inkling2Chat](docs/models/inkling2-mini.md) / [Inkling2CoreMLChat](docs/inference/inkling2-mini-coreml.md)** — การให้เหตุผลจากข้อความและภาพนิ่งภายในเครื่องด้วย Inkling 2 Mini (26.4B MoE, MLX INT4/INT5 + CoreML INT8, สตรีมผลลัพธ์; อยู่ใน Qwen3Chat)
 - **[FunctionGemma](https://soniqo.audio/guides/function-calls)** — LLM บนอุปกรณ์สำหรับการเรียกฟังก์ชัน / เครื่องมือแบบมีโครงสร้าง (Gemma 3 270M, CoreML 8-bit palettize, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/guides/translate)** — การแปลแบบหลายต่อหลายระหว่างกว่า 400 ภาษา (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
 - **[GLiNER2.5-Decide](https://soniqo.audio/guides/gliner)** - จัดประเภทข้อความตามป้ายกำกับและดึงเอนทิตีบนเครื่อง (encoder DeBERTa-v3-large, MLX, INT8/FP16/FP32; พรีวิวสำหรับการพัฒนา, Apache 2.0)
@@ -216,7 +216,7 @@ struct DictateView: View {
 | [Fish Audio S2 Pro](docs/models/fish-audio-s2-pro.md) | ข้อความ → เสียงพูด (การโคลนแบบ zero-shot, marker สไตล์แบบชัดเจน) | MLX | 0.5B-class (fp16) | หลายภาษา |
 | [CSM](docs/models/csm.md) | ข้อความ → เสียงพูด (เชิงสนทนา, การโคลนแบบ zero-shot) | MLX | 1B (int8 / fp16) | EN |
 | [Qwen3.5 Chat](docs/models/qwen35-chat.md) | Text → Text (LLM) | MLX, CoreML | 0.8B | Multi |
-| [Inkling 2 Mini](docs/models/inkling2-mini.md) | ข้อความ + ภาพ → ข้อความ | MLX | 26.4B MoE (INT4/INT5) | EN + ตัวอย่างใน 5 ภาษา |
+| [Inkling 2 Mini](docs/models/inkling2-mini.md) | ข้อความ + ภาพ → ข้อความ | MLX / CoreML | 26.4B MoE (INT4/INT5/INT8) | EN + ตัวอย่างใน 5 ภาษา |
 | [Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md) | Text → Text (LLM) | MLX | 4B | Multi |
 | [Gemma 4 Chat](docs/models/gemma4-chat.md) | Text → Text (LLM) | MLX | E2B / E4B (4-bit) | Multi |
 | [FunctionGemma](docs/models/function-gemma.md) | ข้อความ → การเรียกเครื่องมือ (LLM) | CoreML | 270M | EN |

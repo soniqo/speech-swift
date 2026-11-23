@@ -76,7 +76,7 @@ On-device speech recognition, synthesis, and understanding for Mac and iOS. Runs
 **LLMs & Translation**
 
 - **[Qwen3Chat](https://soniqo.audio/guides/chat)** — On-device LLM chat (Qwen3.5-0.8B MLX/CoreML plus dense Qwen3 4B and Gemma 4 E2B/E4B MLX backends, streaming tokens)
-- **[Inkling2Chat](docs/models/inkling2-mini.md)** — Local text and still-image reasoning with Inkling 2 Mini (26.4B MoE, MLX INT4/INT5, streaming; part of Qwen3Chat)
+- **[Inkling2Chat](docs/models/inkling2-mini.md) / [Inkling2CoreMLChat](docs/inference/inkling2-mini-coreml.md)** — Local text and still-image reasoning with Inkling 2 Mini (26.4B MoE, MLX INT4/INT5 + CoreML INT8, streaming; part of Qwen3Chat)
 - **[FunctionGemma](https://soniqo.audio/guides/function-calls)** — On-device LLM for structured function / tool calls (Gemma 3 270M, CoreML 8-bit palettized, Neural Engine, ~252 tok/s on M5 Pro · 128 tok/s on iPhone 16 Pro)
 - **[MADLAD-400](https://soniqo.audio/guides/translate)** — Many-to-many translation across 400+ languages (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
 - **[GLiNER2.5-Decide](https://soniqo.audio/guides/gliner)** - Local schema-conditioned text classification and entity spans (DeBERTa-v3-large encoder, MLX, INT8/FP16/FP32; development preview, Apache 2.0)
@@ -219,7 +219,7 @@ Compact view below. **[Full model catalogue with sizes, quantisations, download 
 | [Fish Audio S2 Pro](docs/models/fish-audio-s2-pro.md) | Text → Speech (zero-shot cloning, explicit style markers) | MLX | 0.5B-class (fp16) | Multilingual |
 | [CSM](docs/models/csm.md) | Text → Speech (conversational, zero-shot voice cloning) | MLX | 1B (int8 / fp16) | EN |
 | [Qwen3.5 Chat](docs/models/qwen35-chat.md) | Text → Text (LLM) | MLX, CoreML | 0.8B | Multi |
-| [Inkling 2 Mini](docs/models/inkling2-mini.md) | Text + Image → Text | MLX | 26.4B MoE (INT4/INT5) | EN + 5 sample languages |
+| [Inkling 2 Mini](docs/models/inkling2-mini.md) | Text + Image → Text | MLX / CoreML | 26.4B MoE (INT4/INT5/INT8) | EN + 5 sample languages |
 | [Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md) | Text → Text (LLM) | MLX | 4B | Multi |
 | [Gemma 4 Chat](docs/models/gemma4-chat.md) | Text → Text (LLM) | MLX | E2B / E4B (4-bit) | Multi |
 | [FunctionGemma](docs/models/function-gemma.md) | Text → Tool calls (LLM) | CoreML | 270M | EN-tuned |

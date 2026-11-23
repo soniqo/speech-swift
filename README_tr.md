@@ -76,7 +76,7 @@ Speech Swift paketine doğrulanabilir biçimde başvuran 16 açık depo.
 **LLM ve çeviri**
 
 - **[Qwen3Chat](https://soniqo.audio/guides/chat)** — Cihaz üzerinde LLM sohbet (Qwen3.5-0.8B MLX/CoreML artı dense Qwen3 4B ve Gemma 4 E2B/E4B MLX arka uçları, akış token'ları)
-- **[Inkling2Chat](docs/models/inkling2-mini.md)** — Inkling 2 Mini ile yerel metin ve sabit görüntü akıl yürütme (26.4B MoE, MLX INT4/INT5, akış; Qwen3Chat içinde)
+- **[Inkling2Chat](docs/models/inkling2-mini.md) / [Inkling2CoreMLChat](docs/inference/inkling2-mini-coreml.md)** — Inkling 2 Mini ile yerel metin ve sabit görüntü akıl yürütme (26.4B MoE, MLX INT4/INT5 + CoreML INT8, akış; Qwen3Chat içinde)
 - **[FunctionGemma](https://soniqo.audio/guides/function-calls)** — Cihaz üzerinde yapılandırılmış fonksiyon / araç çağrıları için LLM (Gemma 3 270M, CoreML 8-bit paletleme, Neural Engine, ~252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/guides/translate)** — 400+ dil arasında çoktan-çoğa çeviri (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
 - **[GLiNER2.5-Decide](https://soniqo.audio/guides/gliner)** - Verilen etiketlere göre yerel metin sınıflandırma ve varlık çıkarma (DeBERTa-v3-large kodlayıcı, MLX, INT8/FP16/FP32; geliştirme önizlemesi, Apache 2.0)
@@ -216,7 +216,7 @@ Aşağıda kompakt bir görünüm. **[Boyutlar, kuantizasyonlar, indirme URL'ler
 | [Fish Audio S2 Pro](docs/models/fish-audio-s2-pro.md) | Metin → Konuşma (zero-shot klonlama, açık stil işaretleri) | MLX | 0.5B-class (fp16) | Çok dilli |
 | [CSM](docs/models/csm.md) | Metin → Konuşma (diyalog odaklı, zero-shot klonlama) | MLX | 1B (int8 / fp16) | EN |
 | [Qwen3.5 Chat](docs/models/qwen35-chat.md) | Text → Text (LLM) | MLX, CoreML | 0.8B | Multi |
-| [Inkling 2 Mini](docs/models/inkling2-mini.md) | Metin + Görüntü → Metin | MLX | 26.4B MoE (INT4/INT5) | EN + 5 dilde örnekler |
+| [Inkling 2 Mini](docs/models/inkling2-mini.md) | Metin + Görüntü → Metin | MLX / CoreML | 26.4B MoE (INT4/INT5/INT8) | EN + 5 dilde örnekler |
 | [Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md) | Text → Text (LLM) | MLX | 4B | Multi |
 | [Gemma 4 Chat](docs/models/gemma4-chat.md) | Text → Text (LLM) | MLX | E2B / E4B (4-bit) | Multi |
 | [FunctionGemma](docs/models/function-gemma.md) | Metin → Araç çağrıları (LLM) | CoreML | 270M | EN |

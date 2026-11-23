@@ -96,6 +96,9 @@ See [Swift and CLI inference](../inference/inkling2-mini.md) and
 [export usage and verification](../inference/inkling2-mini-export.md).
 The [local decision example](../inference/inkling2-mini-decisions.md) uses the same
 runtime to propose validated actions.
-The [Core ML feasibility note](../inference/inkling2-mini-coreml.md) records
-operator conversion and FP32 cache-I/O probes; a full Core ML backend is not
-part of the model support described here.
+The [Core ML exporter and backend](../inference/inkling2-mini-coreml.md) use the
+same source architecture through 27 model partitions, with one decoder
+partition per physical layer and state per logical visit. Text matrices use
+INT8 storage, text activations and caches use FP32, and vision matrices use
+FP16. Partition calls process one token at a time. Its source conversion and
+validation are documented separately from the affine MLX format above.

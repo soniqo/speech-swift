@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 import json
+import math
 from pathlib import Path
 import subprocess
 
@@ -67,7 +68,15 @@ def parse_proposal(raw: str, *, image_available: bool = False) -> Proposal:
 
 
 def select_action(request: str, *, model_dir: Path, speech_cli: Path,
-                  image: Path | None = None, timeout: float = 120) -> Proposal:
+                  image: Path | None = None, timeout: float | None = None,
+                  backend: str = "mlx", coreml_compute_units: str = "cpu") -> Proposal:
+    if backend not in {"mlx", "coreml"}:
+        return reject("invalid_backend")
+    if coreml_compute_units not in {"cpu", "gpu", "ane", "all"}:
+        return reject("invalid_compute_units")
+    timeout = timeout if timeout is not None else (900 if backend == "coreml" else 120)
+    if not math.isfinite(timeout) or not 0 < timeout <= 1800:
+        return reject("invalid_timeout")
     if not request.strip():
         return reject("missing_request")
     if image is not None and not image.is_file():
@@ -79,6 +88,8 @@ def select_action(request: str, *, model_dir: Path, speech_cli: Path,
                "--reasoning-effort", "0"]
     if image is not None:
         command += ["--image", str(image)]
+    if backend == "coreml":
+        command += ["--backend", backend, "--coreml-compute-units", coreml_compute_units]
     try:
         process = subprocess.run(command, capture_output=True, encoding="utf-8",
                                  timeout=timeout, check=False)
@@ -97,17 +108,21 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--model-dir", required=True, type=Path)
     result.add_argument("--speech", type=Path, default=ROOT / ".build/debug/speech")
     result.add_argument("--image", type=Path)
-    result.add_argument("--timeout", type=float, default=120)
+    result.add_argument("--timeout", type=float,
+                        help="Seconds, up to 1800; default 120 for MLX or 900 for Core ML.")
+    result.add_argument("--backend", choices=["mlx", "coreml"], default="mlx")
+    result.add_argument("--coreml-compute-units", choices=["cpu", "gpu", "ane", "all"], default="cpu")
     return result
 
 
 def main():
     arguments = parser()
     args = arguments.parse_args()
-    if not 0 < args.timeout <= 300:
-        arguments.error("--timeout must be greater than zero and at most 300 seconds")
+    if args.timeout is not None and (not math.isfinite(args.timeout) or not 0 < args.timeout <= 1800):
+        arguments.error("--timeout must be greater than zero and at most 1800 seconds")
     proposal = select_action(args.request, model_dir=args.model_dir,
-                             speech_cli=args.speech, image=args.image, timeout=args.timeout)
+                             speech_cli=args.speech, image=args.image, timeout=args.timeout,
+                             backend=args.backend, coreml_compute_units=args.coreml_compute_units)
     print(json.dumps({"action": proposal.action, "validated": proposal.validated,
                       "fallback_reason": proposal.fallback_reason}))
 
