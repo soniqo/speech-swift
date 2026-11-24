@@ -2,6 +2,9 @@
 
 ## Overview
 
+The denoise command also supports [Inworld Voice Isolator v1](inworld-voice-isolator.md)
+for offline recordings using Core ML and Metal.
+
 DeepFilterNet3 (Interspeech 2023) removes background noise from speech in real-time. Two interchangeable engines run the neural network:
 
 - **Core ML** (default) — Apple Neural Engine, 8-bit palettized weights with FP16 compute, ~2.2 MB

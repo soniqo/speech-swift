@@ -32,13 +32,7 @@ public enum AudioFileLoader {
     ) throws -> [Float] {
         let audioFile = try AVAudioFile(forReading: url)
         let format = audioFile.processingFormat
-        let frameCount = AVAudioFrameCount(audioFile.length)
-        guard let buffer = AVAudioPCMBuffer(
-            pcmFormat: format,
-            frameCapacity: frameCount) else {
-            throw AudioLoadError.bufferCreationFailed
-        }
-        try audioFile.read(into: buffer)
+        let buffer = try readPCM(audioFile, format: format)
         guard let channels = buffer.floatChannelData else {
             throw AudioLoadError.noFloatData
         }
@@ -90,13 +84,7 @@ public enum AudioFileLoader {
     public static func loadStereo(url: URL, targetSampleRate: Int = 44100, quality: ResampleQuality = .standard) throws -> [[Float]] {
         let audioFile = try AVAudioFile(forReading: url)
         let format = audioFile.processingFormat
-        let frameCount = AVAudioFrameCount(audioFile.length)
-
-        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
-            throw AudioLoadError.bufferCreationFailed
-        }
-
-        try audioFile.read(into: buffer)
+        let buffer = try readPCM(audioFile, format: format)
 
         guard let floatData = buffer.floatChannelData else {
             throw AudioLoadError.noFloatData
@@ -119,6 +107,35 @@ public enum AudioFileLoader {
         }
 
         return [left, right]
+    }
+
+    private static func readPCM(_ file: AVAudioFile, format: AVAudioFormat) throws -> AVAudioPCMBuffer {
+        guard let frameCount = AVAudioFrameCount(exactly: file.length),
+              let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
+            throw AudioLoadError.bufferCreationFailed
+        }
+        try file.read(into: buffer)
+
+        // AVAudioFile can stop at a block boundary even with more PCM available.
+        let remaining = frameCount - buffer.frameLength
+        guard remaining > 0, buffer.frameLength > 0 else { return buffer }
+        guard let tail = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: min(remaining, 4_096)) else {
+            throw AudioLoadError.bufferCreationFailed
+        }
+        guard let destination = buffer.floatChannelData, let source = tail.floatChannelData else {
+            throw AudioLoadError.noFloatData
+        }
+        while buffer.frameLength < frameCount {
+            let requested = min(frameCount - buffer.frameLength, tail.frameCapacity)
+            try file.read(into: tail, frameCount: requested)
+            guard tail.frameLength > 0 else { break }
+            let offset = Int(buffer.frameLength)
+            for channel in 0..<Int(format.channelCount) {
+                destination[channel].advanced(by: offset).update(from: source[channel], count: Int(tail.frameLength))
+            }
+            buffer.frameLength += tail.frameLength
+        }
+        return buffer
     }
 
     /// Load WAV file directly (for 16-bit PCM). Multichannel input is averaged

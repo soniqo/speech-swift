@@ -3,6 +3,22 @@ import XCTest
 
 final class WAVWriterTests: XCTestCase {
 
+    func testFloat32WAVPreservesSampleLevels() throws {
+        let pattern: [Float] = [1.25, -1.5, 0.0000003, 0, -0.16]
+        let samples = (0..<144_000).map { pattern[$0 % pattern.count] }
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        try autoreleasepool {
+            try WAVWriter.writeFloat32(samples: samples, sampleRate: 48_000, to: url)
+            let mono = try AudioFileLoader.load(url: url, targetSampleRate: 48_000)
+            let stereo = try AudioFileLoader.loadStereo(url: url, targetSampleRate: 48_000)
+            XCTAssertEqual(mono.count, samples.count)
+            XCTAssertTrue(mono == samples)
+            XCTAssertTrue(stereo == [samples, samples])
+        }
+    }
+
     func testWriteAndReadBack() throws {
         let samples: [Float] = [0.0, 0.5, -0.5, 1.0, -1.0]
         let url = FileManager.default.temporaryDirectory
