@@ -1,0 +1,12 @@
+{
+  "name": "soniqo-local",
+  "interface": { "displayName": "Soniqo Local" },
+  "plugins": [
+    {
+      "name": "soniqo-speech",
+      "source": { "source": "local", "path": "./plugins/soniqo-speech" },
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+      "category": "Productivity"
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+name: Desktop plugin tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'plugins/soniqo-speech/**'
+      - 'Tests/SpeechPluginTests/**'
+      - '.agents/plugins/marketplace.json'
+      - '.github/workflows/plugin-tests.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'plugins/soniqo-speech/**'
+      - 'Tests/SpeechPluginTests/**'
+      - '.agents/plugins/marketplace.json'
+      - '.github/workflows/plugin-tests.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: speech-plugin-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-and-package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: plugins/soniqo-speech
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: plugins/soniqo-speech/package-lock.json
+      - name: Install build dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Build bundled server
+        run: npm run build
+      - name: Test protocol and runtime adapter
+        run: npm test
+      - name: Test package validation
+        run: python3 -m unittest discover -s ../../Tests/SpeechPluginTests -p 'test_*.py'
+      - name: Inspect development archive
+        run: python3 scripts/package.py

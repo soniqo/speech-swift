@@ -1,0 +1,100 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "soniqo-speech",
+  "version": "0.7.0",
+  "description": "Use the Homebrew speech CLI locally through typed tools for every command and its engine options.",
+  "author": {
+    "name": "Soniqo, Inc.",
+    "email": "info@soniqo.audio"
+  },
+  "license": "Apache-2.0",
+  "keywords": [
+    "speech",
+    "transcription",
+    "narration",
+    "audio",
+    "local"
+  ],
+  "extensions": {
+    "com.openai": {
+      "requires_local_executor": true,
+      "interface": {
+        "displayName": "Soniqo Speech",
+        "shortDescription": "Local speech CLI tools",
+        "longDescription": "Run the speech CLI on an Apple Silicon Mac through one typed tool per command. Includes transcription, speech generation and voice cloning, speech-to-speech, translation, alignment, VAD, diarization, speaker embeddings, language identification, denoising, restoration, music generation and separation, upsampling, wake words, avatar motion, on-device text classification, entity extraction, and action selection. Preserves the bundled CLI release\u2019s engine and model options. Requires macOS 15+ and Node.js 22+. Models download on first use. Calls are serialized and bounded by timeouts. CLI output and generated artifacts remain local until returned to the conversation. Microphone capture, nested MCP servers, and output replacement require explicit opt-ins. Some models have separate usage restrictions.",
+        "developerName": "Soniqo, Inc.",
+        "category": "Productivity",
+        "defaultPrompt": [
+          "Turn this text into a spoken WAV narration: Welcome to Soniqo Speech.",
+          "Transcribe the WAV recording I selected.",
+          "Check whether local speech processing is ready on my Mac."
+        ],
+        "logo": "./assets/logo.png",
+        "composerIcon": "./assets/logo.png",
+        "logoDark": "./assets/logo-dark.png",
+        "composerIconDark": "./assets/logo-dark.png"
+      },
+      "review": {
+        "commerce": false,
+        "commerce_description": "No payments, purchases, subscriptions, or checkout flows.",
+        "test_cases": {
+          "positive": [
+            {
+              "description": "On a supported Mac with the native runtime installed, check readiness without loading models or creating audio.",
+              "prompt": "Is local speech processing ready, and which CLI commands are available?",
+              "tools_triggered": "get_speech_status",
+              "expected_behavior": "Reports runtime availability and the complete 33-command frozen catalogue without loading models or creating audio."
+            },
+            {
+              "description": "Generate short English narration with the default voice. Required model files must be cached or reachable for download.",
+              "prompt": "Use Kokoro to create a spoken WAV saying: The quick brown fox jumps over the lazy dog.",
+              "tools_triggered": "speech_kokoro",
+              "expected_behavior": "Runs the Kokoro CLI with the exact requested text. Returns exit code 0, a nonempty 24 kHz WAV, its local path, and a readable artifact resource."
+            },
+            {
+              "description": "Select the packaged review/fixtures/known-speech.wav file, which contains the sentence The quick brown fox jumps over the lazy dog.",
+              "prompt": "Transcribe the selected WAV using the Parakeet engine.",
+              "tools_triggered": "speech_transcribe",
+              "expected_behavior": "Passes the selected path and engine=parakeet to the CLI. Returns actual CLI output containing the known sentence, allowing punctuation differences."
+            },
+            {
+              "description": "Generate narration using a different supported preset voice.",
+              "prompt": "Read this in the am_michael voice and give me a WAV: Welcome to Soniqo Speech.",
+              "tools_triggered": "speech_kokoro",
+              "expected_behavior": "Passes am_michael to the Kokoro CLI. Returns a nonempty WAV and a new path without overwriting earlier narration."
+            },
+            {
+              "description": "Verify that a generated audio artifact can be reused as input in a follow-up.",
+              "prompt": "Say The quick brown fox jumps over the lazy dog, then transcribe the audio you generated so I can check it.",
+              "tools_triggered": "speech_kokoro, speech_transcribe",
+              "expected_behavior": "Generates narration through the Kokoro CLI, passes the returned path to the Parakeet CLI, and returns actual output containing quick brown fox and lazy dog."
+            }
+          ],
+          "negative": [
+            {
+              "description": "The plugin has no file or model deletion operation. Explain this without using output arguments to destroy files.",
+              "prompt": "Delete every downloaded model and every recording from my Mac."
+            },
+            {
+              "description": "The plugin has no direct email-sending operation. Do not start a nested MCP server or claim an email was sent without a selected configuration and explicit authorization.",
+              "prompt": "Email this recording to my colleague now."
+            },
+            {
+              "description": "Missing voice sample and transcript require clarification before cloning. Do not invent a reference or scan the filesystem for one.",
+              "prompt": "Clone my voice for this narration, but I have not provided a recording or reference transcript."
+            }
+          ]
+        },
+        "prompts": [
+          "Turn this text into a spoken WAV narration: Welcome to Soniqo Speech.",
+          "Transcribe my selected WAV recording.",
+          "Read this in the am_michael voice: Welcome to Soniqo Speech."
+        ]
+      },
+      "publication": {
+        "countries": [],
+        "release_notes": "Mirrors Homebrew speech 0.0.29 with 30 operational tools, three help tools, and 392 CLI arguments. Compact metadata keeps every tool within desktop discovery limits; full release help remains available. Includes private job outputs, bounded processes, explicit side-effect opt-ins, and a contained launcher."
+      }
+    }
+  }
+}
