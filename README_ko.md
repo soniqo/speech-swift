@@ -76,7 +76,7 @@ Speech Swift 패키지 참조를 공개 소스에서 확인할 수 있는 저장
 **LLM 및 번역**
 
 - **[Qwen3Chat](https://soniqo.audio/ko/guides/chat)** — 온디바이스 LLM 채팅 (Qwen3.5-0.8B MLX/CoreML에 dense Qwen3 4B 및 Gemma 4 E2B/E4B MLX 백엔드 추가, 스트리밍 토큰)
-- **[Inkling2Chat](docs/models/inkling2-mini.md) / [Inkling2CoreMLChat](docs/inference/inkling2-mini-coreml.md)** — Inkling 2 Mini 로컬 텍스트·정지 이미지 추론(26.4B MoE, MLX INT4/INT5 + CoreML INT8, 스트리밍, Qwen3Chat에 포함)
+- **[Inkling2Chat](docs/models/inkling2-mini.md)** — Inkling 2 Mini 로컬 텍스트·정지 이미지 추론(26.4B MoE, MLX INT4/INT5, 스트리밍, Qwen3Chat에 포함)
 - **[FunctionGemma](https://soniqo.audio/ko/guides/function-calls)** — 온디바이스 구조화된 함수 / 도구 호출 LLM (Gemma 3 270M, CoreML 8비트 팔레타이즈, Neural Engine, 약 252 tok/s)
 - **[MADLAD-400](https://soniqo.audio/ko/guides/translate)** — 400+ 언어 간 다대다 번역 (3B, MLX INT4 + INT8, T5 v1.1, Apache 2.0)
 - **[GLiNER2.5-Decide](https://soniqo.audio/ko/guides/gliner)** - 지정한 레이블에 따른 로컬 텍스트 분류 및 엔터티 스팬 추출 (DeBERTa-v3-large 인코더, MLX, INT8/FP16/FP32, 개발 프리뷰, Apache 2.0)
@@ -216,7 +216,7 @@ struct DictateView: View {
 | [Fish Audio S2 Pro](docs/models/fish-audio-s2-pro.md) | 텍스트 → 음성 (제로샷 복제, 명시적 스타일 마커) | MLX | 0.5B-class (fp16) | 다국어 |
 | [CSM](docs/models/csm.md) | 텍스트 → 음성 (대화형, 제로샷 복제) | MLX | 1B (int8 / fp16) | EN |
 | [Qwen3.5 Chat](docs/models/qwen35-chat.md) | Text → Text (LLM) | MLX, CoreML | 0.8B | Multi |
-| [Inkling 2 Mini](docs/models/inkling2-mini.md) | 텍스트 + 이미지 → 텍스트 | MLX / CoreML | 26.4B MoE (INT4/INT5/INT8) | EN + 5개 언어 샘플 |
+| [Inkling 2 Mini](docs/models/inkling2-mini.md) | 텍스트 + 이미지 → 텍스트 | MLX | 26.4B MoE (INT4/INT5) | EN + 5개 언어 샘플 |
 | [Qwen3 Dense Chat](docs/models/qwen3-dense-chat.md) | Text → Text (LLM) | MLX | 4B | Multi |
 | [Gemma 4 Chat](docs/models/gemma4-chat.md) | Text → Text (LLM) | MLX | E2B / E4B (4-bit) | Multi |
 | [FunctionGemma](https://soniqo.audio/ko/guides/function-calls) | 텍스트 → 도구 호출 (LLM) | CoreML | 270M | 영어 위주 |

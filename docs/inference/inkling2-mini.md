@@ -14,15 +14,11 @@ Published affine bundles:
 | [aufklarer/Inkling-2-Mini-MLX-4bit](https://huggingface.co/aufklarer/Inkling-2-Mini-MLX-4bit) | INT4 | INT8 |
 | [aufklarer/Inkling-2-Mini-MLX-5bit](https://huggingface.co/aufklarer/Inkling-2-Mini-MLX-5bit) | INT5 | INT8 |
 
-Each model card includes installation steps, conversion provenance, a source
-patch, and its fixed acceptance-test transcripts.
+Each model card includes a source patch for the unmerged runtime, installation
+steps, conversion provenance, and its fixed acceptance-test transcripts.
 The same runtime supports both precisions and reads their settings from the
 bundle configuration. Choose the model ID or local directory for the desired
 variant.
-
-The CLI defaults to MLX. For the Core ML INT8 exporter and `Inkling2CoreMLChat`,
-see [Core ML export and inference](inkling2-mini-coreml.md). Select it with
-`speech inkling --backend coreml --model-dir /path/to/Inkling-2-Mini-CoreML-INT8`.
 
 See the [architecture diagram](../models/inkling2-mini.md) and
 [validated local decision example](inkling2-mini-decisions.md) for text/image
@@ -141,3 +137,5 @@ The dated [INT4 quality report](../benchmarks/inkling2-mini.md#int4-acceptance) 
 25 selected text, language, image, and long-context checks. Run the acceptance
 corpus with `INKLING2_MODEL_DIR` set and `swift test --filter E2EInkling2QualityTests`.
 These checks do not establish general accuracy or multilingual parity.
+
+The [matched release comparison](../benchmarks/inkling2-mini.md#speed-memory-and-a-source-model-comparison) records about 26 decode tokens/s for both exports on the 48 GiB M5 Pro, peak physical footprints of 16.93 GB (INT4) and 19.99 GB (INT5), and the paired 512-position quality sample. These observations are workload-specific.
