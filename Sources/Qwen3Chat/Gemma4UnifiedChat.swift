@@ -167,7 +167,7 @@ public final class Gemma4UnifiedChat: @unchecked Sendable {
         guard !tokens.isEmpty, tokens.count + sampling.maxTokens <= contextLength else {
             throw Gemma4ToolError.malformed("conversation exceeds the model context")
         }
-        var cache = model.newCache(parameters: nil)
+        var cache = try model.newCache(parameters: nil)
         defer { cache.removeAll() }
         var suffixTokens = tokens
         if prefillStrategy == .cacheOnly, prefixCacheBudgetBytes > 0 {
