@@ -1,7 +1,33 @@
+import AVFoundation
+import AudioToolbox
 import Foundation
 
 /// Write float audio samples to WAV file
 public enum WAVWriter {
+
+    /// Write mono IEEE Float32 WAV without quantizing or clamping sample levels.
+    public static func writeFloat32(samples: [Float], sampleRate: Int, to url: URL) throws {
+        guard sampleRate > 0,
+              let frameCount = AVAudioFrameCount(exactly: samples.count),
+              let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: Double(sampleRate),
+                                         channels: 1, interleaved: false),
+              let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: max(1, frameCount)),
+              let channel = buffer.floatChannelData?[0] else {
+            throw AudioLoadError.bufferCreationFailed
+        }
+        samples.withUnsafeBufferPointer { source in
+            if let base = source.baseAddress {
+                channel.update(from: base, count: source.count)
+            }
+        }
+        buffer.frameLength = frameCount
+        var settings = format.settings
+        settings[AVAudioFileTypeKey] = kAudioFileWAVEType
+        let file = try AVAudioFile(forWriting: url, settings: settings,
+                                   commonFormat: .pcmFormatFloat32, interleaved: false)
+        defer { file.close() }
+        try file.write(from: buffer)
+    }
 
     /// Write mono float samples to a 16-bit PCM WAV file
     /// - Parameters:
