@@ -9,15 +9,12 @@ final class InklingCommandTests: XCTestCase {
         XCTAssertEqual(command.image, "photo.png")
         XCTAssertEqual(command.maxTokens, 32)
         XCTAssertEqual(command.reasoningEffort, 0.2)
-        XCTAssertEqual(command.backend, .mlx)
     }
-    func testParsesCoreMLBackendAndComputeUnits() throws {
-        let command = try InklingCommand.parse(["Hello", "--model-dir", "/tmp/coreml-inkling",
-            "--backend", "coreml", "--coreml-compute-units", "gpu"])
-        XCTAssertEqual(command.backend, .coreml)
-        XCTAssertEqual(command.coremlComputeUnits, .gpu)
-        XCTAssertThrowsError(try InklingCommand.parse(["Hello", "--model-dir", "/tmp/inkling", "--backend", "unknown"]))
-        XCTAssertThrowsError(try InklingCommand.parse(["Hello", "--model-dir", "/tmp/inkling", "--coreml-compute-units", "unknown"]))
+    func testRejectsRemovedCoreMLBackendOptions() {
+        for arguments in [["--backend", "coreml"], ["--coreml-compute-units", "cpu"],
+                          ["--coreml-gpu-layer-limit", "12"]] {
+            XCTAssertThrowsError(try InklingCommand.parse(["Hello", "--model-dir", "/tmp/inkling"] + arguments))
+        }
     }
     func testRejectsMissingModelAndInvalidBudgets() {
         XCTAssertThrowsError(try InklingCommand.parse(["Hello"]))

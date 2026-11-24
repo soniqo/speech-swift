@@ -1,7 +1,7 @@
 # Inkling 2 Mini: local action selection
 
-Use `Inkling2Chat` or `Inkling2CoreMLChat` to classify a text or image request into
-a small, explicit set of actions. The example runs through the local Swift CLI, parses the final reply,
+Use `Inkling2Chat` to classify a text or image request into a small, explicit set
+of actions. The example runs through the local Swift CLI, parses the final reply,
 and returns an action proposal. It does not execute the action.
 
 ![A request enters Inkling2Chat, then strict JSON and allow-list validation returns an action or the clarify fallback.](../images/inkling2/decision-flow.svg)
@@ -30,19 +30,6 @@ The example downloads no weights and makes no hosted inference calls. Supply a
 local model directory. For a release build, pass `--speech .build/release/speech`.
 Run model-loading jobs sequentially.
 
-For a [Core ML INT8 export](inkling2-mini-coreml.md), select the backend explicitly:
-
-```bash
-python3 scripts/examples/inkling2_decision.py \
-  'Summarize this note: The train is delayed by ten minutes.' \
-  --backend coreml --coreml-compute-units cpu --timeout 900 \
-  --model-dir /path/to/Inkling-2-Mini-CoreML-INT8 \
-  --speech .build/debug/speech
-```
-
-The action allowlist and validation rules are shared by both backends. The
-default backend is `mlx`; Core ML compute units default to `cpu`.
-
 ## Interpreting the proposal
 
 `validated` means that the reply satisfies the example's schema, allowed actions,
@@ -54,9 +41,7 @@ The backend currently implements free text generation. It does not implement
 constrained JSON decoding or native tool-call parsing. Prompting for JSON and
 validating it afterwards gives the caller a deterministic fallback when the
 model returns another format. Even effort zero can consume hidden reasoning;
-the example reserves 512 generated tokens. The timeout defaults to 120 seconds
-for MLX or 900 seconds for Core ML, whose CPU initialization and generation can
-take minutes. `--timeout` accepts a positive deadline up to 1,800 seconds.
+the example reserves 512 generated tokens and a 120-second timeout.
 
 Inkling's text/image reasoning can help when an action depends on a passage,
 conversation, or image. The INT4/INT5 tensors alone occupy 16.1/19.2 GB, before
@@ -92,12 +77,6 @@ python3 scripts/tests/e2e_inkling_decisions.py \
   --model-dir /path/to/Inkling-2-Mini-MLX-5bit \
   --output /tmp/inkling-decisions/results.json
 ```
-
-The same runner accepts `--backend coreml --coreml-compute-units cpu --timeout 900`.
-All eight cases also passed through the release CLI with the prepared Core ML
-INT8 bundle on CPU. See the [Core ML report](../benchmarks/inkling2-mini.md#core-ml-int8)
-for the test scope and timing caveats. Those results are recorded separately
-from the published INT5 run.
 
 These fixed cases do not establish general routing accuracy or resistance to
 prompt injection. The example returns a proposal for the caller to assess.

@@ -1,6 +1,6 @@
 # Inkling 2 Mini validation
 
-Selected local checks on an Apple M5 Pro with 48 GB unified memory, dated 2026-11-22. Raw transcripts and probe results remain in the linked model releases; this report records the method, findings and limits.
+Selected local checks on an Apple M5 Pro with 48 GB unified memory, dated 22–23 November 2026. Raw transcripts and comparison results remain in the linked model releases; this report records the method, findings and limits.
 
 
 ## INT4 acceptance
@@ -67,9 +67,6 @@ sequentially and require the compiled MLX metallib.
 
 - [Prompts, rules, final replies and timings](https://huggingface.co/aufklarer/Inkling-2-Mini-MLX-4bit/blob/1033fa524242140fcc7168094839cb34fb3549b7/validation/quality-results.json)
 - [Semantic review and SQL check](https://huggingface.co/aufklarer/Inkling-2-Mini-MLX-4bit/blob/1033fa524242140fcc7168094839cb34fb3549b7/validation/quality-review.json)
-- [CPU Core ML operator probe](https://huggingface.co/aufklarer/Inkling-2-Mini-MLX-4bit/blob/1033fa524242140fcc7168094839cb34fb3549b7/validation/coreml-probe-cpu.json)
-- [CPU/GPU-allowed Core ML operator probe](https://huggingface.co/aufklarer/Inkling-2-Mini-MLX-4bit/blob/1033fa524242140fcc7168094839cb34fb3549b7/validation/coreml-probe-gpu.json)
-- [CPU/Neural-Engine-allowed Core ML operator probe](https://huggingface.co/aufklarer/Inkling-2-Mini-MLX-4bit/blob/1033fa524242140fcc7168094839cb34fb3549b7/validation/coreml-probe-ane.json)
 
 Earlier targeted validation also passed 20 CPU exporter tests, four source-sample
 MLX conversion tests, seven configuration/template/image-layout tests, two CLI
@@ -92,7 +89,7 @@ The INT5 export decodes that source independently.
 ### Functional result
 
 **25/25 selected acceptance cases passed.** The corpus and generation settings
-match the [INT4 evaluation](#int4-acceptance): twenty text cases,
+match the [INT4 evaluation](inkling2-mini-quality.md): twenty text cases,
 four synthetic image cases, and a 2,032-token document retrieval case.
 Both real CLI tests also passed: arithmetic and a PNG image's color.
 
@@ -154,80 +151,39 @@ multilingual parity, or performance. No natural-image benchmark was run.
 
 All eight fixed cases in `scripts/tests/fixtures/inkling2-decisions.json` passed through the real Swift CLI: two questions, summarization, an image, missing image input, ambiguity, an unsupported action and a request to override the schema. Nine CPU tests cover validation and invocation boundaries, including malformed and duplicate-key JSON, unknown actions, extra fields and process failures. No action was executed. These cases do not establish general routing accuracy or prompt-injection resistance. See [the example and reproduction steps](../inference/inkling2-mini-decisions.md).
 
-## Core ML INT8
+## Speed, memory and a source-model comparison
 
-Hardware: Apple M5 Pro, 48 GB unified memory; macOS 26.6.2 (25G83).
-The bundle uses INT8 text weights, FP32 text activations and visit-local histories,
-and FP16 vision weights. Its 27 compiled partitions occupy 27.69 GB (25.79 GiB).
-Allow about 65 GiB for the compiled download and Core ML execution cache.
+On the 48 GiB M5 Pro, both Swift exports generated about 26 tokens per second.
+We used the same 128-token prompt and generated 64 tokens, with one full warmup
+and three measured trials. These are release-build results from separate runs
+on the same shared Mac. Generation ignored EOS to keep the work fixed.
 
-### Native text and image acceptance
+| Model and runtime | Decode tokens/s | Prefill tokens/s | Peak physical footprint, GB | Peak RSS, GB |
+| --- | ---: | ---: | ---: | ---: |
+| Original checkpoint, pinned MLX-VLM | 23.80 | 360.22 | 24.12 | 4.19 |
+| Swift MLX INT4 | 26.54 | 359.62 | 16.93 | 6.76 |
+| Swift MLX INT5 | 26.40 | 337.04 | 19.99 | 10.74 |
 
-**25/25 fixed cases passed on CPU.** The inputs and rules match the MLX corpus:
-20 short text cases, four synthetic image questions and a 2032-token document
-retrieval case. The image replies were `3`, `Red square`, `MEET AT 4 PM` and `B`.
-The document reply was `Oslo, 2028`.
+GB is decimal. Physical footprint includes GPU allocations and the peak during
+loading, warmup and inference. RSS overlaps that counter; do not add the two.
+These figures describe this workload, not the smallest Mac that can run it.
+The original checkpoint uses native NVFP4 experts in layers 0–19 and MXFP8 in
+20–23. Our exports use affine INT4 or INT5 experts, with INT8 attention and
+vocabulary weights. This comparison changes both runtime and weight format.
 
-All final replies were reviewed for meaning and coherence. The seasons answer
-explains axial tilt, sunlight angle and day length. The missing-information
-answer avoids inventing a birthday. The five non-English examples preserve
-the requested meaning. The generated SQL returned the expected active users
-in alphabetical order in an isolated in-memory SQLite fixture.
+We also scored identical token histories from four selected WikiText-2
+paragraphs: 32 context tokens followed by 128 scored positions per paragraph,
+for 512 positions total. Lower perplexity means the model assigned more
+probability to the actual next tokens in these passages.
 
-The first process completed the 24 short text/image cases before a disk-space
-guard interrupted the document request. Another document-only attempt was also
-interrupted by that guard. After more space was reclaimed, a separate rerun
-completed the original document fixture. The combined report retains those
-execution boundaries; unfinished attempts are excluded from completed-case timings.
-A load-only cache preparation run is excluded from the acceptance count.
+| Model | Selected-position perplexity | Correct actual next tokens | Top-prediction agreement with original |
+| --- | ---: | ---: | ---: |
+| Original checkpoint | 9.111 | 280/512 | Reference |
+| Swift MLX INT4 | 9.153 | 274/512 | 474/512 (92.58%) |
+| Swift MLX INT5 | 9.172 | 277/512 | 483/512 (94.34%) |
 
-Method: debug Swift build, CPU-only compute units, one request at a time,
-temperature 0, top-k 0, top-p 1, repetition penalty 1, effort 0, and at most
-512 generated tokens including hidden reasoning and framing. The context limit
-was 8192, prefill size 1, and image budget 1024 merged patches.
-
-| Completed requests | Observed CPU time after initialization |
-| --- | --- |
-| 24 short text/image cases | 71–309 seconds each; median 131.6 seconds |
-| 2032-token document | 3109.8 seconds (51.8 minutes); first visible text at 3101.8 seconds |
-
-Initial model loading took about 158 seconds in the first smoke run. These are
-observations from a shared development Mac, with web verification running during
-parts of the document test. They are not a controlled throughput comparison.
-The backend remains experimental and MLX remains the CLI default. Full-model
-GPU, Neural Engine and iOS execution are unverified.
-
-### Conversion checks
-
-Four unquantized tiny decoder comparisons match the independent pinned MLX
-reference within 0.00000175, with matching greedy choices. Thirteen quantized
-tiny pipeline comparisons passed, including cache growth, sliding eviction and
-repeated-layer messages: maximum logit error 0.0000195, maximum state error
-0.000077. Five complete tiny vision grids passed with maximum error 0.000657.
-
-All 27 full-weight partitions passed comparison with their INT8-weight PyTorch
-modules. Maximum text output error was 0.000111; maximum vision feature error
-was 0.00879. These component comparisons do not establish parity with the
-complete original source-precision checkpoint.
-
-The focused checks also passed 21 Python exporter tests, 13 decision validation
-tests and 20 Swift checks: 11 config/tensor tests, three CLI tests, three tiny
-Core ML tests and three existing MLX parity checks. Release compilation and the
-release Metal library passed.
-
-### Decision validation
-
-**8/8 fixed cases passed through the real release CLI.** The two question
-cases selected `answer`, supplied text selected `summarize`, and the attached
-image selected `describe_image`. Missing image input, an ambiguous request,
-an unsupported action and a schema-override request selected `clarify`.
-Every reply passed strict JSON and allowlist validation. No action was executed.
-
-The decision run encountered macOS sleep periods. Its elapsed values use Python's
-monotonic clock and are retained as raw operational evidence, not a latency
-benchmark. The final cases ran with a scoped idle-sleep assertion. The separate
-long-document run had 325 monitor samples with a maximum gap of 10.03 seconds;
-its 51.8-minute wall time contains no such sleep gaps.
-
-The fixed corpus does not establish general accuracy, multilingual parity,
-long-context reliability, natural-image quality or prompt-injection resistance.
+INT5 stayed closer to the original next-token distributions on this sample:
+mean KL divergence was 0.00853 nats per position, compared with 0.01775 for
+INT4. Its perplexity was slightly higher. Four passages cannot establish a
+general quality ranking. The [machine-readable record](data/inkling2-mlx-comparison-2026-11-23.json)
+contains the method, source revisions, runtime versions and measured ranges.

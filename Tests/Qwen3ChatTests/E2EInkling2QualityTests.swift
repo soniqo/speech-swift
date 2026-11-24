@@ -1,5 +1,4 @@
 import Foundation
-import CoreML
 import MLX
 import XCTest
 @testable import Qwen3Chat
@@ -11,29 +10,8 @@ final class E2EInkling2QualityTests: XCTestCase {
         guard let directory = env["INKLING2_MODEL_DIR"] else {
             throw XCTSkip("Set INKLING2_MODEL_DIR to run the quality corpus")
         }
-        let backend = env["INKLING2_QUALITY_BACKEND"] ?? "mlx"
-        let generate: ([ChatMessage], [Inkling2Image], ChatSamplingConfig) -> AsyncThrowingStream<String, Error>
-        let encode: (String) -> [Int]
-        switch backend {
-        case "mlx":
-            MLX.Memory.cacheLimit = 128 * 1024 * 1024
-            let model = try Inkling2Chat.fromDirectory(URL(fileURLWithPath: directory))
-            generate = { messages, images, sampling in
-                model.generateStream(messages: messages, reasoningEffort: 0, sampling: sampling, images: images)
-            }
-            encode = model.encode
-        case "coreml":
-            let units: [String: MLComputeUnits] = ["cpu": .cpuOnly, "gpu": .cpuAndGPU, "ane": .cpuAndNeuralEngine, "all": .all]
-            guard let compute = units[env["INKLING2_COREML_COMPUTE_UNITS"] ?? "cpu"] else {
-                throw Inkling2Error.invalid("invalid Core ML compute units for quality test")
-            }
-            let model = try Inkling2CoreMLChat.fromDirectory(URL(fileURLWithPath: directory), computeUnits: compute)
-            generate = { messages, images, sampling in
-                model.generateStream(messages: messages, reasoningEffort: 0, sampling: sampling, images: images)
-            }
-            encode = model.encode
-        default: throw Inkling2Error.invalid("quality backend must be mlx or coreml")
-        }
+        MLX.Memory.cacheLimit = 128 * 1024 * 1024
+        let model = try Inkling2Chat.fromDirectory(URL(fileURLWithPath: directory))
         let fixtures = Bundle.module.resourceURL!.appendingPathComponent("Inkling2")
         let cases = try JSONSerialization.jsonObject(with: Data(contentsOf: fixtures.appendingPathComponent("quality-cases.json"))) as! [[String: Any]]
         let output = URL(fileURLWithPath: env["INKLING2_QUALITY_OUTPUT"] ?? "/tmp/inkling-quality/results.json")
@@ -47,7 +25,7 @@ final class E2EInkling2QualityTests: XCTestCase {
             let sampling = ChatSamplingConfig(temperature: 0, topK: 0, topP: 1, maxTokens: 512, repetitionPenalty: 1)
             var text = "", firstText: Double?
             let start = Date()
-            for try await part in generate(messages, images, sampling) {
+            for try await part in model.generateStream(messages: messages, reasoningEffort: 0, sampling: sampling, images: images) {
                 if firstText == nil { firstText = Date().timeIntervalSince(start) }
                 text += part
             }
@@ -65,12 +43,11 @@ final class E2EInkling2QualityTests: XCTestCase {
             result["response"] = text; result["passed"] = passed
             result["seconds"] = Date().timeIntervalSince(start)
             result["first_visible_text_seconds"] = firstText
-            result["visible_output_tokens"] = encode(text).count
+            result["visible_output_tokens"] = model.encode(text).count
             results.append(result)
             let report: [String: Any] = ["scope": "25 fixed acceptance cases; deterministic greedy decoding; not a broad quality benchmark",
                 "hardware": env["INKLING2_QUALITY_HARDWARE"] ?? "Apple Silicon", "os": ProcessInfo.processInfo.operatingSystemVersionString,
-                "model": URL(fileURLWithPath: directory).lastPathComponent, "backend": backend,
-                "temperature": 0, "max_tokens": 512,
+                "model": URL(fileURLWithPath: directory).lastPathComponent, "temperature": 0, "max_tokens": 512,
                 "reasoning_effort": 0, "results": results]
             try FileManager.default.createDirectory(at: output.deletingLastPathComponent(), withIntermediateDirectories: true)
             try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]).write(to: output, options: .atomic)

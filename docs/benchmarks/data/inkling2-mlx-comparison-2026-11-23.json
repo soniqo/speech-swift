@@ -1,0 +1,224 @@
+{
+  "schema_version": 1,
+  "measured_date_utc": "2026-11-23",
+  "scope": "MLX-only fixed text workload and a 512-position quality sample on one shared development Mac.",
+  "hardware": {
+    "chip": "Apple M5 Pro",
+    "cpu_cores": 18,
+    "gpu_cores": 20,
+    "unified_memory_bytes": 51539607552,
+    "model": "Mac17,9",
+    "os": "macOS 26.6.2 (25G83)"
+  },
+  "runtime_provenance": {
+    "recorded_at_utc": "2026-11-23T14:55:28.484599+00:00",
+    "python": "3.12.13 (main, Mar  3 2026, 12:39:30) [Clang 21.0.0 (clang-2100.0.123.102)]",
+    "packages": {
+      "mlx": "0.32.4",
+      "mlx-lm": "0.32.2",
+      "mlx-vlm": "0.8.0",
+      "numpy": "2.5.5",
+      "transformers": "5.24.0",
+      "tokenizers": "0.23.3",
+      "safetensors": "0.8.0",
+      "huggingface-hub": "2.4.0"
+    },
+    "swift_mlx_package": "0.31.4",
+    "swift_embedded_mlx_core": "0.31.1",
+    "source_commit": "6860388705be7ca087b9e6a4bd20cf8a9db2be0b",
+    "mlx_vlm_install_origin": {
+      "url": "https://github.com/Neywa-Labs/mlx-vlm.git",
+      "vcs_info": {
+        "vcs": "git",
+        "commit_id": "36565bc13a1b0314acff6cbcbc8328cf675d85e4",
+        "requested_revision": "36565bc13a1b0314acff6cbcbc8328cf675d85e4"
+      }
+    },
+    "xcode": {
+      "CFBundleShortVersionString": "27.2",
+      "CFBundleVersion": "25400.63.5"
+    },
+    "coreml_framework": {
+      "CFBundleShortVersionString": "1.0",
+      "CFBundleVersion": "3520.5.1"
+    }
+  },
+  "models": {
+    "original": {
+      "repo_id": "thinkingmachines/Inkling-2-Mini",
+      "revision": "ed40e7da625f594fc9c4990f5f66be24873c22d7",
+      "expert_precision": "native NVFP4 in layers 0–19 and MXFP8 in layers 20–23",
+      "runtime": "pinned MLX-VLM"
+    },
+    "mlx-int4": {
+      "repo_id": "aufklarer/Inkling-2-Mini-MLX-4bit",
+      "revision": "cd7f2b4900c47cb421e173a0916bb236cd88de2c",
+      "expert_precision": "affine INT4, group 64",
+      "attention_and_vocabulary_precision": "affine INT8, group 64",
+      "runtimes": [
+        "speech-swift release",
+        "pinned MLX-VLM"
+      ]
+    },
+    "mlx-int5": {
+      "repo_id": "aufklarer/Inkling-2-Mini-MLX-5bit",
+      "revision": "2cb76903161a015a3cf5f0d9b833ca39cae466ff",
+      "expert_precision": "affine INT5, group 64",
+      "attention_and_vocabulary_precision": "affine INT8, group 64",
+      "runtimes": [
+        "speech-swift release",
+        "pinned MLX-VLM"
+      ]
+    }
+  },
+  "method": {
+    "performance": {
+      "workload": "Text-only, greedy, fixed-length raw next-token inference; EOS ignored to keep work fixed",
+      "input_tokens": 128,
+      "decode_steps": 64,
+      "warmup_runs": 1,
+      "measured_trials": 3,
+      "loop_passes": 3,
+      "layer_visits": 48,
+      "batch_size": 1,
+      "speculative_decoding": false,
+      "mlx_cache_limit_bytes": 134217728,
+      "mlx_memory_limit_bytes": 30064771072,
+      "memory_metric": "Kernel-recorded peak process physical footprint, including GPU allocations; includes load/warmup/inference. RSS is reported separately. Do not add RSS and GPU allocations.",
+      "input_ids_sha256": "6ec9abec7c6611500bce02a5d1979836ed5f848b40b67d03d8e51e30df2e6dc2",
+      "source_commit": "258ff17632cd37319c23e29f661e0571c28a0e53",
+      "source_merged_commit": "6860388705be7ca087b9e6a4bd20cf8a9db2be0b",
+      "swift_mlx_package": "0.31.4",
+      "swift_embedded_mlx_core": "0.31.1",
+      "python_mlx": "0.32.4",
+      "mlx_vlm_commit": "36565bc13a1b0314acff6cbcbc8328cf675d85e4",
+      "source_checkpoint": "thinkingmachines/Inkling-2-Mini@ed40e7da625f594fc9c4990f5f66be24873c22d7"
+    },
+    "quality": {
+      "request": "likelihood-cases.json",
+      "dataset": "Salesforce/wikitext",
+      "dataset_revision": "b08601e04326c79dfdd32d625aee71d232d685c3",
+      "dataset_file_sha256": "5f1bea067869d04849c0f975a2b29c4ff47d867f484f5010ea5e861eab246d91",
+      "dataset_license": "CC-BY-SA-3.0 / GFDL",
+      "paragraphs": 4,
+      "context_tokens_per_paragraph": 32,
+      "scored_tokens_per_paragraph": 128,
+      "total_scored_tokens": 512,
+      "total_forward_input_tokens": 636,
+      "fresh_state_per_paragraph": true,
+      "input": "Raw text, no chat template; identical pinned token IDs",
+      "loop_passes": 3,
+      "logical_layer_visits": 48,
+      "speculative_decoding": false,
+      "activation_quantization": false,
+      "score_format": "little-endian Float32 full-vocabulary logits; stable Float64 metric calculation",
+      "mlx_chunk_tokens": 128,
+      "coreml_chunk_tokens": 1,
+      "metrics": {
+        "mean_nll_nats": "Mean negative log probability of the actual next token, in nats; lower is better",
+        "perplexity": "exp(mean_nll_nats), restricted to the 512 selected positions; lower is better",
+        "next_token_accuracy": "Fraction of positions whose top prediction equals the actual next token",
+        "top1_agreement_with_original": "Fraction whose top prediction equals the original model prediction under the same history",
+        "mean_kl_original_to_candidate": "Mean full-vocabulary KL(original || candidate), nats per position; lower means closer distributions"
+      }
+    },
+    "memory": "Report peak physical footprint and peak RSS separately. GPU allocations are reflected in footprint; Core ML maps model files. The counters overlap and must not be added. Values describe this workload, not a minimum-RAM guarantee."
+  },
+  "results": [
+    {
+      "id": "original",
+      "performance": {
+        "id": "original-mlx",
+        "runtime": "mlx-vlm",
+        "decode_tokens_per_second_median": 23.7989907514719,
+        "decode_tokens_per_second_range": [
+          23.518840540998855,
+          24.216471413427417
+        ],
+        "prefill_tokens_per_second_median": 360.2204521187687,
+        "peak_physical_footprint_bytes": 24121893144,
+        "peak_rss_bytes": 4192780288,
+        "peak_mlx_active_bytes": 23768230336,
+        "thermal_state_start": null,
+        "thermal_state_trials": [
+          null,
+          null,
+          null
+        ]
+      },
+      "quality": {
+        "scored_tokens": 512,
+        "mean_nll_nats": 2.209480906710667,
+        "perplexity": 9.110985713771376,
+        "next_token_accuracy": 0.546875
+      }
+    },
+    {
+      "id": "mlx-int4-swift",
+      "performance": {
+        "id": "int4-swift",
+        "runtime": "speech-swift-release",
+        "decode_tokens_per_second_median": 26.540610286268166,
+        "decode_tokens_per_second_range": [
+          26.46440191421057,
+          26.64349839274344
+        ],
+        "prefill_tokens_per_second_median": 359.62460016627136,
+        "peak_physical_footprint_bytes": 16927551704,
+        "peak_rss_bytes": 6757990400,
+        "peak_mlx_active_bytes": 16691199908,
+        "thermal_state_start": 0,
+        "thermal_state_trials": [
+          0,
+          0,
+          0
+        ]
+      },
+      "quality": {
+        "scored_tokens": 512,
+        "mean_nll_nats": 2.214134871725245,
+        "perplexity": 9.153486744975565,
+        "next_token_accuracy": 0.53515625,
+        "top1_agreement_with_original": 0.92578125,
+        "mean_kl_original_to_candidate": 0.01775223201699615
+      }
+    },
+    {
+      "id": "mlx-int5-swift",
+      "performance": {
+        "id": "int5-swift",
+        "runtime": "speech-swift-release",
+        "decode_tokens_per_second_median": 26.396848255622793,
+        "decode_tokens_per_second_range": [
+          26.356476569434278,
+          26.457529546308713
+        ],
+        "prefill_tokens_per_second_median": 337.04170594997686,
+        "peak_physical_footprint_bytes": 19986708904,
+        "peak_rss_bytes": 10743431168,
+        "peak_mlx_active_bytes": 19748887460,
+        "thermal_state_start": 1,
+        "thermal_state_trials": [
+          1,
+          1,
+          1
+        ]
+      },
+      "quality": {
+        "scored_tokens": 512,
+        "mean_nll_nats": 2.2161215035607116,
+        "perplexity": 9.171689428176904,
+        "next_token_accuracy": 0.541015625,
+        "top1_agreement_with_original": 0.943359375,
+        "mean_kl_original_to_candidate": 0.008528697430558783
+      }
+    }
+  ],
+  "limits": [
+    "Separate runs on a shared M5 Pro; measurements are workload-specific and not a minimum-RAM guarantee.",
+    "Peak physical footprint includes GPU allocations, loading and warmup. RSS overlaps footprint and must not be added to it.",
+    "The original checkpoint uses native NVFP4 experts in layers 0–19 and MXFP8 in 20–23; the Swift exports use affine INT4/INT5 experts and INT8 attention/vocabulary.",
+    "Quality uses four selected WikiText-2 paragraphs and 512 scored positions, not full-corpus perplexity or general accuracy.",
+    "25 selected text/image/document acceptance cases passed for each MLX export; no broad natural-image benchmark was run."
+  ]
+}
