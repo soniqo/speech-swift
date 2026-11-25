@@ -91,6 +91,27 @@ and 28.02% for INT8. See
 [MOSS MLX INT5 vs INT8 Benchmark](moss-mlx.md) for the long-context
 diarization results, weight sizes, caveats, and reproduction commands.
 
+### Oruk Fourier 2B MLX 8-bit comparison
+
+The `oruk-fourier-2b-mlx-8bit` engine loads the published `mlx/8bit` weights from [`oruk/oruk-fourier-2b`](https://huggingface.co/oruk/oruk-fourier-2b) (CC BY-NC 4.0, English-specialized post-training of Qwen3-ASR 1.7B) through `Qwen3ASRModel.fromPretrained(modelId: "oruk/oruk-fourier-2b", subfolder: "mlx/8bit")`. It reuses the existing 24-layer audio encoder and 28-layer Qwen3 text decoder (1,101 tensors, greedy decoding) with zero architecture changes, while downloading the repository root `config.json` alongside `mlx/8bit/*`.
+
+Matched isolated LibriSpeech `test-clean` run on Apple M5 Max, 128 GB, macOS 26.4.1, release build (`--product asr-bench`), 2026-11-25. Both engines ran in fresh child processes (`--isolated`) over the same first 200 utterances (1,818.5 s / ~30.3 min audio, 4,675 reference words) with warm local caches:
+
+```bash
+.build/release/asr-bench \
+  --dataset ~/datasets/LibriSpeech/test-clean \
+  --engines oruk-fourier-2b-mlx-8bit qwen3-mlx-1.7b-8bit \
+  --isolated \
+  --limit 200
+```
+
+| Engine | WER% (Agg) | Avg WER% | CER% | Mean RTF | Median RTF | Overall xRT | Load | Peak RSS | Phys Footprint |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| **`oruk-fourier-2b-mlx-8bit`** | **1.60** | **2.18** | **0.45** | **0.026** | **0.025** | **40.9x** | 5.5s | 2 640 MB | 4 952 MB |
+| `qwen3-asr-mlx-1.7b-8bit` | 1.69 | 2.77 | 0.54 | 0.027 | 0.026 | 39.2x | **1.6s** | 2 640 MB | **4 847 MB** |
+
+On this matched 200-utterance English fixture, `oruk-fourier-2b-mlx-8bit` records 75 word errors (`54 S / 14 D / 7 I`, 92 char errors) versus `qwen3-asr-mlx-1.7b-8bit`'s 79 word errors (`60 S / 14 D / 5 I`, 110 char errors) at identical peak RSS (2,640 MB) and slightly higher throughput (40.9x vs 39.2x real-time). Note that `oruk/oruk-fourier-2b` is English-specialized and licensed **CC BY-NC 4.0** (non-commercial); multilingual workloads remain served by `qwen3-mlx-1.7b-8bit` / `qwen3-mlx-0.6b-8bit`.
+
 ## Comparison with published models
 
 | Model | Params | Size | Precision | WER% (test-clean) | Source |

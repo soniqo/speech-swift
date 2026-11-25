@@ -96,6 +96,13 @@ final class Qwen3ASRTests: XCTestCase {
             ASRModelSize.detect(from: "aufklarer/Qwen3-ASR-1.7B-MLX-8bit"),
             .large)
         XCTAssertEqual(
+            ASRModelSize.detect(from: Qwen3ASRModel.orukFourier2BModelId),
+            .large)
+        XCTAssertEqual(
+            ASRModelSize.detectBits(
+                from: "\(Qwen3ASRModel.orukFourier2BModelId)/\(Qwen3ASRModel.orukFourier2BSubfolder)"),
+            8)
+        XCTAssertEqual(
             ASRModelSize.detect(from: "some-custom/model"),
             .small)  // defaults to small
     }
