@@ -124,6 +124,11 @@ public class Qwen3ASRModel {
     /// 1.7B 8-bit MLX bundle — higher-capacity sibling of the default.
     public static let largeModelId = "aufklarer/Qwen3-ASR-1.7B-MLX-8bit"
 
+    /// Oruk Fourier 2B (CC BY-NC 4.0) English-specialized Qwen3-ASR 1.7B post-training.
+    /// MLX 8-bit weights live under `orukFourier2BSubfolder` inside the canonical HF repo.
+    public static let orukFourier2BModelId = "oruk/oruk-fourier-2b"
+    public static let orukFourier2BSubfolder = "mlx/8bit"
+
     /// CoreML-packaged variant for Neural Engine deployment.
     public static let coreMLModelId = "aufklarer/Qwen3-ASR-CoreML"
 
@@ -1230,7 +1235,8 @@ public enum ASRModelSize {
 
     /// Detect model size from a HuggingFace model ID
     public static func detect(from modelId: String) -> ASRModelSize {
-        if modelId.contains("1.7B") || modelId.contains("1.7b") {
+        let lower = modelId.lowercased()
+        if lower.contains("1.7b") || lower.contains("fourier-2b") {
             return .large
         }
         return .small
@@ -1331,9 +1337,15 @@ internal enum Qwen3ASRMemory {
 // MARK: - Model Loading
 
 public extension Qwen3ASRModel {
-    /// Load model from HuggingFace hub with automatic weight downloading
+    /// Load model from HuggingFace hub with automatic weight downloading.
+    ///
+    /// When `subfolder` is provided (for example `"mlx/8bit"` on multi-format
+    /// repositories such as `oruk/oruk-fourier-2b`), weights and tokenizer files
+    /// are downloaded from that subdirectory while still fetching the repository
+    /// root `config.json` for standard HuggingFace Hub attribution.
     static func fromPretrained(
         modelId: String = "aufklarer/Qwen3-ASR-0.6B-MLX-4bit",
+        subfolder: String? = nil,
         cacheDir: URL? = nil,
         offlineMode: Bool = false,
         downloadOptions: DownloadOptions = .init(),
@@ -1341,9 +1353,10 @@ public extension Qwen3ASRModel {
     ) async throws -> Qwen3ASRModel {
         progressHandler?(0.0, "Downloading model...")
 
-        // Auto-detect model size and quantization bits from model ID
+        // Auto-detect model size and quantization bits from model ID (and subfolder if set)
         let modelSize = ASRModelSize.detect(from: modelId)
-        let detectedBits = ASRModelSize.detectBits(from: modelId)
+        let bitsHint = subfolder.map { "\(modelId)/\($0)" } ?? modelId
+        let detectedBits = ASRModelSize.detectBits(from: bitsHint)
 
         // Bug 4b: soft RAM warning for the 1.7B variant. Emit BEFORE the
         // download so users see it on the first byte, not after a 1.7 GB
@@ -1363,18 +1376,51 @@ public extension Qwen3ASRModel {
         // Get cache directory
         let cacheDir = try cacheDir ?? HuggingFaceDownloader.getCacheDirectory(for: modelId)
 
+        let normalizedSubfolder: String?
+        if let raw = subfolder?.trimmingCharacters(in: CharacterSet(charactersIn: "/")), !raw.isEmpty {
+            normalizedSubfolder = try HuggingFaceDownloader.validatedRelativePath(raw)
+        } else {
+            normalizedSubfolder = nil
+        }
+
         // Download weights and tokenizer files (skips files that already exist on disk)
         // Download is the slowest part — give it 0-80% of progress
-        try await HuggingFaceDownloader.downloadWeights(
-            modelId: modelId,
-            to: cacheDir,
-            additionalFiles: ["vocab.json", "merges.txt", "tokenizer_config.json"],
-            offlineMode: offlineMode,
-            downloadOptions: downloadOptions,
-            progressHandler: { progress in
-                progressHandler?(progress * 0.8, "Downloading weights...")
-            }
-        )
+        if let sub = normalizedSubfolder {
+            // Keep repo-root `config.json` alongside the MLX bundle under `sub`
+            // so only the subfolder weights are downloaded while preserving
+            // canonical HuggingFace Hub download attribution and offlineMode.
+            let files = [
+                "config.json",
+                "\(sub)/config.json",
+                "\(sub)/*.safetensors",
+                "\(sub)/vocab.json",
+                "\(sub)/merges.txt",
+                "\(sub)/tokenizer_config.json",
+            ]
+            try await HuggingFaceDownloader.downloadFiles(
+                modelId: modelId,
+                to: cacheDir,
+                files: files,
+                offlineMode: offlineMode,
+                downloadOptions: downloadOptions,
+                progressHandler: { progress in
+                    progressHandler?(progress * 0.8, "Downloading weights...")
+                }
+            )
+        } else {
+            try await HuggingFaceDownloader.downloadWeights(
+                modelId: modelId,
+                to: cacheDir,
+                additionalFiles: ["vocab.json", "merges.txt", "tokenizer_config.json"],
+                offlineMode: offlineMode,
+                downloadOptions: downloadOptions,
+                progressHandler: { progress in
+                    progressHandler?(progress * 0.8, "Downloading weights...")
+                }
+            )
+        }
+
+        let modelDir = normalizedSubfolder.map { cacheDir.appendingPathComponent($0, isDirectory: true) } ?? cacheDir
 
         progressHandler?(0.80, "Loading tokenizer...")
 
@@ -1387,7 +1433,7 @@ public extension Qwen3ASRModel {
         }
 
         // Load tokenizer from vocab.json
-        let vocabPath = cacheDir.appendingPathComponent("vocab.json")
+        let vocabPath = modelDir.appendingPathComponent("vocab.json")
         if FileManager.default.fileExists(atPath: vocabPath.path) {
             let tokenizer = Qwen3Tokenizer()
             try tokenizer.load(from: vocabPath)
@@ -1397,14 +1443,14 @@ public extension Qwen3ASRModel {
         progressHandler?(0.85, "Loading audio encoder weights...")
 
         // Load audio encoder weights
-        try WeightLoader.loadWeights(into: model.audioEncoder, from: cacheDir)
+        try WeightLoader.loadWeights(into: model.audioEncoder, from: modelDir)
 
         progressHandler?(0.92, "Loading text decoder weights...")
 
         // Initialize and load text decoder
         model.initializeTextDecoder()
         if let textDecoder = model.textDecoder {
-            try WeightLoader.loadTextDecoderWeights(into: textDecoder, from: cacheDir)
+            try WeightLoader.loadTextDecoderWeights(into: textDecoder, from: modelDir)
         }
 
         MetalBudget.pinMemory()
