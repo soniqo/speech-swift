@@ -217,9 +217,11 @@ public final class KokoroPhonemizer {
 
         var ids = [bosId]
 
-        // Tokenize IPA string character by character
-        for char in phonemes {
-            let s = String(char)
+        // Tokenize the IPA string code point by code point, as Kokoro does: a
+        // vowel and a combining mark such as U+0303 (nasal) are separate
+        // entries, while one Character would hold both and match neither.
+        for scalar in phonemes.unicodeScalars {
+            let s = String(scalar)
             if let id = vocab[s] {
                 ids.append(id)
             }

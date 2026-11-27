@@ -66,6 +66,18 @@ final class KokoroTTSTests: XCTestCase {
         let ids = phonemizer.tokenize("axyz")
         XCTAssertEqual(ids, [1, 3, 2])
     }
+
+    /// Regression: tokenization went Character by Character, so a vowel and a
+    /// combining mark (the nasal tilde, U+0303) were one lookup that matched
+    /// neither entry, and both were dropped. Kokoro looks up each code point.
+    func testPhonemizerTokenizesCombiningMarksSeparately() {
+        let vocab: [String: Int] = ["b": 3, "ɔ": 4, "\u{0303}": 5, "n": 6, "ˈ": 7]
+        let phonemizer = KokoroPhonemizer(vocab: vocab)
+        phonemizer.addPronunciations(["bonbon": "bɔ\u{0303}bɔ\u{0303}"])
+        XCTAssertEqual(Array(phonemizer.tokenize("bonbon").dropFirst().dropLast()), [3, 4, 5, 3, 4, 5])
+        XCTAssertTrue(phonemizer.tokenize("bon", language: "fr").contains(5),
+            "French nasal vowels must keep their tilde")
+    }
 }
 
 // MARK: - Chinese Phonemizer Tests
