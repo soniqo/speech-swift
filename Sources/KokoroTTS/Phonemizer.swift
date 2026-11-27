@@ -48,11 +48,12 @@ public final class KokoroPhonemizer {
     /// Pad token ID (0).
     public let padId: Int = 0
 
-    /// Start-of-sequence token ID.
-    public let bosId: Int = 1
+    /// Start-of-sequence token ID. Kokoro wraps the phoneme ids in the pad id,
+    /// `[0, *ids, 0]`; in the vocabulary, ids 1 and 2 are `;` and `:`.
+    public let bosId: Int = 0
 
-    /// End-of-sequence token ID.
-    public let eosId: Int = 2
+    /// End-of-sequence token ID (the pad id, as for `bosId`).
+    public let eosId: Int = 0
 
     /// Dictionary entry: either a simple phoneme string or POS-tagged heteronym.
     enum DictEntry {
