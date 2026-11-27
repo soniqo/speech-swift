@@ -101,8 +101,8 @@ final class GermanPhonemizerTests: XCTestCase {
         let vocab: [String: Int] = ["$": 0, "ʃ": 1, "t": 2, "ɾ": 3, "ˈ": 4, "ɑ": 5, "ː": 6, "s": 7, "ə": 8, " ": 16]
         let phonemizer = KokoroPhonemizer(vocab: vocab)
         let ids = phonemizer.tokenize("Straße", language: "de")
-        // ʃ t ɾ ˈ ɑ ː s ə between BOS/EOS
-        XCTAssertEqual(ids, [1, 1, 2, 3, 4, 5, 6, 7, 8, 2])
+        // ʃ t ɾ ˈ ɑ ː s ə between BOS/EOS (the pad id, 0)
+        XCTAssertEqual(ids, [0, 1, 2, 3, 4, 5, 6, 7, 8, 0])
         XCTAssertEqual(phonemizer.tokenize("Straße", language: "german"), ids)
     }
 

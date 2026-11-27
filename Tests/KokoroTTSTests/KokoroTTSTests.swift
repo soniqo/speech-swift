@@ -30,41 +30,51 @@ final class KokoroTTSTests: XCTestCase {
 
     func testPhonemizerTokenize() {
         let vocab: [String: Int] = [
-            "<pad>": 0, "<bos>": 1, "<eos>": 2,
+            "$": 0,
             "h": 3, "e": 4, "l": 5, "o": 6, " ": 7,
         ]
         let phonemizer = KokoroPhonemizer(vocab: vocab)
         let ids = phonemizer.tokenize("hello")
-        XCTAssertEqual(ids.first, 1)
-        XCTAssertEqual(ids.last, 2)
+        XCTAssertEqual(ids.first, 0)
+        XCTAssertEqual(ids.last, 0)
         XCTAssertTrue(ids.count >= 3)
     }
 
     func testPhonemizerPadding() {
-        let vocab: [String: Int] = ["<pad>": 0, "<bos>": 1, "<eos>": 2, "a": 3]
+        let vocab: [String: Int] = ["$": 0, "a": 3]
         let phonemizer = KokoroPhonemizer(vocab: vocab)
         let ids = phonemizer.tokenize("a")
         let padded = phonemizer.pad(ids, to: 10)
         XCTAssertEqual(padded.count, 10)
-        XCTAssertEqual(padded[0], 1)
-        XCTAssertEqual(padded.last(where: { $0 != 0 }), 2)
+        XCTAssertEqual(Array(padded.prefix(ids.count)), ids)
+        XCTAssertEqual(padded.dropFirst(ids.count).filter { $0 != 0 }, [])
     }
 
     func testPhonemizerTruncation() {
-        let vocab: [String: Int] = ["<pad>": 0, "<bos>": 1, "<eos>": 2, "a": 3]
+        let vocab: [String: Int] = ["$": 0, "a": 3]
         let phonemizer = KokoroPhonemizer(vocab: vocab)
         let longText = String(repeating: "a", count: 1000)
         let ids = phonemizer.tokenize(longText, maxLength: 20)
         XCTAssertEqual(ids.count, 20)
-        XCTAssertEqual(ids.first, 1)
-        XCTAssertEqual(ids.last, 2)
+        XCTAssertEqual(ids.first, 0)
+        XCTAssertEqual(ids.last, 0)
     }
 
     func testPhonemizerUnknownChars() {
-        let vocab: [String: Int] = ["<pad>": 0, "<bos>": 1, "<eos>": 2, "a": 3]
+        let vocab: [String: Int] = ["$": 0, "a": 3]
         let phonemizer = KokoroPhonemizer(vocab: vocab)
         let ids = phonemizer.tokenize("axyz")
-        XCTAssertEqual(ids, [1, 3, 2])
+        XCTAssertEqual(ids, [0, 3, 0])
+    }
+
+    /// Regression: the ids were wrapped in 1 and 2, which are `;` and `:` in the
+    /// shipped vocabulary. Kokoro wraps them in the pad id: `[0, *ids, 0]`.
+    func testPhonemizerWrapsInPadSymbol() {
+        let vocab: [String: Int] = ["$": 0, ";": 1, ":": 2, "a": 3]
+        let phonemizer = KokoroPhonemizer(vocab: vocab)
+        XCTAssertEqual(phonemizer.tokenize("axyz"), [0, 3, 0])
+        XCTAssertEqual(
+            phonemizer.tokenize(String(repeating: "a", count: 1000), maxLength: 5), [0, 3, 3, 3, 0])
     }
 }
 
@@ -309,7 +319,7 @@ final class LatinPhonemizerTests: XCTestCase {
 final class MultilingualTokenizerTests: XCTestCase {
 
     private func makeVocab() -> [String: Int] {
-        ["<pad>": 0, "<bos>": 1, "<eos>": 2,
+        ["$": 0,
          "a": 3, "b": 4, "d": 5, "e": 6, "f": 7, "h": 8,
          "i": 9, "k": 10, "l": 11, "m": 12, "n": 13, "o": 14,
          "p": 15, "r": 16, "s": 17, "t": 18, "u": 19, "w": 20,
@@ -321,48 +331,48 @@ final class MultilingualTokenizerTests: XCTestCase {
     func testChineseRouting() {
         let phonemizer = KokoroPhonemizer(vocab: makeVocab())
         let ids = phonemizer.tokenize("你好", language: "zh")
-        XCTAssertEqual(ids.first, 1, "Should start with BOS")
-        XCTAssertEqual(ids.last, 2, "Should end with EOS")
+        XCTAssertEqual(ids.first, 0, "Should start with BOS")
+        XCTAssertEqual(ids.last, 0, "Should end with EOS")
         XCTAssertGreaterThan(ids.count, 2, "Should produce tokens for Chinese")
     }
 
     func testJapaneseRouting() {
         let phonemizer = KokoroPhonemizer(vocab: makeVocab())
         let ids = phonemizer.tokenize("こんにちは", language: "ja")
-        XCTAssertEqual(ids.first, 1)
-        XCTAssertEqual(ids.last, 2)
+        XCTAssertEqual(ids.first, 0)
+        XCTAssertEqual(ids.last, 0)
         XCTAssertGreaterThan(ids.count, 2, "Should produce tokens for Japanese")
     }
 
     func testHindiRouting() {
         let phonemizer = KokoroPhonemizer(vocab: makeVocab())
         let ids = phonemizer.tokenize("नमस्ते", language: "hi")
-        XCTAssertEqual(ids.first, 1)
-        XCTAssertEqual(ids.last, 2)
+        XCTAssertEqual(ids.first, 0)
+        XCTAssertEqual(ids.last, 0)
         XCTAssertGreaterThan(ids.count, 2, "Should produce tokens for Hindi")
     }
 
     func testFrenchRouting() {
         let phonemizer = KokoroPhonemizer(vocab: makeVocab())
         let ids = phonemizer.tokenize("bonjour", language: "fr")
-        XCTAssertEqual(ids.first, 1)
-        XCTAssertEqual(ids.last, 2)
+        XCTAssertEqual(ids.first, 0)
+        XCTAssertEqual(ids.last, 0)
         XCTAssertGreaterThan(ids.count, 2, "Should produce tokens for French")
     }
 
     func testSpanishRouting() {
         let phonemizer = KokoroPhonemizer(vocab: makeVocab())
         let ids = phonemizer.tokenize("hola", language: "es")
-        XCTAssertEqual(ids.first, 1)
-        XCTAssertEqual(ids.last, 2)
+        XCTAssertEqual(ids.first, 0)
+        XCTAssertEqual(ids.last, 0)
         XCTAssertGreaterThan(ids.count, 2, "Should produce tokens for Spanish")
     }
 
     func testPortugueseRouting() {
         let phonemizer = KokoroPhonemizer(vocab: makeVocab())
         let ids = phonemizer.tokenize("olá", language: "pt")
-        XCTAssertEqual(ids.first, 1)
-        XCTAssertEqual(ids.last, 2)
+        XCTAssertEqual(ids.first, 0)
+        XCTAssertEqual(ids.last, 0)
         XCTAssertGreaterThan(ids.count, 2, "Should produce tokens for Portuguese")
     }
 
@@ -391,7 +401,7 @@ final class KokoroPronunciationTests: XCTestCase {
     /// Covers the IPA symbols used below plus the plain letters the raw-letter
     /// fallback emits, so tokenization round-trips either outcome.
     private func makeVocab() -> [String: Int] {
-        ["<pad>": 0, "<bos>": 1, "<eos>": 2,
+        ["$": 0,
          "a": 3, "e": 4, "i": 5, "n": 6, "t": 7,
          "ɑ": 8, "ə": 9, "æ": 10, "ˈ": 11, " ": 12]
     }
